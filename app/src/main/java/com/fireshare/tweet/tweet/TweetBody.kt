@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import android.media.browse.MediaBrowser
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +25,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
 fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {

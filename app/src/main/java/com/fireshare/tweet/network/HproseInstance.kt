@@ -5,13 +5,10 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -32,21 +29,12 @@ object UserFavorites {
 object HproseInstance {
     private const val BASE_URL = "http://10.0.2.2:8081"
     const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
-
     private const val CHUNK_SIZE = 50 * 1024 * 1024 // 10MB in bytes
-    private const val APP_ID = "V6MUd0cVeuCFE7YsGLNn5ygyJlm"
-    private const val APP_EXT = "com.example.twitterclone"
-    private const val APP_MARK = "version 0.0.3"
-
-    // Keys within the mimei of each tweet
-    private const val TWT_CONTENT_KEY = "core_data_of_tweet"  // content key within the Mimei
-    private const val TWT_LIKED_COUNT = "count_of_likes"
 
     // Keys within the mimei of the user's database
     private const val TWT_LIST_KEY = "list_of_tweets_mid"
     private const val OWNER_DATA_KEY = "data_of_author"     // account data of user
     private const val FOLLOWINGS_KEY = "list_of_followings_mid"
-    private const val FOLLOWERS_KEY = "list_of_followers_mid"
 
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
@@ -60,16 +48,10 @@ object HproseInstance {
         .addInterceptor(loggingInterceptor)
         .build()
 
-    @Serializable
-    data class TempJson(
-        var sid: String = "",
-        var mid: String = ""
-    )
-
-    lateinit var viewModel: TweetFeedViewModel
+    private val users: MutableSet<User> = emptySet<User>().toMutableSet()
 
     val appUser: User by lazy {
-        viewModel.users.find { it.mid == appMid } ?: runBlocking {
+        users.find { it.mid == appMid } ?: runBlocking {
             withContext(IO) {
                 val method = "get_author_core_data"
                 val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&userid=$appMid"
@@ -77,7 +59,7 @@ object HproseInstance {
                 val response = httpClient.newCall(request).execute()
                 val user = Json.decodeFromString<User>(response.body?.string() ?: "")
                 user.baseUrl = BASE_URL
-                viewModel.users.add(user)
+                users.add(user)
                 user
             }
         }
@@ -91,9 +73,15 @@ object HproseInstance {
                 val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
-                val json = Json.decodeFromString<TempJson>(response.body?.string() ?: "")
-                sid = json.sid
-                json.mid
+                if (!response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    val res = responseBody?.let { Json.decodeFromString<Map<*, *>>(it) }
+                    if (res != null) {
+                        sid = res["sid"] as String
+                        res["mid"]
+                    }
+                }
+                ""
             }
         }
     }
@@ -101,7 +89,7 @@ object HproseInstance {
     // Get base url where user data can be accessed, and user data
     private suspend fun getUserBase(userId: MimeiId): User? {
         // check if user data has been read
-        viewModel.users.find { it.mid == userId }?.let { user -> return user }
+        users.find { it.mid == userId }?.let { user -> return user }
 
         val providers = client.getVar("", "mmprovsips", userId)
         val providerList = Json.parseToJsonElement(providers).jsonArray
@@ -109,8 +97,8 @@ object HproseInstance {
             println(providerList)
             val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
             Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
-                viewModel.users.add(u)
-                println("Get userbase=${viewModel.users}")
+                users.add(u)
+                println("Get userbase=${users}")
                 return u
             }
         }
@@ -173,7 +161,7 @@ object HproseInstance {
                 val tweetId = sp["member"] as MimeiId
                 if (score <= startTimestamp && (endTimestamp == null || score > endTimestamp)) {
                     // check if the tweet is in the tweets already.
-                    getTweet(tweetId, authorId)?.let { t -> tweets += t }
+                    fetchTweet(tweetId, authorId, tweets)?.let { t -> tweets += t }
                 }
             }
         }
@@ -181,9 +169,13 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    private suspend fun getTweet(tweetId: MimeiId, authorId: MimeiId): Tweet? {
+    private suspend fun fetchTweet(
+        tweetId: MimeiId,
+        authorId: MimeiId,
+        tweets: MutableList<Tweet>
+    ): Tweet? {
         // if the tweet is fetched already, return null
-//        InMemoryData._tweets.value.find { it.mid == tweetId }?.let { return null }
+        tweets.find { it.mid == tweetId }?.let { return null }
 
         val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
         val method = "get_tweet"
@@ -193,24 +185,22 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             response.body?.string()?.let { json ->
-                println("getTweet=$json")
+                println("fetchTweet=$json")
                 val tweet = Json.decodeFromString<Tweet>(json)
                 tweet.author = author
 
                 if (tweet.originalTweetId != null) {
-                    return null
-//                    val cachedTweet =
-//                        InMemoryData._tweets.value.find { it.mid == tweet.originalTweetId }
-//                    if (cachedTweet != null) {
-//                        // isPrivate could be null
-//                        tweet.originalAuthor = cachedTweet.author
-//                        tweet.originalTweet = cachedTweet;
-//                    } else {
-//                        tweet.originalTweet =
-//                            tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId, it) }
-//                                ?: return null
-//                        tweet.originalAuthor = tweet.originalTweet!!.author
-//                    }
+                    val cachedTweet = tweets.find { it.mid == tweet.originalTweetId }
+                    if (cachedTweet != null) {
+                        // isPrivate could be null
+                        tweet.originalAuthor = cachedTweet.author
+                        tweet.originalTweet = cachedTweet;
+                    } else {
+                        tweet.originalTweet =
+                            tweet.originalAuthorId?.let { fetchTweet(tweet.originalTweetId, it, tweets) }
+                                ?: return null
+                        tweet.originalAuthor = tweet.originalTweet!!.author
+                    }
                 }
                 return tweet
             }

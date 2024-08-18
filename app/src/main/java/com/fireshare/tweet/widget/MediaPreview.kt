@@ -1,4 +1,4 @@
-package com.fireshare.tweet.tweet
+package com.fireshare.tweet.widget
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
