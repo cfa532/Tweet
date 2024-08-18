@@ -43,6 +43,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
     }
 
+    fun delTweet(tweetId: MimeiId) {
+        _tweets.update { currentTweets ->
+            currentTweets.filterNot { it.mid == tweetId }
+        }
+    }
+
     fun toggleRetweet(tweet: Tweet) {
         var originalTweet: Tweet = tweet
         viewModelScope.launch(Dispatchers.Default) {
@@ -54,7 +60,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     // update timestamp of the old retweet to move it forward.
                 }
             }
-            HproseInstance.toggleRetweet( originalTweet )?.let {
+            HproseInstance.toggleRetweet( originalTweet, ::delTweet )?.let {
 //                _tweet.value = it
             }
         }

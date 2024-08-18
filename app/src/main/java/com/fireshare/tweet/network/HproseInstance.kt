@@ -6,6 +6,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import hprose.client.HproseClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -39,7 +40,6 @@ object HproseInstance {
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
     }
-
     private var sid = ""
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -66,22 +66,25 @@ object HproseInstance {
     }
 
     // Initialize lazily, also used as UserId
-    private val appMid: MimeiId by lazy {
+    private val appMid: String by lazy {
         runBlocking {   // necessary for the whole App
-            withContext(IO) {
+            withContext(Dispatchers.IO) {
                 val method = "get_app_mid"
                 val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
+                if (response.isSuccessful) {
                     val responseBody = response.body?.string()
-                    val res = responseBody?.let { Json.decodeFromString<Map<*, *>>(it) }
+                    val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
                     if (res != null) {
-                        sid = res["sid"] as String
-                        res["mid"]
+                        sid = res["sid"] ?: ""
+                        res["mid"] ?: ""
+                    } else {
+                        ""
                     }
+                } else {
+                    ""
                 }
-                ""
             }
         }
     }
@@ -230,21 +233,19 @@ object HproseInstance {
         return null
     }
 
-    private fun deleteTweet(tweetId: MimeiId) {
+    private fun deleteTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
         val method = "delete_tweet"
         val url =
             "${appUser.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
-//            InMemoryData._tweets.update { currentTweets ->
-//                currentTweets.filterNot { it.mid == tweetId }
-//            }
+            delTweet(tweetId)
         }
     }
 
     // retweet or cancel retweet
-    fun toggleRetweet(tweet: Tweet /* original tweet */): Tweet? {
+    fun toggleRetweet(tweet: Tweet, delTweet: (MimeiId) -> Unit): Tweet? {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return null
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
@@ -258,7 +259,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
                 val res = Json.decodeFromString<Map<*, *>>(responseBody)
-                deleteTweet(res["retweetId"] as MimeiId)
+                deleteTweet(res["retweetId"] as MimeiId, delTweet)
                 tweet.favorites!![UserFavorites.RETWEET] = false
                 return tweet.copy(retweetCount = (res["count"] as Double).toInt())
             }
