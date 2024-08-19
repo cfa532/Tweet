@@ -28,17 +28,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.network.HproseInstance
-import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Composable
 fun UserProfileScreen(
@@ -64,9 +59,9 @@ fun UserProfileScreen(
             verticalAlignment = Alignment.Bottom,
         ) {
             Image(
-                painter = rememberAsyncImagePainter(appUser.baseUrl?.let {
+                painter = rememberAsyncImagePainter(user?.baseUrl?.let {
                     HproseInstance.getMediaUrl(
-                        user?.avatar, it
+                        user.avatar, it
                     )
                 }),
                 contentDescription = "User Avatar",
@@ -104,7 +99,7 @@ fun UserProfileScreen(
             }
 
             val tweets by tweetFeedViewModel.tweets.collectAsState()
-            val tweetsByAuthor = tweets.filter { it.authorId == appUser.mid }
+            val tweetsByAuthor = tweets.filter { it.authorId == user?.mid }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()

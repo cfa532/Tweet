@@ -77,6 +77,7 @@ object HproseInstance {
                     val responseBody = response.body?.string()
                     val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
                     if (res != null) {
+                        println(res)
                         sid = res["sid"] ?: ""
                         res["mid"] ?: ""
                     } else {
@@ -301,7 +302,7 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
-            val res = Json.decodeFromString<Map<*, *>>(responseBody)
+            val res = Json.decodeFromString<Map<String, Any>>(responseBody)
 
             // return a new object for recomposition to work.
             tweet.favorites?.set(UserFavorites.TWEET, res["hasLiked"] as Boolean)
