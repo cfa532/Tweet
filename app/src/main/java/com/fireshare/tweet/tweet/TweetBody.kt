@@ -81,7 +81,7 @@ fun TweetHeader(tweet: Tweet, viewModel: TweetViewModel) {
                 painter = rememberAsyncImagePainter(it),
                 contentDescription = "User Avatar",
                 modifier = Modifier
-                    .size(200.dp)
+                    .size(40.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )

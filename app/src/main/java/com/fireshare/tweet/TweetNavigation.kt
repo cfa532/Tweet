@@ -24,7 +24,7 @@ object DestProfileEditor
 data class DestTweetDetail(val tweetId: MimeiId)
 
 @Serializable
-data class DestUserProfile(val user: User)     // profile detail of a user
+data class DestUserProfile(val userId: MimeiId)     // profile detail of a user
 
 @Serializable
 data class DestMediaPreview(val mid: MimeiId)   // preview media file by Mimei ID

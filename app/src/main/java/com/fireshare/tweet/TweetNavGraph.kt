@@ -35,10 +35,12 @@ fun TweetNavGraph(
         composable<DestComposeTweet> {
             ComposeTweetScreen(navController)
         }
-//        composable<DestUserProfile> {backStackEntry ->
-//            val profile: DestUserProfile = backStackEntry.toRoute()
-//            UserProfileScreen(navController, profile.user.mid)
-//        }
+        composable<DestUserProfile> {backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId")
+            if (userId != null) {
+                UserProfileScreen(navController, userId)
+            }
+        }
         composable<DestProfileEditor> {
             EditProfileScreen(navController, preferencesHelper)
         }

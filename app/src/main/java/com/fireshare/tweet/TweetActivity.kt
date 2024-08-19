@@ -59,7 +59,7 @@ fun MainTopAppBar(navController: NavHostController) {
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.navigate("userProfile") })
+            IconButton(onClick = { navController.navigate(DestUserProfile(appUser.mid)) })
             {
                 appUser.baseUrl?.let { getMediaUrl(appUser.avatar, it) }?.let {
                     Image(
@@ -98,7 +98,7 @@ fun BottomNavigationBar(navController: NavHostController) {
                     modifier = Modifier.size(32.dp)
                 )
             }
-            IconButton(onClick = { navController.navigate("composeTweet") }) {
+            IconButton(onClick = { navController.navigate(DestComposeTweet) }) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_compose),
                     contentDescription = "Compose",
