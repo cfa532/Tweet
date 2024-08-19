@@ -28,22 +28,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun UserProfileScreen(
-    user: User,
     navController: NavHostController,
-    viewModel: TweetViewModel
+    userId: MimeiId,
 ) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    val user = HproseInstance.getUser(userId)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,7 +66,7 @@ fun UserProfileScreen(
             Image(
                 painter = rememberAsyncImagePainter(appUser.baseUrl?.let {
                     HproseInstance.getMediaUrl(
-                        user.avatar, it
+                        user?.avatar, it
                     )
                 }),
                 contentDescription = "User Avatar",
@@ -88,14 +92,14 @@ fun UserProfileScreen(
         ) {
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
             Text(
-                text = user.name ?: "No one",
+                text = user?.name ?: "No one",
                 style = MaterialTheme.typography.titleLarge
             )
-            Text(text = "@" + (user.username ?: "NoOne"),
+            Text(text = "@" + (user?.username ?: "NoOne"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.padding(start = 0.dp))
-            Text(text = user.profile ?: "Profile") // Replace with actual resume
+            Text(text = user?.profile ?: "Profile") // Replace with actual resume
             // Add more user details here, like following/followers count
             }
 
@@ -108,7 +112,7 @@ fun UserProfileScreen(
             )
             {
                 items(tweetsByAuthor) { tweet ->
-                    if (!tweet.isPrivate) TweetItem(tweet, viewModel)
+                    if (!tweet.isPrivate) TweetItem(tweet)
                 }
             }
         }

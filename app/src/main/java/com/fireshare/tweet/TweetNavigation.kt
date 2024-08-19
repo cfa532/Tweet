@@ -1,33 +1,30 @@
 package com.fireshare.tweet
 
 import androidx.navigation.NavHostController
-import com.fireshare.tweet.TweetDestinationsArgs.TWEET_ID_ARGS
-import com.fireshare.tweet.TweetScreens.FEED_SCREEN
-import com.fireshare.tweet.TweetScreens.TWEET_SCREEN
+import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.User
+import kotlinx.serialization.Serializable
 
-private object TweetScreens {
-    const val FEED_SCREEN = "tweetFeed"
-    const val TWEET_SCREEN = "tweetDetail"
-    const val PROFILE_SCREEN = "userProfile"
-    const val EDIT_SCREEN = "tweetEditor"
-    const val MESSAGE_SCREEN = "userMessages"
-}
+@Serializable
+object DestTweetFeed
 
-object TweetDestinationsArgs {
-    const val TWEET_ID_ARGS = "tweetId"
-}
+@Serializable
+object DestMessageList      // all messages of app user
 
-object TweetDestinations {
-    const val TWEET_ROUTE = "$TWEET_SCREEN?$TWEET_ID_ARGS={$TWEET_ID_ARGS}"
-}
+@Serializable
+data class DestMessageDetail(val userId: MimeiId)   // all messages with another user
 
-class TweetNavigationActions(private val navController: NavHostController) {
+@Serializable
+object DestComposeTweet
 
-    fun navigateToFeed() {
-        navController.navigate(FEED_SCREEN)
-    }
+@Serializable
+object DestProfileEditor
 
-    fun navigateToTweet() {
+@Serializable
+data class DestTweetDetail(val tweetId: MimeiId)
 
-    }
-}
+@Serializable
+data class DestUserProfile(val user: User)     // profile detail of a user
+
+@Serializable
+data class DestMediaPreview(val mid: MimeiId)   // preview media file by Mimei ID

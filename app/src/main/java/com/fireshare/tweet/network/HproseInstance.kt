@@ -89,10 +89,14 @@ object HproseInstance {
         }
     }
 
+    fun getUser(userId: MimeiId): User? {
+        return users.find { it.mid == userId }
+    }
+
     // Get base url where user data can be accessed, and user data
     private suspend fun getUserBase(userId: MimeiId): User? {
         // check if user data has been read
-        users.find { it.mid == userId }?.let { user -> return user }
+        getUser(userId)?.let { return it}
 
         val providers = client.getVar("", "mmprovsips", userId)
         val providerList = Json.parseToJsonElement(providers).jsonArray

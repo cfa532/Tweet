@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.fireshare.tweet"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.fireshare.tweet"
@@ -54,6 +54,8 @@ android {
 }
 
 dependencies {
+
+    api(libs.androidx.navigation.fragment.ktx)
     kapt(libs.hilt.compiler)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)

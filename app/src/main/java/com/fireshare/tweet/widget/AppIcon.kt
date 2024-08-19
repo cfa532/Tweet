@@ -17,7 +17,7 @@ fun AppIcon() {
         painter = rememberAsyncImagePainter(R.drawable.ic_app_icon),
         contentDescription = "App Icon",
         modifier = Modifier
-            .size(200.dp)
+            .size(50.dp)
             .clip(CircleShape),
         contentScale = ContentScale.Crop
     )

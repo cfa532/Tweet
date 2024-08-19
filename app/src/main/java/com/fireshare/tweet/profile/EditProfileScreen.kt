@@ -1,3 +1,5 @@
+@file:JvmName("EditProfileScreenKt")
+
 package com.fireshare.tweet.profile
 
 import PreferencesHelper
@@ -46,7 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun PreferencesScreen(
+fun EditProfileScreen(
     navController: NavHostController,
     preferencesHelper: PreferencesHelper,
 ) {

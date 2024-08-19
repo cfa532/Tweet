@@ -57,6 +57,7 @@ fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {
 //                    .padding(start = 0.dp, end = 20.dp),
 //                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                // state hoist
                 LikeButton(it, tweetViewModel)
                 Spacer(modifier = Modifier.width(8.dp)) // Add some space between the two texts
                 BookmarkButton(it, tweetViewModel)
