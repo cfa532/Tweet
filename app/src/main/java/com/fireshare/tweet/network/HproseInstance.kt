@@ -58,7 +58,10 @@ object HproseInstance {
                 val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&userid=$appMid"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
-                val user = Json.decodeFromString<User>(response.body?.string() ?: "")
+                val responseBody = response.body?.string()
+                val gson = Gson()
+                val user = gson.fromJson(responseBody, User::class.java)
+//                val user = Json.decodeFromString<User>(response.body?.string() ?: "")
                 user.baseUrl = BASE_URL
                 users.add(user)
                 user
@@ -265,7 +268,8 @@ object HproseInstance {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
-                val res = Json.decodeFromString<Map<*, *>>(responseBody)
+                val gson = Gson()
+                val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
                 deleteTweet(res["retweetId"] as MimeiId, delTweet)
                 tweet.favorites!![UserFavorites.RETWEET] = false
                 return tweet.copy(retweetCount = (res["count"] as Double).toInt())
@@ -284,7 +288,8 @@ object HproseInstance {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
-                val res = Json.decodeFromString<Map<*, *>>(responseBody)
+                val gson = Gson()
+                val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
                 tweet.favorites!![UserFavorites.RETWEET] = true
 
                 retweet.author = appUser
@@ -378,7 +383,6 @@ object HproseInstance {
                 val responseBody = response.body?.string() ?: return null
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
-//                val user = Json.decodeFromString<User>(responseBody)
                 user.baseUrl = "http://$ip"
                 return user
             }

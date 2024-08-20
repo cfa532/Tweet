@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.ProfileEditor
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.tweet.TweetItem
@@ -72,7 +73,7 @@ fun UserProfileScreen(
             )
             Row(modifier = Modifier.padding(bottom = 4.dp)) {
                 Button(
-                    onClick = { navController.navigate("preferences") },
+                    onClick = { navController.navigate(ProfileEditor) },
                     modifier = Modifier.width(IntrinsicSize.Min)
                 ) {
                     Text("Edit")
