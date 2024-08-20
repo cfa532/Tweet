@@ -35,7 +35,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(startTimestamp.longValue)
     }
 
-    fun getTweetById(tweetId: MimeiId): Tweet? {
+    fun getTweetById(tweetId: MimeiId?): Tweet? {
         return tweets.value.find { it.mid == tweetId }
     }
 

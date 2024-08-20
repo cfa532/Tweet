@@ -16,7 +16,12 @@ class TweetViewModel(
 {
     private val _tweet = MutableStateFlow<Tweet?>(tweet)
     val tweet: StateFlow<Tweet?> get() = _tweet.asStateFlow()
+    private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
+    val comments: StateFlow<List<Tweet>> get() = _comments
 
+    fun loadComments(pageNumber: Number = 0) {
+        //
+    }
     fun likeTweet(tweet: Tweet) {
         viewModelScope.launch(Dispatchers.IO) {
             try {

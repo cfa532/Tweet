@@ -13,8 +13,8 @@ import androidx.navigation.toRoute
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
-import com.fireshare.tweet.TweetActivity.*
 import com.fireshare.tweet.profile.UserProfileScreen
+import com.fireshare.tweet.tweet.ComposeCommentScreen
 
 @Composable
 fun TweetNavGraph(
@@ -27,23 +27,24 @@ fun TweetNavGraph(
     NavHost(
         modifier = modifier,
         navController = navController,
-        startDestination = DestTweetFeed
+        startDestination = TweetFeed
     ) {
-        composable<DestTweetFeed> {
+        composable<TweetFeed> {
             TweetFeedScreen(navController)
         }
-        composable<DestComposeTweet> {
+        composable<ComposeTweet> {
             ComposeTweetScreen(navController)
         }
-        composable<DestUserProfile> {backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId")
-            if (userId != null) {
-                UserProfileScreen(navController, userId)
-            }
+        composable<ComposeComment> { backStackEntry ->
+            val tweet = backStackEntry.toRoute<ComposeComment>()
+            ComposeCommentScreen(navController, tweet.tweetId)
         }
-        composable<DestProfileEditor> {
+        composable<UserProfile> { backStackEntry ->
+            val user = backStackEntry.toRoute<UserProfile>()
+            UserProfileScreen(navController, user.userId)
+        }
+        composable<ProfileEditor> {
             EditProfileScreen(navController, preferencesHelper)
         }
     }
-
 }

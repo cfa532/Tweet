@@ -90,7 +90,8 @@ object HproseInstance {
         }
     }
 
-    fun getUser(userId: MimeiId): User? {
+    // check if in memory Users include the given Id
+    fun getUser(userId: MimeiId?): User? {
         return users.find { it.mid == userId }
     }
 

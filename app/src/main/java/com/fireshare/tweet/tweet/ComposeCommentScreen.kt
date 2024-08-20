@@ -51,13 +51,18 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ComposeTweetScreen(
+fun ComposeCommentScreen(
     navController: NavHostController,
-    viewModel: TweetFeedViewModel = hiltViewModel(),
+    tweetId: MimeiId? = null,   // Null for new tweet. Not null for comment
+    tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(),
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current // Renamed for clarity
+
+    // if current tweet is not null, we are composing a comment.
+    val currentTweet = tweetFeedViewModel.getTweetById(tweetId)
+    val author = currentTweet?.author
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -83,14 +88,14 @@ fun ComposeTweetScreen(
                 ) {
                     Button(
                         onClick = { // upload new tweet or comment
-                            viewModel.viewModelScope.launch {
+                            tweetFeedViewModel.viewModelScope.launch {
                                 val attachments = uploadAttachments(context, selectedAttachments)
                                 val tweet = Tweet(
                                     authorId = HproseInstance.appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments,
                                 )
-                                viewModel.uploadTweet(tweet = tweet)
+                                tweetFeedViewModel.uploadTweet(tweet = tweet)
 
                                 // clear and return to previous screen
                                 selectedAttachments.clear()
@@ -118,6 +123,9 @@ fun ComposeTweetScreen(
                 }
             }
         )
+        Row {
+            author?.let { Text(text = "Reply to @${author.mid}", color = Color.Blue) }
+        }
         OutlinedTextField(
             value = tweetContent,
             onValueChange = { tweetContent = it },
@@ -164,4 +172,3 @@ fun ComposeTweetScreen(
         }
     }
 }
-

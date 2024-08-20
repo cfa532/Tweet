@@ -14,7 +14,6 @@ import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.MainTopAppBar
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
-
 @Composable
 fun TweetFeedScreen(navController: NavHostController)
 {

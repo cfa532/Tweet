@@ -38,7 +38,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 @Composable
 fun UserProfileScreen(
     navController: NavHostController,
-    userId: MimeiId,
+    userId: MimeiId? = null,
 ) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val user = HproseInstance.getUser(userId)

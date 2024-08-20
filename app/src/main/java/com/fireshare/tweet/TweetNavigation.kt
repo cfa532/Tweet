@@ -1,30 +1,31 @@
 package com.fireshare.tweet
 
-import androidx.navigation.NavHostController
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.User
 import kotlinx.serialization.Serializable
 
 @Serializable
-object DestTweetFeed
+object TweetFeed
 
 @Serializable
-object DestMessageList      // all messages of app user
+object MessageList      // all messages of app user
 
 @Serializable
-data class DestMessageDetail(val userId: MimeiId)   // all messages with another user
+data class MessageDetail(val userId: MimeiId)   // all messages with another user
 
 @Serializable
-object DestComposeTweet
+data class ComposeComment(val tweetId: MimeiId? = null)
 
 @Serializable
-object DestProfileEditor
+object ComposeTweet
 
 @Serializable
-data class DestTweetDetail(val tweetId: MimeiId)
+object ProfileEditor
 
 @Serializable
-data class DestUserProfile(val userId: MimeiId)     // profile detail of a user
+data class TweetDetail(val tweetId: MimeiId)
 
 @Serializable
-data class DestMediaPreview(val mid: MimeiId)   // preview media file by Mimei ID
+data class UserProfile(val userId: MimeiId?)     // profile detail of a user
+
+@Serializable
+data class MediaPreview(val mid: MimeiId)   // preview media file by Mimei ID
