@@ -4,6 +4,6 @@ import androidx.compose.runtime.Composable
 import com.fireshare.tweet.datamodel.MimeiId
 
 @Composable
-fun CommentFeedScreen(tweetId: MimeiId) {
+fun CommentFeed(tweetId: MimeiId) {
     // given tweetId, load all its comments
 }

@@ -19,6 +19,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.io.InputStream
 import java.math.BigInteger
 import java.net.URLEncoder
+import com.google.gson.Gson
 
 object UserFavorites {
     const val TWEET = 0
@@ -194,7 +195,8 @@ object HproseInstance {
         if (response.isSuccessful) {
             response.body?.string()?.let { json ->
                 println("fetchTweet=$json")
-                val tweet = Json.decodeFromString<Tweet>(json)
+                val gson = Gson()
+                val tweet = gson.fromJson(json, Tweet::class.java)
                 tweet.author = author
 
                 if (tweet.originalTweetId != null) {
@@ -302,7 +304,8 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
-            val res = Json.decodeFromString<Map<String, Any>>(responseBody)
+            val gson = Gson()
+            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
 
             // return a new object for recomposition to work.
             tweet.favorites?.set(UserFavorites.TWEET, res["hasLiked"] as Boolean)
@@ -322,9 +325,13 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
-            val res = Json.decodeFromString<Map<*, *>>(responseBody)
+            val gson = Gson()
+            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+            tweet.bookmarkCount = (res["count"] as Double).toInt()
             tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
-            return tweet.copy(bookmarkCount = (res["count"] as Double).toInt())
+            return tweet.copy(
+                bookmarkCount = (res["count"] as Double).toInt()
+            )
         }
         return tweet
     }
@@ -369,7 +376,9 @@ object HproseInstance {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
-                val user = Json.decodeFromString<User>(responseBody)
+                val gson = Gson()
+                val user = gson.fromJson(responseBody, User::class.java)
+//                val user = Json.decodeFromString<User>(responseBody)
                 user.baseUrl = "http://$ip"
                 return user
             }

@@ -20,10 +20,12 @@ media3Exoplayer = "1.4.0"
 media3Ui = "1.4.0"
 media3Common = "1.4.0"
 coilCompose = "2.7.0"
+gson = "2.10.1"
 
 [libraries]
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hiltAndroid" }
 androidx-media3-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer"}
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3Ui" }

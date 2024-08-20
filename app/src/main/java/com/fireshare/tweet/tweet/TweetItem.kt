@@ -8,14 +8,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModelFactory
+import dagger.hilt.android.lifecycle.HiltViewModel
 
 @Composable
 fun TweetItem(
     tweet: Tweet,
-    tweetViewModel: TweetViewModel = TweetViewModel(tweet)
 ) {
+    val viewModel: TweetViewModel = viewModel(
+        factory = TweetViewModelFactory(tweet)
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -24,7 +31,7 @@ fun TweetItem(
 
         // Content body
         if (tweet.originalTweetId != null) {
-            tweet.originalTweet?.let { tweetViewModel.setTweet(it) }
+            tweet.originalTweet?.let { viewModel.setTweet(it) }
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
                 Text(
@@ -34,11 +41,11 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 2.dp)
                 )
                 tweet.originalTweet?.let {
-                    TweetBody(it, tweetViewModel)
+                    TweetBody(it, viewModel)
                 }
             } else {
                 // retweet with comments
-                TweetHeader(tweet, tweetViewModel)
+                TweetHeader(tweet, viewModel)
                 Text(
                     text = tweet.content,
                     fontSize = MaterialTheme.typography.labelSmall.fontSize,
@@ -46,13 +53,13 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 12.dp)
                 )
                 tweet.originalTweet?.let {
-                    TweetBody(it, tweetViewModel)
+                    TweetBody(it, viewModel)
                 }
             }
         } else {
             // original tweet by current user.
-            tweetViewModel.setTweet(tweet)
-            TweetBody(tweet, tweetViewModel)
+            viewModel.setTweet(tweet)
+            TweetBody(tweet, viewModel)
         }
     }
 }

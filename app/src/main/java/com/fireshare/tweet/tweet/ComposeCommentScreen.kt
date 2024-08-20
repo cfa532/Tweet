@@ -52,12 +52,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun ComposeCommentScreen(
     navController: NavHostController,
-    tweetId: MimeiId?,
+    tweetId: MimeiId,
     viewModel: TweetFeedViewModel = hiltViewModel(),
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current // Renamed for clarity
+
+    val author = viewModel.getTweetById(tweetId)?.author ?: return  // parent tweet's author
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -118,6 +120,9 @@ fun ComposeCommentScreen(
                 }
             }
         )
+        Row {
+            Text(text = "Reply to @${author.username}")
+        }
         OutlinedTextField(
             value = tweetContent,
             onValueChange = { tweetContent = it },
@@ -150,7 +155,8 @@ fun ComposeCommentScreen(
         ) {
             items(selectedAttachments.chunked(2)) { rowItems ->
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

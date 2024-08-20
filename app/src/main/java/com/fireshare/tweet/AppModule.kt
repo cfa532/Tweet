@@ -1,6 +1,8 @@
 package com.fireshare.tweet
 
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,6 +14,15 @@ import javax.inject.Singleton
 object AppModule {
 
     @Provides
+    fun provideTweet(): Tweet {
+        // Provide a default Tweet instance or fetch it from a repository
+        return Tweet(
+            authorId = "defaultAuthorId",
+            content = "defaultContent"
+        )
+    }
+
+    @Provides
     @Singleton
     fun provideAppContainer(): AppContainer {
         return AppContainer()
@@ -21,5 +32,10 @@ object AppModule {
     @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
+    }
+
+    @Provides
+    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
+        return TweetViewModel(tweet)
     }
 }
