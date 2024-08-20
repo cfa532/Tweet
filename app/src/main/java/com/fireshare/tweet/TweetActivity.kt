@@ -98,7 +98,7 @@ fun BottomNavigationBar(navController: NavHostController) {
                     modifier = Modifier.size(32.dp)
                 )
             }
-            IconButton(onClick = { navController.navigate(ComposeTweet()) }) {
+            IconButton(onClick = { navController.navigate(ComposeTweet) }) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_compose),
                     contentDescription = "Compose",
