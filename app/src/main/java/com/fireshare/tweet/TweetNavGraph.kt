@@ -15,6 +15,7 @@ import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
+import com.fireshare.tweet.tweet.TweetDetailScreen
 
 @Composable
 fun TweetNavGraph(
@@ -31,6 +32,10 @@ fun TweetNavGraph(
     ) {
         composable<TweetFeed> {
             TweetFeedScreen(navController)
+        }
+        composable<TweetDetail> {navBackStackEntry ->
+            val tweet = navBackStackEntry.toRoute<TweetDetail>()
+            TweetDetailScreen(tweet.tweetId)
         }
         composable<ComposeTweet> {
             ComposeTweetScreen(navController)
