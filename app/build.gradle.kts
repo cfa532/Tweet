@@ -55,6 +55,8 @@ android {
 
 dependencies {
 
+    implementation(libs.assisted.inject.annotations.dagger2)
+    kapt(libs.assisted.inject.processor.dagger2)
     implementation(libs.gson)
     api(libs.androidx.navigation.fragment.ktx)
     kapt(libs.hilt.compiler)
