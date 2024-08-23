@@ -51,15 +51,3 @@ class TweetViewModel @Inject constructor(
         _tweet.value = tweet
     }
 }
-
-class TweetViewModelFactory @Inject constructor(
-    private val tweet: Tweet
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return TweetViewModel(tweet) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}

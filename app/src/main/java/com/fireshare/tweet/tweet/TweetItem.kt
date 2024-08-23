@@ -8,12 +8,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.fireshare.tweet.TweetViewModelFactory
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModelFactory
-import dagger.hilt.android.lifecycle.HiltViewModel
 
 @Composable
 fun TweetItem(
