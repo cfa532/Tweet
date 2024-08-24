@@ -33,6 +33,7 @@ fun TweetNavGraph(
     val context = LocalContext.current
     val preferencesHelper = remember { PreferencesHelper(context) }
 
+    // provide navController application-wide
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
             modifier = modifier,

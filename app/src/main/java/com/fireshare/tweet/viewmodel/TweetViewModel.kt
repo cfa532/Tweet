@@ -29,6 +29,14 @@ class TweetViewModel @Inject constructor(
         //
     }
 
+    fun uploadComment(comment: Tweet) {
+        viewModelScope.launch(Dispatchers.Default) {
+            tweet.value?.let {
+                _tweet.value = HproseInstance.addComment(it, comment)
+            }
+        }
+    }
+
     fun addComment(comment: Tweet) {
         _comments.update { newComments ->
             listOf(comment) + newComments
@@ -38,7 +46,7 @@ class TweetViewModel @Inject constructor(
     fun likeTweet(tweet: Tweet) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _tweet.value = HproseInstance.likeTweet(tweet) ?: _tweet.value
+                _tweet.value = HproseInstance.likeTweet(tweet)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -48,7 +56,7 @@ class TweetViewModel @Inject constructor(
     fun bookmarkTweet(tweet: Tweet) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _tweet.value = HproseInstance.bookmarkTweet(tweet) ?: _tweet.value
+                _tweet.value = HproseInstance.bookmarkTweet(tweet)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
