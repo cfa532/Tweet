@@ -5,6 +5,7 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.datamodel.UserFavorites
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -20,12 +21,6 @@ import java.io.InputStream
 import java.math.BigInteger
 import java.net.URLEncoder
 import com.google.gson.Gson
-
-object UserFavorites {
-    const val TWEET = 0
-    const val BOOKMARK = 1
-    const val RETWEET = 2
-}
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
