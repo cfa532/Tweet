@@ -27,7 +27,6 @@ fun TweetItem(
 
         // Content body
         if (tweet.originalTweetId != null) {
-            tweet.originalTweet?.let { viewModel.setTweet(it) }
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
                 Text(
@@ -37,6 +36,8 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 2.dp)
                 )
                 tweet.originalTweet?.let {
+                    viewModel.setTweet(it)
+                    // retweet shares the same viewModel
                     viewModel = hiltViewModel(key = tweet.originalTweetId)
                     TweetBody(it, viewModel)
                 }
