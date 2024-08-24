@@ -332,7 +332,6 @@ object HproseInstance {
             val responseBody = response.body?.string() ?: return tweet
             val gson = Gson()
             val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
-            tweet.bookmarkCount = (res["count"] as Double).toInt()
             tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
             return tweet.copy(
                 bookmarkCount = (res["count"] as Double).toInt()

@@ -92,16 +92,16 @@ fun LikeButton(tweet: Tweet, viewModel: TweetViewModel) {
 @Composable
 fun BookmarkButton(tweet: Tweet, viewModel: TweetViewModel) {
     val t by viewModel.tweet.collectAsState(initial = tweet)
-    val hasBookmarked = t?.favorites?.get(UserFavorites.BOOKMARK)
+    val hasBookmarked = t?.favorites?.get(UserFavorites.BOOKMARK) ?: false
     IconButton(onClick = {
         t?.let { viewModel.bookmarkTweet(it) }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = if (hasBookmarked == true) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
+                painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
                 contentDescription = "Like",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (hasBookmarked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = if (hasBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(

@@ -38,7 +38,7 @@ class TweetViewModel @Inject constructor(
     }
 
     fun bookmarkTweet(tweet: Tweet) {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 _tweet.value = HproseInstance.bookmarkTweet(tweet) ?: _tweet.value
             } catch (e: Exception) {
