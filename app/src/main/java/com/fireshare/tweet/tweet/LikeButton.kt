@@ -68,17 +68,17 @@ fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(tweet: Tweet, viewModel: TweetViewModel) {
     val t by viewModel.tweet.collectAsState(initial = tweet)
-    val hasLiked = t?.favorites?.get(UserFavorites.TWEET)
+    val hasLiked = t?.favorites?.get(UserFavorites.TWEET) ?: false
 
     IconButton(onClick = {
         t?.let { viewModel.likeTweet(it) }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = if (hasLiked == true) R.drawable.ic_heart_fill else R.drawable.ic_heart),
+                painter = painterResource(id = if (hasLiked) R.drawable.ic_heart_fill else R.drawable.ic_heart),
                 contentDescription = "Like",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (hasLiked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = if (hasLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(

@@ -16,7 +16,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetItem(
     tweet: Tweet,
 ) {
-    val viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
+    var viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
     viewModel.setTweet(tweet)
 
     Column(
@@ -37,6 +37,7 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 2.dp)
                 )
                 tweet.originalTweet?.let {
+                    viewModel = hiltViewModel(key = tweet.originalTweetId)
                     TweetBody(it, viewModel)
                 }
             } else {
