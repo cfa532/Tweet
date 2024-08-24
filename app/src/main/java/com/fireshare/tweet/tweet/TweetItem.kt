@@ -9,12 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
 fun TweetItem(
-    tweet: Tweet,
+    tweet: Tweet
 ) {
     var viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
     viewModel.setTweet(tweet)

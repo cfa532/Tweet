@@ -114,6 +114,19 @@ object HproseInstance {
         return null
     }
 
+    // given a tweet, load its comments
+    fun loadComments(tweet: Tweet, pageNumber: Int = 0) {
+        //
+    }
+
+    fun delComment(tweetId: MimeiId, commentId: MimeiId) {
+        // remove a comment from parent tweet in Mimei DB
+    }
+
+    fun addComment(tweetId: MimeiId, comment: Tweet) {
+        // add the comment to tweetId
+    }
+
     suspend fun getUserData(userId: MimeiId = appMid): User? {
         return runCatching {
             // get each user data based on its node ip
@@ -219,7 +232,7 @@ object HproseInstance {
     }
 
     // Store an object in a Mimei file and return its MimeiId.
-    fun uploadTweet(tweet: Tweet, commentOnly: Boolean = false): Tweet? {
+    fun uploadTweet(tweet: Tweet): Tweet? {
         val method = "upload_tweet"
 
         // make a copy of input tweet and remove attributes that is for display only.
@@ -229,7 +242,7 @@ object HproseInstance {
 
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
         val url =
-            "${appUser.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweet=$json&commentonly=$commentOnly"
+            "${appUser.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {

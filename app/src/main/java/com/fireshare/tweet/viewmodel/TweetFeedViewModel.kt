@@ -82,7 +82,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     fun uploadTweet(tweet: Tweet) {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.uploadTweet(tweet, false)?.let { newTweet: Tweet ->
+            HproseInstance.uploadTweet(tweet)?.let { newTweet: Tweet ->
                 _tweets.update { currentTweets ->
                     // add new tweet at top of the list
                     listOf(newTweet) + currentTweets

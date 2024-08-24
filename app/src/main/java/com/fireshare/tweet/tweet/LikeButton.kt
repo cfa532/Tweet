@@ -17,6 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import androidx.navigation.NavHostController
+import androidx.navigation.Navigation
+import com.fireshare.tweet.ComposeComment
+import com.fireshare.tweet.ComposeTweet
+import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.UserFavorites
@@ -24,10 +30,14 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
-fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
+fun CommentButton(tweet: Tweet) {
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    val viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
     val t by viewModel.tweet.collectAsState(initial = tweet)
 
+    val navController = LocalNavController.current
     IconButton(onClick = {
+        tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
