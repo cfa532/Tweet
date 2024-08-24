@@ -308,7 +308,7 @@ object HproseInstance {
             val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
 
             // return a new object for recomposition to work.
-            tweet.favorites?.set(UserFavorites.TWEET, res["hasLiked"] as Boolean)
+            tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
             return tweet.copy(
                 likeCount = (res["count"] as Double).toInt()
             )

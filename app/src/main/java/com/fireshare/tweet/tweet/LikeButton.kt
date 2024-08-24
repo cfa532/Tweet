@@ -68,7 +68,7 @@ fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(tweet: Tweet, viewModel: TweetViewModel) {
     val t by viewModel.tweet.collectAsState(initial = tweet)
-    val hasLiked = t?.favorites?.get(UserFavorites.TWEET) ?: false
+    val hasLiked = t?.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
 
     IconButton(onClick = {
         t?.let { viewModel.likeTweet(it) }

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 typealias MimeiId = String      // 27 or 64 character long string
 
 object UserFavorites {
-    const val TWEET = 0
+    const val LIKE_TWEET = 0
     const val BOOKMARK = 1
     const val RETWEET = 2
 }
