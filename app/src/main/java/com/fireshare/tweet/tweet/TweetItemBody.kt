@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.rememberAsyncImagePainter
 
 import com.fireshare.tweet.datamodel.Tweet
@@ -29,9 +30,9 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
-fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {
+fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel = hiltViewModel()) {
     // Tweet Header
-    TweetHeader(tweet, tweetViewModel)
+    TweetHeader(tweet)
     Spacer(modifier = Modifier.padding(8.dp))
     Column(
         modifier = Modifier.padding(start = 12.dp)
@@ -71,7 +72,7 @@ fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {
 }
 
 @Composable
-fun TweetHeader(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetHeader(tweet: Tweet) {
     // Use a Row to align author name and potential verification badge
     Row(verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start

@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fireshare.tweet.TweetViewModelFactory
 import com.fireshare.tweet.datamodel.Tweet
@@ -17,9 +18,8 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetItem(
     tweet: Tweet,
 ) {
-    val viewModel: TweetViewModel = viewModel(
-        factory = TweetViewModelFactory(tweet)
-    )
+    val viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
+    viewModel.setTweet(tweet)
 
     Column(
         modifier = Modifier
@@ -43,7 +43,7 @@ fun TweetItem(
                 }
             } else {
                 // retweet with comments
-                TweetHeader(tweet, viewModel)
+                TweetHeader(tweet)
                 Text(
                     text = tweet.content,
                     fontSize = MaterialTheme.typography.labelSmall.fontSize,
