@@ -24,7 +24,6 @@ fun TweetItem(
             .fillMaxWidth()
             .padding(8.dp)
     ) {
-
         // Content body
         if (tweet.originalTweetId != null) {
             if (tweet.content == "") {
@@ -36,9 +35,9 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 2.dp)
                 )
                 tweet.originalTweet?.let {
-                    viewModel.setTweet(it)
                     // retweet shares the same viewModel
                     viewModel = hiltViewModel(key = tweet.originalTweetId)
+                    viewModel.setTweet(it)
                     TweetBody(it, viewModel)
                 }
             } else {

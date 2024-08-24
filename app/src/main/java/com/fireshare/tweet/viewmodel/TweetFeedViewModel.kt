@@ -1,19 +1,16 @@
 package com.fireshare.tweet.viewmodel
 
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.network.HproseInstance
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -49,7 +46,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun toggleRetweet(tweet: Tweet) {
+    fun toggleRetweet(tweet: Tweet): Tweet {
         var originalTweet: Tweet = tweet
         viewModelScope.launch(Dispatchers.Default) {
             tweet.originalTweet?.let {
@@ -57,13 +54,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 if (tweet.content == "") {
                     originalTweet = it
                 } else {
-                    // update timestamp of the old retweet to move it forward.
+                    // this is a retweet with comment.
                 }
             }
-            HproseInstance.toggleRetweet( originalTweet, ::delTweet )?.let {
-//                _tweet.value = it
-            }
+            originalTweet = HproseInstance.toggleRetweet( originalTweet, this@TweetFeedViewModel )
         }
+        return originalTweet.copy()
     }
 
     private fun getTweets(

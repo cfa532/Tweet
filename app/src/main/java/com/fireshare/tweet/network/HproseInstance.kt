@@ -6,6 +6,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -21,6 +22,7 @@ import java.io.InputStream
 import java.math.BigInteger
 import java.net.URLEncoder
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -250,9 +252,9 @@ object HproseInstance {
     }
 
     // retweet or cancel retweet
-    fun toggleRetweet(tweet: Tweet, delTweet: (MimeiId) -> Unit): Tweet? {
+    fun toggleRetweet(tweet: Tweet, viewModel: TweetFeedViewModel): Tweet {
         val method = "toggle_retweet"
-        val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return null
+        val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return tweet
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}")
             .append("&userid=${appUser.mid}")
@@ -262,12 +264,15 @@ object HproseInstance {
             val request = Request.Builder().url(url.toString()).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return null
+                val responseBody = response.body?.string() ?: return tweet
                 val gson = Gson()
                 val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
-                deleteTweet(res["retweetId"] as MimeiId, delTweet)
+                deleteTweet(res["retweetId"] as MimeiId) {
+                    viewModel.delTweet(res["retweetId"] as MimeiId)
+                }
                 tweet.favorites!![UserFavorites.RETWEET] = false
-                return tweet.copy(retweetCount = (res["count"] as Double).toInt())
+                tweet.retweetCount = (res["count"] as Double).toInt()
+                return tweet
             }
         } else {
             var retweet = Tweet(
@@ -276,23 +281,25 @@ object HproseInstance {
                 originalTweetId = tweet.mid,
                 originalAuthorId = tweet.authorId
             )
-            retweet = uploadTweet(retweet) ?: return null
+            retweet = uploadTweet(retweet) ?: return tweet
             url.append("&retweetid=${retweet.mid}")
 
             val request = Request.Builder().url(url.toString()).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return null
+                val responseBody = response.body?.string() ?: return tweet
                 val gson = Gson()
                 val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
                 tweet.favorites!![UserFavorites.RETWEET] = true
+                tweet.retweetCount = (res["count"] as Double).toInt()
 
                 retweet.author = appUser
                 retweet.originalTweet = tweet
-                return tweet.copy(retweetCount = (res["count"] as Double).toInt())
+                viewModel.addTweet(retweet)
+                return tweet
             }
         }
-        return null
+        return tweet
     }
 
     fun likeTweet(tweet: Tweet): Tweet? {

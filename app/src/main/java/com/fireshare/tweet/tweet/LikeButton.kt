@@ -45,17 +45,17 @@ fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
 fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val t by viewModel.tweet.collectAsState(initial = tweet)
-    val hasRetweeted = t?.favorites?.get(UserFavorites.RETWEET)
+    val hasRetweeted = t?.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
-        t?.let { tweetFeedViewModel.toggleRetweet(it) }
+        t?.let { tweetFeedViewModel.toggleRetweet(it) }?.let {it1 -> viewModel.setTweet(it1) }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = if (hasRetweeted==true) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
+                painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
                 contentDescription = "forward",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (hasRetweeted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary)
+                tint = if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary)
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "${t?.retweetCount}",
