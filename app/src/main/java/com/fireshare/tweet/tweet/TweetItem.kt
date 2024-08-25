@@ -2,17 +2,22 @@ package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
@@ -44,15 +49,25 @@ fun TweetItem(
                     }
 
                     // The Text() that you want to move downward
-                    Text(
-                        text = "Forwarded by you",
-                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier
-                            .padding(start = 10.dp)
-                            .offset(y = (-16).dp) // Adjust the offset value as needed
-                            .zIndex(1f) // Ensure it appears above the tweet area
-                    )
+                    Box {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_squarepath),
+                            contentDescription = "Forward",
+                            modifier = Modifier.size(40.dp)
+                                .padding(start = 50.dp)
+                                .offset(y = (-4).dp) // Adjust the offset value as needed
+                                .zIndex(1f) // Ensure it appears above the tweet area
+                        )
+                        Text(
+                            text = "Forwarded by you",
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier
+                                .padding(start = 60.dp)
+                                .offset(y = (-4).dp) // Adjust the offset value as needed
+                                .zIndex(1f) // Ensure it appears above the tweet area
+                        )
+                    }
                 }
             } else {
                 // retweet with comments

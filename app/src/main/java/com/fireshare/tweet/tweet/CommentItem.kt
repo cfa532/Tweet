@@ -64,7 +64,7 @@ fun CommentItem(tweet: Tweet) {
             Spacer(modifier = Modifier.padding(horizontal = 2.dp))
             Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
         }
-        Column(modifier = Modifier.padding(start = 20.dp))
+        Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
         {
             Text(text = tweet.content, style = MaterialTheme.typography.bodyMedium)
 
