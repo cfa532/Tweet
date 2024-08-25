@@ -46,13 +46,11 @@ fun CommentItem(tweet: Tweet) {
         ) {
             IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
             {
-                author?.baseUrl?.let { getMediaUrl(author.avatar, it) }?.let {
+                if (author != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(author.baseUrl?.let {
-                            getMediaUrl(
-                                author.avatar, it
-                            )
-                        }),
+                        painter = rememberAsyncImagePainter(
+                            getMediaUrl(author.avatar, author.baseUrl)
+                        ),
                         contentDescription = "User Avatar",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -66,7 +64,8 @@ fun CommentItem(tweet: Tweet) {
             Spacer(modifier = Modifier.padding(horizontal = 2.dp))
             Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
         }
-        Column {
+        Column(modifier = Modifier.padding(start = 20.dp))
+        {
             Text(text = tweet.content, style = MaterialTheme.typography.bodyMedium)
 
             // attached media files

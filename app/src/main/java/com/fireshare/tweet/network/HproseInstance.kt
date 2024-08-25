@@ -400,8 +400,8 @@ object HproseInstance {
         return cid
     }
 
-    fun getMediaUrl(mid: MimeiId?, baseUrl: String): Any {
-        if (mid?.isNotEmpty() == true) {
+    fun getMediaUrl(mid: MimeiId?, baseUrl: String?): Any {
+        if (mid?.isNotEmpty() == true && baseUrl?.isNotEmpty() == true) {
             return if (mid.length > 27) {
                 "$baseUrl/ipfs/$mid"
             } else {
