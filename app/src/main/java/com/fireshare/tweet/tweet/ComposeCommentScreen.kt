@@ -70,8 +70,9 @@ fun ComposeCommentScreen(
 
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet = tweetFeedViewModel.getTweetById(tweetId)
+
     val author = tweet?.author
-    val viewModel: TweetViewModel = hiltViewModel(key = tweetId)
+    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
     tweet?.let { viewModel.setTweet(it) }
 
     // Create a launcher for the file picker
@@ -84,7 +85,6 @@ fun ComposeCommentScreen(
             }
         }
     }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()

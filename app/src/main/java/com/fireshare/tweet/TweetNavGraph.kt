@@ -38,7 +38,7 @@ fun TweetNavGraph(
         NavHost(
             modifier = modifier,
             navController = navController,
-            startDestination = TweetFeed
+            startDestination = TweetFeed,
         ) {
             composable<TweetFeed> {
                 TweetFeedScreen(navController)

@@ -17,7 +17,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetItem(
     tweet: Tweet
 ) {
-    var viewModel: TweetViewModel = hiltViewModel(key = tweet.mid)
+    var viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
     viewModel.setTweet(tweet)
 
     Column(

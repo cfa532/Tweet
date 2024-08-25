@@ -20,8 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 
 import com.fireshare.tweet.datamodel.Tweet
@@ -31,7 +29,7 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
-fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {
+fun TweetBody(tweet: Tweet, viewModel: TweetViewModel) {
     // Tweet Header
     TweetHeader(tweet)
     Spacer(modifier = Modifier.padding(8.dp))
@@ -58,13 +56,13 @@ fun TweetBody(tweet: Tweet, tweetViewModel: TweetViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // state hoist
-                LikeButton(it, tweetViewModel)
+                LikeButton(it, viewModel)
                 Spacer(modifier = Modifier.width(8.dp)) // Add some space between the two texts
-                BookmarkButton(it, tweetViewModel)
+                BookmarkButton(it, viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                CommentButton(it, tweetViewModel)
+                CommentButton(it, viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                RetweetButton(it, tweetViewModel)
+                RetweetButton(it, viewModel)
             }
         }
     }
