@@ -25,12 +25,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideAppContainer(): AppContainer {
-        return AppContainer()
-    }
-
-    @Provides
-    @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }

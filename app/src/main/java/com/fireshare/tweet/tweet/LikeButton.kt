@@ -17,20 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
-import androidx.navigation.NavHostController
-import androidx.navigation.Navigation
+import com.fireshare.tweet.AppContainer
 import com.fireshare.tweet.ComposeComment
-import com.fireshare.tweet.ComposeTweet
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetFeed
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
-
-var sharedViewModel: TweetViewModel = TweetViewModel(Tweet(authorId = "default", content = "default"))
 
 @Composable
 fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
@@ -38,7 +32,7 @@ fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
     val navController = LocalNavController.current
 
     IconButton(onClick = {
-        sharedViewModel = viewModel
+        AppContainer.sharedViewModel = viewModel
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

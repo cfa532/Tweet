@@ -45,16 +45,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
-import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.AppContainer
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.Gadget.uploadAttachments
-import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 
@@ -70,11 +68,9 @@ fun ComposeCommentScreen(
 
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet = tweetFeedViewModel.getTweetById(tweetId)
-    val viewModel = sharedViewModel
+    val viewModel = AppContainer.sharedViewModel
     tweet?.let { viewModel.setTweet(it) }
     val author = tweet?.author
-//    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
-//    tweet?.let { viewModel.setTweet(it) }
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(

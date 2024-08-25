@@ -1,19 +1,19 @@
 package com.fireshare.tweet
 
 import android.app.Application
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class TweetApplication : Application() {
-
-    val appContainer = AppContainer()
-
     override fun onCreate() {
         super.onCreate()
     }
 }
 
-class AppContainer {
+object AppContainer {
     var users: MutableSet<User> = emptySet<User>().toMutableSet()
+    var sharedViewModel: TweetViewModel = TweetViewModel(Tweet(authorId = "default", content = "default"))
 }

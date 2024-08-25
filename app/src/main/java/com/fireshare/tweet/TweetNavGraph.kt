@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -16,13 +15,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.profile.EditProfileScreen
-import com.fireshare.tweet.tweet.ComposeTweetScreen
-import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
+import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetDetailScreen
+import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 
 val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")

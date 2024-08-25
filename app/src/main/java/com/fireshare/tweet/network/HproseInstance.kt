@@ -7,6 +7,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.google.gson.Gson
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -21,8 +22,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.io.InputStream
 import java.math.BigInteger
 import java.net.URLEncoder
-import com.google.gson.Gson
-import kotlinx.coroutines.CoroutineScope
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
