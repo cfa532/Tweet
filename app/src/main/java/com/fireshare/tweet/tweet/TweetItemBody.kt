@@ -44,7 +44,7 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
             })) {
         Column(
             modifier = Modifier
-                .padding(8.dp)
+                .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
             TweetHeader(tweet)
