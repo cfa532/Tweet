@@ -31,8 +31,9 @@ object HproseInstance {
 
     // Keys within the mimei of the user's database
     private const val TWT_LIST_KEY = "list_of_tweets_mid"
-    private const val OWNER_DATA_KEY = "data_of_author"     // account data of user
+    private const val TWT_CONTENT_KEY = "core_data_of_tweet"     // account data of user
     private const val FOLLOWINGS_KEY = "list_of_followings_mid"
+    private const val COMMENT_LIST = "comment_list_key"
 
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
@@ -281,9 +282,38 @@ object HproseInstance {
         return tweet
     }
 
+    fun getCommentList( tweetId: MimeiId ): List<Tweet> {
+        val list = mutableListOf<Tweet>()
+        client.mmOpen("", tweetId, "last").also {
+            client.zRevRange(it, COMMENT_LIST, 0, -1).forEach { e ->
+                val sp = e as Map<*, *>
+                val score = (sp["score"] as BigInteger).toLong()
+                val commentId = sp["member"] as MimeiId
+                client.mmOpen("", commentId, "last").also {mmsid ->
+                    val c = client.get(mmsid, TWT_CONTENT_KEY) as Map<*, *>
+                    list.add(Tweet(mid = c["mid"] as MimeiId,
+                        authorId = c["authorId"] as MimeiId,
+                        content = c["content"] as String,
+                        timestamp = (c["timestamp"] as Double).toLong()))
+                }
+            }
+        }
+        return list
+    }
+
     // given a tweet, load its comments
-    fun loadComments(tweet: Tweet, pageNumber: Int = 0) {
-        //
+    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet> {
+        val method = "get_comments"
+        val url = "${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val responseBody = response.body?.string() ?: return listOf()
+            val gson = Gson()
+            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+            return listOf()
+        }
+        return listOf()
     }
 
     fun delComment(tweetId: MimeiId, commentId: MimeiId) {

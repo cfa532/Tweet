@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
@@ -35,13 +36,16 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
 fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
+    val navController = LocalNavController.current
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-                println("show detail")
-            })) {
+            println("show detail")
+            tweet.mid?.let {navController.navigate(TweetDetail(it)) }
+        })
+    ) {
         Column(
             modifier = Modifier
                 .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)

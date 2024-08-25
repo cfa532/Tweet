@@ -24,7 +24,11 @@ class TweetViewModel @Inject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments
 
     fun loadComments(pageNumber: Number = 0) {
-        //
+        viewModelScope.launch(Dispatchers.Default) {
+            tweet.value?.let {
+                _comments.value = it.mid?.let { it1 -> HproseInstance.getCommentList(it1) }!!
+            }
+        }
     }
 
     fun uploadComment(comment: Tweet) {
