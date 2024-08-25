@@ -31,9 +31,6 @@ fun TweetNavGraph(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
-    val context = LocalContext.current
-    val preferencesHelper = remember { PreferencesHelper(context) }
-
     // provide navController application-wide
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
@@ -61,7 +58,7 @@ fun TweetNavGraph(
                 UserProfileScreen(navController, profile.userId)
             }
             composable<ProfileEditor> {
-                EditProfileScreen(navController, preferencesHelper)
+                EditProfileScreen(navController)
             }
         }
     }

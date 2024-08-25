@@ -29,9 +29,10 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
-fun TweetBody(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
     // Tweet Header
     TweetHeader(tweet)
+
     Spacer(modifier = Modifier.padding(8.dp))
     Column(
         modifier = Modifier.padding(start = 12.dp)

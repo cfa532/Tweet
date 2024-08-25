@@ -38,7 +38,7 @@ fun TweetItem(
                     // retweet shares the same viewModel
                     viewModel = hiltViewModel(key = tweet.originalTweetId)
                     viewModel.setTweet(it)
-                    TweetBody(it, viewModel)
+                    TweetBlock(it, viewModel)
                 }
             } else {
                 // retweet with comments
@@ -50,13 +50,13 @@ fun TweetItem(
                     modifier = Modifier.padding(start = 12.dp)
                 )
                 tweet.originalTweet?.let {
-                    TweetBody(it, viewModel)
+                    TweetBlock(it, viewModel)
                 }
             }
         } else {
             // original tweet by current user.
             viewModel.setTweet(tweet)
-            TweetBody(tweet, viewModel)
+            TweetBlock(tweet, viewModel)
         }
     }
 }

@@ -50,8 +50,11 @@ import kotlinx.coroutines.withContext
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
-    preferencesHelper: PreferencesHelper,
+//    preferencesHelper: PreferencesHelper,
 ) {
+    val context = LocalContext.current
+    val preferencesHelper = remember { PreferencesHelper(context) }
+
     var username by rememberSaveable { mutableStateOf(preferencesHelper.getUsername() ?: "NoOne") }
     var name by rememberSaveable { mutableStateOf(preferencesHelper.getName() ?: "No One") }
     var profile by rememberSaveable { mutableStateOf(preferencesHelper.getProfile() ?: "My cool profile") }
@@ -59,7 +62,6 @@ fun EditProfileScreen(
     val user by remember { mutableStateOf<User?>(appUser) }
 
 //    appUser.avatar?.let { avatar = it }
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -67,17 +69,13 @@ fun EditProfileScreen(
         uri?.let {
             coroutineScope.launch {
                 withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openInputStream(it)?.let { stream ->
-                            val mimeiId = HproseInstance.uploadToIPFS(stream)
-                            avatar = mimeiId
-                            user?.let { user ->
-                                user.avatar = mimeiId
-                                HproseInstance.setUserData(user)
-                            }
+                    context.contentResolver.openInputStream(it)?.let { stream ->
+                        val mimeiId = HproseInstance.uploadToIPFS(stream)
+                        avatar = mimeiId
+                        user?.let { user ->
+                            user.avatar = mimeiId
+                            HproseInstance.setUserData(user)
                         }
-                    } catch (e: Exception) {
-                        // Handle error
                     }
                 }
             }
