@@ -19,6 +19,8 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun CommentFeed(tweet: Tweet) {
     // given tweetId, load all its comments
     val viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
+    viewModel.setTweet(tweet)
+    viewModel.loadComments()
     val comments = viewModel.comments.collectAsState().value
 
     LazyColumn(
@@ -31,7 +33,7 @@ fun CommentFeed(tweet: Tweet) {
                 thickness = 0.5.dp,
                 color = Color.LightGray
             )
-            TweetItem(tweet = comment)
+            CommentItem(tweet = comment)
         }
     }
 }

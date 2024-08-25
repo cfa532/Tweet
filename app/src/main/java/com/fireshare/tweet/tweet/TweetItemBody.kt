@@ -42,7 +42,6 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-            println("show detail")
             tweet.mid?.let {navController.navigate(TweetDetail(it)) }
         })
     ) {
@@ -53,7 +52,7 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
             // Tweet Header
             TweetHeader(tweet)
 
-            Spacer(modifier = Modifier.padding(4.dp))
+            Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 tonalElevation = 0.dp,
@@ -119,9 +118,8 @@ fun TweetHeader(tweet: Tweet) {
             }
         }
         Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-        Column {
-            Text(text = author?.name ?: "No One", style = MaterialTheme.typography.bodyMedium)
-            Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
-        }
+        Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+        Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
     }
 }
