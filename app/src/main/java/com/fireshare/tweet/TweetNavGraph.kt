@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,6 +21,8 @@ import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
 import com.fireshare.tweet.tweet.TweetDetailScreen
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 
 val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")
@@ -41,7 +44,8 @@ fun TweetNavGraph(
             startDestination = TweetFeed,
         ) {
             composable<TweetFeed> {
-                TweetFeedScreen(navController)
+                val viewModel = hiltViewModel<TweetFeedViewModel>()
+                TweetFeedScreen(navController, viewModel)
             }
             composable<TweetDetail> { navBackStackEntry ->
                 val tweet = navBackStackEntry.toRoute<TweetDetail>()

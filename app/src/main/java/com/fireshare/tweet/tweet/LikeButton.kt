@@ -30,12 +30,15 @@ import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
+var sharedViewModel: TweetViewModel = TweetViewModel(Tweet(authorId = "default", content = "default"))
+
 @Composable
 fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
     val t by viewModel.tweet.collectAsState(initial = tweet)
     val navController = LocalNavController.current
 
     IconButton(onClick = {
+        sharedViewModel = viewModel
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

@@ -16,13 +16,12 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 
 @Composable
-fun TweetFeedScreen(navController: NavHostController)
+fun TweetFeedScreen(navController: NavHostController, viewModel: TweetFeedViewModel)
 {
     Scaffold(
         topBar = { MainTopAppBar(navController) },
         bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
-        val viewModel: TweetFeedViewModel = hiltViewModel()
         val tweets = viewModel.tweets.collectAsState().value
         LazyColumn(
             modifier = Modifier
