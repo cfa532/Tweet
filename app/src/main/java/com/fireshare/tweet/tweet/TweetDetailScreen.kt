@@ -1,9 +1,6 @@
 package com.fireshare.tweet.tweet
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,56 +16,47 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweetDetailScreen(tweetId: MimeiId) {
     val navController = LocalNavController.current
 
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val tweet = tweetFeedViewModel.getTweetById(tweetId)
+    val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
 
     Column {
-        TweetTopBar(navController)
-        if (tweet != null) {
-            CommentHead(tweet)
-            // divider between tweet and comments
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 1.dp),
-                thickness = 0.5.dp,
-                color = Color.LightGray
-            )
-            CommentFeed(tweet)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TweetTopBar(navController: NavController) {
-    TopAppBar(
-        title = {
-            Text(
-                text="Tweet",
-                style = MaterialTheme.typography.bodyLarge
-            ) },
-        navigationIcon = {
-            IconButton(onClick = { navController.popBackStack() }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_back),
-                    contentDescription = "Back",
-                    modifier = Modifier
-                        .size(18.dp)
+        TopAppBar(
+            title = {
+                Text(
+                    text = "Tweet",
+                    style = MaterialTheme.typography.bodyLarge
                 )
-            }
-        },
-        modifier = Modifier.height(70.dp)
-    )
+            },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_back),
+                        contentDescription = "Back",
+                        modifier = Modifier
+                            .size(18.dp)
+                    )
+                }
+            },
+            modifier = Modifier.height(70.dp)
+        )
+        CommentHead(tweet)
+        // divider between tweet and comments
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 1.dp),
+            thickness = 0.5.dp,
+            color = Color.LightGray
+        )
+        CommentFeed(tweet)
+    }
 }
