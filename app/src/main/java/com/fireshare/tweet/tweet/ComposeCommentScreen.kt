@@ -68,6 +68,7 @@ fun ComposeCommentScreen(
 
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet = tweetFeedViewModel.getTweetById(tweetId)
+
     val viewModel = AppContainer.sharedViewModel
     tweet?.let { viewModel.setTweet(it) }
     val author = tweet?.author
@@ -82,6 +83,7 @@ fun ComposeCommentScreen(
             }
         }
     }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()

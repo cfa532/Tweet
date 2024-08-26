@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
@@ -21,6 +22,8 @@ fun CommentFeed(tweet: Tweet) {
     viewModel.setTweet(tweet)
     viewModel.loadComments()
     val comments = viewModel.comments.collectAsState().value
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    comments.forEach{tweetFeedViewModel.addTweet(it) }
 
     LazyColumn(
         modifier = Modifier

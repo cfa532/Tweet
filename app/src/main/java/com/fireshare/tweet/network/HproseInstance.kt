@@ -156,7 +156,7 @@ object HproseInstance {
                 val tweetId = sp["member"] as MimeiId
                 if (score <= startTimestamp && (endTimestamp == null || score > endTimestamp)) {
                     // check if the tweet is in the tweets already.
-                    fetchTweet(tweetId, authorId, tweets)?.let { t -> tweets += t }
+                    getTweet(tweetId, authorId, tweets)?.let { t -> tweets += t }
                 }
             }
         }
@@ -164,7 +164,7 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    private suspend fun fetchTweet(
+    private suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         tweets: MutableList<Tweet>
@@ -193,7 +193,7 @@ object HproseInstance {
                         tweet.originalTweet = cachedTweet;
                     } else {
                         tweet.originalTweet =
-                            tweet.originalAuthorId?.let { fetchTweet(tweet.originalTweetId, it, tweets) }
+                            tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId, it, tweets) }
                                 ?: return null
                         tweet.originalAuthor = tweet.originalTweet!!.author
                     }
@@ -304,9 +304,9 @@ object HproseInstance {
     }
 
     // given a tweet, load its comments
-    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet> {
+    fun getComments(tweet: Tweet, commentId: MimeiId?, pageNumber: Int = 0): List<Tweet> {
         val method = "get_comments"
-        val url = "${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}"
+        val url = "${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}&pn=$pageNumber&commentid=$commentId"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {

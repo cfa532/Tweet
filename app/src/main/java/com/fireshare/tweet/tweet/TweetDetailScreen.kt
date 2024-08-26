@@ -20,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
