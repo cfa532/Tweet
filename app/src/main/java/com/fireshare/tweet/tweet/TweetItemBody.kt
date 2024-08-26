@@ -33,6 +33,7 @@ import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
@@ -45,12 +46,23 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
             tweet.mid?.let {navController.navigate(TweetDetail(it)) }
         })
     ) {
-        Column(
-            modifier = Modifier
+        Column( modifier = Modifier
                 .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
-            TweetHeader(tweet)
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                val author = tweet.author
+                IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
+                {
+                    UserAvatar(author, 40)
+                }
+                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+            }
 
             Spacer(modifier = Modifier.padding(2.dp))
             Surface(
@@ -58,7 +70,6 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
                 tonalElevation = 0.dp,
                 modifier = Modifier
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 16.dp)
-                    .clickable(onClick = { /* Handle inner column click */ })
             ) {
                 Column {
                     Text(text = tweet.content, style = MaterialTheme.typography.bodyMedium)

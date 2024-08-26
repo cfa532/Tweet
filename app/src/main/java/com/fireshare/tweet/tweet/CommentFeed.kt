@@ -26,6 +26,7 @@ fun CommentFeed(tweet: Tweet) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .padding(start = 8.dp)
     ) {
         items(comments) { comment ->
             HorizontalDivider(
