@@ -90,6 +90,7 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
                     // Actions Row
                     Row(
                         modifier = Modifier.fillMaxWidth()
+                            .padding(top = 0.dp)
                     ) {
                         // State hoist
                         LikeButton(tweet, viewModel)

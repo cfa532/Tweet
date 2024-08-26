@@ -282,7 +282,7 @@ object HproseInstance {
         return tweet
     }
 
-    fun getCommentList( tweetId: MimeiId ): List<Tweet> {
+    suspend fun getCommentList(tweetId: MimeiId ): List<Tweet> {
         val list = mutableListOf<Tweet>()
         client.mmOpen("", tweetId, "last").also {
             client.zRevRange(it, COMMENT_LIST, 0, -1).forEach { e ->
@@ -291,10 +291,12 @@ object HproseInstance {
                 val commentId = sp["member"] as MimeiId
                 client.mmOpen("", commentId, "last").also {mmsid ->
                     val c = client.get(mmsid, TWT_CONTENT_KEY) as Map<*, *>
-                    list.add(Tweet(mid = c["mid"] as MimeiId,
+                    val tweet = Tweet(mid = c["mid"] as MimeiId,
                         authorId = c["authorId"] as MimeiId,
                         content = c["content"] as String,
-                        timestamp = (c["timestamp"] as Double).toLong()))
+                        timestamp = (c["timestamp"] as Double).toLong())
+                    tweet.author = getUserBase(tweet.authorId)
+                    list.add(tweet)
                 }
             }
         }

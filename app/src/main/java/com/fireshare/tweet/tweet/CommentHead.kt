@@ -21,7 +21,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
 fun CommentHead(tweet: Tweet) {
-    var viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
+    val viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
     viewModel.setTweet(tweet)
 
     Column(
@@ -30,50 +30,15 @@ fun CommentHead(tweet: Tweet) {
             .padding(0.dp)
     ) {
         if (tweet.originalTweetId != null) {
-            if (tweet.content == "") {
-                // this is a retweet of another tweet.
-                Box {
-                    // The tweet area
-                    tweet.originalTweet?.let {
-                        // retweet shares the same viewModel
-                        viewModel = hiltViewModel(key = tweet.originalTweetId)
-                        viewModel.setTweet(it)
-                        TweetBlock(it, viewModel)
-                    }
-
-                    // The Text() that you want to move downward
-                    Box {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_squarepath),
-                            contentDescription = "Forward",
-                            modifier = Modifier.size(40.dp)
-                                .padding(start = 50.dp)
-                                .offset(y = (-4).dp) // Adjust the offset value as needed
-                                .zIndex(1f) // Ensure it appears above the tweet area
-                        )
-                        Text(
-                            text = "Forwarded by you",
-                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier
-                                .padding(start = 60.dp)
-                                .offset(y = (-4).dp) // Adjust the offset value as needed
-                                .zIndex(1f) // Ensure it appears above the tweet area
-                        )
-                    }
-                }
-            } else {
-                // retweet with comments
-                TweetHeader(tweet)
-                Text(
-                    text = tweet.content,
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(start = 12.dp)
-                )
-                tweet.originalTweet?.let {
-                    TweetBlock(it, viewModel)
-                }
+            TweetHeader(tweet)
+            Text(
+                text = tweet.content,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+            tweet.originalTweet?.let {
+                TweetBlock(it, viewModel)
             }
         } else {
             // original tweet by current user.
