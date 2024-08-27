@@ -323,7 +323,7 @@ object HproseInstance {
     }
 
     // update input parameter "comment" with new mid, and return count
-    fun addComment(tweet: Tweet, comment: Tweet): Tweet {
+    fun uploadComment(tweet: Tweet, comment: Tweet): Tweet {
         // add the comment to tweetId
         val method = "add_comment"
         val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")

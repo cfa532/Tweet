@@ -46,7 +46,7 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavRoot)
                 }
                 val viewModel = hiltViewModel<TweetFeedViewModel>(parentEntry)
-                TweetFeedScreen(navController, viewModel)
+                TweetFeedScreen(navController, viewModel, parentEntry)
             }
 //            composable<TweetDetail> { navBackStackEntry ->
 //                val args = navBackStackEntry.toRoute<TweetDetail>()
@@ -83,8 +83,11 @@ fun TweetNavGraph(
                 ComposeCommentScreen(navController, tweet.tweetId, viewModel)
             }
             composable<UserProfile> { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(NavRoot)
+                }
                 val profile = backStackEntry.toRoute<UserProfile>()
-                UserProfileScreen(navController, profile.userId)
+                UserProfileScreen(navController, profile.userId, parentEntry)
             }
             composable<ProfileEditor> {
                 EditProfileScreen(navController)

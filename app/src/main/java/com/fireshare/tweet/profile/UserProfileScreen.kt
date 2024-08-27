@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.ProfileEditor
@@ -40,6 +41,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 fun UserProfileScreen(
     navController: NavHostController,
     userId: MimeiId,
+    parentEntry: NavBackStackEntry,
 ) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val user = HproseInstance.getUser(userId)
@@ -108,7 +110,7 @@ fun UserProfileScreen(
             )
             {
                 items(tweetsByAuthor) { tweet ->
-                    if (!tweet.isPrivate) TweetItem(tweet)
+                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
             }
         }

@@ -20,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.UserProfile
@@ -29,9 +30,10 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetItem(
-    tweet: Tweet
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry
 ) {
-    var viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
+    var viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.mid)
     viewModel.setTweet(tweet)
 
     Column(

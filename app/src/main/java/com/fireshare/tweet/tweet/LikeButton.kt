@@ -54,7 +54,10 @@ fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
     val hasRetweeted = t?.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
-        t?.let { tweetFeedViewModel.toggleRetweet(it) }?.let {it1 -> viewModel.setTweet(it1) }
+        t?.let { tweetFeedViewModel.toggleRetweet(it) }?.let {it1 ->
+            viewModel.setTweet(it1)
+            tweetFeedViewModel.updateTweet(it1)
+        }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -73,11 +76,12 @@ fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
 
 @Composable
 fun LikeButton(tweet: Tweet, viewModel: TweetViewModel) {
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val t by viewModel.tweet.collectAsState(initial = tweet)
     val hasLiked = t?.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
 
     IconButton(onClick = {
-        t?.let { viewModel.likeTweet(it) }
+        t?.let { viewModel.likeTweet(it) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) } }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -97,10 +101,11 @@ fun LikeButton(tweet: Tweet, viewModel: TweetViewModel) {
 
 @Composable
 fun BookmarkButton(tweet: Tweet, viewModel: TweetViewModel) {
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val t by viewModel.tweet.collectAsState(initial = tweet)
     val hasBookmarked = t?.favorites?.get(UserFavorites.BOOKMARK) ?: false
     IconButton(onClick = {
-        t?.let { viewModel.bookmarkTweet(it) }
+        t?.let { viewModel.bookmarkTweet(it) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) } }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(

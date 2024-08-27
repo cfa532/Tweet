@@ -55,6 +55,7 @@ import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
+import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,8 +73,8 @@ fun ComposeCommentScreen(
     val tweet = tweetFeedViewModel.getTweetById(tweetId)
 
 //    val viewModel = AppContainer.sharedViewModel
-    tweet?.let { viewModel.setTweet(it) }
-    val author = tweet?.author
+    tweet?.let { viewModel.setTweet(it) } ?: return
+    val author = tweet.author
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -101,7 +102,8 @@ fun ComposeCommentScreen(
                         onClick = {
                             viewModel.viewModelScope.launch {
                                 val attachments = uploadAttachments(context, selectedAttachments)
-                                viewModel.uploadComment(comment = Tweet(
+                                viewModel.uploadComment(tweet,
+                                    comment = Tweet(
                                     authorId = appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments,
@@ -135,18 +137,7 @@ fun ComposeCommentScreen(
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            author?.baseUrl?.let { getMediaUrl(author.avatar, it) }?.let {
-                Image(
-                    painter = rememberAsyncImagePainter(it),
-                    contentDescription = "User Avatar",
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            Spacer(Modifier.padding(start = 8.dp))
-            Text(text = "Reply to @${author?.username}")
+            UserAvatar(author, 32)
         }
         OutlinedTextField(
             value = tweetContent,

@@ -32,6 +32,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(startTimestamp.longValue)
     }
 
+    // given a tweet, update its counterpart in Tweet list
+    fun updateTweet(tweet: Tweet) {
+        _tweets.value = _tweets.value.map {
+            if (it.mid == tweet.mid) tweet else tweet
+        }
+    }
+
     fun getTweetById(tweetId: MimeiId): Tweet? {
         return tweets.value.find { it.mid == tweetId }
     }
