@@ -53,6 +53,7 @@ import com.fireshare.tweet.network.Gadget.uploadAttachments
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 fun ComposeCommentScreen(
     navController: NavHostController,
     tweetId: MimeiId,
+    viewModel: TweetViewModel
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
@@ -69,7 +71,7 @@ fun ComposeCommentScreen(
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet = tweetFeedViewModel.getTweetById(tweetId)
 
-    val viewModel = AppContainer.sharedViewModel
+//    val viewModel = AppContainer.sharedViewModel
     tweet?.let { viewModel.setTweet(it) }
     val author = tweet?.author
 

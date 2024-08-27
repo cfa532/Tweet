@@ -2,6 +2,7 @@ package com.fireshare.tweet.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,6 +31,10 @@ class TweetViewModel @Inject constructor(
                 _comments.value = it.mid?.let { it1 -> HproseInstance.getCommentList(it1) }!!
             }
         }
+    }
+
+    fun getCommentById(commentId: MimeiId): Tweet? {
+        return comments.value.find { it.mid == commentId }
     }
 
     fun uploadComment(comment: Tweet) {
@@ -63,6 +69,10 @@ class TweetViewModel @Inject constructor(
                 e.printStackTrace()
             }
         }
+    }
+
+    fun loadComment(tweetId: MimeiId, commentId: MimeiId) {
+        // Load a comment with given ID from the same node where the tweet is.
     }
 
     fun setTweet(tweet: Tweet) {

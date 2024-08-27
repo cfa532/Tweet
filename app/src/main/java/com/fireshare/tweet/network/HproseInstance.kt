@@ -164,7 +164,7 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    private suspend fun getTweet(
+    suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         tweets: MutableList<Tweet>

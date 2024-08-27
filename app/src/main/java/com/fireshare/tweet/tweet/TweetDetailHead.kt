@@ -1,7 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,23 +8,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
@@ -35,26 +26,38 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
+// The Tweet block above the comment list
 @Composable
-fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
-    val navController = LocalNavController.current
+fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel)
+{
+//    viewModel.setTweet(tweet)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(0.dp)
+    ) {
+        tweet.originalTweet?.let {
+            TweetBody(it, viewModel)
+        } ?: TweetBody(tweet, viewModel)    // display regular tweet as default action
+    }
+}
+
+@Composable
+fun TweetBody(tweet: Tweet, viewModel: TweetViewModel) {
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
-        tonalElevation = 1.dp,
-        modifier = Modifier.clickable(onClick = {
-//            tweet.mid?.let { navController.navigate(TweetDetail(it, null)) }
-            tweet.mid?.let { navController.navigate("TweetDetail?tweetId=$it") }
-        })
+        tonalElevation = 2.dp
     ) {
         Column( modifier = Modifier
-                .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
+            .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start
             ) {
                 val author = tweet.author
+                val navController = LocalNavController.current
                 IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
                 {
                     UserAvatar(author, 40)
@@ -64,19 +67,17 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
                 Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                 Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
             }
-
             Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
-                tonalElevation = 0.dp,
+                tonalElevation = 3.dp,
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 16.dp)
+                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
                     Text(text = tweet.content, style = MaterialTheme.typography.bodyMedium)
-
-                    // attached media files
                     Box(
+                        // media files
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 800.dp) // Set a specific height for the grid
@@ -90,8 +91,7 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
 
                     // Actions Row
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                             .padding(top = 0.dp)
                     ) {
                         // State hoist
@@ -106,5 +106,20 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun TweetDetailHeader(tweet: Tweet) {
+    // Use a Row to align author name and potential verification badge
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start
+    ) {
+        val author = tweet.author
+        UserAvatar(author, 40)
+        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+        Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+        Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
     }
 }

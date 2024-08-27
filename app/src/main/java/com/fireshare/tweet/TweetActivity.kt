@@ -84,7 +84,7 @@ fun BottomNavigationBar(navController: NavHostController) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            IconButton(onClick = { navController.navigate("tweetFeed") }) {
+            IconButton(onClick = { navController.navigate(TweetFeed) }) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_home),
                     contentDescription = "Home",

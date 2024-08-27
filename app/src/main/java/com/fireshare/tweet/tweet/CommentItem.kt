@@ -21,6 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -29,20 +30,22 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun CommentItem(tweet: Tweet) {
+fun CommentItem(tweetId: MimeiId, comment: Tweet) {
     val navController = LocalNavController.current
-    val author = tweet.author
-    val viewModel = hiltViewModel<TweetViewModel>(key = tweet.mid)
+    val author = comment.author
+
+    val viewModel = hiltViewModel<TweetViewModel>(key = comment.mid)
     Column(
         modifier = Modifier.clickable(onClick = {
-            tweet.mid?.let {navController.navigate(TweetDetail(it)) }
+//            navController.navigate(TweetDetail(comment.mid, tweetId))
+            navController.navigate("TweetDetail?tweetId=$tweetId&commentId=${comment.mid}")
         })
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
-            IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
+            IconButton(onClick = { navController.navigate(UserProfile(comment.authorId)) })
             {
                 UserAvatar(author, 40)
             }
@@ -54,7 +57,7 @@ fun CommentItem(tweet: Tweet) {
 
         Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
         {
-            Text(text = tweet.content, style = MaterialTheme.typography.bodyMedium)
+            Text(text = comment.content, style = MaterialTheme.typography.bodyMedium)
 
             // attached media files
             Box(
@@ -62,8 +65,8 @@ fun CommentItem(tweet: Tweet) {
                     .fillMaxWidth()
                     .heightIn(max = 800.dp) // Set a specific height for the grid
             ) {
-                val mediaItems = tweet.attachments?.mapNotNull {
-                    tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
+                val mediaItems = comment.attachments?.mapNotNull {
+                    comment.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
                         ?.let { it2 -> MediaItem(it2) }
                 }
                 mediaItems?.let { MediaPreviewGrid(it) }
@@ -74,13 +77,13 @@ fun CommentItem(tweet: Tweet) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // State hoist
-                LikeButton(tweet, viewModel)
+                LikeButton(comment, viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                BookmarkButton(tweet, viewModel)
+                BookmarkButton(comment, viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                CommentButton(tweet, viewModel)
+                CommentButton(comment, viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                RetweetButton(tweet, viewModel)
+                RetweetButton(comment, viewModel)
             }
         }
     }

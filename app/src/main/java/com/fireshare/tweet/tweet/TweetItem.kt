@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,17 +10,22 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetItem(
@@ -86,5 +92,24 @@ fun TweetItem(
             // original tweet by current user.
             TweetBlock(tweet, viewModel)
         }
+    }
+}
+
+@Composable
+fun TweetHeader(tweet: Tweet) {
+    // Use a Row to align author name and potential verification badge
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start
+    ) {
+        val navController = LocalNavController.current
+        val author = tweet.author
+        IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
+        {
+            UserAvatar(author, 40)
+        }
+        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+        Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+        Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
     }
 }
