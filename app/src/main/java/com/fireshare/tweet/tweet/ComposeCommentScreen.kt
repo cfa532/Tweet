@@ -107,7 +107,7 @@ fun ComposeCommentScreen(
                                     authorId = appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments,
-                                ))
+                                )) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
                                 // clear and return to previous screen
                                 selectedAttachments.clear()
                                 tweetContent = ""

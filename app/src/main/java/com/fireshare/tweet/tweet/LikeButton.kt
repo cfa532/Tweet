@@ -56,7 +56,6 @@ fun RetweetButton(tweet: Tweet, viewModel: TweetViewModel) {
     IconButton(onClick = {
         t?.let { tweetFeedViewModel.toggleRetweet(it) }?.let {it1 ->
             viewModel.setTweet(it1)
-            tweetFeedViewModel.updateTweet(it1)
         }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

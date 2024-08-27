@@ -37,9 +37,10 @@ class TweetViewModel @Inject constructor(
         return comments.value.find { it.mid == commentId }
     }
 
-    fun uploadComment(tweet: Tweet, comment: Tweet) {
+    fun uploadComment(tweet: Tweet, comment: Tweet, updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.Default) {
             _tweet.value = HproseInstance.uploadComment(tweet, comment)
+            updateTweetFeed(_tweet.value as Tweet)
             addComment(comment)     // add it to top of comment list
         }
     }
