@@ -4,6 +4,9 @@ import com.fireshare.tweet.datamodel.MimeiId
 import kotlinx.serialization.Serializable
 
 @Serializable
+object NavRoot
+
+@Serializable
 object TweetFeed
 
 @Serializable

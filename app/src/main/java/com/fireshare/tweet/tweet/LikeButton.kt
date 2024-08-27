@@ -32,7 +32,7 @@ fun CommentButton(tweet: Tweet, viewModel: TweetViewModel) {
     val navController = LocalNavController.current
 
     IconButton(onClick = {
-        AppContainer.sharedViewModel = viewModel
+//        AppContainer.sharedViewModel = viewModel
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

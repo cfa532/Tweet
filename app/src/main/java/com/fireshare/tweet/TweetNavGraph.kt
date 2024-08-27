@@ -3,6 +3,7 @@ package com.fireshare.tweet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -38,9 +39,13 @@ fun TweetNavGraph(
             modifier = modifier,
             navController = navController,
             startDestination = TweetFeed,
+            route = NavRoot::class
         ) {
             composable<TweetFeed> {
-                val viewModel = hiltViewModel<TweetFeedViewModel>()
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavRoot)
+                }
+                val viewModel = hiltViewModel<TweetFeedViewModel>(parentEntry)
                 TweetFeedScreen(navController, viewModel)
             }
 //            composable<TweetDetail> { navBackStackEntry ->
@@ -58,17 +63,23 @@ fun TweetNavGraph(
                     }
                 )
             ) {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavRoot)
+                }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-                val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
+                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
                 TweetDetailScreen(tweetId, commentId, viewModel)
             }
             composable<ComposeTweet> {
                 ComposeTweetScreen(navController)
             }
             composable<ComposeComment> { navBackStackEntry ->
+                val parentEntry = remember(navBackStackEntry) {
+                    navController.getBackStackEntry(NavRoot)
+                }
                 val tweet = navBackStackEntry.toRoute<ComposeComment>()
-                val viewModel = hiltViewModel<TweetViewModel>(key = tweet.tweetId)
+                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.tweetId)
                 ComposeCommentScreen(navController, tweet.tweetId, viewModel)
             }
             composable<UserProfile> { backStackEntry ->

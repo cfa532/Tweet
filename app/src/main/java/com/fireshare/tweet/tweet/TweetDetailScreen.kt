@@ -30,15 +30,26 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetViewModel) {
+    lateinit var tweetViewModel: TweetViewModel
     val navController = LocalNavController.current
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+
     val tweet = if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
         // the 1st parameter tweetId is its parent tweet
-        viewModel.getCommentById(commentId)
+        val t = viewModel.getCommentById(commentId) ?: return
+        tweetViewModel = hiltViewModel<TweetViewModel>(key = t.mid)
+        tweetViewModel.setTweet(t)
+        t
     } else {
-        tweetFeedViewModel.getTweetById(tweetId)
+        // display a plain tweet with its comments
+        val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
+        tweetViewModel = viewModel
+        tweetViewModel.setTweet(t)
+        t
     }
+    tweetViewModel.loadComments()
+    val comments = tweetViewModel.comments.collectAsState().value
 
     Column {
         TopAppBar(
@@ -60,36 +71,29 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetVie
             },
             modifier = Modifier.height(70.dp)
         )
-        if (tweet != null) {
-            // main body of the parent Tweet.
-            TweetDetailHead(tweet, viewModel)
 
-            // divider between tweet and its comment list
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 1.dp),
-                thickness = 0.5.dp,
-                color = Color.LightGray
-            )
+        // main body of the parent Tweet.
+        TweetDetailHead(tweet, tweetViewModel)
 
-            viewModel.setTweet(tweet)
-            viewModel.loadComments()
-            val comments = viewModel.comments.collectAsState().value
-//            comments.forEach{viewModel.addComment(it) }
-
-            // user comment list
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 8.dp)
-            ) {
-                items(comments) { comment ->
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
-                        thickness = 0.5.dp,
-                        color = Color.LightGray
-                    )
-                    tweet.mid?.let { CommentItem(it, comment) }
-                }
+        // divider between tweet and its comment list
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 1.dp),
+            thickness = 0.5.dp,
+            color = Color.LightGray
+        )
+        // user comment list
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 8.dp)
+        ) {
+            items(comments) { comment ->
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 1.dp),
+                    thickness = 0.5.dp,
+                    color = Color.LightGray
+                )
+                tweet.mid?.let { CommentItem(it, comment) }
             }
         }
     }
