@@ -10,13 +10,13 @@ object TweetFeed
 object MessageList      // all messages of app user
 
 @Serializable
-data class MessageDetail(var userId: MimeiId)   // all messages with another user
+data class MessageDetail(val userId: MimeiId)   // all messages with another user
 
 @Serializable
 object ComposeTweet
 
 @Serializable
-data class ComposeComment(var tweetId: MimeiId)
+data class ComposeComment(val tweetId: MimeiId)
 
 @Serializable
 object ProfileEditor
@@ -25,12 +25,12 @@ object ProfileEditor
 // the comment itself is a tweet too.
 @Serializable
 data class TweetDetail(
-    var tweetId: String,
-    var commentId: String?,
+    val tweetId: String,
+    val commentId: String?,
     )
 
 @Serializable
-data class UserProfile(var userId: MimeiId)     // profile detail of a user
+data class UserProfile(val userId: MimeiId)     // profile detail of a user
 
 @Serializable
-data class MediaPreview(var mid: MimeiId)   // preview media file by Mimei ID
+data class MediaPreview(val mid: MimeiId)   // preview media file by Mimei ID
