@@ -15,5 +15,4 @@ class TweetApplication : Application() {
 
 object AppContainer {
     var users: MutableSet<User> = emptySet<User>().toMutableSet()
-    var sharedViewModel: TweetViewModel = TweetViewModel(Tweet(authorId = "default", content = "default"))
 }

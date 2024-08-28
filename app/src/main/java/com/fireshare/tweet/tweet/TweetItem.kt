@@ -14,6 +14,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -25,6 +26,7 @@ import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -34,8 +36,9 @@ fun TweetItem(
     parentEntry: NavBackStackEntry
 ) {
     // only place to call setTweet()
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     var viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.mid)
-    viewModel.setTweet(tweet)
+    viewModel.init(tweet, tweetFeedViewModel)
 
     Column(
         modifier = Modifier
@@ -52,7 +55,7 @@ fun TweetItem(
                     // The tweet area
                     tweet.originalTweet?.let {
                         viewModel = hiltViewModel(key = tweet.originalTweetId)
-                        viewModel.setTweet(it)
+                        viewModel.init(it, tweetFeedViewModel)
                         TweetBlock(it, viewModel)
                     }
 
@@ -61,7 +64,8 @@ fun TweetItem(
                         Icon(
                             painter = painterResource(id = R.drawable.ic_squarepath),
                             contentDescription = "Forward",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier
+                                .size(40.dp)
                                 .padding(start = 50.dp)
                                 .offset(y = (-4).dp) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area

@@ -1,6 +1,5 @@
 package com.fireshare.tweet.viewmodel
 
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
@@ -16,19 +15,21 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class TweetViewModel @Inject constructor(
-    tweet: Tweet
+class TweetViewModel @Inject constructor (
+    private val tweet: Tweet,
 ) : ViewModel()
 {
-    private val _tweet = MutableStateFlow<Tweet?>(tweet)
-    val tweet: StateFlow<Tweet?> get() = _tweet.asStateFlow()
+    private var tweetFeedViewModel: TweetFeedViewModel? = null
+    private val _tweetState = MutableStateFlow(this.tweet)
+    val tweetState: StateFlow<Tweet> get() = _tweetState
+
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
-    val comments: StateFlow<List<Tweet>> get() = _comments
+    val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     fun loadComments(pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.Default) {
-            tweet.value?.let {
-                _comments.value = it.mid?.let { it1 -> HproseInstance.getCommentList(it1) }!!
+            tweetState.value.mid?.let { mid ->
+                _comments.value = HproseInstance.getCommentList(mid) ?: emptyList()
             }
         }
     }
@@ -37,11 +38,14 @@ class TweetViewModel @Inject constructor(
         return comments.value.find { it.mid == commentId }
     }
 
-    fun uploadComment(tweet: Tweet, comment: Tweet, updateTweetFeed: (Tweet) -> Unit) {
+    fun uploadComment(comment: Tweet) {
         viewModelScope.launch(Dispatchers.Default) {
-            _tweet.value = HproseInstance.uploadComment(tweet, comment)
-            updateTweetFeed(_tweet.value as Tweet)
-            addComment(comment)     // add it to top of comment list
+            _tweetState.value?.let {
+                val updatedTweet = HproseInstance.uploadComment(it, comment)
+                _tweetState.value = updatedTweet
+                tweetFeedViewModel?.updateTweet(updatedTweet)
+                addComment(comment)
+            }
         }
     }
 
@@ -51,29 +55,32 @@ class TweetViewModel @Inject constructor(
         }
     }
 
-    fun likeTweet(tweet: Tweet, updateTweetFeed: (Tweet) -> Unit) {
+    fun likeTweet() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _tweet.value = HproseInstance.likeTweet(tweet)
-                updateTweetFeed(_tweet.value as Tweet)
+                val updatedTweet = HproseInstance.likeTweet(_tweetState.value)
+                _tweetState.value = updatedTweet
+                tweetFeedViewModel?.updateTweet(updatedTweet)
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Handle the like error (e.g., show a toast)
             }
         }
     }
 
-    fun bookmarkTweet(tweet: Tweet, updateTweetFeed: (Tweet) -> Unit) {
+    fun bookmarkTweet() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _tweet.value = HproseInstance.bookmarkTweet(tweet)
-                updateTweetFeed(_tweet.value as Tweet)  // update single source of truth
+                val updatedTweet = HproseInstance.bookmarkTweet(_tweetState.value)
+                _tweetState.value = updatedTweet
+                tweetFeedViewModel?.updateTweet(updatedTweet)
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Handle the bookmark error (e.g., show a toast)
             }
         }
     }
 
-    fun setTweet(tweet: Tweet) {
-        _tweet.value = tweet
+    fun init(tweet: Tweet, viewModel: TweetFeedViewModel) {
+        _tweetState.value = tweet
+        tweetFeedViewModel = viewModel
     }
 }

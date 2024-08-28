@@ -2,7 +2,9 @@ package com.fireshare.tweet
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,8 +70,8 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
-                TweetDetailScreen(tweetId, commentId, viewModel)
+//                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
+                TweetDetailScreen(tweetId, commentId)
             }
             composable<ComposeTweet> {
                 ComposeTweetScreen(navController)
@@ -79,8 +81,7 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavRoot)
                 }
                 val tweet = navBackStackEntry.toRoute<ComposeComment>()
-                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.tweetId)
-                ComposeCommentScreen(navController, tweet.tweetId, viewModel)
+                ComposeCommentScreen(navController, tweet.tweetId)
             }
             composable<UserProfile> { backStackEntry ->
                 val parentEntry = remember(backStackEntry) {

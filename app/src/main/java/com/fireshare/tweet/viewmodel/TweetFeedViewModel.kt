@@ -15,8 +15,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class TweetFeedState(val tweets: List<Tweet>)
-
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
@@ -39,6 +37,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    // get tweet from preload tweet feed list
     fun getTweetById(tweetId: MimeiId): Tweet? {
         return tweets.value.find { it.mid == tweetId }
     }
@@ -53,11 +52,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
+    fun toggleRetweet(tweet: Tweet) {
         viewModelScope.launch(Dispatchers.Default) {
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
-            updateTweet(tweet.copy())
         }
     }
 

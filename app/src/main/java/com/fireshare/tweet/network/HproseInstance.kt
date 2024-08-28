@@ -96,7 +96,7 @@ object HproseInstance {
     }
 
     // Get base url where user data can be accessed, and user data
-    private suspend fun getUserBase(userId: MimeiId): User? {
+    suspend fun getUserBase(userId: MimeiId): User? {
         // check if user data has been read
         getUser(userId)?.let { return it}
 

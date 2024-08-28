@@ -3,7 +3,6 @@ package com.fireshare.tweet.tweet
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,22 +34,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import coil.compose.rememberAsyncImagePainter
-import com.fireshare.tweet.AppContainer
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.Gadget.uploadAttachments
 import com.fireshare.tweet.network.HproseInstance.appUser
-import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
@@ -63,17 +56,16 @@ import kotlinx.coroutines.launch
 fun ComposeCommentScreen(
     navController: NavHostController,
     tweetId: MimeiId,
-    viewModel: TweetViewModel
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current // Renamed for clarity
 
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val tweet = tweetFeedViewModel.getTweetById(tweetId)
+    val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
 
-//    val viewModel = AppContainer.sharedViewModel
-    tweet?.let { viewModel.setTweet(it) } ?: return
+    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
+    viewModel.init(tweet, tweetFeedViewModel)
     val author = tweet.author
 
     // Create a launcher for the file picker
@@ -102,12 +94,12 @@ fun ComposeCommentScreen(
                         onClick = {
                             viewModel.viewModelScope.launch {
                                 val attachments = uploadAttachments(context, selectedAttachments)
-                                viewModel.uploadComment(tweet,
+                                viewModel.uploadComment(
                                     comment = Tweet(
                                     authorId = appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments,
-                                )) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
+                                ))
                                 // clear and return to previous screen
                                 selectedAttachments.clear()
                                 tweetContent = ""

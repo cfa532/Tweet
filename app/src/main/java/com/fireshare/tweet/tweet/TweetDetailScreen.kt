@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -30,15 +29,22 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
-fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetViewModel) {
+fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?)
+{
+    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
+
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
         // the 1st parameter tweetId is its parent tweet
-        val t = viewModel.getCommentById(commentId) ?: return
-        TweetDetailBody(tweet = t, viewModel = hiltViewModel<TweetViewModel>(key = t.mid))
+        val ct = viewModel.getCommentById(commentId) ?: return
+        val vm = hiltViewModel<TweetViewModel>(key = ct.mid)
+        vm.init(ct, tweetFeedViewModel)
+        TweetDetailBody(tweet = ct, viewModel = vm)
     } else {
-        val tweet by viewModel.tweet.collectAsState()
-        tweet?.let { TweetDetailBody(it, viewModel) }
+        viewModel.init(tweet, tweetFeedViewModel)
+        TweetDetailBody(tweet, viewModel)
     }
 }
 
