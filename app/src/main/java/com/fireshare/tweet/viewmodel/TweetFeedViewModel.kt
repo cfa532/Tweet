@@ -53,20 +53,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun toggleRetweet(tweet: Tweet): Tweet {
-        var originalTweet: Tweet = tweet
+    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.Default) {
-            tweet.originalTweet?.let {
-                // the tweet to be forwarded is a retweet itself. Find the original tweet to forward.
-                if (tweet.content == "") {
-                    originalTweet = it
-                } else {
-                    // this is a retweet with comment.
-                }
-            }
-            HproseInstance.toggleRetweet( originalTweet, this@TweetFeedViewModel )
+            // tweet object is updated in toggleRetweet()
+            HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
+            updateTweet(tweet.copy())
         }
-        return originalTweet.copy()
     }
 
     private fun getTweets(
