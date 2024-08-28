@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -24,30 +25,32 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetViewModel) {
     lateinit var tweetViewModel: TweetViewModel
-    val navController = LocalNavController.current
 
-    val tweet = if (commentId != null) {
+    if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
         // the 1st parameter tweetId is its parent tweet
         val t = viewModel.getCommentById(commentId) ?: return
-        tweetViewModel = hiltViewModel<TweetViewModel>(key = t.mid)
-        t
+        TweetDetailBody(tweet = t, viewModel = hiltViewModel<TweetViewModel>(key = t.mid))
     } else {
-        // display a plain tweet with its comments
-        tweetViewModel = viewModel
-        viewModel.tweet.collectAsState().value
-    } ?: return
+        val tweet by viewModel.tweet.collectAsState()
+        tweet?.let { TweetDetailBody(it, viewModel) }
+    }
+}
 
-    tweetViewModel.loadComments()
-    val comments = tweetViewModel.comments.collectAsState().value
-
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel)
+{
+    val navController = LocalNavController.current
+    viewModel.loadComments()
+    val comments = viewModel.comments.collectAsState().value
     Column {
         TopAppBar(
             title = {
@@ -70,7 +73,7 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetVie
         )
 
         // main body of the parent Tweet.
-        TweetDetailHead(tweet, tweetViewModel)
+        TweetDetailHead(tweet, viewModel)
 
         // divider between tweet and its comment list
         HorizontalDivider(
