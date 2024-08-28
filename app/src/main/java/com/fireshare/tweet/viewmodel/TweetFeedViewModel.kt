@@ -64,7 +64,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     // this is a retweet with comment.
                 }
             }
-            originalTweet = HproseInstance.toggleRetweet( originalTweet, this@TweetFeedViewModel )
+            HproseInstance.toggleRetweet( originalTweet, this@TweetFeedViewModel )
         }
         return originalTweet.copy()
     }

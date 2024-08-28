@@ -95,13 +95,13 @@ fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
                             .padding(top = 0.dp)
                     ) {
                         // State hoist
-                        LikeButton(tweet, viewModel)
+                        LikeButton(viewModel)
                         Spacer(modifier = Modifier.width(8.dp))
-                        BookmarkButton(tweet, viewModel)
+                        BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(8.dp))
-                        CommentButton(tweet, viewModel)
+                        CommentButton(viewModel)
                         Spacer(modifier = Modifier.width(8.dp))
-                        RetweetButton(tweet, viewModel)
+                        RetweetButton(viewModel)
                     }
                 }
             }

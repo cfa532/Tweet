@@ -38,7 +38,6 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetVie
         // the 1st parameter tweetId is its parent tweet
         val t = viewModel.getCommentById(commentId) ?: return
         tweetViewModel = hiltViewModel<TweetViewModel>(key = t.mid)
-//        tweetViewModel.setTweet(t)
         t
     } else {
         // display a plain tweet with its comments

@@ -77,13 +77,13 @@ fun CommentItem(tweetId: MimeiId, comment: Tweet) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // State hoist
-                LikeButton(comment, viewModel)
+                LikeButton(viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                BookmarkButton(comment, viewModel)
+                BookmarkButton(viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                CommentButton(comment, viewModel)
+                CommentButton(viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
-                RetweetButton(comment, viewModel)
+                RetweetButton(viewModel)
             }
         }
     }

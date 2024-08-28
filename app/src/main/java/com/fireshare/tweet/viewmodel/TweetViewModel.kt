@@ -66,7 +66,7 @@ class TweetViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 _tweet.value = HproseInstance.bookmarkTweet(tweet)
-                updateTweetFeed(_tweet.value as Tweet)
+                updateTweetFeed(_tweet.value as Tweet)  // update single source of truth
             } catch (e: Exception) {
                 e.printStackTrace()
             }

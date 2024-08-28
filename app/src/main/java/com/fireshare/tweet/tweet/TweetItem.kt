@@ -33,6 +33,7 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry
 ) {
+    // only place to call setTweet()
     var viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.mid)
     viewModel.setTweet(tweet)
 
