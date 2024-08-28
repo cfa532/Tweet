@@ -31,8 +31,6 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
 fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, viewModel: TweetViewModel) {
-    lateinit var tweetViewModel: TweetViewModel
-
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
         // the 1st parameter tweetId is its parent tweet

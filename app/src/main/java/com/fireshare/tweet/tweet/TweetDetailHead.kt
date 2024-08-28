@@ -26,24 +26,8 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
-// The Tweet block above the comment list
 @Composable
-fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel)
-{
-//    viewModel.setTweet(tweet)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(0.dp)
-    ) {
-        tweet.originalTweet?.let {
-            TweetBody(it, viewModel)
-        } ?: TweetBody(tweet, viewModel)    // display regular tweet as default action
-    }
-}
-
-@Composable
-fun TweetBody(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
