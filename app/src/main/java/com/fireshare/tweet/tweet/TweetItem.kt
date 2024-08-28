@@ -45,18 +45,17 @@ fun TweetItem(
         if (tweet.originalTweetId != null) {
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
-                Spacer(modifier = Modifier.padding(8.dp))
 
+                Spacer(modifier = Modifier.padding(8.dp))
                 Box {
                     // The tweet area
                     tweet.originalTweet?.let {
-                        // retweet shares the same viewModel
                         viewModel = hiltViewModel(key = tweet.originalTweetId)
                         viewModel.setTweet(it)
                         TweetBlock(it, viewModel)
                     }
 
-                    // The Text() that you want to move downward
+                    // Label: Forward by user, on top of original tweet
                     Box {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_squarepath),
