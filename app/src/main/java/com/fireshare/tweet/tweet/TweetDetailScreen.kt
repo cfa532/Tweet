@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -33,7 +34,9 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?)
 {
     val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
+    val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
+    viewModel.init(t, tweetFeedViewModel)
+    val tweet by viewModel.tweetState.collectAsState()
 
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
@@ -43,7 +46,6 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?)
         vm.init(ct, tweetFeedViewModel)
         TweetDetailBody(tweet = ct, viewModel = vm)
     } else {
-        viewModel.init(tweet, tweetFeedViewModel)
         TweetDetailBody(tweet, viewModel)
     }
 }

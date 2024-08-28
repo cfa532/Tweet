@@ -50,8 +50,11 @@ fun RetweetButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
 
-    IconButton(onClick = { tweetFeedViewModel.toggleRetweet(tweet) } )
-    {
+    IconButton(onClick = {
+        tweetFeedViewModel.toggleRetweet(tweet) { updatedTweet ->
+            viewModel.updateTweet(updatedTweet)
+        }
+    } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),

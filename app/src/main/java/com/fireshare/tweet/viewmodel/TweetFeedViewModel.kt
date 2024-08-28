@@ -52,10 +52,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun toggleRetweet(tweet: Tweet) {
+    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.Default) {
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
+            updateTweet(tweet)
         }
     }
 

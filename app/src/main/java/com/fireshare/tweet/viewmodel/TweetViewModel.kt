@@ -34,13 +34,17 @@ class TweetViewModel @Inject constructor (
         }
     }
 
+    fun updateTweet(tweet: Tweet) {
+        _tweetState.value = tweet.copy()
+    }
+
     fun getCommentById(commentId: MimeiId): Tweet? {
         return comments.value.find { it.mid == commentId }
     }
 
     fun uploadComment(comment: Tweet) {
         viewModelScope.launch(Dispatchers.Default) {
-            _tweetState.value?.let {
+            _tweetState.value.let {
                 val updatedTweet = HproseInstance.uploadComment(it, comment)
                 _tweetState.value = updatedTweet
                 tweetFeedViewModel?.updateTweet(updatedTweet)
