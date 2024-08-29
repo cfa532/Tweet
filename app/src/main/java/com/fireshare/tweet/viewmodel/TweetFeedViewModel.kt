@@ -7,6 +7,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.scopes.ViewModelScoped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,11 +53,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
+    fun toggleRetweet(tweet: Tweet, viewModel: TweetViewModel) {
         viewModelScope.launch(Dispatchers.Default) {
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
-            updateTweet(tweet)
+//            updateTweet(tweet)    // without this, main feed works fine.
+            viewModel.updateTweet(tweet.copy())
         }
     }
 

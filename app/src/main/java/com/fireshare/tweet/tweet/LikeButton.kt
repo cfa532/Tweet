@@ -51,9 +51,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
-        tweetFeedViewModel.toggleRetweet(tweet) { updatedTweet ->
-            viewModel.updateTweet(updatedTweet)
-        }
+        tweetFeedViewModel.toggleRetweet(tweet, viewModel)
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(

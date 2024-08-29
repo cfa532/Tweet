@@ -31,8 +31,12 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, tweetViewModel: TweetViewModel)
-{
+fun TweetDetailScreen(
+    tweetId: MimeiId,
+    commentId: MimeiId?,
+    tweetViewModel: TweetViewModel      // the tweetViewModel is initialized under current AppModule settings
+) {
+    //
     val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     var viewModel = tweetViewModel
@@ -44,8 +48,8 @@ fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, tweetViewModel: Twe
         viewModel = hiltViewModel<TweetViewModel>(key = ct.mid)
         viewModel.init(ct, tweetFeedViewModel)
     } else {
-        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
-        viewModel.init(t, tweetFeedViewModel)
+//        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
+//        viewModel.init(t, tweetFeedViewModel)
     }
     viewModel.loadComments()
     val comments by viewModel.comments.collectAsState()
