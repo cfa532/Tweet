@@ -29,34 +29,28 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?)
+fun TweetDetailScreen(tweetId: MimeiId, commentId: MimeiId?, tweetViewModel: TweetViewModel)
 {
-    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
+    val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
-    viewModel.init(t, tweetFeedViewModel)
-    val tweet by viewModel.tweetState.collectAsState()
+    var viewModel = tweetViewModel
 
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
         // the 1st parameter tweetId is its parent tweet
         val ct = viewModel.getCommentById(commentId) ?: return
-        val vm = hiltViewModel<TweetViewModel>(key = ct.mid)
-        vm.init(ct, tweetFeedViewModel)
-        TweetDetailBody(tweet = ct, viewModel = vm)
+        viewModel = hiltViewModel<TweetViewModel>(key = ct.mid)
+        viewModel.init(ct, tweetFeedViewModel)
     } else {
-        TweetDetailBody(tweet, viewModel)
+        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
+        viewModel.init(t, tweetFeedViewModel)
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel)
-{
-    val navController = LocalNavController.current
     viewModel.loadComments()
-    val comments = viewModel.comments.collectAsState().value
+    val comments by viewModel.comments.collectAsState()
+    val tweet by viewModel.tweetState.collectAsState()
+
     Column {
         TopAppBar(
             title = {
@@ -66,7 +60,8 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel)
                 )
             },
             navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() }) {
+                IconButton(onClick = { navController.popBackStack() })
+                {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_back),
                         contentDescription = "Back",

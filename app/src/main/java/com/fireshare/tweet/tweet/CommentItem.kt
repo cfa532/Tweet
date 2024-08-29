@@ -24,6 +24,7 @@ import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -33,8 +34,10 @@ import com.fireshare.tweet.widget.UserAvatar
 fun CommentItem(tweetId: MimeiId, comment: Tweet) {
     val navController = LocalNavController.current
     val author = comment.author
-
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val viewModel = hiltViewModel<TweetViewModel>(key = comment.mid)
+    viewModel.init(comment, tweetFeedViewModel)
+
     Column(
         modifier = Modifier.clickable(onClick = {
 //            navController.navigate(TweetDetail(comment.mid, tweetId))

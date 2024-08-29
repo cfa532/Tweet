@@ -63,10 +63,10 @@ fun ComposeCommentScreen(
 
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
+    val author = tweet.author
 
     val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
     viewModel.init(tweet, tweetFeedViewModel)
-    val author = tweet.author
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(

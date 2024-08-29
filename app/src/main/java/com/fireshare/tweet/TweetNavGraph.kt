@@ -70,8 +70,8 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-//                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
-                TweetDetailScreen(tweetId, commentId)
+                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
+                TweetDetailScreen(tweetId, commentId, viewModel)
             }
             composable<ComposeTweet> {
                 ComposeTweetScreen(navController)

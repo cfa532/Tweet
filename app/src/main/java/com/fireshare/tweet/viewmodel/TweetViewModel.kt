@@ -43,12 +43,15 @@ class TweetViewModel @Inject constructor (
     }
 
     fun uploadComment(comment: Tweet) {
-        viewModelScope.launch(Dispatchers.Default) {
-            _tweetState.value.let {
-                val updatedTweet = HproseInstance.uploadComment(it, comment)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // comment is changed within uploadComment()
+                val updatedTweet = HproseInstance.uploadComment(_tweetState.value, comment)
                 _tweetState.value = updatedTweet
                 tweetFeedViewModel?.updateTweet(updatedTweet)
                 addComment(comment)
+            } catch (e: Exception) {
+                //
             }
         }
     }
