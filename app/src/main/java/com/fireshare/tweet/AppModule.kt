@@ -1,5 +1,8 @@
 package com.fireshare.tweet
 
+import android.os.Bundle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -8,6 +11,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.scopes.ViewModelScoped
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Inject
 import javax.inject.Singleton
 
 @Module
@@ -33,16 +37,17 @@ object AppModule {
     fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
         return TweetViewModel(tweet)
     }
-}
 
-//class TweetViewModelFactory @Inject constructor(
-//    private val tweet: Tweet
-//) : ViewModelProvider.Factory {
-//    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-//        if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
-//            @Suppress("UNCHECKED_CAST")
-//            return TweetViewModel(tweet) as T
-//        }
-//        throw IllegalArgumentException("Unknown ViewModel class")
-//    }
-//}
+    @Singleton
+    class TweetViewModelFactory @Inject constructor(
+        private val tweet: Tweet
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
+                @Suppress("UNCHECKED_CAST")
+                return TweetViewModel(tweet) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
+        }
+    }
+}
