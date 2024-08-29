@@ -57,8 +57,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         viewModelScope.launch(Dispatchers.Default) {
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
-//            updateTweet(tweet)    // without this, main feed works fine.
-            viewModel.updateTweet(tweet.copy())
+//            viewModel.updateTweet(tweet)
         }
     }
 

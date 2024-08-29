@@ -26,14 +26,16 @@ import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.ui.theme.TweetTheme
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
 
-//    @Inject
-//    lateinit var tweetFeedViewModel: TweetFeedViewModel
+    @Inject
+    lateinit var tweetFeedViewModel: TweetFeedViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

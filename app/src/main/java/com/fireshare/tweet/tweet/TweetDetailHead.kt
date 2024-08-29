@@ -14,6 +14,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -28,6 +32,7 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
+
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,

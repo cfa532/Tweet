@@ -35,7 +35,7 @@ class TweetViewModel @Inject constructor (
     }
 
     fun updateTweet(tweet: Tweet) {
-        _tweetState.value = tweet.copy()
+        _tweetState.value = tweet
     }
 
     fun getCommentById(commentId: MimeiId): Tweet? {
@@ -46,10 +46,10 @@ class TweetViewModel @Inject constructor (
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // comment is changed within uploadComment()
-                val updatedTweet = HproseInstance.uploadComment(_tweetState.value, comment)
-                _tweetState.value = updatedTweet
-                tweetFeedViewModel?.updateTweet(updatedTweet)
+                val updatedTweet = HproseInstance.uploadComment(tweetState.value, comment)
                 addComment(comment)
+                updateTweet(updatedTweet)
+                tweetFeedViewModel?.updateTweet(updatedTweet)
             } catch (e: Exception) {
                 //
             }
@@ -65,8 +65,8 @@ class TweetViewModel @Inject constructor (
     fun likeTweet() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val updatedTweet = HproseInstance.likeTweet(_tweetState.value)
-                _tweetState.value = updatedTweet
+                val updatedTweet = HproseInstance.likeTweet(tweetState.value)
+                updateTweet(updatedTweet)
                 tweetFeedViewModel?.updateTweet(updatedTweet)
             } catch (e: Exception) {
                 // Handle the like error (e.g., show a toast)
@@ -77,8 +77,8 @@ class TweetViewModel @Inject constructor (
     fun bookmarkTweet() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val updatedTweet = HproseInstance.bookmarkTweet(_tweetState.value)
-                _tweetState.value = updatedTweet
+                val updatedTweet = HproseInstance.bookmarkTweet(tweetState.value)
+                updateTweet(updatedTweet)
                 tweetFeedViewModel?.updateTweet(updatedTweet)
             } catch (e: Exception) {
                 // Handle the bookmark error (e.g., show a toast)
