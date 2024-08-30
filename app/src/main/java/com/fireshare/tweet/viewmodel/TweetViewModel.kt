@@ -28,11 +28,8 @@ class TweetViewModel @AssistedInject constructor(
     interface TweetViewModelFactory {
         fun create(tweet: Tweet): TweetViewModel
     }
-//    private val viewModelStoreOwner = requireNotNull(
-//        LocalViewModelStoreOwner.current as? HasDefaultViewModelProviderFactory
-//    )
     private val _tweetState = MutableStateFlow<Tweet>(tweet)
-    val tweetState: MutableStateFlow<Tweet> get() = _tweetState
+    val tweetState: StateFlow<Tweet> get() = _tweetState
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
@@ -40,13 +37,12 @@ class TweetViewModel @AssistedInject constructor(
     fun loadComments(pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.Default) {
             tweetState.value.mid?.let { mid ->
-                _comments.value = HproseInstance.getCommentList(mid) ?: emptyList()
+                _comments.value = HproseInstance.getCommentList(mid)
             }
         }
     }
 
     fun updateTweet(tweet: Tweet) {
-        Log.d("TweetViewModel", "Updating tweet: ${tweet.commentCount}")
         _tweetState.value = tweet.copy()
     }
 
@@ -60,9 +56,11 @@ class TweetViewModel @AssistedInject constructor(
             try {
                 // comment is changed within uploadComment()
                 val updatedTweet = HproseInstance.uploadComment(tweetState.value.copy(), comment)
-                updateTweet(updatedTweet)
-                updateTweetFeed(updatedTweet)
                 addComment(comment)
+//                updateTweet(updatedTweet)
+                _tweetState.value = updatedTweet
+                Log.d("TweetViewModel", "Updating tweet: ${tweetState.value.commentCount}")
+                updateTweetFeed(updatedTweet)
             } catch (e: Exception) {
                 //
             }
@@ -99,3 +97,7 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 }
+
+//    private val viewModelStoreOwner = requireNotNull(
+//        LocalViewModelStoreOwner.current as? HasDefaultViewModelProviderFactory
+//    )
