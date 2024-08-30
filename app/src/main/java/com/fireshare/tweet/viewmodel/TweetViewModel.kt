@@ -56,11 +56,9 @@ class TweetViewModel @AssistedInject constructor(
             try {
                 // comment is changed within uploadComment()
                 val updatedTweet = HproseInstance.uploadComment(tweetState.value.copy(), comment)
-                addComment(comment)
-//                updateTweet(updatedTweet)
-                _tweetState.value = updatedTweet
-                Log.d("TweetViewModel", "Updating tweet: ${tweetState.value.commentCount}")
+                updateTweet(updatedTweet)
                 updateTweetFeed(updatedTweet)
+                addComment(comment)
             } catch (e: Exception) {
                 //
             }
