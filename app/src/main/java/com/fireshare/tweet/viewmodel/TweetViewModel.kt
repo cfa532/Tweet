@@ -52,7 +52,8 @@ class TweetViewModel @AssistedInject constructor(
         return comments.value.find { it.mid == commentId }
     }
 
-    fun uploadComment(comment: Tweet) {
+    // add new Comment object to its parent Tweet
+    fun uploadComment(comment: Tweet, updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // comment is changed within uploadComment()
@@ -60,7 +61,7 @@ class TweetViewModel @AssistedInject constructor(
                 addComment(comment)
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-//                    tweetFeedViewModel.updateTweet(updatedTweet)
+                    updateTweetFeed(updatedTweet)
                 }
             } catch (e: Exception) {
                 //
@@ -74,13 +75,13 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    fun likeTweet() {
+    fun likeTweet(updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val updatedTweet = tweetState.value?.let { HproseInstance.likeTweet(it) }
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-//                    tweetFeedViewModel.updateTweet(updatedTweet)
+                    updateTweetFeed(updatedTweet)
                 }
             } catch (e: Exception) {
                 // Handle the like error (e.g., show a toast)
@@ -88,13 +89,13 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    fun bookmarkTweet() {
+    fun bookmarkTweet(updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val updatedTweet = tweetState.value?.let { HproseInstance.bookmarkTweet(it) }
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-//                    tweetFeedViewModel.updateTweet(updatedTweet)
+                    updateTweetFeed(updatedTweet)
                 }
             } catch (e: Exception) {
                 // Handle the bookmark error (e.g., show a toast)

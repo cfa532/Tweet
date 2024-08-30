@@ -66,7 +66,9 @@ fun ComposeCommentScreen(
     val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
     val author = tweet.author
 
-    val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
+        factory.create(tweet)
+    }
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -99,7 +101,7 @@ fun ComposeCommentScreen(
                                     authorId = appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments,
-                                ))
+                                )) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
                                 // clear and return to previous screen
                                 selectedAttachments.clear()
                                 tweetContent = ""

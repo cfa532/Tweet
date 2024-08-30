@@ -38,7 +38,7 @@ class TweetFeedViewModel @Inject constructor(
     // given a tweet, update its counterpart in Tweet list
     fun updateTweet(tweet: Tweet) {
         _tweets.value = _tweets.value.map {
-            if (it.mid == tweet.mid) tweet else tweet
+            if (it.mid == tweet.mid) tweet else it
         }
     }
 
@@ -57,11 +57,11 @@ class TweetFeedViewModel @Inject constructor(
         }
     }
 
-    fun toggleRetweet(tweet: Tweet, viewModel: TweetViewModel) {
+    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.Default) {
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel )
-//            viewModel.updateTweet(tweet)
+            updateTweet(tweet)
         }
     }
 
