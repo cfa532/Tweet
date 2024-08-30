@@ -20,21 +20,20 @@ import javax.inject.Singleton
 @Module
 @InstallIn(ActivityComponent::class)
 object ActivityModule {
+//    @Provides
+//    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
+//        return activity
+//    }
+
     @Provides
-    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
-        return activity
+    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
+        return TweetViewModel(tweetKey, viewModelStoreOwner)
     }
 }
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
-    @Provides
-    @Singleton
-    fun provideTweetFeedViewModel(): TweetFeedViewModel {
-        return TweetFeedViewModel()
-    }
 
     @Provides
     fun provideTweetKey(): TweetKey {
@@ -44,13 +43,14 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
-        return application as TweetApplication
+    fun provideTweetFeedViewModel(): TweetFeedViewModel {
+        return TweetFeedViewModel()
     }
 
     @Provides
-    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
-        return TweetViewModel(tweetKey, viewModelStoreOwner)
+    @Singleton
+    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
+        return application as TweetApplication
     }
 
     @Singleton
