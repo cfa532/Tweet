@@ -32,7 +32,7 @@ fun CommentButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.commentCount
     val navController = LocalNavController.current
-    Log.d("CommentButton", "Comment count: $count")
+//    Log.d("CommentButton", "Comment count: $count")
 
     IconButton(onClick = {
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
