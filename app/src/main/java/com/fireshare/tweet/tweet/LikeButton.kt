@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +13,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -27,7 +30,9 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 @Composable
 fun CommentButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
+    val count = tweet.commentCount
     val navController = LocalNavController.current
+    Log.d("CommentButton", "Comment count: $count")
 
     IconButton(onClick = {
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
@@ -39,7 +44,7 @@ fun CommentButton(viewModel: TweetViewModel) {
                 modifier = Modifier.size(ButtonDefaults.IconSize)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "${tweet.commentCount}", style = MaterialTheme.typography.labelSmall)
+            Text(text = "$count", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -48,6 +53,9 @@ fun CommentButton(viewModel: TweetViewModel) {
 fun RetweetButton(viewModel: TweetViewModel) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val tweet by viewModel.tweetState.collectAsState()
+    val count by remember {
+        derivedStateOf { tweet.retweetCount }
+    }
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
@@ -63,7 +71,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
                 tint = if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary)
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${tweet.retweetCount}",
+                text = "$count",
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -73,6 +81,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
+    val count  by remember { derivedStateOf { tweet.likeCount } }
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
@@ -88,7 +97,7 @@ fun LikeButton(viewModel: TweetViewModel) {
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${tweet.likeCount}",
+                text = "$count",
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -98,6 +107,7 @@ fun LikeButton(viewModel: TweetViewModel) {
 @Composable
 fun BookmarkButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
+    val count  by remember { derivedStateOf { tweet.bookmarkCount } }
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     IconButton(onClick = { viewModel.bookmarkTweet { updatedTweet ->
@@ -112,7 +122,7 @@ fun BookmarkButton(viewModel: TweetViewModel) {
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "${tweet.bookmarkCount}",
+                text = "$count",
                 style = MaterialTheme.typography.labelSmall
             )
         }

@@ -18,28 +18,13 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module
-@InstallIn(ActivityComponent::class)
-object ActivityModule {
-//    @Provides
-//    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
-//        return activity
-//    }
-}
-
-@Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
 //    @Provides
-//    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
-//        return TweetViewModel(tweetKey, viewModelStoreOwner)
+//    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
+//        return TweetViewModel(tweet)
 //    }
-
-    @Provides
-    fun provideTweetKey(): TweetKey {
-        // Replace with your actual logic to create a TweetKey instance
-        return TweetKeyImpl("placeholder")
-    }
 
     @Provides
     @Singleton

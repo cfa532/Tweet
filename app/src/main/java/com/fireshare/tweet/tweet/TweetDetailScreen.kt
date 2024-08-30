@@ -46,12 +46,12 @@ fun TweetDetailScreen(
 
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
-        // the 1st parameter tweetId is its parent tweet
-        val ct = viewModel.getCommentById(commentId) ?: return
-        viewModel = hiltViewModel<TweetViewModel>(key = ct.mid)
-    } else {
-//        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
-//        viewModel.init(t, tweetFeedViewModel)
+        // Retrieve the comment from its parent tweet.
+        val ct: Tweet = viewModel.getCommentById(commentId) ?: return
+        // create viewModel of the comment Item, which is ViewModelScoped at the navigation destination.
+        viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = ct.mid)  { factory ->
+            factory.create(ct)
+        }
     }
     viewModel.loadComments()
     val comments by viewModel.comments.collectAsState()

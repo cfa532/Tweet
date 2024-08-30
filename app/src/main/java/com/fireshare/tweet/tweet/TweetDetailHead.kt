@@ -91,6 +91,8 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
                         CommentButton(viewModel)
                         Spacer(modifier = Modifier.width(8.dp))
                         RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        UpdateTweetButton(viewModel)
                     }
                 }
             }
