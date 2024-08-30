@@ -71,8 +71,7 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-                val factory = AppModule.TweetViewModelFactory(TweetKeyImpl(tweetId), it)
-                val viewModel = ViewModelProvider(parentEntry, factory)[TweetViewModel::class.java]
+                val viewModel = hiltViewModel<TweetViewModel>(key = tweetId)
                 TweetDetailScreen(tweetId, commentId, viewModel)
             }
             composable<ComposeTweet> {

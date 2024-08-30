@@ -24,16 +24,16 @@ object ActivityModule {
 //    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
 //        return activity
 //    }
-
-    @Provides
-    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
-        return TweetViewModel(tweetKey, viewModelStoreOwner)
-    }
 }
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+//    @Provides
+//    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
+//        return TweetViewModel(tweetKey, viewModelStoreOwner)
+//    }
 
     @Provides
     fun provideTweetKey(): TweetKey {
@@ -42,26 +42,22 @@ object AppModule {
     }
 
     @Provides
-    @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }
 
     @Provides
-    @Singleton
     fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
         return application as TweetApplication
     }
 
-    @Singleton
     class TweetViewModelFactory(
-        private val tweetKey: TweetKey,
-        private val viewModelStoreOwner: ViewModelStoreOwner
+        private val tweet: Tweet,
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return TweetViewModel(tweetKey, viewModelStoreOwner) as T
+                return TweetViewModel(tweet) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

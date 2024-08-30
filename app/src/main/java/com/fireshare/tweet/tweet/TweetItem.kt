@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.AppModule
@@ -35,15 +36,13 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry      // navGraph scoped
 ) {
-    var tweetKey = tweet.mid?.let { TweetKeyImpl(it) } ?: throw IllegalArgumentException("TweetKey must be provided")
-    val factory = AppModule.TweetViewModelFactory(tweetKey, parentEntry)
-    var viewModel = ViewModelProvider(parentEntry, factory)[TweetViewModel::class.java]
+    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
+        factory.create(tweet)
+    }
+//    var tweetKey = tweet.mid?.let { TweetKeyImpl(it) } ?: throw IllegalArgumentException("TweetKey must be provided")
+//    val factory = AppModule.TweetViewModelFactory(tweetKey, parentEntry)
+//    var viewModel = ViewModelProvider(parentEntry, factory)[TweetViewModel::class.java]
 //    val tweetFeedViewModel = ViewModelProvider(viewModelStoreOwner, TweetFeedViewModel::class.java).get()
-
-    // only place to call setTweet()
-//    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-//    var viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweet.mid)
-//    viewModel.init(tweet, tweetFeedViewModel)
 
     Column(
         modifier = Modifier
@@ -58,13 +57,12 @@ fun TweetItem(
                 Spacer(modifier = Modifier.padding(8.dp))
                 Box {
                     // The tweet area
-                    tweetKey = TweetKeyImpl(tweet.originalTweetId)
-                    viewModel = ViewModelProvider(
-                        parentEntry,
-                        AppModule.TweetViewModelFactory(tweetKey, parentEntry)
-                    )[TweetViewModel::class.java]
-                    tweet.originalTweet?.let { TweetBlock(it, viewModel) }
-
+                    tweet.originalTweet?.let {
+                        viewModel =
+                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.originalTweetId)
+                            { factory -> factory.create(it) }
+                        TweetBlock(it, viewModel)
+                    }
                     // Label: Forward by user, on top of original tweet
                     Box {
                         Icon(

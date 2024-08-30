@@ -1,16 +1,15 @@
 package com.fireshare.tweet.viewmodel
 
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleObserver
-import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
-import com.fireshare.tweet.TweetKey
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,26 +17,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class TweetViewModel @Inject constructor(
-    private val key: TweetKey,
-    private val viewModelStoreOwner: ViewModelStoreOwner
-) : ViewModel(), LifecycleObserver
+@HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
+class TweetViewModel @AssistedInject constructor(
+    @Assisted private val tweet: Tweet,
+) : ViewModel()
 {
-    private var tweetFeedViewModel: TweetFeedViewModel = getTweetFeedVM()
-    private var tweet: Tweet? = tweetFeedViewModel.getTweetById(key.tweetId)
-
+    @AssistedFactory
+    interface TweetViewModelFactory {
+        fun create(tweet: Tweet): TweetViewModel
+    }
+//    private val viewModelStoreOwner = requireNotNull(
+//        LocalViewModelStoreOwner.current as? HasDefaultViewModelProviderFactory
+//    )
     private val _tweetState = MutableStateFlow(tweet)
-    val tweetState: MutableStateFlow<Tweet?> get() = _tweetState
+    val tweetState: MutableStateFlow<Tweet> get() = _tweetState
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
-
-    private fun getTweetFeedVM(): TweetFeedViewModel {
-        return ViewModelProvider(viewModelStoreOwner, ViewModelProvider.NewInstanceFactory())[TweetFeedViewModel::class.java]
-    }
 
     fun loadComments(pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.Default) {
@@ -63,7 +60,7 @@ class TweetViewModel @Inject constructor(
                 addComment(comment)
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-                    tweetFeedViewModel.updateTweet(updatedTweet)
+//                    tweetFeedViewModel.updateTweet(updatedTweet)
                 }
             } catch (e: Exception) {
                 //
@@ -83,7 +80,7 @@ class TweetViewModel @Inject constructor(
                 val updatedTweet = tweetState.value?.let { HproseInstance.likeTweet(it) }
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-                    tweetFeedViewModel.updateTweet(updatedTweet)
+//                    tweetFeedViewModel.updateTweet(updatedTweet)
                 }
             } catch (e: Exception) {
                 // Handle the like error (e.g., show a toast)
@@ -97,7 +94,7 @@ class TweetViewModel @Inject constructor(
                 val updatedTweet = tweetState.value?.let { HproseInstance.bookmarkTweet(it) }
                 if (updatedTweet != null) {
                     updateTweet(updatedTweet)
-                    tweetFeedViewModel.updateTweet(updatedTweet)
+//                    tweetFeedViewModel.updateTweet(updatedTweet)
                 }
             } catch (e: Exception) {
                 // Handle the bookmark error (e.g., show a toast)
