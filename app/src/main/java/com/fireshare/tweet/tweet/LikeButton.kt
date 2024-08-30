@@ -30,7 +30,7 @@ fun CommentButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
 
     IconButton(onClick = {
-        tweet.mid?.let {navController.navigate(ComposeComment(it))}
+        tweet?.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -39,7 +39,7 @@ fun CommentButton(viewModel: TweetViewModel) {
                 modifier = Modifier.size(ButtonDefaults.IconSize)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "${tweet.commentCount}", style = MaterialTheme.typography.labelSmall)
+            Text(text = "${tweet?.commentCount}", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -48,10 +48,10 @@ fun CommentButton(viewModel: TweetViewModel) {
 fun RetweetButton(viewModel: TweetViewModel) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val tweet by viewModel.tweetState.collectAsState()
-    val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
+    val hasRetweeted = tweet?.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
-        tweetFeedViewModel.toggleRetweet(tweet, viewModel)
+        tweet?.let { tweetFeedViewModel.toggleRetweet(it, viewModel) }
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -61,7 +61,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
                 tint = if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary)
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${tweet.retweetCount}",
+                text = "${tweet?.retweetCount}",
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -71,7 +71,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
-    val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+    val hasLiked = tweet?.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
 
     IconButton(onClick = { viewModel.likeTweet() } )
     {
@@ -84,7 +84,7 @@ fun LikeButton(viewModel: TweetViewModel) {
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${tweet.likeCount}",
+                text = "${tweet?.likeCount}",
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -94,7 +94,7 @@ fun LikeButton(viewModel: TweetViewModel) {
 @Composable
 fun BookmarkButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
-    val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
+    val hasBookmarked = tweet?.favorites?.get(UserFavorites.BOOKMARK) ?: false
     IconButton(onClick = { viewModel.bookmarkTweet() } )
     {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -106,7 +106,7 @@ fun BookmarkButton(viewModel: TweetViewModel) {
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "${tweet.bookmarkCount}",
+                text = "${tweet?.bookmarkCount}",
                 style = MaterialTheme.typography.labelSmall
             )
         }

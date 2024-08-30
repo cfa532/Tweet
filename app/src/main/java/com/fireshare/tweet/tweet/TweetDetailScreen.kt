@@ -46,7 +46,6 @@ fun TweetDetailScreen(
         // the 1st parameter tweetId is its parent tweet
         val ct = viewModel.getCommentById(commentId) ?: return
         viewModel = hiltViewModel<TweetViewModel>(key = ct.mid)
-        viewModel.init(ct, tweetFeedViewModel)
     } else {
 //        val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
 //        viewModel.init(t, tweetFeedViewModel)
@@ -78,7 +77,7 @@ fun TweetDetailScreen(
         )
 
         // main body of the parent Tweet.
-        TweetDetailHead(tweet, viewModel)
+        tweet?.let { TweetDetailHead(it, viewModel) }
 
         // divider between tweet and its comment list
         HorizontalDivider(
@@ -98,7 +97,7 @@ fun TweetDetailScreen(
                     thickness = 0.5.dp,
                     color = Color.LightGray
                 )
-                tweet.mid?.let { CommentItem(it, comment) }
+                tweet?.mid?.let { CommentItem(it, comment) }
             }
         }
     }

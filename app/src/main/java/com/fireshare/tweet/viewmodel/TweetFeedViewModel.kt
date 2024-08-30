@@ -2,26 +2,29 @@ package com.fireshare.tweet.viewmodel
 
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.scopes.ViewModelScoped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class TweetFeedViewModel @Inject constructor() : ViewModel()
-{
-//    private val _tweets = InMemoryData._tweets
+class TweetFeedViewModel @Inject constructor(
+) : ViewModel() {
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
-    val tweets: StateFlow<List<Tweet>> get() = _tweets
+    val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time

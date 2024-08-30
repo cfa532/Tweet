@@ -36,7 +36,6 @@ fun CommentItem(tweetId: MimeiId, comment: Tweet) {
     val author = comment.author
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val viewModel = hiltViewModel<TweetViewModel>(key = comment.mid)
-    viewModel.init(comment, tweetFeedViewModel)
 
     Column(
         modifier = Modifier.clickable(onClick = {

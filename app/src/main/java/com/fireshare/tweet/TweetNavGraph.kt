@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -70,7 +71,8 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-                val viewModel = hiltViewModel<TweetViewModel>(parentEntry, key = tweetId)
+                val factory = AppModule.TweetViewModelFactory(TweetKeyImpl(tweetId), it)
+                val viewModel = ViewModelProvider(parentEntry, factory)[TweetViewModel::class.java]
                 TweetDetailScreen(tweetId, commentId, viewModel)
             }
             composable<ComposeTweet> {
