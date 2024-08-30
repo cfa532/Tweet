@@ -34,12 +34,14 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetDetailScreen(
     tweetId: MimeiId,
     commentId: MimeiId?,
-    tweetViewModel: TweetViewModel      // the tweetViewModel is initialized under current AppModule settings
 ) {
     //
     val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    var viewModel = tweetViewModel
+    val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
+    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = t.mid) { factory ->
+        factory.create(t)
+    }
 
     if (commentId != null) {
         // displaying details of a comment as a Tweet, which is a Tweet object itself.
@@ -77,7 +79,7 @@ fun TweetDetailScreen(
         )
 
         // main body of the parent Tweet.
-        tweet?.let { TweetDetailHead(it, viewModel) }
+        TweetDetailHead(tweet, viewModel)
 
         // divider between tweet and its comment list
         HorizontalDivider(
@@ -97,7 +99,7 @@ fun TweetDetailScreen(
                     thickness = 0.5.dp,
                     color = Color.LightGray
                 )
-                tweet?.mid?.let { CommentItem(it, comment) }
+                tweet.mid?.let { CommentItem(it, comment) }
             }
         }
     }

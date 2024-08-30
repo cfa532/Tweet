@@ -35,7 +35,10 @@ fun CommentItem(tweetId: MimeiId, comment: Tweet) {
     val navController = LocalNavController.current
     val author = comment.author
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val viewModel = hiltViewModel<TweetViewModel>(key = comment.mid)
+    // this viewModel is a comment Item.
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = comment.mid) { factory ->
+        factory.create(comment)
+    }
 
     Column(
         modifier = Modifier.clickable(onClick = {

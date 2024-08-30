@@ -42,6 +42,7 @@ object AppModule {
     }
 
     @Provides
+    @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }
