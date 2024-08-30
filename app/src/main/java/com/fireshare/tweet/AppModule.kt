@@ -17,14 +17,14 @@ import dagger.hilt.android.components.ActivityComponent
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-//@Module
-//@InstallIn(ActivityComponent::class)
-//object ActivityModule {
-//    @Provides
-//    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
-//        return activity
-//    }
-//}
+@Module
+@InstallIn(ActivityComponent::class)
+object ActivityModule {
+    @Provides
+    fun provideViewModelStoreOwner(activity: ComponentActivity): ViewModelStoreOwner {
+        return activity
+    }
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -49,8 +49,8 @@ object AppModule {
     }
 
     @Provides
-    fun provideTweetViewModel(tweet: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
-        return TweetViewModel(tweet, viewModelStoreOwner)
+    fun provideTweetViewModel(tweetKey: TweetKey, viewModelStoreOwner: ViewModelStoreOwner): TweetViewModel {
+        return TweetViewModel(tweetKey, viewModelStoreOwner)
     }
 
     @Singleton
