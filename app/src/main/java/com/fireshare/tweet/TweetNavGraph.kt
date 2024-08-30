@@ -71,7 +71,7 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.arguments?.getString("tweetId") as MimeiId
                 val commentId = it.arguments?.getString("commentId")
-                TweetDetailScreen(tweetId, commentId)
+                TweetDetailScreen(tweetId, commentId, parentEntry)
             }
             composable<ComposeTweet> {
                 ComposeTweetScreen(navController)

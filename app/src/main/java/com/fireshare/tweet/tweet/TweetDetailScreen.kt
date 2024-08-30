@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
@@ -34,12 +35,12 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetDetailScreen(
     tweetId: MimeiId,
     commentId: MimeiId?,
+    parentEntry: NavBackStackEntry
 ) {
-    //
     val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
-    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = t.mid) { factory ->
+    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = t.mid) { factory ->
         factory.create(t)
     }
 

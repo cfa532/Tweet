@@ -36,14 +36,9 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry      // navGraph scoped
 ) {
-    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
+    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweet.mid) { factory ->
         factory.create(tweet)
     }
-//    var tweetKey = tweet.mid?.let { TweetKeyImpl(it) } ?: throw IllegalArgumentException("TweetKey must be provided")
-//    val factory = AppModule.TweetViewModelFactory(tweetKey, parentEntry)
-//    var viewModel = ViewModelProvider(parentEntry, factory)[TweetViewModel::class.java]
-//    val tweetFeedViewModel = ViewModelProvider(viewModelStoreOwner, TweetFeedViewModel::class.java).get()
-
     Column(
         modifier = Modifier
             .fillMaxWidth()

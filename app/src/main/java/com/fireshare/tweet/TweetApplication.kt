@@ -10,17 +10,10 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class TweetApplication : Application(), ViewModelStoreOwner {
-
-    override val viewModelStore: ViewModelStore by lazy { ViewModelStore() }
+class TweetApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-    }
-
-    override fun onTerminate() {
-        super.onTerminate()
-        viewModelStore.clear()
     }
 }
 

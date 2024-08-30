@@ -47,22 +47,22 @@ object AppModule {
         return TweetFeedViewModel()
     }
 
-    @Provides
-    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
-        return application as TweetApplication
-    }
+//    @Provides
+//    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
+//        return application as TweetApplication
+//    }
 
-    class TweetViewModelFactory(
-        private val tweet: Tweet,
-    ) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
-                @Suppress("UNCHECKED_CAST")
-                return TweetViewModel(tweet) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class")
-        }
-    }
+//    class TweetViewModelFactory(
+//        private val tweet: Tweet,
+//    ) : ViewModelProvider.Factory {
+//        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+//            if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
+//                @Suppress("UNCHECKED_CAST")
+//                return TweetViewModel(tweet) as T
+//            }
+//            throw IllegalArgumentException("Unknown ViewModel class")
+//        }
+//    }
 
 //    @Singleton
 //    class TweetViewModelFactory @Inject constructor(

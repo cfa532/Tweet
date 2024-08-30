@@ -30,7 +30,7 @@ fun CommentButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
 
     IconButton(onClick = {
-        tweet?.mid?.let {navController.navigate(ComposeComment(it))}
+        tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -39,7 +39,7 @@ fun CommentButton(viewModel: TweetViewModel) {
                 modifier = Modifier.size(ButtonDefaults.IconSize)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "${tweet?.commentCount}", style = MaterialTheme.typography.labelSmall)
+            Text(text = "${tweet.commentCount}", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -76,7 +76,8 @@ fun LikeButton(viewModel: TweetViewModel) {
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
-    IconButton(onClick = { viewModel.likeTweet{ updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) } } )
+    IconButton(onClick = { viewModel.likeTweet{ updatedTweet ->
+        tweetFeedViewModel.updateTweet(updatedTweet) } } )
     {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -87,7 +88,7 @@ fun LikeButton(viewModel: TweetViewModel) {
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${tweet?.likeCount}",
+                text = "${tweet.likeCount}",
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -99,7 +100,8 @@ fun BookmarkButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    IconButton(onClick = { viewModel.bookmarkTweet { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) } } )
+    IconButton(onClick = { viewModel.bookmarkTweet { updatedTweet ->
+        tweetFeedViewModel.updateTweet(updatedTweet) } } )
     {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
