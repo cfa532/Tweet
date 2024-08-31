@@ -34,7 +34,9 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TweetDetailScreen()
+fun TweetDetailScreen(
+    parentEntry: NavBackStackEntry
+)
 {
     val navController = LocalNavController.current
     val viewModelProvider = LocalViewModelProvider.current
@@ -42,7 +44,7 @@ fun TweetDetailScreen()
     val viewModel = sharedViewModel?.sharedTVMInstance ?: return
     val tweet by viewModel.tweetState.collectAsState()
 
-    viewModel.loadComments()
+    viewModel.loadComments( tweet )
     val comments by viewModel.comments.collectAsState()
 
     Column {
@@ -88,7 +90,7 @@ fun TweetDetailScreen()
                     thickness = 0.5.dp,
                     color = Color.LightGray
                 )
-                CommentItem(comment)
+                CommentItem(comment, parentEntry)
             }
         }
     }

@@ -34,10 +34,11 @@ class TweetViewModel @AssistedInject constructor(
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
-    fun loadComments(pageNumber: Number = 0) {
+    fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.Default) {
-            tweetState.value.mid?.let { mid ->
-                _comments.value = HproseInstance.getCommentList(mid)
+            _comments.value = HproseInstance.getComments(tweet).map {
+                it.author = HproseInstance.getUserBase(it.authorId)
+                it
             }
         }
     }

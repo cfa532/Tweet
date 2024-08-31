@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.SharedTweetViewModel
@@ -35,9 +36,13 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun CommentItem(comment: Tweet) {
+fun CommentItem(
+    comment: Tweet,
+    parentEntry: NavBackStackEntry
+) {
     val navController = LocalNavController.current
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = comment.mid) { factory ->
+    val viewModelProvider = LocalViewModelProvider.current
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = comment.mid) { factory ->
         factory.create(comment)
     }
     val author = comment.author
@@ -45,8 +50,11 @@ fun CommentItem(comment: Tweet) {
     // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
-            navController.navigate(TweetDetail)
-        })
+            viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
+                svm.sharedTVMInstance = viewModel   // store current viewModel in shardViewModel
+                navController.navigate(TweetDetail)
+            }
+        } )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

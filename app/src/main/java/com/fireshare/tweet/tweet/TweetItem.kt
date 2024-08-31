@@ -34,7 +34,7 @@ fun TweetItem(
     parentEntry: NavBackStackEntry,      // navGraph scoped
 ) {
     var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry,
+        parentEntry,    // keep the tweetViewModel NavGraph scoped.
         key = tweet.mid
     ) { factory ->
         factory.create(tweet)

@@ -62,7 +62,10 @@ fun TweetNavGraph(
                     TweetFeedScreen(navController, viewModel, parentEntry, sharedViewModel)
                 }
                 composable<TweetDetail> {
-                    TweetDetailScreen()
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(NavRoot)
+                    }
+                    TweetDetailScreen(parentEntry)
                 }
                 composable<ComposeTweet> {
                     ComposeTweetScreen(navController)

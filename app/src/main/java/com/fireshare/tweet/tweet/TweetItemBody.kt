@@ -43,11 +43,9 @@ fun TweetBlock(viewModel: TweetViewModel) {
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-            tweet.mid?.let {
-                viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
-                    svm.sharedTVMInstance = viewModel
-                    navController.navigate(TweetDetail)
-                }
+            viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
+                svm.sharedTVMInstance = viewModel   // store current viewModel in shardViewModel
+                navController.navigate(TweetDetail)
             }
         })
     ) {

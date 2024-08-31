@@ -8,6 +8,7 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -96,7 +97,7 @@ object HproseInstance {
     }
 
     // Get base url where user data can be accessed, and user data
-    private suspend fun getUserBase(userId: MimeiId): User? {
+    suspend fun getUserBase(userId: MimeiId): User? {
         // check if user data has been read
         getUser(userId)?.let { return it}
 
@@ -303,19 +304,20 @@ object HproseInstance {
         return list
     }
 
-    // given a tweet, load its comments
-    fun getComments(tweet: Tweet, commentId: MimeiId?, pageNumber: Int = 0): List<Tweet> {
-        val method = "get_comments"
-        val url = "${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}&pn=$pageNumber&commentid=$commentId"
+    // given a tweet, load its comments. If commentId is not Null, retrieve that one alone.
+    fun getComments(tweet: Tweet, commentId: MimeiId? = null, pageNumber: Int = 0): List<Tweet> {
+        val method = "get_tweets"
+        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
+            .append("&tweetid=${tweet.mid}&userid=${appUser.mid}")
+            .append("&pn=$pageNumber&commentid=$commentId").toString()
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return listOf()
             val gson = Gson()
-            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
-            return listOf()
+            return gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type)
         }
-        return listOf()
+        return listOf<Tweet>()
     }
 
     fun delComment(tweetId: MimeiId, commentId: MimeiId) {
