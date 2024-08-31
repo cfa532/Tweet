@@ -27,7 +27,8 @@ import java.net.URLEncoder
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private const val BASE_URL = "http://10.0.2.2:8081"
-    const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
+//    const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
+    const val TWBE_APP_ID = "1Ob2vQMZYnA83Onc5dn2yfThwLe"
     private const val CHUNK_SIZE = 50 * 1024 * 1024 // 10MB in bytes
 
     // Keys within the mimei of the user's database
