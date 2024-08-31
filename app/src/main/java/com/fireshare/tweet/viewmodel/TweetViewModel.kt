@@ -60,7 +60,7 @@ class TweetViewModel @AssistedInject constructor(
                 updateTweetFeed(updatedTweet)
                 addComment(comment)
             } catch (e: Exception) {
-                //
+                println(e.message)
             }
         }
     }
@@ -76,9 +76,10 @@ class TweetViewModel @AssistedInject constructor(
             try {
                 val updatedTweet = HproseInstance.likeTweet(tweetState.value)
                 updateTweet(updatedTweet)
-                updateTweetFeed(updatedTweet)
+//                updateTweetFeed(updatedTweet)
             } catch (e: Exception) {
                 // Handle the like error (e.g., show a toast)
+                println(e.message)
             }
         }
     }
@@ -91,6 +92,7 @@ class TweetViewModel @AssistedInject constructor(
                 updateTweetFeed(updatedTweet)
             } catch (e: Exception) {
                 // Handle the bookmark error (e.g., show a toast)
+                println(e.message)
             }
         }
     }

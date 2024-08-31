@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -32,30 +34,16 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TweetDetailScreen(
-    tweetId: MimeiId,
-    commentId: MimeiId?,
-    parentEntry: NavBackStackEntry
-) {
+fun TweetDetailScreen()
+{
     val navController = LocalNavController.current
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val t = tweetFeedViewModel.getTweetById(tweetId) ?: return
-    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = t.mid) { factory ->
-        factory.create(t)
-    }
+    val viewModelProvider = LocalViewModelProvider.current
+    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
+    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
+    val tweet by viewModel.tweetState.collectAsState()
 
-    if (commentId != null) {
-        // displaying details of a comment as a Tweet, which is a Tweet object itself.
-        // Retrieve the comment from its parent tweet.
-        val ct: Tweet = viewModel.getCommentById(commentId) ?: return
-        // create viewModel of the comment Item, which is ViewModelScoped at the navigation destination.
-        viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = ct.mid)  { factory ->
-            factory.create(ct)
-        }
-    }
     viewModel.loadComments()
     val comments by viewModel.comments.collectAsState()
-    val tweet by viewModel.tweetState.collectAsState()
 
     Column {
         TopAppBar(

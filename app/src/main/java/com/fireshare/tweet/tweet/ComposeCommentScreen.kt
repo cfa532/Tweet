@@ -26,7 +26,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -50,7 +49,6 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.Gadget.uploadAttachments
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -64,8 +62,9 @@ fun ComposeCommentScreen(
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
-    val context = LocalContext.current // Renamed for clarity
+    val localContext = LocalContext.current
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
     val viewModel = sharedViewModel?.sharedTVMInstance
@@ -101,7 +100,7 @@ fun ComposeCommentScreen(
                     Button(
                         onClick = {
                             viewModel?.viewModelScope?.launch {
-                                val attachments = uploadAttachments(context, selectedAttachments)
+                                val attachments = uploadAttachments(localContext, selectedAttachments)
                                 viewModel.uploadComment(
                                     comment = Tweet(
                                     authorId = appUser.mid,

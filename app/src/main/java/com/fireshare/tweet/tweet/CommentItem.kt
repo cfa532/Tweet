@@ -14,11 +14,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.LocalViewModelProvider
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.MimeiId
@@ -33,13 +37,14 @@ import com.fireshare.tweet.widget.UserAvatar
 @Composable
 fun CommentItem(tweetId: MimeiId, comment: Tweet) {
     val navController = LocalNavController.current
-    val author = comment.author
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    // this viewModel is a comment Item.
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = comment.mid) { factory ->
-        factory.create(comment)
-    }
+    val viewModelProvider = LocalViewModelProvider.current
+    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
+    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
 
+    val tweet by viewModel.tweetState.collectAsState()
+    val author = comment.author
+
+    // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
 //            navController.navigate(TweetDetail(comment.mid, tweetId))

@@ -38,8 +38,8 @@ fun CommentButton(viewModel: TweetViewModel) {
     val viewModelProvider = LocalViewModelProvider.current
 
     IconButton(onClick = {
-        viewModelProvider?.get(SharedTweetViewModel::class)?.let {
-            it.sharedTVMInstance = viewModel
+        viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
+            svm.sharedTVMInstance = viewModel
             tweet.mid?.let { navController.navigate(ComposeComment(it)) }
         }
     }) {
@@ -59,9 +59,7 @@ fun CommentButton(viewModel: TweetViewModel) {
 fun RetweetButton(viewModel: TweetViewModel) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val tweet by viewModel.tweetState.collectAsState()
-    val count by remember {
-        derivedStateOf { tweet.retweetCount }
-    }
+    val count = tweet.retweetCount
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
@@ -89,7 +87,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
-    val count by remember { derivedStateOf { tweet.likeCount } }
+    val count = tweet.likeCount
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 

@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,28 +9,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.TweetDetail
+import com.fireshare.tweet.LocalViewModelProvider
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.UserProfile
-import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
@@ -42,21 +35,28 @@ import com.fireshare.tweet.widget.UserAvatar
 fun TweetBlock(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
+    val viewModelProvider = LocalViewModelProvider.current
 
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-//            tweet.mid?.let { navController.navigate(TweetDetail(it, null)) }
-            tweet.mid?.let { navController.navigate("TweetDetail?tweetId=$it") }
+            tweet.mid?.let {
+                viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
+                    svm.sharedTVMInstance = viewModel
+                    navController.navigate("TweetDetail?tweetId=$it")
+                }
+            }
         })
     ) {
-        Column( modifier = Modifier
+        Column(
+            modifier = Modifier
                 .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
-            Row(verticalAlignment = Alignment.CenterVertically,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start
             ) {
                 val author = tweet.author
@@ -119,7 +119,8 @@ fun TweetBlock(viewModel: TweetViewModel) {
 @Composable
 fun UpdateTweetButton(viewModel: TweetViewModel) {
     Button(onClick = {
-        val updatedTweet = viewModel.tweetState.value.copy(commentCount = viewModel.tweetState.value.commentCount + 1)
+        val updatedTweet =
+            viewModel.tweetState.value.copy(commentCount = viewModel.tweetState.value.commentCount + 1)
         viewModel.updateTweet(updatedTweet)
     }) {
         Text("comment")

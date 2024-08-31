@@ -96,7 +96,7 @@ object HproseInstance {
     }
 
     // Get base url where user data can be accessed, and user data
-    suspend fun getUserBase(userId: MimeiId): User? {
+    private suspend fun getUserBase(userId: MimeiId): User? {
         // check if user data has been read
         getUser(userId)?.let { return it}
 
@@ -164,7 +164,7 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    suspend fun getTweet(
+    private suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         tweets: MutableList<Tweet>
@@ -281,6 +281,7 @@ object HproseInstance {
         }
     }
 
+    // get the comment Id list of this tweet
     suspend fun getCommentList(tweetId: MimeiId ): List<Tweet> {
         val list = mutableListOf<Tweet>()
         client.mmOpen("", tweetId, "last").also {
@@ -290,12 +291,12 @@ object HproseInstance {
                 val commentId = sp["member"] as MimeiId
                 client.mmOpen("", commentId, "last").also {mmsid ->
                     val c = client.get(mmsid, TWT_CONTENT_KEY) as Map<*, *>
-                    val tweet = Tweet(mid = c["mid"] as MimeiId,
+                    val comment = Tweet(mid = c["mid"] as MimeiId,
                         authorId = c["authorId"] as MimeiId,
                         content = c["content"] as String,
                         timestamp = (c["timestamp"] as Double).toLong())
-                    tweet.author = getUserBase(tweet.authorId)
-                    list.add(tweet)
+                    comment.author = getUserBase(comment.authorId)
+                    list.add(comment)
                 }
             }
         }
@@ -353,9 +354,9 @@ object HproseInstance {
             val gson = Gson()
             val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
 
-            // return a new object for recomposition to work.
             tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
             return tweet.copy(
+                // return a new object for recomposition to work.
                 likeCount = (res["count"] as Double).toInt()
             )
         }

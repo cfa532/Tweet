@@ -27,10 +27,7 @@ object ProfileEditor
 // if commentId is not null, reading comment detail of current Tweet.
 // the comment itself is a tweet too.
 @Serializable
-data class TweetDetail(
-    val tweetId: String,
-    val commentId: String?,
-    )
+object TweetDetail
 
 @Serializable
 data class UserProfile(val userId: MimeiId)     // profile detail of a user
