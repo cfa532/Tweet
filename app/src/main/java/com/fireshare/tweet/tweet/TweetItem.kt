@@ -20,13 +20,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavBackStackEntry
-import com.fireshare.tweet.AppModule
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.SharedTweetViewModel
-import com.fireshare.tweet.TweetKeyImpl
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -37,7 +33,10 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,      // navGraph scoped
 ) {
-    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweet.mid) { factory ->
+    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry,
+        key = tweet.mid
+    ) { factory ->
         factory.create(tweet)
     }
     Column(
@@ -46,19 +45,21 @@ fun TweetItem(
             .padding(0.dp)
     ) {
         // Content body
-        if (tweet.originalTweetId != null) {
+        if (tweet.originalTweet != null) {
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
 
                 Spacer(modifier = Modifier.padding(8.dp))
                 Box {
                     // The tweet area
-                    tweet.originalTweet?.let {
-                        viewModel =
-                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweet.originalTweetId)
-                            { factory -> factory.create(it) }
-                        TweetBlock(it, viewModel)
-                    }
+                    viewModel =
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry,
+                            key = tweet.originalTweetId
+                        )
+                        { factory -> factory.create(tweet.originalTweet!!) }
+                    TweetBlock(viewModel)
+
                     // Label: Forward by user, on top of original tweet
                     Box {
                         Icon(
@@ -90,13 +91,11 @@ fun TweetItem(
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(start = 12.dp)
                 )
-                tweet.originalTweet?.let {
-                    TweetBlock(it, viewModel)
-                }
+                TweetBlock(viewModel)
             }
         } else {
             // original tweet by current user.
-            TweetBlock(tweet, viewModel)
+            TweetBlock(viewModel)
         }
     }
 }
@@ -104,7 +103,8 @@ fun TweetItem(
 @Composable
 fun TweetHeader(tweet: Tweet) {
     // Use a Row to align author name and potential verification badge
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start
     ) {
         val navController = LocalNavController.current

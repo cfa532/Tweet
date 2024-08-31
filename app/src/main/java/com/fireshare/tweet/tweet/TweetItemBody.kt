@@ -20,6 +20,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,8 +39,10 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun TweetBlock(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetBlock(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
+    val tweet by viewModel.tweetState.collectAsState()
+
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
