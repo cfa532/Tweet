@@ -17,7 +17,6 @@ import androidx.navigation.NavHostController
 import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.MainTopAppBar
 import com.fireshare.tweet.SharedTweetViewModel
-import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 

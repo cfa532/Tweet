@@ -1,9 +1,6 @@
 package com.fireshare.tweet.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet

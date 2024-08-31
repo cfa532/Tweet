@@ -13,13 +13,10 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import androidx.navigation.toRoute
-import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen

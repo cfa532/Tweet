@@ -1,19 +1,9 @@
 package com.fireshare.tweet
 
-import android.app.Application
-import androidx.activity.ComponentActivity
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.components.ActivityComponent
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 

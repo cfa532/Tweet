@@ -21,16 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
 import com.fireshare.tweet.SharedTweetViewModel
-import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
