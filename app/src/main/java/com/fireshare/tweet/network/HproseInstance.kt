@@ -232,7 +232,7 @@ object HproseInstance {
     }
 
     // retweet or cancel retweet
-    fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel) {
+    fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
@@ -247,11 +247,12 @@ object HproseInstance {
                 val responseBody = response.body?.string() ?: return
                 val gson = Gson()
                 val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+                tweet.favorites!![UserFavorites.RETWEET] = false
+                updateTweetViewModel( tweet.copy(retweetCount = (res["count"] as Double).toInt()) )
+
                 deleteTweet(res["retweetId"] as MimeiId) {
                     tweetFeedViewModel.delTweet(res["retweetId"] as MimeiId)
                 }
-                tweet.favorites!![UserFavorites.RETWEET] = false
-                tweet.retweetCount = (res["count"] as Double).toInt()
             }
         } else {
             var retweet = Tweet(
@@ -271,6 +272,7 @@ object HproseInstance {
                 val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
                 tweet.favorites!![UserFavorites.RETWEET] = true
                 tweet.retweetCount = (res["count"] as Double).toInt()
+                updateTweetViewModel( tweet.copy() )
 
                 retweet.author = appUser
                 retweet.originalTweet = tweet

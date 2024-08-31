@@ -43,7 +43,7 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun updateTweet(tweet: Tweet) {
-        _tweetState.value = tweet.copy()
+        _tweetState.value = tweet
     }
 
     fun getCommentById(commentId: MimeiId): Tweet? {
