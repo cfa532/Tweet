@@ -35,20 +35,17 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun CommentItem(tweetId: MimeiId, comment: Tweet) {
+fun CommentItem(comment: Tweet) {
     val navController = LocalNavController.current
-    val viewModelProvider = LocalViewModelProvider.current
-    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
-    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
-
-    val tweet by viewModel.tweetState.collectAsState()
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = comment.mid) { factory ->
+        factory.create(comment)
+    }
     val author = comment.author
 
     // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
-//            navController.navigate(TweetDetail(comment.mid, tweetId))
-            navController.navigate("TweetDetail?tweetId=$tweetId&commentId=${comment.mid}")
+            navController.navigate(TweetDetail)
         })
     ) {
         Row(

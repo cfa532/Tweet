@@ -88,7 +88,7 @@ fun TweetDetailScreen()
                     thickness = 0.5.dp,
                     color = Color.LightGray
                 )
-                tweet.mid?.let { CommentItem(it, comment) }
+                CommentItem(comment)
             }
         }
     }

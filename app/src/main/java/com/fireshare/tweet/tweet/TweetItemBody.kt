@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.SharedTweetViewModel
+import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -45,7 +46,7 @@ fun TweetBlock(viewModel: TweetViewModel) {
             tweet.mid?.let {
                 viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
                     svm.sharedTVMInstance = viewModel
-                    navController.navigate("TweetDetail?tweetId=$it")
+                    navController.navigate(TweetDetail)
                 }
             }
         })
