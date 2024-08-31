@@ -57,7 +57,7 @@ class TweetViewModel @AssistedInject constructor(
                 // comment is changed within uploadComment()
                 val updatedTweet = HproseInstance.uploadComment(tweetState.value, comment)
                 updateTweet(updatedTweet)
-                updateTweetFeed(updatedTweet)
+//                updateTweetFeed(updatedTweet)
                 addComment(comment)
             } catch (e: Exception) {
                 println(e.message)
@@ -89,7 +89,7 @@ class TweetViewModel @AssistedInject constructor(
             try {
                 val updatedTweet = HproseInstance.bookmarkTweet(tweetState.value)
                 updateTweet(updatedTweet)
-                updateTweetFeed(updatedTweet)
+//                updateTweetFeed(updatedTweet)
             } catch (e: Exception) {
                 // Handle the bookmark error (e.g., show a toast)
                 println(e.message)
