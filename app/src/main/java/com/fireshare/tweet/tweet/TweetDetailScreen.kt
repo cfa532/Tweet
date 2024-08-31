@@ -26,17 +26,18 @@ import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
 import com.fireshare.tweet.SharedTweetViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweetDetailScreen(
+    viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry
-)
-{
+) {
     val navController = LocalNavController.current
-    val viewModelProvider = LocalViewModelProvider.current
-    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
-    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
+//    val viewModelProvider = LocalViewModelProvider.current
+//    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
+//    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
     val tweet by viewModel.tweetState.collectAsState()
 
     viewModel.loadComments( tweet )

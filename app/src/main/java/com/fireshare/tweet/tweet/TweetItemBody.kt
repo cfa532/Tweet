@@ -36,17 +36,13 @@ import com.fireshare.tweet.widget.UserAvatar
 fun TweetBlock(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
-    val viewModelProvider = LocalViewModelProvider.current
 
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-            viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
-                svm.sharedTVMInstance = viewModel   // store current viewModel in shardViewModel
-                navController.navigate(TweetDetail)
-            }
+            tweet.mid?.let { navController.navigate(TweetDetail(it)) }
         })
     ) {
         Column(

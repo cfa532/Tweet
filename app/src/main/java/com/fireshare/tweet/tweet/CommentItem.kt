@@ -37,7 +37,6 @@ fun CommentItem(
     parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
-    val viewModelProvider = LocalViewModelProvider.current
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = comment.mid) { factory ->
         factory.create(comment)
     }
@@ -46,10 +45,7 @@ fun CommentItem(
     // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
-            viewModelProvider?.get(SharedTweetViewModel::class)?.let { svm ->
-                svm.sharedTVMInstance = viewModel   // store current viewModel in shardViewModel
-                navController.navigate(TweetDetail)
-            }
+            comment.mid?.let {navController.navigate(TweetDetail(it))}
         } )
     ) {
         Row(

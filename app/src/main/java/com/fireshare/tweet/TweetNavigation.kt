@@ -1,7 +1,11 @@
 package com.fireshare.tweet
 
+import android.os.Bundle
+import androidx.navigation.NavType
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.Tweet
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 @Serializable
 object NavRoot
@@ -27,7 +31,7 @@ object ProfileEditor
 // if commentId is not null, reading comment detail of current Tweet.
 // the comment itself is a tweet too.
 @Serializable
-object TweetDetail
+data class TweetDetail(val tweetId: MimeiId)
 
 @Serializable
 data class UserProfile(val userId: MimeiId)     // profile detail of a user
