@@ -25,7 +25,6 @@ fun TweetFeedScreen(
     navController: NavHostController,
     viewModel: TweetFeedViewModel,
     parentEntry: NavBackStackEntry,
-    sharedViewModel: SharedTweetViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
     Scaffold(
