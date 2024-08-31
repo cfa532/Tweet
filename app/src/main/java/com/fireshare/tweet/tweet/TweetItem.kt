@@ -55,7 +55,7 @@ fun TweetItem(
                     // The tweet area
                     tweet.originalTweet?.let {
                         viewModel =
-                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.originalTweetId)
+                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweet.originalTweetId)
                             { factory -> factory.create(it) }
                         TweetBlock(it, viewModel)
                     }
