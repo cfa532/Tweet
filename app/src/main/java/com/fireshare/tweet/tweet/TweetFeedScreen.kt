@@ -16,6 +16,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.MainTopAppBar
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
@@ -24,8 +25,9 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 fun TweetFeedScreen(
     navController: NavHostController,
     viewModel: TweetFeedViewModel,
-    parentEntry: NavBackStackEntry)
-{
+    parentEntry: NavBackStackEntry,
+    sharedViewModel: SharedTweetViewModel
+) {
     val tweets by viewModel.tweets.collectAsState()
     Scaffold(
         topBar = { MainTopAppBar(navController) },

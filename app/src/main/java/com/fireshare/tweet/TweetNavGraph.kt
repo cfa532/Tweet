@@ -2,13 +2,15 @@ package com.fireshare.tweet
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -28,7 +30,10 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 val LocalNavController = compositionLocalOf<NavController> {
-    error("NavController must be provided in a CompositionLocalProvider")
+    error("NavController must be provided in a CompositionLocalProvider") }
+val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
+class SharedTweetViewModel: ViewModel() {
+    lateinit var sharedTVMInstance: TweetViewModel
 }
 
 @Composable
@@ -37,61 +42,67 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     // provide navController application-wide
+    val viewModelStoreOwner = LocalViewModelStoreOwner.current ?: (LocalContext.current as TweetActivity)
+    val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
+    val sharedViewModel = viewModel(SharedTweetViewModel::class.java)
+
     CompositionLocalProvider(LocalNavController provides navController) {
-        NavHost(
-            modifier = modifier,
-            navController = navController,
-            startDestination = TweetFeed,
-            route = NavRoot::class
-        ) {
-            composable<TweetFeed> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavRoot)
+        CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
+            NavHost(
+                modifier = modifier,
+                navController = navController,
+                startDestination = TweetFeed,
+                route = NavRoot::class
+            ) {
+                composable<TweetFeed> {
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(NavRoot)
+                    }
+                    val viewModel = hiltViewModel<TweetFeedViewModel>()
+                    TweetFeedScreen(navController, viewModel, parentEntry, sharedViewModel)
                 }
-                val viewModel = hiltViewModel<TweetFeedViewModel>()
-                TweetFeedScreen(navController, viewModel, parentEntry)
-            }
 //            composable<TweetDetail> { navBackStackEntry ->
 //                val args = navBackStackEntry.toRoute<TweetDetail>()
 //                val viewModel = hiltViewModel<TweetViewModel>(key = args.tweetId)
 //                TweetDetailScreen(args.tweetId, args.commentId, viewModel)
 //            }
-            composable("TweetDetail?tweetId={tweetId}&commentId={commentId}",
-                arguments = listOf(
-                    navArgument("tweetId") { type = NavType.StringType },
-                    navArgument("commentId") {
-                        nullable = true
-                        defaultValue = null
-                        type = NavType.StringType
+                composable("TweetDetail?tweetId={tweetId}&commentId={commentId}",
+                    arguments = listOf(
+                        navArgument("tweetId") { type = NavType.StringType },
+                        navArgument("commentId") {
+                            nullable = true
+                            defaultValue = null
+                            type = NavType.StringType
+                        }
+                    )
+                ) {
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(NavRoot)
                     }
-                )
-            ) {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavRoot)
+                    val tweetId = it.arguments?.getString("tweetId") as MimeiId
+                    val commentId = it.arguments?.getString("commentId")
+                    TweetDetailScreen(tweetId, commentId, parentEntry)
                 }
-                val tweetId = it.arguments?.getString("tweetId") as MimeiId
-                val commentId = it.arguments?.getString("commentId")
-                TweetDetailScreen(tweetId, commentId, parentEntry)
-            }
-            composable<ComposeTweet> {
-                ComposeTweetScreen(navController)
-            }
-            composable<ComposeComment> { navBackStackEntry ->
-                val parentEntry = remember(navBackStackEntry) {
-                    navController.getBackStackEntry(NavRoot)
+                composable<ComposeTweet> {
+                    ComposeTweetScreen(navController)
                 }
-                val tweet = navBackStackEntry.toRoute<ComposeComment>()
-                ComposeCommentScreen(navController, tweet.tweetId)
-            }
-            composable<UserProfile> { backStackEntry ->
-                val parentEntry = remember(backStackEntry) {
-                    navController.getBackStackEntry(NavRoot)
+                composable<ComposeComment> { navBackStackEntry ->
+                    val parentEntry = remember(navBackStackEntry) {
+                        navController.getBackStackEntry(NavRoot)
+                    }
+                    val tweet = navBackStackEntry.toRoute<ComposeComment>()
+                    ComposeCommentScreen(navController, tweet.tweetId)
                 }
-                val profile = backStackEntry.toRoute<UserProfile>()
-                UserProfileScreen(navController, profile.userId, parentEntry)
-            }
-            composable<ProfileEditor> {
-                EditProfileScreen(navController)
+                composable<UserProfile> { backStackEntry ->
+                    val parentEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry(NavRoot)
+                    }
+                    val profile = backStackEntry.toRoute<UserProfile>()
+                    UserProfileScreen(navController, profile.userId, parentEntry)
+                }
+                composable<ProfileEditor> {
+                    EditProfileScreen(navController)
+                }
             }
         }
     }

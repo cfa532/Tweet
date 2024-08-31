@@ -25,6 +25,7 @@ import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.AppModule
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.TweetKeyImpl
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
@@ -34,7 +35,7 @@ import com.fireshare.tweet.widget.UserAvatar
 @Composable
 fun TweetItem(
     tweet: Tweet,
-    parentEntry: NavBackStackEntry      // navGraph scoped
+    parentEntry: NavBackStackEntry,      // navGraph scoped
 ) {
     var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweet.mid) { factory ->
         factory.create(tweet)

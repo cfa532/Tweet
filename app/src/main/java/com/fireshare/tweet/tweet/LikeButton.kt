@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,7 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.ComposeComment
 import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -32,9 +33,13 @@ fun CommentButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.commentCount
     val navController = LocalNavController.current
-//    Log.d("CommentButton", "Comment count: $count")
+    val viewModelProvider = LocalViewModelProvider.current
 
     IconButton(onClick = {
+        val shared = viewModelProvider?.get(SharedTweetViewModel::class)
+        if (shared != null) {
+            shared.sharedTVMInstance = viewModel
+        }
         tweet.mid?.let {navController.navigate(ComposeComment(it))}
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

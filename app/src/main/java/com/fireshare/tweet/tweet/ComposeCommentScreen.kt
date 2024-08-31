@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
+import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.Gadget.uploadAttachments
@@ -57,18 +60,22 @@ import kotlinx.coroutines.launch
 fun ComposeCommentScreen(
     navController: NavHostController,
     tweetId: MimeiId,
+    commentId: MimeiId? = null
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current // Renamed for clarity
-
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val tweet = tweetFeedViewModel.getTweetById(tweetId) ?: return
+    val viewModelProvider = LocalViewModelProvider.current
+    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
+    val viewModel = sharedViewModel?.sharedTVMInstance
+    val tweet by viewModel?.tweetState?.collectAsState() ?: return
     val author = tweet.author
 
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
-        factory.create(tweet)
-    }
+//    val viewModel: TweetViewModel =
+//        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
+//        factory.create(tweet)
+//    }
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -80,7 +87,6 @@ fun ComposeCommentScreen(
             }
         }
     }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -94,7 +100,7 @@ fun ComposeCommentScreen(
                 ) {
                     Button(
                         onClick = {
-                            viewModel.viewModelScope.launch {
+                            viewModel?.viewModelScope?.launch {
                                 val attachments = uploadAttachments(context, selectedAttachments)
                                 viewModel.uploadComment(
                                     comment = Tweet(
