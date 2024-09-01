@@ -149,10 +149,10 @@ fun ComposeCommentScreen(
             ) {
                 Spacer(modifier = Modifier.padding(8.dp))
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row (
-                        verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.Start,
                         modifier = Modifier.weight(1f)
                     ) {
@@ -164,7 +164,6 @@ fun ComposeCommentScreen(
                         )
                     }
                     Row (
-                        verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.End,
                         modifier = Modifier.weight(1f)
                             .padding(end = 8.dp)
@@ -173,7 +172,7 @@ fun ComposeCommentScreen(
                             checked = isChecked,
                             onCheckedChange = { isChecked = it },
                             modifier = Modifier
-                                .size(16.dp)
+                                .size(18.dp)
                                 .alpha(0.8f)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
