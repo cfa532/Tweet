@@ -52,7 +52,6 @@ fun UserProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-//            .padding(start = 16.dp, end = 16.dp)
     ) {
         // User header
         ProfileTopAppBar(navController)

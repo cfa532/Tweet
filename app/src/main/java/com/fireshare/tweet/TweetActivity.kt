@@ -5,19 +5,31 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.BottomAppBarDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -30,6 +42,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -50,14 +63,27 @@ class TweetActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainTopAppBar(navController: NavHostController) {
-    TopAppBar(
+fun MainTopAppBar(
+    navController: NavHostController,
+    scrollBehavior: TopAppBarScrollBehavior? = null
+) {
+    CenterAlignedTopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+        ),
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
             ) {
-                AppIcon()
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = { navController.navigate(TweetFeed) })
+                ) {
+                    AppIcon()
+                }
             }
         },
         navigationIcon = {
@@ -65,8 +91,11 @@ fun MainTopAppBar(navController: NavHostController) {
             {
                 appUser.baseUrl?.let { getMediaUrl(appUser.avatar, it) }?.let {
                     Image(
-                        painter = rememberAsyncImagePainter(appUser.baseUrl?.let { getMediaUrl(
-                            appUser.avatar, it) }),
+                        painter = rememberAsyncImagePainter(appUser.baseUrl?.let {
+                            getMediaUrl(
+                                appUser.avatar, it
+                            )
+                        }),
                         contentDescription = "User Avatar",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -75,25 +104,25 @@ fun MainTopAppBar(navController: NavHostController) {
                     )
                 }
             }
-        }
+        },
+        scrollBehavior = scrollBehavior
     )
 }
 
 @Composable
 fun BottomNavigationBar(navController: NavHostController) {
-    BottomAppBar {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
+    BottomAppBar(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        actions = {
             IconButton(onClick = { navController.navigate(TweetFeed) }) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_home),
+//                    painter = painterResource(id = R.drawable.ic_home),
+                    rememberVectorPainter(image = Icons.Filled.Home),
                     contentDescription = "Home",
                     modifier = Modifier.size(32.dp)
                 )
             }
-            IconButton(onClick = { /* Navigate to Notice */ }) {
+            IconButton(onClick = { /* Navigate to Message */ }) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_notice),
                     contentDescription = "Notice",
@@ -107,6 +136,15 @@ fun BottomNavigationBar(navController: NavHostController) {
                     modifier = Modifier.size(32.dp)
                 )
             }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {},
+                containerColor = BottomAppBarDefaults.bottomAppBarFabColor,
+                elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation()
+                ) {
+                Icon(Icons.Filled.Add, "Localized description")
+            }
         }
-    }
+    )
 }
