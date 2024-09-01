@@ -18,9 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
-import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.MainTopAppBar
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.widget.BottomNavigationBar
 
 
 @OptIn(ExperimentalMaterial3Api::class)

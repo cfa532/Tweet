@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,12 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
-import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
-import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.BottomNavigationBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +42,11 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
 
     Scaffold(
-        topBar = {TopAppBar(
+        topBar = { TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                titleContentColor = MaterialTheme.colorScheme.primary,
+            ),
             title = {
                 Text(
                     text = "Tweet",
@@ -61,32 +64,33 @@ fun TweetDetailScreen(
                     )
                 }
             },
-            modifier = Modifier.height(70.dp)
         )},
         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
-        // main body of the parent Tweet.
-        TweetDetailHead(tweet, viewModel)
-
-        // divider between tweet and its comment list
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 1.dp),
-            thickness = 0.5.dp,
-            color = Color.LightGray
-        )
-        // user comment list
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            items(comments) { comment ->
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 0.5.dp,
-                    color = Color.LightGray
-                )
-                CommentItem(comment, parentEntry)
+            // main body of the parent Tweet.
+            TweetDetailHead(tweet, viewModel)
+
+            // divider between tweet and its comment list
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 1.dp),
+                thickness = 0.5.dp,
+                color = Color.LightGray
+            )
+            // user comment list
+            LazyColumn{
+                items(comments) { comment ->
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 1.dp),
+                        thickness = 0.5.dp,
+                        color = Color.LightGray
+                    )
+                    CommentItem(comment, parentEntry)
+                }
             }
         }
     }
