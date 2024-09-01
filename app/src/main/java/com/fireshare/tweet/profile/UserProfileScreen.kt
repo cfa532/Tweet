@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.ProfileEditor
 import com.fireshare.tweet.datamodel.MimeiId
@@ -45,6 +46,8 @@ fun UserProfileScreen(
 ) {
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val user = HproseInstance.getUser(userId)
+//    val navBackStackEntry by navController.currentBackStackEntryAsState()
+//    val currentRoute = navBackStackEntry?.destination?.route
 
     Column(
         modifier = Modifier
