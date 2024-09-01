@@ -26,8 +26,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -73,9 +75,12 @@ fun ComposeTweetScreen(
     }
 
     Scaffold(
-        modifier = Modifier.padding(start = 8.dp, end = 8.dp),
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
                 title = {
                     Text("Edit Tweet", fontSize = 18.sp)
                 },
@@ -121,47 +126,51 @@ fun ComposeTweetScreen(
                 }
             )
         }) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding))
-        {
-            OutlinedTextField(
-                value = tweetContent,
-                onValueChange = { tweetContent = it },
-                label = { Text("What's happening?") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 200.dp)
-                    .alpha(0.7f)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_photo_plus),
-                        contentDescription = "upload file",
-                        modifier = Modifier.size(60.dp),
-                        tint = MaterialTheme.colorScheme.surfaceTint
-                    )
+        Surface(
+            modifier = Modifier.padding(innerPadding),
+        ) {
+            Column( modifier = Modifier.padding(start = 8.dp, end = 8.dp) )
+            {
+                OutlinedTextField(
+                    value = tweetContent,
+                    onValueChange = { tweetContent = it },
+                    label = { Text("What's happening?") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp)
+                        .alpha(0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_photo_plus),
+                            contentDescription = "upload file",
+                            modifier = Modifier.size(60.dp),
+                            tint = MaterialTheme.colorScheme.surfaceTint
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-            }
 
-            // Display icons for attached files
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-            ) {
-                items(selectedAttachments.chunked(2)) { rowItems ->
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(rowItems) { uri ->
-                            UploadFilePreview(uri)
+                // Display icons for attached files
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    items(selectedAttachments.chunked(2)) { rowItems ->
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(rowItems) { uri ->
+                                UploadFilePreview(uri)
+                            }
                         }
                     }
                 }

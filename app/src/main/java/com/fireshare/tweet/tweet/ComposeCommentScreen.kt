@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -26,8 +27,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -88,9 +91,12 @@ fun ComposeCommentScreen(
     }
 
     Scaffold(
-        modifier = Modifier.padding(start = 8.dp, end = 8.dp),
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
                 title = {
                     Text("Comment", fontSize = 18.sp)
                 },
@@ -135,71 +141,89 @@ fun ComposeCommentScreen(
                 }
             )
         }) { innerPadding ->
-        Column(
-            modifier = Modifier.padding(innerPadding))
-        {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween // Adjust horizontal arrangement
+        Surface(
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp)
             ) {
-                UserAvatar(author, 32)
-                Spacer(modifier = Modifier.padding(4.dp))
-                Text(text = "Reply to @${author?.username}", modifier = Modifier.alpha(0.6f))
-
-                Spacer(modifier = Modifier.width(20.dp))
-                Checkbox(
-                    checked = isChecked,
-                    onCheckedChange = { isChecked = it },
-                    modifier = Modifier
-                        .size(16.dp)
-                        .alpha(0.8f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Post as Tweet",
-                    modifier = Modifier.alpha(0.6f),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            OutlinedTextField(
-                value = tweetContent,
-                onValueChange = { tweetContent = it },
-                label = { Text("What's happening?") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 200.dp)
-                    .alpha(0.7f)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_photo_plus),
-                        contentDescription = "upload file",
-                        modifier = Modifier.size(60.dp),
-                        tint = MaterialTheme.colorScheme.surfaceTint
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            // Display icons for attached files
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-            ) {
-                items(selectedAttachments.chunked(2)) { rowItems ->
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Spacer(modifier = Modifier.padding(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row (
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.Start,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        items(rowItems) { uri ->
-                            UploadFilePreview(uri)
+                        UserAvatar(author, 32)
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text(
+                            text = "Reply to @${author?.username}",
+                            modifier = Modifier.alpha(0.6f)
+                        )
+                    }
+                    Row (
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.weight(1f)
+                            .padding(end = 8.dp)
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = { isChecked = it },
+                            modifier = Modifier
+                                .size(16.dp)
+                                .alpha(0.8f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Post as Tweet",
+                            modifier = Modifier.alpha(0.6f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = tweetContent,
+                    onValueChange = { tweetContent = it },
+                    label = { Text("What's happening?") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp)
+                        .alpha(0.7f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_photo_plus),
+                            contentDescription = "upload file",
+                            modifier = Modifier.size(60.dp),
+                            tint = MaterialTheme.colorScheme.surfaceTint
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                // Display icons for attached files
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    items(selectedAttachments.chunked(2)) { rowItems ->
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(rowItems) { uri ->
+                                UploadFilePreview(uri)
+                            }
                         }
                     }
                 }

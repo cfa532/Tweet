@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -28,37 +29,40 @@ fun MessageScreen(
 ) {
     val navController = LocalNavController.current
     Scaffold(
-        modifier = Modifier.padding(start = 8.dp, end = 8.dp),
-        topBar = { TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                titleContentColor = MaterialTheme.colorScheme.primary,
-            ),
-            title = {
-                Text(
-                    text = "Message",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() })
-                {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                title = {
+                    Text(
+                        text = "Message",
+                        style = MaterialTheme.typography.bodyLarge
                     )
-                }
-            },
-        )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() })
+                    {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
+                    }
+                },
+            )
         },
         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            Text(text = "Message box")
+        Surface(modifier = Modifier.padding(innerPadding))
+        {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 8.dp, end = 8.dp)
+            ) {
+                Text(text = "Message box")
+            }
         }
     }
 }
