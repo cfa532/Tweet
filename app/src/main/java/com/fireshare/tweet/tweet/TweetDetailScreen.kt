@@ -12,6 +12,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
+import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
@@ -32,19 +34,16 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 @Composable
 fun TweetDetailScreen(
     viewModel: TweetViewModel,
-    parentEntry: NavBackStackEntry
+    parentEntry: NavBackStackEntry,
+    selectedBottomBarItemIndex: Int,
 ) {
     val navController = LocalNavController.current
-//    val viewModelProvider = LocalViewModelProvider.current
-//    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
-//    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
     val tweet by viewModel.tweetState.collectAsState()
-
     viewModel.loadComments( tweet )
     val comments by viewModel.comments.collectAsState()
 
-    Column {
-        TopAppBar(
+    Scaffold(
+        topBar = {TopAppBar(
             title = {
                 Text(
                     text = "Tweet",
@@ -63,8 +62,9 @@ fun TweetDetailScreen(
                 }
             },
             modifier = Modifier.height(70.dp)
-        )
-
+        )},
+        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+    ) { innerPadding ->
         // main body of the parent Tweet.
         TweetDetailHead(tweet, viewModel)
 
@@ -78,7 +78,7 @@ fun TweetDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 8.dp)
+                .padding(innerPadding)
         ) {
             items(comments) { comment ->
                 HorizontalDivider(

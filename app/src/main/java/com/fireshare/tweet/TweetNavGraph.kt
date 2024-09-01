@@ -1,9 +1,15 @@
 package com.fireshare.tweet
 
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,28 +46,29 @@ fun TweetNavGraph(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+
     // provide navController application-wide
     val viewModelStoreOwner =
         LocalViewModelStoreOwner.current ?: (LocalContext.current as TweetActivity)
     val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
-    val sharedViewModel = viewModel(SharedTweetViewModel::class.java)
+//    val sharedViewModel = viewModel(SharedTweetViewModel::class.java)
 
     CompositionLocalProvider(LocalNavController provides navController) {
         CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
             NavHost(
                 modifier = modifier,
                 navController = navController,
-                startDestination = TweetFeed,
+                startDestination = NavigationItem.TweetFeed,
                 route = NavRoot::class
             ) {
-                composable<TweetFeed> {
+                composable<NavigationItem.TweetFeed> {
                     val parentEntry = remember(it) {
                         navController.getBackStackEntry(NavRoot)
                     }
-                    TweetFeedScreen(navController, parentEntry)
+                    TweetFeedScreen(navController, parentEntry, 0)
                 }
-                composable<TweetDetail> { navBackStackEntry ->
-                    val args = navBackStackEntry.toRoute<TweetDetail>()
+                composable<NavigationItem.TweetDetail> { navBackStackEntry ->
+                    val args = navBackStackEntry.toRoute<NavigationItem.TweetDetail>()
                     val parentEntry = remember(navBackStackEntry) {
                         navController.getBackStackEntry(NavRoot)
                     }
@@ -78,9 +85,9 @@ fun TweetNavGraph(
                                 )
                             )
                         }
-                    TweetDetailScreen(viewModel, parentEntry)
+                    TweetDetailScreen(viewModel, parentEntry, 0)
                 }
-                composable<ComposeTweet> {
+                composable<NavigationItem.ComposeTweet> {
                     ComposeTweetScreen(navController)
                 }
                 composable<ComposeComment> { navBackStackEntry ->
@@ -96,6 +103,9 @@ fun TweetNavGraph(
                 }
                 composable<ProfileEditor> {
                     EditProfileScreen(navController)
+                }
+                composable<NavigationItem.MessageBox> {
+                    Text(text = "Coming soon")
                 }
             }
         }

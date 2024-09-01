@@ -22,7 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.TweetDetail
+import com.fireshare.tweet.NavigationItem
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -40,7 +40,7 @@ fun TweetBlock(viewModel: TweetViewModel) {
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable(onClick = {
-            tweet.mid?.let { navController.navigate(TweetDetail(it)) }
+            tweet.mid?.let { navController.navigate(NavigationItem.TweetDetail(it)) }
         })
     ) {
         Column(

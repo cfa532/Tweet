@@ -20,9 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.LocalViewModelProvider
-import com.fireshare.tweet.SharedTweetViewModel
-import com.fireshare.tweet.TweetDetail
+import com.fireshare.tweet.NavigationItem
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
@@ -45,7 +43,7 @@ fun CommentItem(
     // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
-            comment.mid?.let {navController.navigate(TweetDetail(it))}
+            comment.mid?.let {navController.navigate(NavigationItem.TweetDetail(it))}
         } )
     ) {
         Row(

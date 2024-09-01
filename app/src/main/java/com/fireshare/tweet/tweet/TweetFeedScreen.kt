@@ -28,6 +28,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 fun TweetFeedScreen(
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
+    selectedBottomBarItemIndex: Int,
 ) {
     val viewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
@@ -35,7 +36,7 @@ fun TweetFeedScreen(
 
     Scaffold(
         topBar = { MainTopAppBar(navController, scrollBehavior) },
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier

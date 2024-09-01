@@ -13,26 +13,35 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.BottomAppBarDefaults
+import androidx.compose.material.icons.outlined.Create
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.network.HproseInstance.appUser
@@ -42,7 +51,6 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -80,7 +88,7 @@ fun MainTopAppBar(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable(onClick = { navController.navigate(TweetFeed) })
+                        .clickable(onClick = { navController.navigate(NavigationItem.TweetFeed) })
                 ) {
                     AppIcon()
                 }
@@ -110,41 +118,71 @@ fun MainTopAppBar(
 }
 
 @Composable
-fun BottomNavigationBar(navController: NavHostController) {
-    BottomAppBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        actions = {
-            IconButton(onClick = { navController.navigate(TweetFeed) }) {
-                Icon(
-//                    painter = painterResource(id = R.drawable.ic_home),
-                    rememberVectorPainter(image = Icons.Filled.Home),
-                    contentDescription = "Home",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            IconButton(onClick = { /* Navigate to Message */ }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_notice),
-                    contentDescription = "Notice",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            IconButton(onClick = { navController.navigate(ComposeTweet) }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_compose),
-                    contentDescription = "Compose",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {},
-                containerColor = BottomAppBarDefaults.bottomAppBarFabColor,
-                elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation()
-                ) {
-                Icon(Icons.Filled.Add, "Localized description")
-            }
-        }
+fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) {
+    var selectedItemIndex by rememberSaveable {
+        mutableIntStateOf(0)
+    }
+
+    val items = listOf(
+        BottomNavigationItem(
+            title = "Home",
+            route = NavigationItem.TweetFeed,
+            selectedIcon = Icons.Filled.Home,
+            unselectedIcon = Icons.Outlined.Home,
+            hasNews = false,
+        ),
+        BottomNavigationItem(
+            title = "Chat",
+            route = NavigationItem.MessageBox(),
+            selectedIcon = Icons.Filled.Email,
+            unselectedIcon = Icons.Outlined.Email,
+            hasNews = false,
+            badgeCount = 12,
+        ),
+        BottomNavigationItem(
+            title = "Post",
+            route = NavigationItem.ComposeTweet,
+            selectedIcon = Icons.Filled.Create,
+            unselectedIcon = Icons.Outlined.Create,
+            hasNews = true
+        )
     )
+    NavigationBar {
+        items.forEachIndexed { index, item ->
+            NavigationBarItem(
+                selected = index == selectedIndex,
+                label = { Text(text = item.title) },
+                onClick = {
+                    selectedItemIndex = index
+                    navController.navigate(item.route) },
+                icon = {
+                    BadgedBox(
+                        badge = {
+                            if (item.badgeCount != null) {
+                                Badge {
+                                    Text(text = item.badgeCount.toString())
+                                }
+                            } else if(item.hasNews) {
+                                Badge()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (index == selectedIndex) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.title
+                        )
+                    }
+                }
+            )
+        }
+    }
 }
+
+data class BottomNavigationItem(
+    val title: String,
+    val route:  NavigationItem,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector,
+    val hasNews: Boolean,
+    val badgeCount: Int? = null
+)
