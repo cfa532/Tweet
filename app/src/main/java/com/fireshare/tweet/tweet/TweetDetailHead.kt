@@ -55,7 +55,7 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
             Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
-                tonalElevation = 3.dp,
+//                tonalElevation = 3.dp,
                 modifier = Modifier
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {

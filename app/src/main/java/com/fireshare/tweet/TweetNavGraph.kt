@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.message.MessageScreen
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
@@ -105,7 +106,10 @@ fun TweetNavGraph(
                     EditProfileScreen(navController)
                 }
                 composable<NavigationItem.MessageBox> {
-                    Text(text = "Coming soon")
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(NavRoot)
+                    }
+                    MessageScreen(parentEntry, 1)
                 }
             }
         }
