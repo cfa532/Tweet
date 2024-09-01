@@ -30,13 +30,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.rememberAsyncImagePainter
-import com.fireshare.tweet.ProfileEditor
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.widget.ProfileEditor
 
 @Composable
 fun UserProfileScreen(

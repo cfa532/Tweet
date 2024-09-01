@@ -20,14 +20,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.NavigationItem
-import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.NavigationItem
 import com.fireshare.tweet.widget.UserAvatar
+import com.fireshare.tweet.widget.UserProfile
 
 @Composable
 fun CommentItem(

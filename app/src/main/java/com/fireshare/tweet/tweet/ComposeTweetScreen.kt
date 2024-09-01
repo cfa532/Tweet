@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -36,6 +39,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -68,21 +72,30 @@ fun ComposeTweetScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        TopAppBar(
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
+    Scaffold(
+        modifier = Modifier.padding(start = 8.dp, end = 8.dp),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text("Edit Tweet", fontSize = 18.sp)
+                },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        // show warning snack bar
+                        navController.popBackStack()
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
                         onClick = {
                             viewModel.viewModelScope.launch {
-                                val attachments = uploadAttachments(localContext, selectedAttachments)
+                                val attachments =
+                                    uploadAttachments(localContext, selectedAttachments)
                                 val tweet = Tweet(
                                     authorId = HproseInstance.appUser.mid,
                                     content = tweetContent,
@@ -100,59 +113,56 @@ fun ComposeTweetScreen(
                             .width(intrinsicSize = IntrinsicSize.Min) // Adjust width to fit content
                             .alpha(0.8f) // Set opacity to 80%
                     ) {
-                        Text("Tweet")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send"
+                        )
                     }
                 }
-            },
-            navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() }) {
+            )
+        }) { innerPadding ->
+        Column(modifier = Modifier.padding(innerPadding))
+        {
+            OutlinedTextField(
+                value = tweetContent,
+                onValueChange = { tweetContent = it },
+                label = { Text("What's happening?") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 200.dp)
+                    .alpha(0.7f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_back),
-                        contentDescription = "Back",
-                        modifier = Modifier
-                            .size(40.dp)
-                            .padding(8.dp)
+                        painter = painterResource(R.drawable.ic_photo_plus),
+                        contentDescription = "upload file",
+                        modifier = Modifier.size(60.dp),
+                        tint = MaterialTheme.colorScheme.surfaceTint
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
             }
-        )
-        OutlinedTextField(
-            value = tweetContent,
-            onValueChange = { tweetContent = it },
-            label = { Text("What's happening?") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 200.dp)
-                .alpha(0.7f)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
-                Icon(painter = painterResource(R.drawable.ic_photo_plus),
-                    contentDescription = "upload file",
-                    modifier = Modifier.size(60.dp),
-                    tint = MaterialTheme.colorScheme.surfaceTint)
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-        }
 
-        // Display icons for attached files
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-        ) {
-            items(selectedAttachments.chunked(2)) { rowItems ->
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(rowItems) { uri ->
-                        UploadFilePreview(uri)
+            // Display icons for attached files
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
+                items(selectedAttachments.chunked(2)) { rowItems ->
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(rowItems) { uri ->
+                            UploadFilePreview(uri)
+                        }
                     }
                 }
             }

@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.fireshare.tweet.ComposeComment
 import com.fireshare.tweet.LocalNavController
 import com.fireshare.tweet.LocalViewModelProvider
 import com.fireshare.tweet.R
@@ -27,6 +26,7 @@ import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.ComposeComment
 
 @Composable
 fun CommentButton(viewModel: TweetViewModel) {
