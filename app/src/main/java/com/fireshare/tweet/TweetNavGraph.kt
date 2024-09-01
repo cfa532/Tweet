@@ -24,13 +24,14 @@ import com.fireshare.tweet.tweet.ComposeCommentScreen
 import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetDetailScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 
 val LocalNavController = compositionLocalOf<NavController> {
-    error("NavController must be provided in a CompositionLocalProvider") }
+    error("NavController must be provided in a CompositionLocalProvider")
+}
 val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
-class SharedTweetViewModel: ViewModel() {
+
+class SharedTweetViewModel : ViewModel() {
     lateinit var sharedTVMInstance: TweetViewModel
 }
 
@@ -40,7 +41,8 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     // provide navController application-wide
-    val viewModelStoreOwner = LocalViewModelStoreOwner.current ?: (LocalContext.current as TweetActivity)
+    val viewModelStoreOwner =
+        LocalViewModelStoreOwner.current ?: (LocalContext.current as TweetActivity)
     val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
     val sharedViewModel = viewModel(SharedTweetViewModel::class.java)
 
@@ -56,16 +58,26 @@ fun TweetNavGraph(
                     val parentEntry = remember(it) {
                         navController.getBackStackEntry(NavRoot)
                     }
-                    val viewModel = hiltViewModel<TweetFeedViewModel>()
-                    TweetFeedScreen(navController, viewModel, parentEntry)
+                    TweetFeedScreen(navController, parentEntry)
                 }
-                composable<TweetDetail> {navBackStackEntry ->
+                composable<TweetDetail> { navBackStackEntry ->
                     val args = navBackStackEntry.toRoute<TweetDetail>()
                     val parentEntry = remember(navBackStackEntry) {
                         navController.getBackStackEntry(NavRoot)
                     }
-                    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = args.tweetId)
-                    { factory -> factory.create(Tweet(authorId = "default", content = "nothing")) }
+                    val viewModel =
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry,
+                            key = args.tweetId
+                        )
+                        { factory ->
+                            factory.create(
+                                Tweet(
+                                    authorId = "default",
+                                    content = "nothing"
+                                )
+                            )
+                        }
                     TweetDetailScreen(viewModel, parentEntry)
                 }
                 composable<ComposeTweet> {

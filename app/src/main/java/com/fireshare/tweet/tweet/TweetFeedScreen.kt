@@ -12,20 +12,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.BottomNavigationBar
 import com.fireshare.tweet.MainTopAppBar
-import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
-    viewModel: TweetFeedViewModel,
     parentEntry: NavBackStackEntry,
 ) {
+    val viewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
     Scaffold(
         topBar = { MainTopAppBar(navController) },

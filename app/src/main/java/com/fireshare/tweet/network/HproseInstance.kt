@@ -22,6 +22,7 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.InputStream
 import java.math.BigInteger
+import java.net.ProtocolException
 import java.net.URLEncoder
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -71,7 +72,7 @@ object HproseInstance {
     // Initialize lazily, also used as UserId
     private val appMid: String by lazy {
         runBlocking {   // necessary for the whole App
-            withContext(Dispatchers.IO) {
+            withContext(IO) {
                 val method = "get_app_mid"
                 val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method"
                 val request = Request.Builder().url(url).build()
@@ -192,7 +193,7 @@ object HproseInstance {
                     if (cachedTweet != null) {
                         // isPrivate could be null
                         tweet.originalAuthor = cachedTweet.author
-                        tweet.originalTweet = cachedTweet;
+                        tweet.originalTweet = cachedTweet
                     } else {
                         tweet.originalTweet =
                             tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId, it, tweets) }
@@ -312,11 +313,16 @@ object HproseInstance {
             .append("&tweetid=${tweet.mid}&userid=${appUser.mid}")
             .append("&pn=$pageNumber&commentid=$commentId").toString()
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val responseBody = response.body?.string() ?: return listOf()
-            val gson = Gson()
-            return gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type)
+        try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return listOf()
+                val gson = Gson()
+                return gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type)
+            }
+        } catch (e: ProtocolException) {
+            // handle network failure (e.g., show an error message)
+            Log.e("OkHttp", "Network failure: Unexpected status line", e)
         }
         return listOf<Tweet>()
     }
