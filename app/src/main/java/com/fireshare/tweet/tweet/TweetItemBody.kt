@@ -22,8 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.LocalNavController
-import com.fireshare.tweet.LocalViewModelProvider
-import com.fireshare.tweet.SharedTweetViewModel
 import com.fireshare.tweet.TweetDetail
 import com.fireshare.tweet.UserProfile
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl

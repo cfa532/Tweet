@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +62,7 @@ fun ComposeCommentScreen(
     commentId: MimeiId? = null
 ) {
     var tweetContent by remember { mutableStateOf("") }
+    var isChecked by remember { mutableStateOf(false) }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
@@ -70,11 +72,6 @@ fun ComposeCommentScreen(
     val viewModel = sharedViewModel?.sharedTVMInstance
     val tweet by viewModel?.tweetState?.collectAsState() ?: return
     val author = tweet.author
-
-//    val viewModel: TweetViewModel =
-//        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(key = tweet.mid) { factory ->
-//        factory.create(tweet)
-//    }
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -101,12 +98,13 @@ fun ComposeCommentScreen(
                         onClick = {
                             viewModel?.viewModelScope?.launch {
                                 val attachments = uploadAttachments(localContext, selectedAttachments)
-                                viewModel.uploadComment(
-                                    comment = Tweet(
+                                viewModel.uploadComment( comment = Tweet(
                                     authorId = appUser.mid,
                                     content = tweetContent,
-                                    attachments = attachments,
-                                )) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
+                                    attachments = attachments)
+                                ) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
+                                if (isChecked) tweetFeedViewModel.uploadTweet(tweet)
+
                                 // clear and return to previous screen
                                 selectedAttachments.clear()
                                 tweetContent = ""
@@ -134,9 +132,25 @@ fun ComposeCommentScreen(
             }
         )
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween // Adjust horizontal arrangement
         ) {
             UserAvatar(author, 32)
+            Spacer(modifier = Modifier.padding(4.dp))
+            Text(text = "Reply to @${author?.username}", modifier = Modifier.alpha(0.6f))
+
+            Spacer(modifier = Modifier.width(20.dp))
+            Checkbox(
+                checked = isChecked,
+                onCheckedChange = { isChecked = it },
+                modifier = Modifier
+                    .size(16.dp)
+                    .alpha(0.8f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Post as Tweet",
+                modifier = Modifier.alpha(0.6f),
+                style = MaterialTheme.typography.bodyMedium)
         }
         OutlinedTextField(
             value = tweetContent,
@@ -148,7 +162,6 @@ fun ComposeCommentScreen(
                 .alpha(0.7f)
         )
         Spacer(modifier = Modifier.height(8.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
@@ -161,7 +174,6 @@ fun ComposeCommentScreen(
             }
             Spacer(modifier = Modifier.width(8.dp))
         }
-
         // Display icons for attached files
         LazyColumn(
             modifier = Modifier

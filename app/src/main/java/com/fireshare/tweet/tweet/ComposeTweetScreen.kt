@@ -55,7 +55,7 @@ fun ComposeTweetScreen(
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
-    val context = LocalContext.current // Renamed for clarity
+    val localContext = LocalContext.current
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -82,7 +82,7 @@ fun ComposeTweetScreen(
                     Button(
                         onClick = {
                             viewModel.viewModelScope.launch {
-                                val attachments = uploadAttachments(context, selectedAttachments)
+                                val attachments = uploadAttachments(localContext, selectedAttachments)
                                 val tweet = Tweet(
                                     authorId = HproseInstance.appUser.mid,
                                     content = tweetContent,
@@ -126,7 +126,6 @@ fun ComposeTweetScreen(
                 .alpha(0.7f)
         )
         Spacer(modifier = Modifier.height(8.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
