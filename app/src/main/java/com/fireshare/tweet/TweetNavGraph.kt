@@ -73,8 +73,8 @@ fun TweetNavGraph(
                     }
                     val viewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry,
-                            key = args.tweetId
+                            parentEntry,            // The scope and key will identify
+                            key = args.tweetId      // the viewModel to be injected.
                         )
                         { factory ->
                             factory.create(
@@ -89,15 +89,14 @@ fun TweetNavGraph(
                 composable<NavigationItem.ComposeTweet> {
                     ComposeTweetScreen(navController)
                 }
-                composable<ComposeComment> { navBackStackEntry ->
-                    val tweet = navBackStackEntry.toRoute<ComposeComment>()
-                    ComposeCommentScreen(navController, tweet.tweetId)
+                composable<ComposeComment> {
+                    ComposeCommentScreen(navController)
                 }
-                composable<UserProfile> { backStackEntry ->
-                    val parentEntry = remember(backStackEntry) {
+                composable<UserProfile> {
+                    val parentEntry = remember(it) {
                         navController.getBackStackEntry(NavRoot)
                     }
-                    val profile = backStackEntry.toRoute<UserProfile>()
+                    val profile = it.toRoute<UserProfile>()
                     UserProfileScreen(navController, profile.userId, parentEntry)
                 }
                 composable<ProfileEditor> {

@@ -64,8 +64,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun ComposeCommentScreen(
     navController: NavHostController,
-    tweetId: MimeiId,
-    commentId: MimeiId? = null
 ) {
     var tweetContent by remember { mutableStateOf("") }
     var isChecked by remember { mutableStateOf(false) }
