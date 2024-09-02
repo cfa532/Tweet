@@ -2,7 +2,7 @@
 
 package com.fireshare.tweet.profile
 
-import PreferencesHelper
+import com.fireshare.tweet.PreferencesHelper
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -54,6 +54,7 @@ fun EditProfileScreen(
     val context = LocalContext.current
     val preferencesHelper = remember { HproseInstance.preferencesHelper }
     var baseUrl by rememberSaveable { mutableStateOf( preferencesHelper.getBaseUrl() ?: "") }
+    var keyPhrase by rememberSaveable { mutableStateOf( preferencesHelper.getKeyPhrase() ?: "") }
     var username by rememberSaveable { mutableStateOf(preferencesHelper.getUsername() ?: "NoOne") }
     var name by rememberSaveable { mutableStateOf(preferencesHelper.getName() ?: "No One") }
     var profile by rememberSaveable { mutableStateOf(preferencesHelper.getProfile() ?: "My cool profile") }
@@ -95,12 +96,13 @@ fun EditProfileScreen(
             name = name,
             profile = profile,
             baseUrl = baseUrl,
+            keyPhrase = keyPhrase,
             onUsernameChange = { newUsername -> username = newUsername },
             onNameChange = { newName -> name = newName },
             onProfileChange = { newProfile -> profile = newProfile},
             onBaseUrlChange = { newBaseUrl -> baseUrl = newBaseUrl},
         )
-        SaveButton(preferencesHelper, username, name, profile, user, baseUrl, coroutineScope)
+        SaveButton(preferencesHelper, username, name, profile, user, baseUrl, keyPhrase, coroutineScope)
     }
 }
 
@@ -133,6 +135,7 @@ fun PreferencesForm(
     name: String,
     profile: String,
     baseUrl: String,
+    keyPhrase: String,
     onUsernameChange: (String) -> Unit,
     onNameChange: (String) -> Unit,
     onProfileChange: (String) -> Unit,
@@ -166,6 +169,13 @@ fun PreferencesForm(
             label = { Text("Entry URL") },
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = keyPhrase,
+            onValueChange = onBaseUrlChange,
+            label = { Text("Key phrase") },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -177,6 +187,7 @@ fun SaveButton(
     profile: String,
     user: User?,
     baseUrl: String,
+    keyPhrase: String,
     coroutineScope: CoroutineScope
 ) {
     Button(
@@ -184,11 +195,14 @@ fun SaveButton(
             preferencesHelper.saveUsername(username)
             preferencesHelper.saveName(name)
             preferencesHelper.saveProfile(profile)
+            preferencesHelper.saveBaseUrl(baseUrl)
+            preferencesHelper.saveKeyPhrase(keyPhrase)
             user?.let {
                 it.username = username
                 it.name = name
                 it.profile = profile
                 it.baseUrl = baseUrl
+                it.keyPhrase = keyPhrase
                 coroutineScope.launch(Dispatchers.Default) {
                     HproseInstance.setUserData(it)
                 }

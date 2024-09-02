@@ -42,7 +42,7 @@ fun TweetBlock(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
-        modifier = Modifier.clickable(onClick = {
+        modifier = Modifier.clickable( onClick = {
             tweet.mid?.let { navController.navigate(NavigationItem.TweetDetail(it)) }
         })
     ) {

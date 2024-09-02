@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,17 +91,28 @@ fun UserProfileScreen(
             horizontalAlignment = Alignment.Start
         ) {
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
-            Text(
-                text = user?.name ?: "No one",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(text = "@" + (user?.username ?: "NoOne"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.padding(start = 0.dp))
-            Text(text = user?.profile ?: "Profile") // Replace with actual resume
-            // Add more user details here, like following/followers count
+                Text(
+                    text = user?.name ?: "No one",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = "@" + (user?.username ?: "NoOne"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(start = 0.dp)
+                )
+                Text(text = user?.profile ?: "Profile")
+                Row {
+                    Text(text = "Followers")
+                    Spacer(modifier = Modifier.padding(horizontal = 20.dp))
+                    Text(text = "Following")
+                }
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 1.dp),
+                thickness = 1.dp,
+                color = Color.Gray
+            )
 
             val tweets by tweetFeedViewModel.tweets.collectAsState()
             val tweetsByAuthor = tweets.filter { it.authorId == user?.mid }

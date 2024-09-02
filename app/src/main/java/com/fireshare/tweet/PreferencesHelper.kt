@@ -1,3 +1,5 @@
+package com.fireshare.tweet
+
 import android.content.Context
 import android.content.SharedPreferences
 
@@ -33,5 +35,13 @@ class PreferencesHelper(context: Context) {
     }
     fun getBaseUrl(): String? {
         return sharedPreferences.getString("baseUrl", "twbe.fireshare.us")
+    }
+
+    fun saveKeyPhrase(phrase: String) {
+        sharedPreferences.edit().putString("keyPhrase", phrase).apply()
+    }
+
+    fun getKeyPhrase(): String? {
+        return sharedPreferences.getString("keyPhrase", null)
     }
 }

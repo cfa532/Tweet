@@ -1,6 +1,5 @@
 package com.fireshare.tweet
 
-import PreferencesHelper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -47,7 +46,6 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     val localContext = LocalContext.current
-    val preferencesHelper = remember { PreferencesHelper(localContext) }
 
     val viewModelStoreOwner =
         LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)

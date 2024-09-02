@@ -1,6 +1,6 @@
 package com.fireshare.tweet.network
 
-import PreferencesHelper
+import com.fireshare.tweet.PreferencesHelper
 import android.content.Context
 import android.util.Log
 import com.fireshare.tweet.R
@@ -32,7 +32,7 @@ object HproseInstance {
     lateinit var preferencesHelper: PreferencesHelper
     fun init(context: Context) {
         preferencesHelper = PreferencesHelper(context)
-//        BASE_URL = preferencesHelper.getBaseUrl() ?: BASE_URL // Load from preferences or default
+        BASE_URL = preferencesHelper.getBaseUrl() ?: BASE_URL // Load from preferences or default
     }
 
     const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
