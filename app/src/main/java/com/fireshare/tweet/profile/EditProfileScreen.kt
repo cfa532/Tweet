@@ -50,11 +50,10 @@ import kotlinx.coroutines.withContext
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
-//    preferencesHelper: PreferencesHelper,
 ) {
     val context = LocalContext.current
-    val preferencesHelper = remember { PreferencesHelper(context) }
-
+    val preferencesHelper = remember { HproseInstance.preferencesHelper }
+    var baseUrl by rememberSaveable { mutableStateOf( preferencesHelper.getBaseUrl() ?: "") }
     var username by rememberSaveable { mutableStateOf(preferencesHelper.getUsername() ?: "NoOne") }
     var name by rememberSaveable { mutableStateOf(preferencesHelper.getName() ?: "No One") }
     var profile by rememberSaveable { mutableStateOf(preferencesHelper.getProfile() ?: "My cool profile") }
@@ -95,11 +94,13 @@ fun EditProfileScreen(
             username = username,
             name = name,
             profile = profile,
+            baseUrl = baseUrl,
             onUsernameChange = { newUsername -> username = newUsername },
             onNameChange = { newName -> name = newName },
-            onProfileChange = { newProfile -> profile = newProfile}
+            onProfileChange = { newProfile -> profile = newProfile},
+            onBaseUrlChange = { newBaseUrl -> baseUrl = newBaseUrl},
         )
-        SaveButton(preferencesHelper, username, name, profile, user, coroutineScope)
+        SaveButton(preferencesHelper, username, name, profile, user, baseUrl, coroutineScope)
     }
 }
 
@@ -119,8 +120,8 @@ fun AvatarSection(avatar: MimeiId?, launcher: ManagedActivityResultLauncher<Stri
                 painter = rememberAsyncImagePainter(appUser.baseUrl?.let { getMediaUrl(
                     avatar, it) }),
                 contentDescription = null,
-                contentScale = ContentScale.Crop, // Ensure the image area is as large as possible within the round button
-                modifier = Modifier.size(100.dp) // Ensure the image fits the button size
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(100.dp)
             )
         }
     }
@@ -131,9 +132,11 @@ fun PreferencesForm(
     username: String,
     name: String,
     profile: String,
+    baseUrl: String,
     onUsernameChange: (String) -> Unit,
     onNameChange: (String) -> Unit,
     onProfileChange: (String) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
 ) {
     Column {
         TextField(
@@ -153,7 +156,14 @@ fun PreferencesForm(
         TextField(
             value = profile,
             onValueChange = onProfileChange,
-            label = { Text("Name") },
+            label = { Text("Profile") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = baseUrl,
+            onValueChange = onBaseUrlChange,
+            label = { Text("Entry URL") },
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -166,6 +176,7 @@ fun SaveButton(
     name: String,
     profile: String,
     user: User?,
+    baseUrl: String,
     coroutineScope: CoroutineScope
 ) {
     Button(
@@ -177,6 +188,7 @@ fun SaveButton(
                 it.username = username
                 it.name = name
                 it.profile = profile
+                it.baseUrl = baseUrl
                 coroutineScope.launch(Dispatchers.Default) {
                     HproseInstance.setUserData(it)
                 }

@@ -27,4 +27,11 @@ class PreferencesHelper(context: Context) {
     fun getName(): String? {
         return sharedPreferences.getString("name", null)
     }
+
+    fun saveBaseUrl(baseUrl: String) {
+        return sharedPreferences.edit().putString("baseUrl", baseUrl).apply()
+    }
+    fun getBaseUrl(): String? {
+        return sharedPreferences.getString("baseUrl", "twbe.fireshare.us")
+    }
 }

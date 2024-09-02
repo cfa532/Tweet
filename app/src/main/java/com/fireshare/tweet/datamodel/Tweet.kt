@@ -17,8 +17,8 @@ data class Tweet(
     var content: String,
     val timestamp: Long = System.currentTimeMillis(),
 
-    val originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
-    val originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet
+    var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
+    var originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet
 
     // the following six attributes are for display only. Not stored in database.
     var author: User? = null,

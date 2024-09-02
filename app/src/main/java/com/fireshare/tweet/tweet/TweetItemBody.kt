@@ -31,7 +31,10 @@ import com.fireshare.tweet.widget.UserAvatar
 import com.fireshare.tweet.widget.UserProfile
 
 @Composable
-fun TweetBlock(viewModel: TweetViewModel) {
+fun TweetBlock(
+    viewModel: TweetViewModel,
+    isQuoted: Boolean = false     // the block is a quoted tweet or not
+) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
 
@@ -87,19 +90,21 @@ fun TweetBlock(viewModel: TweetViewModel) {
                     }
 
                     // Actions Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 0.dp)
-                    ) {
-                        // State hoist
-                        LikeButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        BookmarkButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        CommentButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RetweetButton(viewModel)
+                    if (!isQuoted) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 0.dp)
+                        ) {
+                            // State hoist
+                            LikeButton(viewModel)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            BookmarkButton(viewModel)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CommentButton(viewModel)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            RetweetButton(viewModel)
+                        }
                     }
                 }
             }

@@ -123,6 +123,9 @@ fun MainTopAppBar(
                 }
             }
         },
+        actions = {
+            // add delete action here
+        },
         scrollBehavior = scrollBehavior
     )
 }

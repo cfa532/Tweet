@@ -115,14 +115,19 @@ fun ComposeCommentScreen(
                             viewModel?.viewModelScope?.launch {
                                 val attachments =
                                     uploadAttachments(localContext, selectedAttachments)
-                                viewModel.uploadComment(
-                                    comment = Tweet(
-                                        authorId = appUser.mid,
-                                        content = tweetContent,
-                                        attachments = attachments
-                                    )
-                                ) { updatedTweet -> tweetFeedViewModel.updateTweet(updatedTweet) }
-                                if (isChecked) tweetFeedViewModel.uploadTweet(tweet)
+                                val comment = Tweet(
+                                    authorId = appUser.mid,
+                                    content = tweetContent,
+                                    attachments = attachments
+                                )
+                                viewModel.uploadComment( comment ) { updatedTweet ->
+                                    tweetFeedViewModel.updateTweet(updatedTweet)
+                                }
+                                if (isChecked) {
+                                    comment.originalTweetId = tweet.mid
+                                    comment.originalAuthorId = tweet.authorId
+                                    tweetFeedViewModel.uploadTweet(comment)
+                                }
 
                                 // clear and return to previous screen
                                 selectedAttachments.clear()

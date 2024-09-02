@@ -1,5 +1,6 @@
 package com.fireshare.tweet
 
+import PreferencesHelper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -45,10 +46,11 @@ fun TweetNavGraph(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+    val localContext = LocalContext.current
+    val preferencesHelper = remember { PreferencesHelper(localContext) }
 
-    // provide navController application-wide
     val viewModelStoreOwner =
-        LocalViewModelStoreOwner.current ?: (LocalContext.current as TweetActivity)
+        LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
     val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
 //    val sharedViewModel = viewModel(SharedTweetViewModel::class.java)
 

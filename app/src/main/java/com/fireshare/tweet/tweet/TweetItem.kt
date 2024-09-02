@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,13 +10,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -48,7 +52,6 @@ fun TweetItem(
         if (tweet.originalTweet != null) {
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
-
                 Spacer(modifier = Modifier.padding(8.dp))
                 Box {
                     // The tweet area
@@ -84,14 +87,39 @@ fun TweetItem(
                 }
             } else {
                 // retweet with comments
-                TweetHeader(tweet)
-                Text(
-                    text = tweet.content,
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(start = 12.dp)
-                )
-                TweetBlock(viewModel)
+                Column(modifier = Modifier.padding(start = 8.dp))
+                {
+                    TweetHeader(tweet)
+                    Text(modifier = Modifier.padding(start = 16.dp),
+                        text = tweet.content,
+                        style = MaterialTheme.typography.bodyMedium)
+                    Surface(
+                        border = BorderStroke(0.5.dp, color = Color.LightGray),
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.padding(start = 8.dp, top = 8.dp)
+                    ) {
+                        TweetBlock( viewModel  =
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry,
+                            key = tweet.originalTweetId
+                        )
+                        { factory -> factory.create(tweet.originalTweet!!) }, true)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp)
+                    ) {
+                        // State hoist
+                        LikeButton(viewModel)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        BookmarkButton(viewModel)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        CommentButton(viewModel)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        RetweetButton(viewModel)
+                    }
+                }
             }
         } else {
             // original tweet by current user.

@@ -1,5 +1,7 @@
 package com.fireshare.tweet.network
 
+import PreferencesHelper
+import android.content.Context
 import android.util.Log
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
@@ -26,10 +28,16 @@ import java.net.URLEncoder
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-    private const val BASE_URL = "http://10.0.2.2:8081"
+    private var BASE_URL: String = "http://10.0.2.2:8081"   // localhost in Android Simulator
+    lateinit var preferencesHelper: PreferencesHelper
+    fun init(context: Context) {
+        preferencesHelper = PreferencesHelper(context)
+//        BASE_URL = preferencesHelper.getBaseUrl() ?: BASE_URL // Load from preferences or default
+    }
+
     const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
 //    const val TWBE_APP_ID = "1Ob2vQMZYnA83Onc5dn2yfThwLe"
-    private const val CHUNK_SIZE = 50 * 1024 * 1024 // 10MB in bytes
+    private const val CHUNK_SIZE = 50 * 1024 * 1024 // 50MB in bytes
 
     // Keys within the mimei of the user's database
     private const val TWT_LIST_KEY = "list_of_tweets_mid"
@@ -195,7 +203,7 @@ object HproseInstance {
                         tweet.originalTweet = cachedTweet
                     } else {
                         tweet.originalTweet =
-                            tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId, it, tweets) }
+                            tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId!!, it, tweets) }
                                 ?: return null
                         tweet.originalAuthor = tweet.originalTweet!!.author
                     }
@@ -281,28 +289,6 @@ object HproseInstance {
                 tweetFeedViewModel.addTweet(retweet)
             }
         }
-    }
-
-    // get the comment Id list of this tweet
-    suspend fun getCommentList(tweetId: MimeiId ): List<Tweet> {
-        val list = mutableListOf<Tweet>()
-        client.mmOpen("", tweetId, "last").also {
-            client.zRevRange(it, COMMENT_LIST, 0, -1).forEach { e ->
-                val sp = e as Map<*, *>
-                val score = (sp["score"] as BigInteger).toLong()
-                val commentId = sp["member"] as MimeiId
-                client.mmOpen("", commentId, "last").also {mmsid ->
-                    val c = client.get(mmsid, TWT_CONTENT_KEY) as Map<*, *>
-                    val comment = Tweet(mid = c["mid"] as MimeiId,
-                        authorId = c["authorId"] as MimeiId,
-                        content = c["content"] as String,
-                        timestamp = (c["timestamp"] as Double).toLong())
-                    comment.author = getUserBase(comment.authorId)
-                    list.add(comment)
-                }
-            }
-        }
-        return list
     }
 
     // given a tweet, load its comments. If commentId is not Null, retrieve that one alone.
