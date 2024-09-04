@@ -28,49 +28,39 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
-    private var BASE_URL: String = "http://10.0.2.2:8081"  // localhost in Android Simulator
+    private lateinit var BASE_URL: String  // localhost in Android Simulator
     private lateinit var alphaId: MimeiId     // alphaId
-    private lateinit var preferencesHelper: PreferencesHelper
-    var appUser: User = User()     // current user object
+    lateinit var appUser: User     // current user object
 
-    // get the first user account, or a list of accounts.
-    private fun getAlphaIds(): List<MimeiId> {
-        return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
-    }
-
-    suspend fun init(preferencesHelper: PreferencesHelper) {
+    fun init(preferencesHelper: PreferencesHelper) {
         // Use default AppUrl for now, until we find a better one.
-        BASE_URL = "${preferencesHelper.getAppUrl()}"
-        appUser.mid = preferencesHelper.getUserId()
+        val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
+        appId = pair.first
+        BASE_URL = pair.second
 
-        // for testing
-        appUser.mid = getAlphaIds()[0]
+        var userId = preferencesHelper.getUserId()
 
-        if (appUser.mid != null) {
-            appId = preferencesHelper.getAppId().toString()
-            if (appId == "null") {
-                initAppEntry(BASE_URL)
-            }
-            // There is a registered user. Get user info and the best server url address
-            appUser = getUserBase(appUser.mid!!) ?: return
+        // TEMP: for testing
+        userId = getAlphaIds()[0]
 
-            // appUser.baseUrl is holding the best url to serve the App now.
-            // update BASE_URL again with the best address
-            BASE_URL = appUser.baseUrl.toString()
+        if (userId != null) {
+            // There is a registered user.
+            // get appId and best baseUrl
+            initCurrentUser(userId)?.let { appUser = it }
         } else {
-            initAppEntry(BASE_URL)
-            getUserBase(alphaId)?.let {
-                appUser.baseUrl = it.baseUrl
-                BASE_URL = appUser.baseUrl.toString()
-            }
+            appUser = User()
+            appUser.baseUrl = BASE_URL
         }
     }
 
-    // initiate appId, and alphaId the default Ids to follow
-    private fun initAppEntry(baseUrl: String) {
-        val request = Request.Builder().url(baseUrl).build()
+    // Find network entrance of the App
+    // Given entry URL, initiate appId, and BASE_URL.
+    private fun initAppEntry(preferencesHelper: PreferencesHelper): Pair<MimeiId, String> {
+        val baseUrl = preferencesHelper.getAppUrl().toString()
+        val request = Request.Builder().url("http://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
+            // retrieve window.Param from source code.
             val htmlContent = response.body?.string()?.trimIndent()
             val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
             val matcher = pattern.matcher(htmlContent as CharSequence)
@@ -84,19 +74,20 @@ object HproseInstance {
                 // Step 2: Parse the extracted string into a Kotlin map
                 val mapper = Gson()
                 val paramMap = mapper.fromJson(jsonString, Map::class.java) as Map<*, *>                // Print the resulting map
-                appId = paramMap["mid"] as MimeiId
                 val ip = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
-                BASE_URL = "http://$ip"
-            } else {
-                println("No data found within window.setParam()")
-            }
-            // retrieve window.Param from source code.
 
-//            val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
-//            appId = res?.get("appId").toString()
-//            alphaId = res?.get("alphaId").toString()    // the first user.
-//            preferencesHelper.setAppId(appId)
+                preferencesHelper.setAppId(paramMap["mid"].toString())
+                return Pair(paramMap["mid"] as MimeiId, "http://$ip")
+            } else {
+                Log.e("initAppEntry", "No data found within window.setParam()")
+            }
         }
+        return Pair(preferencesHelper.getAppId().toString(), "http://$baseUrl")
+    }
+
+    // get the first user account, or a list of accounts.
+    private fun getAlphaIds(): List<MimeiId> {
+        return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
     }
 
     // Keys within the mimei of the user's database
@@ -118,6 +109,23 @@ object HproseInstance {
 
     private fun getUser(userId: MimeiId): User? {
         return users.find { it.mid == userId }
+    }
+
+    // only used for registered user, that has userId in preference
+    private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
+        val method = "init_user_mid"
+        val url = "$BASE_URL/entry?&aid=${this.appId}&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val json = response.body?.string()
+            val gson = Gson()
+            val user = gson.fromJson(json, User::class.java)
+            user.baseUrl = BASE_URL
+            users.add(user)
+            return user
+        }
+        return null
     }
 
     // Get base url where user data can be accessed, and user data

@@ -27,9 +27,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var tweetFeedViewModel: TweetFeedViewModel
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
