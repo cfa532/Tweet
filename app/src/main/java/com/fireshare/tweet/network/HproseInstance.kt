@@ -165,16 +165,21 @@ object HproseInstance {
     // get Ids of users who the current user is following
     fun getFollowings( user: User = appUser ): List<MimeiId> =
         try {
-            val method = "get_followings"
-            val url = "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&userid=${user.mid}"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = response.body?.string()
-                val gson = Gson()
-                gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
-            } else {
-                emptyList()
+            if (user.mid == TW_CONST.GUEST_ID)
+                getAlphaIds()
+            else {
+                val method = "get_followings"
+                val url =
+                    "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&userid=${user.mid}"
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = response.body?.string()
+                    val gson = Gson()
+                    gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+                } else {
+                    getAlphaIds()
+                }
             }
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
