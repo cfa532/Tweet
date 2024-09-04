@@ -53,12 +53,14 @@ data class Tweet(
 
 @Serializable
 data class User(
-    var keyPhrase: String? = null,      // used as MARK in creating User mimei Id
+    var keyPhrase: String? = "Testing on MacMini",      // used as MARK in creating User mimei Id
+    var keyHint: String? = null,        // key phrase reminder to show user.
     var baseUrl: String? = null,        // most recent url used to access user data
 
-    var mid: MimeiId,                   // Unique identifier for the user, and the mimei database
+    var mid: MimeiId? = null,                   // Unique identifier for the user, and the mimei database
     var name: String? = null,
     var username: String? = null,
+    var password: String? = null,       // hashed password
     var avatar: MimeiId? = null,        // Optional profile image URL
     var bookmarkCount: Int = 0,
     var likeCount: Int = 0,

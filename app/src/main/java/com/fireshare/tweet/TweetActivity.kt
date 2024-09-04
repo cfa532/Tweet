@@ -19,7 +19,6 @@ class TweetActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        HproseInstance.init(this)
 
         setContent {
             TweetTheme {

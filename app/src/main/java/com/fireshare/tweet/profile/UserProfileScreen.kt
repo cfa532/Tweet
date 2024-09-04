@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
@@ -36,7 +37,9 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.ProfileEditor
+import dagger.hilt.android.lifecycle.HiltViewModel
 
 @Composable
 fun UserProfileScreen(
@@ -44,8 +47,12 @@ fun UserProfileScreen(
     userId: MimeiId,
     parentEntry: NavBackStackEntry,
 ) {
-    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val user = HproseInstance.getUser(userId)
+    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
+        factory -> factory.create(userId)
+    }
+    val user by userViewModel.user.collectAsState()
+    val tweets by userViewModel.tweets.collectAsState()
+
 //    val navBackStackEntry by navController.currentBackStackEntryAsState()
 //    val currentRoute = navBackStackEntry?.destination?.route
 
@@ -64,7 +71,7 @@ fun UserProfileScreen(
             verticalAlignment = Alignment.Bottom,
         ) {
             Image(
-                painter = rememberAsyncImagePainter(user?.baseUrl?.let {
+                painter = rememberAsyncImagePainter(user.baseUrl?.let {
                     HproseInstance.getMediaUrl(
                         user.avatar, it
                     )
@@ -92,16 +99,16 @@ fun UserProfileScreen(
         ) {
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
                 Text(
-                    text = user?.name ?: "No one",
+                    text = user.name ?: "No one",
                     style = MaterialTheme.typography.titleLarge
                 )
                 Text(
-                    text = "@" + (user?.username ?: "NoOne"),
+                    text = "@" + (user.username ?: "NoOne"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(start = 0.dp)
                 )
-                Text(text = user?.profile ?: "Profile")
+                Text(text = user.profile ?: "Profile")
                 Row {
                     Text(text = "Followers")
                     Spacer(modifier = Modifier.padding(horizontal = 20.dp))
@@ -114,15 +121,13 @@ fun UserProfileScreen(
                 color = Color.Gray
             )
 
-            val tweets by tweetFeedViewModel.tweets.collectAsState()
-            val tweetsByAuthor = tweets.filter { it.authorId == user?.mid }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(start = 8.dp, bottom = 8.dp)
             )
             {
-                items(tweetsByAuthor) { tweet ->
+                items(tweets) { tweet ->
                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
             }

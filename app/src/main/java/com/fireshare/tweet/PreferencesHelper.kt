@@ -2,6 +2,7 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.fireshare.tweet.datamodel.MimeiId
 
 class PreferencesHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -30,11 +31,11 @@ class PreferencesHelper(context: Context) {
         return sharedPreferences.getString("name", null)
     }
 
-    fun saveBaseUrl(baseUrl: String) {
-        return sharedPreferences.edit().putString("baseUrl", baseUrl).apply()
+    fun saveAppUrl(baseUrl: String) {
+        return sharedPreferences.edit().putString("appUrl", baseUrl).apply()
     }
-    fun getBaseUrl(): String? {
-        return sharedPreferences.getString("baseUrl", "twbe.fireshare.us")
+    fun getAppUrl(): String? {
+        return sharedPreferences.getString("appUrl", "twbe.fireshare.us")
     }
 
     fun saveKeyPhrase(phrase: String) {
@@ -43,5 +44,21 @@ class PreferencesHelper(context: Context) {
 
     fun getKeyPhrase(): String? {
         return sharedPreferences.getString("keyPhrase", null)
+    }
+
+    // the default User Mid to be followed. Provided by App server
+    fun getInitMimei(): String? {
+        return sharedPreferences.getString("initMimei", "6-4DWxT6wpfClqZyAu0Bt4Dsx-q")
+    }
+
+    fun setAppId(id: String) {
+        sharedPreferences.edit().putString("appId", id).apply()
+    }
+    fun getAppId(): String? {
+        return sharedPreferences.getString("appId", null)
+    }
+
+    fun getUserId(): String? {
+        return sharedPreferences.getString("userId", null)
     }
 }

@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.network.HproseInstance
@@ -52,8 +53,8 @@ fun EditProfileScreen(
     navController: NavHostController,
 ) {
     val context = LocalContext.current
-    val preferencesHelper = remember { HproseInstance.preferencesHelper }
-    var baseUrl by rememberSaveable { mutableStateOf( preferencesHelper.getBaseUrl() ?: "") }
+    val preferencesHelper = remember { TweetApplication.preferencesHelper }
+    var baseUrl by rememberSaveable { mutableStateOf( preferencesHelper.getAppUrl() ?: "") }
     var keyPhrase by rememberSaveable { mutableStateOf( preferencesHelper.getKeyPhrase() ?: "") }
     var username by rememberSaveable { mutableStateOf(preferencesHelper.getUsername() ?: "NoOne") }
     var name by rememberSaveable { mutableStateOf(preferencesHelper.getName() ?: "No One") }
@@ -195,7 +196,7 @@ fun SaveButton(
             preferencesHelper.saveUsername(username)
             preferencesHelper.saveName(name)
             preferencesHelper.saveProfile(profile)
-            preferencesHelper.saveBaseUrl(baseUrl)
+            preferencesHelper.saveAppUrl(baseUrl)
             preferencesHelper.saveKeyPhrase(keyPhrase)
             user?.let {
                 it.username = username

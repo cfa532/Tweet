@@ -49,6 +49,7 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.Gadget.uploadAttachments
 import com.fireshare.tweet.network.HproseInstance
+import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
@@ -102,7 +103,7 @@ fun ComposeTweetScreen(
                                 val attachments =
                                     uploadAttachments(localContext, selectedAttachments)
                                 val tweet = Tweet(
-                                    authorId = HproseInstance.appUser.mid,
+                                    authorId = appUser.mid!!,
                                     content = tweetContent,
                                     attachments = attachments,
                                 )

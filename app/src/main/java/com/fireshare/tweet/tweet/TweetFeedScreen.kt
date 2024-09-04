@@ -105,7 +105,7 @@ fun MainTopAppBar(
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.navigate(UserProfile(appUser.mid)) })
+            IconButton(onClick = { navController.navigate(UserProfile(appUser.mid!!)) })
             {
                 appUser.baseUrl?.let { getMediaUrl(appUser.avatar, it) }?.let {
                     Image(

@@ -116,7 +116,7 @@ fun ComposeCommentScreen(
                                 val attachments =
                                     uploadAttachments(localContext, selectedAttachments)
                                 val comment = Tweet(
-                                    authorId = appUser.mid,
+                                    authorId = appUser.mid!!,
                                     content = tweetContent,
                                     attachments = attachments
                                 )

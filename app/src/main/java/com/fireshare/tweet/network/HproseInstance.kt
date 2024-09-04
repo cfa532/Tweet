@@ -1,9 +1,9 @@
 package com.fireshare.tweet.network
 
-import com.fireshare.tweet.PreferencesHelper
-import android.content.Context
 import android.util.Log
+import com.fireshare.tweet.PreferencesHelper
 import com.fireshare.tweet.R
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
@@ -12,9 +12,6 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -28,22 +25,63 @@ import java.net.URLEncoder
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-    private var BASE_URL: String = "http://10.0.2.2:8081"   // localhost in Android Simulator
-    lateinit var preferencesHelper: PreferencesHelper
-    fun init(context: Context) {
-        preferencesHelper = PreferencesHelper(context)
-        BASE_URL = preferencesHelper.getBaseUrl() ?: BASE_URL // Load from preferences or default
+    private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
+    private lateinit var BASE_URL: String   // localhost in Android Simulator
+    private lateinit var alphaId: MimeiId     // alphaId
+    private lateinit var preferencesHelper: PreferencesHelper
+    var appUser: User = User()     // current user object
+
+    // get the first user account, or a list of accounts.
+    private fun getAlphaIds(): List<MimeiId> {
+        return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
     }
 
-    const val TWBE_APP_ID = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
-//    const val TWBE_APP_ID = "1Ob2vQMZYnA83Onc5dn2yfThwLe"
-    private const val CHUNK_SIZE = 50 * 1024 * 1024 // 50MB in bytes
+    suspend fun init() {
+        // Use default AppUrl for now, until we find a better one.
+        preferencesHelper = TweetApplication.preferencesHelper
+        BASE_URL = "http://${preferencesHelper.getAppUrl()}"
+        appUser.mid = preferencesHelper.getUserId()
+
+        // for testing
+        appUser.mid = getAlphaIds()[0]
+
+        if (appUser.mid != null) {
+            appId = preferencesHelper.getAppId().toString()
+            if (appId == "null") {
+                initAppEntry(BASE_URL)
+            }
+            // There is a registered user. Get user info and the best server url address
+            appUser = getUserBase(appUser.mid!!) ?: return
+
+            // appUser.baseUrl is holding the best url to serve the App now.
+            // update BASE_URL again with the best address
+            BASE_URL = appUser.baseUrl.toString()
+        } else {
+            initAppEntry(BASE_URL)
+            getUserBase(alphaId)?.let {
+                appUser.baseUrl = it.baseUrl
+                BASE_URL = appUser.baseUrl.toString()
+            }
+        }
+    }
+
+    // initiate appId, and alphaId the default Ids to follow
+    private fun initAppEntry(baseUrl: String) {
+        val url = "$baseUrl/webapi/"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val responseBody = response.body?.string()
+            val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
+            appId = res?.get("appId").toString()
+            alphaId = res?.get("alphaId").toString()    // the first user.
+            preferencesHelper.setAppId(appId)
+        }
+    }
 
     // Keys within the mimei of the user's database
     private const val TWT_LIST_KEY = "list_of_tweets_mid"
-    private const val TWT_CONTENT_KEY = "core_data_of_tweet"     // account data of user
-    private const val FOLLOWINGS_KEY = "list_of_followings_mid"
-    private const val COMMENT_LIST = "comment_list_key"
+    private const val CHUNK_SIZE = 50 * 1024 * 1024 // 50MB in bytes
 
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
@@ -58,67 +96,30 @@ object HproseInstance {
 
     private val users: MutableSet<User> = emptySet<User>().toMutableSet()
 
-    val appUser: User by lazy {
-        users.find { it.mid == appMid } ?: runBlocking {
-            withContext(IO) {
-                val method = "get_author_core_data"
-                val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&userid=$appMid"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                val responseBody = response.body?.string()
-                val gson = Gson()
-                val user = gson.fromJson(responseBody, User::class.java)
-//                val user = Json.decodeFromString<User>(response.body?.string() ?: "")
-                user.baseUrl = BASE_URL
-                users.add(user)
-                user
-            }
-        }
-    }
-
-    // Initialize lazily, also used as UserId
-    private val appMid: String by lazy {
-        runBlocking {   // necessary for the whole App
-            withContext(IO) {
-                val method = "get_app_mid"
-                val url = "$BASE_URL/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
-                    if (res != null) {
-                        println(res)
-                        sid = res["sid"] ?: ""
-                        res["mid"] ?: ""
-                    } else {
-                        ""
-                    }
-                } else {
-                    ""
-                }
-            }
-        }
-    }
-
-    fun getUser(userId: MimeiId): User? {
+    private fun getUser(userId: MimeiId): User? {
         return users.find { it.mid == userId }
     }
 
     // Get base url where user data can be accessed, and user data
-    suspend fun getUserBase(userId: MimeiId): User? {
+    suspend fun getUserBase( userId: MimeiId ): User? {
         // check if user data has been read
         getUser(userId)?.let { return it}
 
-        val providers = client.getVar("", "mmprovsips", userId)
-        val providerList = Json.parseToJsonElement(providers).jsonArray
-        if (providerList.isNotEmpty()) {
-            println(providerList)
-            val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
-            Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
-                users.add(u)
-                println("Get userbase=${users}")
-                return u
+        val method = "get_providers"
+        val url = "$BASE_URL/entry?&aid=${this.appId}&ver=last&entry=$method&userid=$userId"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val providers = response.body?.string() ?: return null
+            val providerList = Json.parseToJsonElement(providers).jsonArray
+            if (providerList.isNotEmpty()) {
+                println(providerList)
+                val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
+                Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
+                    users.add(u)
+                    println("Get userbase=${users}")
+                    return u
+                }
             }
         }
         return null
@@ -128,7 +129,7 @@ object HproseInstance {
         // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
         // that have value in incoming data.
         val method = "set_author_core_data"
-        val url = "${user.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&user=${
+        val url = "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&user=${
             Json.encodeToString(user)
         }"
         val request = Request.Builder().url(url).build()
@@ -139,12 +140,18 @@ object HproseInstance {
     }
 
     // get Ids of users who the current user is following
-    fun getFollowings(userId: MimeiId = appMid): List<MimeiId> =
+    fun getFollowings( user: User = appUser ): List<MimeiId> =
         try {
-            client.mmOpen("", userId, "last").run {
-                client.get(this, FOLLOWINGS_KEY)?.let { keys ->
-                    (keys as? List<*>)?.mapNotNull { it as? MimeiId }
-                } ?: emptyList()
+            val method = "get_followings"
+            val url = "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&userid=${user.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+            } else {
+                emptyList()
             }
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
@@ -185,7 +192,7 @@ object HproseInstance {
         val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
         val method = "get_tweet"
         val url =
-            "${author.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=$tweetId&userid=${appUser.mid}"
+            "${author.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweetid=$tweetId&userid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -219,7 +226,7 @@ object HproseInstance {
         val method = "upload_tweet"
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
         val url =
-            "${appUser.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweet=$json"
+            "${appUser.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -233,7 +240,7 @@ object HproseInstance {
     private fun deleteTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
         val method = "delete_tweet"
         val url =
-            "${appUser.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
+            "${appUser.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -245,7 +252,7 @@ object HproseInstance {
     fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
-        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
+        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}")
             .append("&userid=${appUser.mid}")
 
@@ -256,21 +263,29 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return
                 val gson = Gson()
-                val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
-                tweet.favorites!![UserFavorites.RETWEET] = false
-                updateTweetViewModel( tweet.copy(retweetCount = (res["count"] as Double).toInt()) )
+                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
 
-                deleteTweet(res["retweetId"] as MimeiId) {
-                    tweetFeedViewModel.delTweet(res["retweetId"] as MimeiId)
+                tweet.favorites!![UserFavorites.RETWEET] = false
+                val count = (res["count"] as? Double)?.toInt() ?: 0
+                val retweetId = res["retweetId"] as? MimeiId
+
+                updateTweetViewModel(tweet.copy(retweetCount = count))
+
+                if (retweetId != null) {
+                    deleteTweet(retweetId) {
+                        tweetFeedViewModel.delTweet(retweetId)
+                    }
                 }
             }
         } else {
-            var retweet = Tweet(
-                content = "",
-                authorId = appUser.mid,
-                originalTweetId = tweet.mid,
-                originalAuthorId = tweet.authorId
-            )
+            var retweet = appUser.mid?.let {
+                Tweet(
+                    content = "",
+                    authorId = it,
+                    originalTweetId = tweet.mid,
+                    originalAuthorId = tweet.authorId
+                )
+            } ?: return
             retweet = uploadTweet(retweet) ?: return
             url.append("&retweetid=${retweet.mid}")
 
@@ -279,7 +294,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return
                 val gson = Gson()
-                val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
                 tweet.favorites!![UserFavorites.RETWEET] = true
                 tweet.retweetCount = (res["count"] as Double).toInt()
                 updateTweetViewModel( tweet.copy() )
@@ -294,7 +309,7 @@ object HproseInstance {
     // given a tweet, load its comments. If commentId is not Null, retrieve that one alone.
     fun getComments(tweet: Tweet, commentId: MimeiId? = null, pageNumber: Int = 0): List<Tweet> {
         val method = "get_tweets"
-        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method")
+        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}&userid=${appUser.mid}")
             .append("&pn=$pageNumber&commentid=$commentId").toString()
         val request = Request.Builder().url(url).build()
@@ -321,13 +336,13 @@ object HproseInstance {
         // add the comment to tweetId
         val method = "add_comment"
         val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
-        val url = "${tweet.author?.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
+        val url = "${tweet.author?.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
             val gson = Gson()
-            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
             comment.mid = res["commentId"] as MimeiId
             return tweet.copy(
                 commentCount = (res["count"] as Double).toInt()
@@ -340,13 +355,13 @@ object HproseInstance {
         val author = tweet.author ?: return tweet
         val method = "liked_count"
         val url =
-            "${author.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            "${author.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
             val gson = Gson()
-            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
 
             tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
             return tweet.copy(
@@ -361,13 +376,13 @@ object HproseInstance {
         val author = tweet.author ?: return tweet
         val method = "bookmark"
         val url =
-            "${author.baseUrl}/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            "${author.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return tweet
             val gson = Gson()
-            val res = gson.fromJson(responseBody, Map::class.java) as Map<*, *>
+            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
             tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
             return tweet.copy(
                 bookmarkCount = (res["count"] as Double).toInt()
@@ -390,7 +405,7 @@ object HproseInstance {
         }
         val cid = client.mfTemp2Ipfs(
             fsid,
-            appMid
+            appUser.mid!!
         )    // Associate the uploaded data with the app's main Mimei
         println("cid=$cid")
         return cid
@@ -411,7 +426,7 @@ object HproseInstance {
         try {
             val method = "get_author_core_data"
             val url =
-                "http://$ip/entry?&aid=$TWBE_APP_ID&ver=last&entry=$method&userid=$mid"
+                "http://$ip/entry?&aid=${this.appId}&ver=last&entry=$method&userid=$mid"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
