@@ -41,7 +41,7 @@ object HproseInstance {
         var userId = preferencesHelper.getUserId()
 
         // TEMP: for testing
-        userId = getAlphaIds()[0]
+//        userId = getAlphaIds()[0]
 
         if (userId != null) {
             // There is a registered user.
@@ -183,7 +183,8 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
-            emptyList()
+//            emptyList()
+            getAlphaIds()   // get default following for testing
         }
 
     // get tweets of a given author in a given span of time

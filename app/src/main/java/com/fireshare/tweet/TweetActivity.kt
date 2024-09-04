@@ -43,28 +43,3 @@ class TweetActivity : ComponentActivity() {
         }
     }
 }
-
-@Composable
-fun WebView() {
-    val url = TweetApplication.preferencesHelper.getAppUrl().toString()
-    AndroidView(factory = {
-        WebView(it).apply {
-            webViewClient = WebViewClient()
-            settings.javaScriptEnabled = true
-            loadUrl(url)
-        }
-    }, update = { webView ->
-        webView.evaluateJavascript(
-            """
-            (function() {
-                return JSON.stringify({
-                    window.getParam()
-                });
-            })();
-            """
-        ) { result ->
-            // Handle the result here
-            println("JavaScript result: $result")
-        }
-    })
-}
