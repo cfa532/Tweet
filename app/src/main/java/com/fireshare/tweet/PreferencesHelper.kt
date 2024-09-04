@@ -3,6 +3,7 @@ package com.fireshare.tweet
 import android.content.Context
 import android.content.SharedPreferences
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 
 class PreferencesHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -58,7 +59,9 @@ class PreferencesHelper(context: Context) {
         return sharedPreferences.getString("appId", null)
     }
 
-    fun getUserId(): String? {
-        return sharedPreferences.getString("userId", null)
+    fun getUserId(): String {
+        var uid = sharedPreferences.getString("userId", null)
+        if (uid == null) uid = TW_CONST.GUEST_ID
+        return uid
     }
 }

@@ -55,8 +55,6 @@ android {
 
 dependencies {
 
-    implementation(libs.jackson.module.kotlin)
-    implementation(libs.androidx.webkit)
     implementation(libs.assisted.inject.annotations.dagger2)
     implementation(libs.androidx.appcompat)
     kapt(libs.assisted.inject.processor.dagger2)

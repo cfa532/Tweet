@@ -4,6 +4,9 @@ import kotlinx.serialization.Serializable
 
 typealias MimeiId = String      // 27 or 64 character long string
 
+object TW_CONST {
+    const val GUEST_ID = "000000000000000000000000000"      // 27
+}
 object UserFavorites {
     const val LIKE_TWEET = 0
     const val BOOKMARK = 1
@@ -57,7 +60,7 @@ data class User(
     var keyHint: String? = null,        // key phrase reminder to show user.
     var baseUrl: String? = null,        // most recent url used to access user data
 
-    var mid: MimeiId? = null,                   // Unique identifier for the user, and the mimei database
+    var mid: MimeiId,                   // Unique identifier for the user, and the mimei database
     var name: String? = null,
     var username: String? = null,
     var password: String? = null,       // hashed password

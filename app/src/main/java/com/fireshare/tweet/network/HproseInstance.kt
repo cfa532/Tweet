@@ -1,10 +1,10 @@
 package com.fireshare.tweet.network
 
 import android.util.Log
-import com.fasterxml.jackson.core.type.TypeReference
 import com.fireshare.tweet.PreferencesHelper
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
@@ -23,13 +23,11 @@ import java.math.BigInteger
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
     private lateinit var BASE_URL: String  // localhost in Android Simulator
-    private lateinit var alphaId: MimeiId     // alphaId
     lateinit var appUser: User     // current user object
 
     fun init(preferencesHelper: PreferencesHelper) {
@@ -39,16 +37,13 @@ object HproseInstance {
         BASE_URL = pair.second
 
         var userId = preferencesHelper.getUserId()
+        userId = getAlphaIds()[0]     // TEMP: for testing
 
-        // TEMP: for testing
-//        userId = getAlphaIds()[0]
-
-        if (userId != null) {
-            // There is a registered user.
-            // get appId and best baseUrl
+        if (userId != TW_CONST.GUEST_ID) {
+            // There is a registered user. Initiate account data.
             initCurrentUser(userId)?.let { appUser = it }
         } else {
-            appUser = User()
+            appUser = User(mid = TW_CONST.GUEST_ID)
             appUser.baseUrl = BASE_URL
         }
     }
@@ -226,7 +221,7 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             response.body?.string()?.let { json ->
-                println("fetchTweet=$json")
+                Log.d("getTweet()","fetchTweet=$json")
                 val gson = Gson()
                 val tweet = gson.fromJson(json, Tweet::class.java)
                 tweet.author = author

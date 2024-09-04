@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.network.HproseInstance
@@ -23,7 +24,7 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
-    @Assisted private val userId: MimeiId?
+    @Assisted private val userId: MimeiId
 ): ViewModel() {
     private var _user = MutableStateFlow<User>(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
@@ -40,10 +41,11 @@ class UserViewModel @AssistedInject constructor(
     }
 
     init {
-        if (userId != null) {
+        if (userId != TW_CONST.GUEST_ID) {
             // read data from db
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
+                getTweets()
             }
 //            getTweets(startTimestamp.longValue, endTimestamp.longValue)
         } else {
@@ -56,8 +58,8 @@ class UserViewModel @AssistedInject constructor(
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null
     ) {
-        if (userId == null) return
-        viewModelScope.launch {
+        if (userId == TW_CONST.GUEST_ID) return
+        viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.getTweetList(userId, _tweets.value.toMutableList(), startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + _tweets.value }
         }
