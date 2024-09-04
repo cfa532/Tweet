@@ -83,6 +83,10 @@ object Gadget {
         return true
     }
 
+    fun getFirstUri() {
+
+    }
+
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getFirstReachableUri(ipList: List<JsonArray>, mid: MimeiId): User? = coroutineScope {
         val ips = ipList.map { ip ->

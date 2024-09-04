@@ -1,9 +1,9 @@
 package com.fireshare.tweet.network
 
 import android.util.Log
+import com.fasterxml.jackson.core.type.TypeReference
 import com.fireshare.tweet.PreferencesHelper
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
@@ -22,11 +22,13 @@ import java.io.InputStream
 import java.math.BigInteger
 import java.net.ProtocolException
 import java.net.URLEncoder
+import java.util.regex.Pattern
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
-    private lateinit var BASE_URL: String   // localhost in Android Simulator
+    private var BASE_URL: String = "http://10.0.2.2:8081"  // localhost in Android Simulator
     private lateinit var alphaId: MimeiId     // alphaId
     private lateinit var preferencesHelper: PreferencesHelper
     var appUser: User = User()     // current user object
@@ -36,10 +38,9 @@ object HproseInstance {
         return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
     }
 
-    suspend fun init() {
+    suspend fun init(preferencesHelper: PreferencesHelper) {
         // Use default AppUrl for now, until we find a better one.
-        preferencesHelper = TweetApplication.preferencesHelper
-        BASE_URL = "http://${preferencesHelper.getAppUrl()}"
+        BASE_URL = "${preferencesHelper.getAppUrl()}"
         appUser.mid = preferencesHelper.getUserId()
 
         // for testing
@@ -67,15 +68,34 @@ object HproseInstance {
 
     // initiate appId, and alphaId the default Ids to follow
     private fun initAppEntry(baseUrl: String) {
-        val url = "$baseUrl/webapi/"
-        val request = Request.Builder().url(url).build()
+        val request = Request.Builder().url(baseUrl).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
-            val responseBody = response.body?.string()
-            val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
-            appId = res?.get("appId").toString()
-            alphaId = res?.get("alphaId").toString()    // the first user.
-            preferencesHelper.setAppId(appId)
+            val htmlContent = response.body?.string()?.trimIndent()
+            val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
+            val matcher = pattern.matcher(htmlContent as CharSequence)
+            var jsonString: String? = null
+
+            if (matcher.find()) {
+                jsonString = matcher.group(1)
+            }
+
+            if (jsonString != null) {
+                // Step 2: Parse the extracted string into a Kotlin map
+                val mapper = Gson()
+                val paramMap = mapper.fromJson(jsonString, Map::class.java) as Map<*, *>                // Print the resulting map
+                appId = paramMap["mid"] as MimeiId
+                val ip = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
+                BASE_URL = "http://$ip"
+            } else {
+                println("No data found within window.setParam()")
+            }
+            // retrieve window.Param from source code.
+
+//            val res = responseBody?.let { Json.decodeFromString<Map<String, String>>(it) }
+//            appId = res?.get("appId").toString()
+//            alphaId = res?.get("alphaId").toString()    // the first user.
+//            preferencesHelper.setAppId(appId)
         }
     }
 

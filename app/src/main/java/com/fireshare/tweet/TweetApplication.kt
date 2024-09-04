@@ -16,34 +16,16 @@ import kotlinx.coroutines.launch
 @HiltAndroidApp
 class TweetApplication : Application() {
 
-    private val applicationScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
     override fun onCreate() {
         super.onCreate()
-
         preferencesHelper = PreferencesHelper(this)
-        applicationScope.launch {
-            HproseInstance.init()
-        }
-    }
-
-    override fun onTerminate() {
-        super.onTerminate()
-        applicationScope.cancel()
     }
 
     companion object {
         lateinit var preferencesHelper: PreferencesHelper
-//        lateinit var applicationContext: Context
     }
 }
 
 object AppContainer {
     var users: MutableSet<User> = emptySet<User>().toMutableSet()
 }
-
-interface TweetKey {
-    val tweetId: MimeiId
-}
-
-class TweetKeyImpl(override val tweetId: MimeiId) : TweetKey
