@@ -67,7 +67,7 @@ class TweetFeedViewModel @Inject constructor(
         endTimestamp: Long? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val followings = HproseInstance.getFollowings()
+            val followings = HproseInstance.getFollowings()     // get following of current user
             coroutineScope {  // Create a child coroutine scope
                 followings.forEach { userId ->
                     launch(Dispatchers.IO) {

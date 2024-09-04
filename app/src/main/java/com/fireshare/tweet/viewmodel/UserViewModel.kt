@@ -60,8 +60,9 @@ class UserViewModel @AssistedInject constructor(
     ) {
         if (userId == TW_CONST.GUEST_ID) return
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.getTweetList(userId, _tweets.value.toMutableList(), startTimestamp, endTimestamp)
-            _tweets.update { currentTweets -> currentTweets + _tweets.value }
+            val tweetsList = _tweets.value.toMutableList()
+            HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)
+            _tweets.update { currentTweets -> currentTweets + tweetsList }
         }
     }
 }
