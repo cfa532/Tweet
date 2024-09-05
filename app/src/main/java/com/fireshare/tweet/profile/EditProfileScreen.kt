@@ -202,7 +202,7 @@ fun SaveButton(
                 it.username = username
                 it.name = name
                 it.profile = profile
-                it.baseUrl = baseUrl
+                it.baseUrl = "http://$baseUrl"
                 it.keyPhrase = keyPhrase
                 coroutineScope.launch(Dispatchers.Default) {
                     HproseInstance.setUserData(it)
