@@ -1,5 +1,6 @@
 package com.fireshare.tweet.network
 
+import android.database.CharArrayBuffer
 import android.util.Log
 import androidx.collection.emptyObjectList
 import com.fireshare.tweet.PreferencesHelper
@@ -92,7 +93,7 @@ object HproseInstance {
 
     // Keys within the mimei of the user's database
     private const val TWT_LIST_KEY = "list_of_tweets_mid"
-    private const val CHUNK_SIZE = 50 * 1024 * 1024 // 50MB in bytes
+    private const val CHUNK_SIZE = 5 * 1024 * 1024 // 50MB in bytes
 
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
@@ -476,25 +477,58 @@ object HproseInstance {
     }
 
     // Upload data from an InputStream to IPFS and return the resulting MimeiId.
-    fun uploadToIPFS(inputStream: InputStream): MimeiId {
-        var sid = ""
-        val fsid = client.mfOpenTempFile(sid)
-        var offset = 0
-        inputStream.use { stream ->
-            val buffer = ByteArray(CHUNK_SIZE)
-            var bytesRead: Int
-            while (stream.read(buffer).also { bytesRead = it } != -1) {
-                client.mfSetData(fsid, buffer, offset)
-                offset += bytesRead
+    fun uploadToIPFS(inputStream: InputStream): MimeiId? {
+        val method = "open_temp_file"
+        val url =
+            "${appUser.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val fsid = response.body?.string()
+            var offset = 0
+            inputStream.use { stream ->
+                val buffer = ByteArray(CHUNK_SIZE)
+                var bytesRead: Int
+                while (stream.read(buffer).also { bytesRead = it } != -1) {
+                    if (fsid != null) {
+                        client.mfSetData(fsid, buffer, offset)
+                    }
+                    offset += bytesRead
+                }
             }
+            val cid = fsid?.let {
+                client.mfTemp2Ipfs(
+                    it,
+                    appUser.mid
+                )
+            }    // Associate the uploaded data with the app's main Mimei
+            println("cid=$cid")
+            return cid
         }
-        val cid = client.mfTemp2Ipfs(
-            fsid,
-            appUser.mid
-        )    // Associate the uploaded data with the app's main Mimei
-        println("cid=$cid")
-        return cid
+        return null
     }
+
+//    fun uploadToIPFS(inputStream: InputStream): MimeiId {
+//        var offset = 0
+//        var cid: String = ""
+//        val request = """
+//            {"userid": ${appUser.mid}, "aid": $appId, "ver": "last"}
+//        """.trimIndent()
+//        val gson = Gson()
+//
+//        inputStream.use { stream ->
+//            val buffer = ByteArray(CHUNK_SIZE)
+//            var bytesRead: Int
+//            while (stream.read(buffer).also { bytesRead = it } != -1) {
+//                cid = client.runMApp("upload_ipfs",
+//                    gson.fromJson(request, object : TypeToken<Map<String, String>>() {}.type),
+//                    listOf(buffer))
+//                offset += bytesRead
+//            }
+//        }
+//        Log.d("uploadToIPFS()", "cid=$cid")
+//        return cid
+//    }
 
     fun getMediaUrl(mid: MimeiId?, baseUrl: String?): Any {
         if (mid?.isNotEmpty() == true && baseUrl?.isNotEmpty() == true) {
@@ -534,7 +568,7 @@ interface ScorePair {
 }
 
 interface HproseService {
-    fun RunMApp(entry: String, request: Map<String, String>, args: Any?): String
+    fun runMApp(entry: String, request: Map<String, String>, args: Any?): String
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String
