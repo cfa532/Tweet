@@ -25,7 +25,7 @@ class TweetViewModel @AssistedInject constructor(
     interface TweetViewModelFactory {
         fun create(tweet: Tweet): TweetViewModel
     }
-    private val _tweetState = MutableStateFlow<Tweet>(tweet)
+    private val _tweetState = MutableStateFlow(tweet)
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())

@@ -37,6 +37,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.BottomNavigationBar
 import com.fireshare.tweet.widget.NavigationItem
@@ -53,6 +54,9 @@ fun TweetFeedScreen(
     val viewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
+        factory -> factory.create(appUser.mid)
+    }
 
     Scaffold(
         modifier = Modifier

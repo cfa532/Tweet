@@ -304,6 +304,34 @@ object HproseInstance {
         }
     }
 
+    fun toggleFollowing(userId: MimeiId): List<MimeiId>? {
+        val method = "toggle_following"
+        val url =
+            "${appUser.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val json = response.body?.string()
+            val gson = Gson()
+            return gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+        }
+        return null
+    }
+
+    fun toggleFollower(userId: MimeiId): List<MimeiId>? {
+        val method = "toggle_follower"
+        val url =
+            "${appUser.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val json = response.body?.string()
+            val gson = Gson()
+            return gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+        }
+        return null
+    }
+
     // retweet or cancel retweet
     fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
         val method = "toggle_retweet"
@@ -506,6 +534,7 @@ interface ScorePair {
 }
 
 interface HproseService {
+    fun RunMApp(entry: String, request: Map<String, String>, args: Any?): String
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String

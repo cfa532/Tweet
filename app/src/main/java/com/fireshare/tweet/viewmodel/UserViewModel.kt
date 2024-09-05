@@ -29,16 +29,38 @@ import kotlinx.coroutines.launch
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId
 ): ViewModel() {
-    private var _user = MutableStateFlow(appUser)
+    private var _user = MutableStateFlow(User(mid = userId))
     val user: StateFlow<User> get() = _user.asStateFlow()
+
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
-    val fans = mutableStateListOf(user.value.fansList)
-    val followings = mutableStateListOf(user.value.followingList)
+
+    private var _fans = MutableStateFlow(emptyList<MimeiId>())
+    val fans: StateFlow<List<MimeiId>> get() = _fans.asStateFlow()
+
+    private var _followings = MutableStateFlow(emptyList<MimeiId>())
+    val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp =
         mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
+
+    val followButtonText: String =
+        when(userId) {
+            appUser.mid -> "Edit"
+            else -> {
+                if (appUser.followingList.contains(userId))
+                    "Unfollow"
+                else "Follow"
+            }
+        }
+
+    fun toggleFollow(userId: MimeiId) {
+        viewModelScope.launch(Dispatchers.IO) {
+            HproseInstance.toggleFollowing(userId)?.let { _followings.value = it }
+            HproseInstance.toggleFollower(userId)?.let { _fans.value = it}
+        }
+    }
 
     @AssistedFactory
     interface UserViewModelFactory {
@@ -56,6 +78,8 @@ class UserViewModel @AssistedInject constructor(
                 viewModelScope.launch(Dispatchers.IO) {
                     HproseInstance.getFollowings(appUser)
                     HproseInstance.getFans(appUser)
+                    _fans.value = appUser.fansList
+                    _followings.value = appUser.followingList
                 }
         }
     }

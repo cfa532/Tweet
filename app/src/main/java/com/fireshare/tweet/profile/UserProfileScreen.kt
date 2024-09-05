@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -53,9 +54,8 @@ fun UserProfileScreen(
     }
     val user by userViewModel.user.collectAsState()
     val tweets by userViewModel.tweets.collectAsState()
-
-//    val navBackStackEntry by navController.currentBackStackEntryAsState()
-//    val currentRoute = navBackStackEntry?.destination?.route
+    val fans by userViewModel.fans.collectAsState()
+    val followings by userViewModel.followings.collectAsState()
 
     Column(
         modifier = Modifier
@@ -85,16 +85,15 @@ fun UserProfileScreen(
             )
             Row(modifier = Modifier.padding(bottom = 4.dp)) {
                 Button(
-                    onClick = { navController.navigate(ProfileEditor) },
+                    onClick = {
+                        when (userViewModel.followButtonText) {
+                            "Edit" -> navController.navigate(ProfileEditor)
+                            else -> userViewModel.toggleFollow(userId)
+                        }
+                    },
                     modifier = Modifier.width(IntrinsicSize.Min)
                 ) {
-                    when(user.mid) {
-                        appUser.mid -> Text("Edit")
-                        else -> {
-
-                        }
-                    }
-
+                    Text(text = userViewModel.followButtonText)
                 }
             }
         }
@@ -117,9 +116,9 @@ fun UserProfileScreen(
                 )
                 Text(text = user.profile ?: "Profile")
                 Row {
-                    Text(text = "${user.fansCount} Followers")
+                    Text(text = "${fans.count()} Followers")
                     Spacer(modifier = Modifier.padding(horizontal = 20.dp))
-                    Text(text = "${user.followingCount} Following")
+                    Text(text = "${followings.count()} Following")
                 }
             }
             HorizontalDivider(
