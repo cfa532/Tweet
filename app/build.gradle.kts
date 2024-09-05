@@ -55,6 +55,7 @@ android {
 
 dependencies {
 
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.assisted.inject.annotations.dagger2)
     implementation(libs.androidx.appcompat)
     kapt(libs.assisted.inject.processor.dagger2)
