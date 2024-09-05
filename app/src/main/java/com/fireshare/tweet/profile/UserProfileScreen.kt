@@ -57,6 +57,10 @@ fun UserProfileScreen(
     val fans by userViewModel.fans.collectAsState()
     val followings by userViewModel.followings.collectAsState()
 
+    // current user's detail has been loaded by default. Load other users' data only when homepage opened.
+    if (user.mid != appUser.mid)
+        userViewModel.getFollows(user)
+
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -74,16 +74,19 @@ class UserViewModel @AssistedInject constructor(
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
                 getTweets()
             }
-            if (userId == appUser.mid)
-                viewModelScope.launch(Dispatchers.IO) {
-                    HproseInstance.getFollowings(appUser)
-                    HproseInstance.getFans(appUser)
-                    _fans.value = appUser.fansList
-                    _followings.value = appUser.followingList
-                }
+            // only load current user data by default.
+            if (userId == appUser.mid) getFollows(appUser)
         }
     }
 
+    fun getFollows(user: User) {
+        viewModelScope.launch(Dispatchers.IO) {
+            HproseInstance.getFollowings(user)
+            HproseInstance.getFans(user)
+            _fans.value = user.fansList
+            _followings.value = user.followingList
+        }
+    }
     private fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null
