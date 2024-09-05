@@ -149,14 +149,21 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
 
             // Save the drawable to a file in the cache directory
             val cacheDir = context.cacheDir
-            val fileName = hashString("SHA-256", imageUrl) + ".png"
+            val fileName = hashString("SHA-256", imageUrl) + ".jpg" // Use JPEG for better compression
             val cacheFile = File(cacheDir, fileName)
 
             result?.let { drawable ->
                 val bitmap = (drawable as BitmapDrawable).bitmap
-                FileOutputStream(cacheFile).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 50, out)
-                }
+                var quality = 60
+                var fileSize: Long
+
+                do {
+                    FileOutputStream(cacheFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                    }
+                    fileSize = cacheFile.length()
+                    quality -= 10
+                } while (fileSize > 100 * 1024 && quality > 0) // 200KB = 200 * 1024 bytes
             }
 
             cacheFile.absolutePath
@@ -166,6 +173,7 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
         }
     }
 }
+
 fun hashString(type: String, input: String): String {
     val bytes = MessageDigest.getInstance(type).digest(input.toByteArray())
     return bytes.joinToString("") { "%02x".format(it) }
