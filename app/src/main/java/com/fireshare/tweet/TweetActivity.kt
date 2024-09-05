@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.fireshare.tweet.network.HproseInstance
+import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.ui.theme.TweetTheme
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.hilt.android.AndroidEntryPoint

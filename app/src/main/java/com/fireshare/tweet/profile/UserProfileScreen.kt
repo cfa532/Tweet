@@ -35,6 +35,7 @@ import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.network.HproseInstance
+import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
@@ -87,7 +88,13 @@ fun UserProfileScreen(
                     onClick = { navController.navigate(ProfileEditor) },
                     modifier = Modifier.width(IntrinsicSize.Min)
                 ) {
-                    Text("Edit")
+                    when(user.mid) {
+                        appUser.mid -> Text("Edit")
+                        else -> {
+
+                        }
+                    }
+
                 }
             }
         }
@@ -110,9 +117,9 @@ fun UserProfileScreen(
                 )
                 Text(text = user.profile ?: "Profile")
                 Row {
-                    Text(text = "Followers")
+                    Text(text = "${user.fansCount} Followers")
                     Spacer(modifier = Modifier.padding(horizontal = 20.dp))
-                    Text(text = "Following")
+                    Text(text = "${user.followingCount} Following")
                 }
             }
             HorizontalDivider(
@@ -120,7 +127,6 @@ fun UserProfileScreen(
                 thickness = 1.dp,
                 color = Color.Gray
             )
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()

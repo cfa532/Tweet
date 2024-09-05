@@ -1,6 +1,9 @@
 package com.fireshare.tweet.viewmodel
 
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
@@ -26,10 +29,12 @@ import kotlinx.coroutines.launch
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId
 ): ViewModel() {
-    private var _user = MutableStateFlow<User>(appUser)
+    private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
+    val fans = mutableStateListOf(user.value.fansList)
+    val followings = mutableStateListOf(user.value.followingList)
 
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp =
@@ -47,10 +52,11 @@ class UserViewModel @AssistedInject constructor(
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
                 getTweets()
             }
-//            getTweets(startTimestamp.longValue, endTimestamp.longValue)
-        } else {
-            // this happens only when a unregistered user opens the App
-            // do nothing.
+            if (userId == appUser.mid)
+                viewModelScope.launch(Dispatchers.IO) {
+                    HproseInstance.getFollowings(appUser)
+                    HproseInstance.getFans(appUser)
+                }
         }
     }
 

@@ -65,9 +65,6 @@ data class User(
     var username: String? = null,
     var password: String? = null,       // hashed password
     var avatar: MimeiId? = null,        // Optional profile image URL
-    var bookmarkCount: Int = 0,
-    var likeCount: Int = 0,
-    var commentCount: Int = 0,
     var profile: String? = null,
     var timestamp: Long = System.currentTimeMillis(),
     var fansCount: Int = 0,
@@ -78,11 +75,9 @@ data class User(
     var publicKey: String? = null,
 
     // List of tweet MIDs bookmarked by the user
-//    var bookmarkedTweets: List<MimeiId> = emptyList(),
-
-    // List of tweet MIDs liked by the user
-//    var likedTweets: List<MimeiId> = emptyList(),
-
-    // List of tweet MIDs commented to by the user
-//    var repliedTweets: List<MimeiId> = emptyList(),
+    var fansList: List<MimeiId> = emptyList(),
+    var followingList: List<MimeiId> = emptyList(),
+    var bookmarkedTweets: List<MimeiId> = emptyList(),
+    var likedTweets: List<MimeiId> = emptyList(),
+    var repliedTweets: List<MimeiId> = emptyList(),
 )

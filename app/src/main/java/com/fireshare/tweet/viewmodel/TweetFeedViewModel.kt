@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.network.HproseInstance
+import com.fireshare.tweet.network.HproseInstance.appUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -67,9 +68,9 @@ class TweetFeedViewModel @Inject constructor(
         endTimestamp: Long? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val followings = HproseInstance.getFollowings()     // get following of current user
+            HproseInstance.getFollowings(appUser)     // get following of current user
             coroutineScope {  // Create a child coroutine scope
-                followings.forEach { userId ->
+                appUser.followingList.forEach { userId ->
                     launch(Dispatchers.IO) {
                         val tweetsList = _tweets.value.filter { it.authorId == userId }.toMutableList()
                         HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)

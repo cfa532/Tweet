@@ -44,10 +44,6 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = tweet
     }
 
-    fun getCommentById(commentId: MimeiId): Tweet? {
-        return comments.value.find { it.mid == commentId }
-    }
-
     // add new Comment object to its parent Tweet
     fun uploadComment(comment: Tweet, updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {

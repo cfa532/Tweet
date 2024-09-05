@@ -1,6 +1,7 @@
 package com.fireshare.tweet.network
 
 import android.util.Log
+import androidx.collection.emptyObjectList
 import com.fireshare.tweet.PreferencesHelper
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
@@ -29,6 +30,7 @@ object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
     private lateinit var BASE_URL: String  // localhost in Android Simulator
     lateinit var appUser: User     // current user object
+    private var cachedUsers: MutableList<User> = emptyList<User>().toMutableList()
 
     fun init(preferencesHelper: PreferencesHelper) {
         // Use default AppUrl for now, until we find a better one.
@@ -41,7 +43,10 @@ object HproseInstance {
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
-            initCurrentUser(userId)?.let { appUser = it }
+            initCurrentUser(userId)?.let {
+                appUser = it
+                cachedUsers.add(it) // the list shall be empty now.
+            }
         } else {
             appUser = User(mid = TW_CONST.GUEST_ID)
             appUser.baseUrl = BASE_URL
@@ -92,18 +97,14 @@ object HproseInstance {
     private val client: HproseService by lazy {
         HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
     }
-    private var sid = ""
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
         .build()
-
-    private val users: MutableSet<User> = emptySet<User>().toMutableSet()
-
     private fun getUser(userId: MimeiId): User? {
-        return users.find { it.mid == userId }
+        return cachedUsers.firstOrNull { it.mid == userId }
     }
 
     // only used for registered user, that has userId in preference
@@ -117,7 +118,7 @@ object HproseInstance {
             val gson = Gson()
             val user = gson.fromJson(json, User::class.java)
             user.baseUrl = BASE_URL
-            users.add(user)
+//            cachedUsers.add(user)
             return user
         }
         return null
@@ -136,11 +137,13 @@ object HproseInstance {
             val providers = response.body?.string() ?: return null
             val providerList = Json.parseToJsonElement(providers).jsonArray
             if (providerList.isNotEmpty()) {
-                println(providerList)
+                Log.d("getUserBase()", providerList.toString())
                 val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
                 Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
-                    users.add(u)
-                    println("Get userbase=${users}")
+                    cachedUsers.find { it.mid == u.mid }.let { it1 ->
+                        if (it1 == null) cachedUsers.add(u)
+                    }
+                    Log.d("getUserBase()", cachedUsers.toString())
                     return u
                 }
             }
@@ -152,8 +155,13 @@ object HproseInstance {
         // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
         // that have value in incoming data.
         val method = "set_author_core_data"
+        val tmp = User(mid = TW_CONST.GUEST_ID).copy(keyPhrase = appUser.keyPhrase,
+            keyHint = appUser.keyHint, mid = appUser.mid, name = appUser.name,
+            username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
+            timestamp = appUser.timestamp, fansCount = appUser.fansCount,
+            followingCount = appUser.followingCount)
         val url = "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&user=${
-            Json.encodeToString(user)
+            Json.encodeToString(tmp)
         }"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
@@ -163,10 +171,10 @@ object HproseInstance {
     }
 
     // get Ids of users who the current user is following
-    fun getFollowings( user: User = appUser ): List<MimeiId> =
+    fun getFollowings( user: User ) =
         try {
             if (user.mid == TW_CONST.GUEST_ID)
-                getAlphaIds()
+                user.followingList = getAlphaIds()
             else {
                 val method = "get_followings"
                 val url =
@@ -176,15 +184,34 @@ object HproseInstance {
                 if (response.isSuccessful) {
                     val json = response.body?.string()
                     val gson = Gson()
-                    gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+                    user.followingList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
                 } else {
-                    getAlphaIds()
+                    user.followingList =getAlphaIds()
                 }
             }
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
-//            emptyList()
-            getAlphaIds()   // get default following for testing
+            user.followingList =getAlphaIds()   // get default following for testing
+        }
+
+    // get fans list of the user
+    fun getFans( user: User ) =
+        try {
+            if (user.mid != TW_CONST.GUEST_ID) {
+                val method = "get_followers"
+                val url =
+                    "${user.baseUrl}/entry?&aid=${this.appId}&ver=last&entry=$method&userid=${user.mid}"
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = response.body?.string()
+                    val gson = Gson()
+                    user.fansList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("HproseInstance.getFollowings", e.toString())
         }
 
     // get tweets of a given author in a given span of time
@@ -422,6 +449,7 @@ object HproseInstance {
 
     // Upload data from an InputStream to IPFS and return the resulting MimeiId.
     fun uploadToIPFS(inputStream: InputStream): MimeiId {
+        var sid = ""
         val fsid = client.mfOpenTempFile(sid)
         var offset = 0
         inputStream.use { stream ->
@@ -434,7 +462,7 @@ object HproseInstance {
         }
         val cid = client.mfTemp2Ipfs(
             fsid,
-            appUser.mid!!
+            appUser.mid
         )    // Associate the uploaded data with the app's main Mimei
         println("cid=$cid")
         return cid
@@ -453,7 +481,7 @@ object HproseInstance {
 
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
         try {
-            val method = "get_author_core_data"
+            val method = "get_user_core_data"
             val url =
                 "http://$ip/entry?&aid=${this.appId}&ver=last&entry=$method&userid=$mid"
             val request = Request.Builder().url(url).build()
