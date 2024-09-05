@@ -63,12 +63,6 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem?>) {
     val maxItems = 4 // 2 rows * 2 columns = 4 items
     val limitedMediaList = mediaItems.take(maxItems)
 
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    // In-memory cache for image URLs and their cached paths
-    val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
-
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.padding(0.dp, 8.dp, 0.dp),
@@ -76,46 +70,56 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem?>) {
     ) {
         items(limitedMediaList) { mediaItem ->
             if (mediaItem != null) {
-                val imageUrl = mediaItem.url
-                val cachedPath = cachedImageUrls[imageUrl]
+                MediaItemPreview(mediaItem)
+            }
+        }
+    }
+}
 
-                // Check if image is already cached and use it directly
-                if (cachedPath != null) {
-                    Box(contentAlignment = Alignment.Center) {
-                        loadImageFromCache(cachedPath)?.let {
-                            Image(
-                                painter = BitmapPainter(it),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(200.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-                        }
+@Composable
+fun ImagePreview(imageUrl: String) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // In-memory cache for image URLs and their cached paths
+    val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
+
+    val cachedPath = cachedImageUrls[imageUrl]
+
+    // Check if image is already cached and use it directly
+    if (cachedPath != null) {
+        Box(contentAlignment = Alignment.Center) {
+            loadImageFromCache(cachedPath)?.let {
+                Image(
+                    painter = BitmapPainter(it),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
+        }
+    } else {
+        // Download and cache image if not already cached
+        LaunchedEffect(imageUrl) {
+            coroutineScope.launch {
+                val downloadedPath = try {
+                    withContext(Dispatchers.IO) {
+                        downloadImageToCache(context, imageUrl) // New function
                     }
-                } else {
-                    // Download and cache image if not already cached
-                    LaunchedEffect(imageUrl) {
-                        coroutineScope.launch {
-                            val downloadedPath = try {
-                                withContext(Dispatchers.IO) {
-                                    downloadImageToCache(context, imageUrl) // New function
-                                }
-                            } catch (e: Exception) {
-                                // Handle download error gracefully (e.g., log error, show placeholder image)
-                                null
-                            }
-                            if (downloadedPath != null) {
-                                cachedImageUrls[imageUrl] = downloadedPath
-                            }
-                        }
-                    }
-                    // Display placeholder while image is downloading
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                } catch (e: Exception) {
+                    // Handle download error gracefully (e.g., log error, show placeholder image)
+                    null
+                }
+                if (downloadedPath != null) {
+                    cachedImageUrls[imageUrl] = downloadedPath
                 }
             }
+        }
+        // Display placeholder while image is downloading
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
     }
 }
@@ -189,12 +193,7 @@ fun MediaItemPreview(mediaItem: MediaItem) {
     ) {
         when (fileType.value) {
             "image/jpeg", "image/png" -> {
-                AsyncImage(
-                    model = mediaItem.url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(200.dp)
-                )
+                ImagePreview(mediaItem.url)
             }
             "video/mp4" -> {
                 // Implement video player here
