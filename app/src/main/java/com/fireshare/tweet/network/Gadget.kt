@@ -21,15 +21,15 @@ import java.io.IOException
 
 object Gadget {
     suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {
-        return attachments.mapNotNull { uri ->
+        return attachments.map { uri ->
             withContext(IO) {
                 runCatching {
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
                         HproseInstance.uploadToIPFS(inputStream)
                     } ?: throw FileNotFoundException("File not found for URI: $uri")
                 }.getOrElse { e ->
-                    Log.e("HproseInstance.uploadFile", "Failed to upload file: $uri", e)
-                    null
+                    Log.e("uploadAttachments", "Failed to upload file: $uri", e)
+                    throw IOException("Upload failed.")
                 }
             }
         }

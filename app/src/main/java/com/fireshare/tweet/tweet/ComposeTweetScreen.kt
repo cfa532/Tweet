@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -43,16 +44,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.network.Gadget.uploadAttachments
-import com.fireshare.tweet.network.HproseInstance
 import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,8 +63,9 @@ fun ComposeTweetScreen(
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
+    var coroutineScope = rememberCoroutineScope()
 
-    // Create a launcher for the file picker
+// Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -81,7 +82,8 @@ fun ComposeTweetScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
+
+                    ),
                 title = {
                     Text("Edit Tweet", fontSize = 18.sp)
                 },
@@ -89,6 +91,7 @@ fun ComposeTweetScreen(
                     IconButton(onClick = {
                         // show warning snack bar
                         navController.popBackStack()
+                        selectedAttachments.clear() // Clear attachments before navigating back
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -99,20 +102,19 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            viewModel.viewModelScope.launch {
-                                val attachments =
-                                    uploadAttachments(localContext, selectedAttachments)
+                            viewModel.uploadAttachments(
+                                localContext,
+                                selectedAttachments
+                            ) { attachments ->
                                 val tweet = Tweet(
                                     authorId = appUser.mid,
                                     content = tweetContent,
-                                    attachments = attachments,
+                                    attachments = attachments.mapNotNull { it },
                                 )
                                 viewModel.uploadTweet(tweet = tweet)
-
-                                // clear and return to previous screen
-                                selectedAttachments.clear()
-                                tweetContent = ""
-                                navController.popBackStack()
+                                coroutineScope.launch(Dispatchers.Main) {
+                                    navController.popBackStack()
+                                }
                             }
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
@@ -130,7 +132,7 @@ fun ComposeTweetScreen(
         Surface(
             modifier = Modifier.padding(innerPadding),
         ) {
-            Column( modifier = Modifier.padding(start = 8.dp, end = 8.dp) )
+            Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp))
             {
                 OutlinedTextField(
                     value = tweetContent,
@@ -165,7 +167,8 @@ fun ComposeTweetScreen(
                 ) {
                     items(selectedAttachments.chunked(2)) { rowItems ->
                         LazyRow(
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
                                 .padding(bottom = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -179,4 +182,3 @@ fun ComposeTweetScreen(
         }
     }
 }
-

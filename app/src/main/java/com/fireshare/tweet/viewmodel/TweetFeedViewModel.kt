@@ -1,6 +1,9 @@
 package com.fireshare.tweet.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.datamodel.MimeiId
@@ -25,10 +28,20 @@ class TweetFeedViewModel @Inject constructor(
 
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
-
     init {
 //        getTweets(startTimestamp.longValue, endTimestamp.longValue)
         getTweets(startTimestamp.longValue)
+    }
+
+    fun uploadAttachments(context: Context, attachments: List<Uri>, upload: (List<MimeiId?>) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cids = attachments.map {
+                context.contentResolver.openInputStream(it)?.use { inputStream ->
+                    HproseInstance.uploadToIPFS(inputStream)
+                }
+            }
+            upload(cids)
+        }
     }
 
     // given a tweet, update its counterpart in Tweet list
@@ -59,7 +72,6 @@ class TweetFeedViewModel @Inject constructor(
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel ) { newTweet ->
                 updateTweetViewModel(newTweet)
             }
-//            updateTweetViewModel(tweet.copy())
         }
     }
 

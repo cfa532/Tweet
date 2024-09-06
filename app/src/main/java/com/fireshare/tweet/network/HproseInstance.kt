@@ -119,7 +119,6 @@ object HproseInstance {
             val gson = Gson()
             val user = gson.fromJson(json, User::class.java)
             user.baseUrl = BASE_URL
-//            cachedUsers.add(user)
             return user
         }
         return null
@@ -512,7 +511,7 @@ object HproseInstance {
 //        var offset = 0
 //        var cid: String = ""
 //        val request = """
-//            {"userid": ${appUser.mid}, "aid": $appId, "ver": "last"}
+//            {"userid": "${appUser.mid}", "aid": "$appId", "ver": "last"}
 //        """.trimIndent()
 //        val gson = Gson()
 //
@@ -522,7 +521,7 @@ object HproseInstance {
 //            while (stream.read(buffer).also { bytesRead = it } != -1) {
 //                cid = client.runMApp("upload_ipfs",
 //                    gson.fromJson(request, object : TypeToken<Map<String, String>>() {}.type),
-//                    listOf(buffer))
+//                    listOf(buffer)) as String
 //                offset += bytesRead
 //            }
 //        }
@@ -542,6 +541,7 @@ object HproseInstance {
     }
 
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
+        val byteArray = byteArrayOf(0x01, 0x02, 0x03)
         try {
             val method = "get_user_core_data"
             val url =
@@ -568,7 +568,7 @@ interface ScorePair {
 }
 
 interface HproseService {
-    fun runMApp(entry: String, request: Map<String, String>, args: Any?): String
+    fun runMApp(entry: String, request: Map<String, String>, args: List<Any>?): Any
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String
