@@ -11,16 +11,16 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-//    @Provides
-//    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
-//        return TweetViewModel(tweet)
-//    }
-
     @Provides
     @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }
+
+//    @Provides
+//    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
+//        return TweetViewModel(tweet)
+//    }
 
 //    @Provides
 //    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {

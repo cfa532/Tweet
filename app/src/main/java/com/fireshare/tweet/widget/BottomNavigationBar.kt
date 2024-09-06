@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
+import com.fireshare.tweet.navigation.NavigationItem
 
 @Composable
 fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) {

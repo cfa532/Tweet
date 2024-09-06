@@ -2,7 +2,6 @@
 
 package com.fireshare.tweet.profile
 
-import com.fireshare.tweet.PreferencesHelper
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,12 +36,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getMediaUrl
+import com.fireshare.tweet.PreferencesHelper
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.network.HproseInstance
-import com.fireshare.tweet.network.HproseInstance.appUser
-import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

@@ -3,13 +3,22 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.TweetActivity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.network.HproseInstance
-import com.fireshare.tweet.network.HproseInstance.appUser
+import com.fireshare.tweet.navigation.ComposeComment
+import com.fireshare.tweet.navigation.LocalViewModelProvider
+import com.fireshare.tweet.navigation.SharedTweetViewModel
+import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -93,14 +102,20 @@ class TweetFeedViewModel @Inject constructor(
         }
     }
 
-    fun uploadTweet(tweet: Tweet) {
-        viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.uploadTweet(tweet)?.let { newTweet: Tweet ->
-                _tweets.update { currentTweets ->
-                    // add new tweet at top of the list
-                    listOf(newTweet) + currentTweets
-                }
-            }
-        }
+    fun uploadTweet(viewModelStoreOwner: ViewModelStoreOwner, context: Context, content: String, attachments: List<Uri>?) {
+        val data = workDataOf(
+            "viewModelStoreOwner" to viewModelStoreOwner.toString(),
+            "tweetContent" to content,
+            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
+            "context" to context.toString()
+        )
+        val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
+            .setInputData(data)
+            .build()
+
+        WorkManager.getInstance(context).enqueue(uploadRequest)
+
+        // Update UI (optional)
+        // You can show a progress indicator while the upload is happening
     }
 }

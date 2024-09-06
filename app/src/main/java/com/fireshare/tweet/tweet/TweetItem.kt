@@ -26,12 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
-import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UserAvatar
-import com.fireshare.tweet.widget.UserProfile
+import com.fireshare.tweet.navigation.UserProfile
 
 @Composable
 fun TweetItem(

@@ -29,19 +29,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.network.HproseInstance
-import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.tweet.TweetItem
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
-import com.fireshare.tweet.widget.ProfileEditor
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.fireshare.tweet.navigation.ProfileEditor
 
 @Composable
 fun UserProfileScreen(

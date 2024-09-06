@@ -2,9 +2,8 @@ package com.fireshare.tweet.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.network.HproseInstance
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject

@@ -33,23 +33,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
+import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
-import com.fireshare.tweet.network.Gadget.detectMimeTypeFromHeader
-import com.fireshare.tweet.network.Gadget.downloadFileHeader
+import coil.request.SuccessResult
+import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
+import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
-import coil.ImageLoader
-import coil.annotation.ExperimentalCoilApi
-import coil.request.SuccessResult
 
 //sealed class MediaItem {
 //    data class Image(val url: String) : MediaItem()

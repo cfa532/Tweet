@@ -46,13 +46,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.network.HproseInstance.appUser
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.SupervisorJob
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +61,8 @@ fun ComposeTweetScreen(
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
-    var coroutineScope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
+    val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -75,7 +74,6 @@ fun ComposeTweetScreen(
             }
         }
     }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -90,8 +88,8 @@ fun ComposeTweetScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         // show warning snack bar
-                        navController.popBackStack()
                         selectedAttachments.clear() // Clear attachments before navigating back
+                        navController.popBackStack()
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -102,20 +100,12 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            viewModel.uploadAttachments(
+                            viewModel.uploadTweet(
                                 localContext,
+                                tweetContent,
                                 selectedAttachments
-                            ) { attachments ->
-                                val tweet = Tweet(
-                                    authorId = appUser.mid,
-                                    content = tweetContent,
-                                    attachments = attachments.mapNotNull { it },
-                                )
-                                viewModel.uploadTweet(tweet = tweet)
-                                coroutineScope.launch(Dispatchers.Main) {
-                                    navController.popBackStack()
-                                }
-                            }
+                            )
+                            navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
                             .width(intrinsicSize = IntrinsicSize.Min) // Adjust width to fit content
@@ -129,6 +119,7 @@ fun ComposeTweetScreen(
                 }
             )
         }) { innerPadding ->
+        // content of scaffold, in the middle of current page.
         Surface(
             modifier = Modifier.padding(innerPadding),
         ) {

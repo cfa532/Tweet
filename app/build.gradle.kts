@@ -54,6 +54,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.hilt.common)
+    val work_version = "2.9.1"
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.work.runtime.ktx)
 
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.assisted.inject.annotations.dagger2)

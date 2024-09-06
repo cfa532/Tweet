@@ -1,4 +1,4 @@
-package com.fireshare.tweet.widget
+package com.fireshare.tweet.navigation
 
 import com.fireshare.tweet.datamodel.MimeiId
 import kotlinx.serialization.Serializable

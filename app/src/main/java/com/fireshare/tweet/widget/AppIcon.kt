@@ -9,9 +9,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
+import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.network.HproseInstance.getMediaUrl
 
 @Composable
 fun AppIcon() {

@@ -1,27 +1,22 @@
 package com.fireshare.tweet.viewmodel
 
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.network.HproseInstance
-import com.fireshare.tweet.network.HproseInstance.appUser
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 

@@ -2,7 +2,6 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 
 class PreferencesHelper(context: Context) {

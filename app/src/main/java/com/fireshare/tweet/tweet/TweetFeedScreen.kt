@@ -34,15 +34,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
-import com.fireshare.tweet.network.HproseInstance.appUser
-import com.fireshare.tweet.network.HproseInstance.getMediaUrl
+import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.BottomNavigationBar
-import com.fireshare.tweet.widget.NavigationItem
-import com.fireshare.tweet.widget.UserProfile
-
+import com.fireshare.tweet.navigation.NavigationItem
+import com.fireshare.tweet.navigation.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +53,8 @@ fun TweetFeedScreen(
     val viewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    // Call it earlier to initiate some appUser fields that will be used for UI state.
     val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
         factory -> factory.create(appUser.mid)
     }

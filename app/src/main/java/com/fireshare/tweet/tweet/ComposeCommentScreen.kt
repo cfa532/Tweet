@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -48,13 +47,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import com.fireshare.tweet.LocalViewModelProvider
+import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.R
-import com.fireshare.tweet.SharedTweetViewModel
-import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.network.Gadget.uploadAttachments
-import com.fireshare.tweet.network.HproseInstance.appUser
+import com.fireshare.tweet.widget.Gadget.uploadAttachments
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
@@ -116,17 +114,17 @@ fun ComposeCommentScreen(
                                 val attachments =
                                     uploadAttachments(localContext, selectedAttachments)
                                 val comment = Tweet(
-                                    authorId = appUser.mid!!,
+                                     authorId = appUser.mid,
                                     content = tweetContent,
                                     attachments = attachments
                                 )
                                 viewModel.uploadComment( comment ) { updatedTweet ->
-                                    tweetFeedViewModel.updateTweet(updatedTweet)
+//                                    tweetFeedViewModel.updateTweet(updatedTweet)
                                 }
                                 if (isChecked) {
                                     comment.originalTweetId = tweet.mid
                                     comment.originalAuthorId = tweet.authorId
-                                    tweetFeedViewModel.uploadTweet(comment)
+//                                    tweetFeedViewModel.uploadTweet(comment)
                                 }
 
                                 // clear and return to previous screen

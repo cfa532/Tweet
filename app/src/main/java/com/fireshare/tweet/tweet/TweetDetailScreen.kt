@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
-import com.fireshare.tweet.LocalNavController
+import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.BottomNavigationBar
 
