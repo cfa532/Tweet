@@ -18,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.TweetActivity
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.message.MessageScreen
@@ -47,6 +48,8 @@ fun TweetNavGraph(
     val localContext = LocalContext.current
     val viewModelStoreOwner = LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
     val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    HproseInstance.tweetFeedViewModel = tweetFeedViewModel
 
     CompositionLocalProvider(LocalNavController provides navController) {
         CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
@@ -60,7 +63,7 @@ fun TweetNavGraph(
                     val parentEntry = remember(it) {
                         navController.getBackStackEntry(NavRoot)
                     }
-                    TweetFeedScreen(navController, parentEntry, 0)
+                    TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
                 }
                 composable<NavigationItem.TweetDetail> { navBackStackEntry ->
                     val args = navBackStackEntry.toRoute<NavigationItem.TweetDetail>()

@@ -27,6 +27,7 @@ import java.util.regex.Pattern
 object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
     private lateinit var BASE_URL: String  // localhost in Android Simulator
+    lateinit var tweetFeedViewModel: TweetFeedViewModel
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
 
     // all loaded User objects will be inserted in the list, for better performance.

@@ -4,20 +4,14 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.TweetActivity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.navigation.ComposeComment
-import com.fireshare.tweet.navigation.LocalViewModelProvider
-import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -86,7 +80,7 @@ class TweetFeedViewModel @Inject constructor(
         }
     }
 
-    fun uploadTweet(viewModelStoreOwner: ViewModelStoreOwner, context: Context, content: String, attachments: List<Uri>?) {
+    fun uploadTweet(context: Context, content: String, attachments: List<Uri>?) {
         val data = workDataOf(
             "tweetContent" to content,
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()

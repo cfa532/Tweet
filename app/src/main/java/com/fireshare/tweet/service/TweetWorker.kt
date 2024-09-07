@@ -28,9 +28,6 @@ class UploadTweetWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
-    @Inject
-    lateinit var tweetFeedViewModel: TweetFeedViewModel
-
     override suspend fun doWork(): Result {
         return try {
             val tweetContent = inputData.getString("tweetContent")
@@ -54,8 +51,7 @@ class UploadTweetWorker @AssistedInject constructor(
             HproseInstance.uploadTweet(tweet)?.let { newTweet: Tweet ->
                 Log.d("UploadTweetWorker", tweet.toString())
                 withContext(Dispatchers.Main) {
-                    Log.d("UploadTweetWorker", tweetFeedViewModel.toString())
-//                    tweetFeedViewModel.addTweet(newTweet)
+                    HproseInstance.tweetFeedViewModel.addTweet(newTweet)
                 }
                 return Result.success()
             }

@@ -35,7 +35,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,18 +43,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetActivity
-import com.fireshare.tweet.navigation.ComposeComment
-import com.fireshare.tweet.navigation.LocalViewModelProvider
-import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +57,6 @@ fun ComposeTweetScreen(
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
-    val viewModelStoreOwner = LocalViewModelStoreOwner.current
 
 // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -104,14 +94,11 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                                if (viewModelStoreOwner != null) {
-                                    viewModel.uploadTweet(
-                                        viewModelStoreOwner,
-                                        localContext,
-                                        tweetContent,
-                                        selectedAttachments
-                                    )
-                                }
+                                viewModel.uploadTweet(
+                                    localContext,
+                                    tweetContent,
+                                    selectedAttachments
+                                )
                                 navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
