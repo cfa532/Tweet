@@ -24,6 +24,9 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
 
+//    @Inject
+//    lateinit var tweetFeedViewModel: TweetFeedViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

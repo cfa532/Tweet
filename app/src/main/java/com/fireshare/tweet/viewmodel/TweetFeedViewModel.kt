@@ -42,27 +42,11 @@ class TweetFeedViewModel @Inject constructor(
         getTweets(startTimestamp.longValue)
     }
 
-    fun uploadAttachments(context: Context, attachments: List<Uri>, upload: (List<MimeiId?>) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val cids = attachments.map {
-                context.contentResolver.openInputStream(it)?.use { inputStream ->
-                    HproseInstance.uploadToIPFS(inputStream)
-                }
-            }
-            upload(cids)
-        }
-    }
-
     // given a tweet, update its counterpart in Tweet list
     fun updateTweet(tweet: Tweet) {
         _tweets.value = _tweets.value.map {
             if (it.mid == tweet.mid) tweet else it
         }
-    }
-
-    // get tweet from preload tweet feed list
-    fun getTweetById(tweetId: MimeiId): Tweet? {
-        return tweets.value.find { it.mid == tweetId }
     }
 
     fun addTweet(tweet: Tweet) {

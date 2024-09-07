@@ -27,11 +27,13 @@ import java.util.regex.Pattern
 object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
     private lateinit var BASE_URL: String  // localhost in Android Simulator
-    lateinit var appUser: User     // current user object
+    var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
+
+    // all loaded User objects will be inserted in the list, for better performance.
     private var cachedUsers: MutableList<User> = emptyList<User>().toMutableList()
 
     fun init(preferencesHelper: PreferencesHelper) {
-        // Use default AppUrl for now, until we find a better one.
+        // Use default AppUrl to enter App network, update with IP of the fastest node.
         val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
         appId = pair.first
         BASE_URL = pair.second
@@ -46,7 +48,6 @@ object HproseInstance {
                 cachedUsers.add(it) // the list shall be empty now.
             }
         } else {
-            appUser = User(mid = TW_CONST.GUEST_ID)
             appUser.baseUrl = BASE_URL
         }
     }
@@ -83,6 +84,22 @@ object HproseInstance {
         return Pair(preferencesHelper.getAppId().toString(), "http://$baseUrl")
     }
 
+    // only used for registered user, that has userId in preference
+    private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
+        val method = "init_user_mid"
+        val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val json = response.body?.string()
+            val gson = Gson()
+            val user = gson.fromJson(json, User::class.java)
+            user.baseUrl = BASE_URL
+            return user
+        }
+        return null
+    }
+
     // get the first user account, or a list of accounts.
     private fun getAlphaIds(): List<MimeiId> {
         return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
@@ -103,22 +120,6 @@ object HproseInstance {
         .build()
     private fun getUser(userId: MimeiId): User? {
         return cachedUsers.firstOrNull { it.mid == userId }
-    }
-
-    // only used for registered user, that has userId in preference
-    private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
-        val method = "init_user_mid"
-        val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
-        val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val json = response.body?.string()
-            val gson = Gson()
-            val user = gson.fromJson(json, User::class.java)
-            user.baseUrl = BASE_URL
-            return user
-        }
-        return null
     }
 
     // Get base url where user data can be accessed, and user data
