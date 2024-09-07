@@ -1,5 +1,6 @@
 package com.fireshare.tweet
 
+import androidx.compose.material3.SnackbarHostState
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
 import dagger.Provides
@@ -15,6 +16,12 @@ object AppModule {
     @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSnackbarHostState(): SnackbarHostState {
+        return SnackbarHostState()
     }
 
 //    @Provides

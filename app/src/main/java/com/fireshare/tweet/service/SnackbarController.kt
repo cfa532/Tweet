@@ -1,4 +1,4 @@
-package com.fireshare.tweet.widget
+package com.fireshare.tweet.service
 
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow

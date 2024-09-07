@@ -40,7 +40,7 @@ object HproseInstance {
         BASE_URL = pair.second
 
         var userId = preferencesHelper.getUserId()
-        userId = getAlphaIds()[0]     // TEMP: for testing
+//        userId = getAlphaIds()[0]     // TEMP: for testing
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
@@ -60,7 +60,7 @@ object HproseInstance {
         val request = Request.Builder().url("http://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
-            // retrieve window.Param from source code.
+            // retrieve window.Param from source code of http://base_url
             val htmlContent = response.body?.string()?.trimIndent()
             val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
             val matcher = pattern.matcher(htmlContent as CharSequence)

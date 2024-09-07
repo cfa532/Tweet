@@ -68,15 +68,13 @@ fun EditProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            coroutineScope.launch {
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(it)?.let { stream ->
-                        val mimeiId = HproseInstance.uploadToIPFS(stream)
-                        avatar = mimeiId
-                        user?.let { user ->
-                            user.avatar = mimeiId
-                            HproseInstance.setUserData(user)
-                        }
+            coroutineScope.launch(Dispatchers.IO) {
+                context.contentResolver.openInputStream(it)?.let { stream ->
+                    val mimeiId = HproseInstance.uploadToIPFS(stream)
+                    avatar = mimeiId
+                    user?.let { user ->
+                        user.avatar = mimeiId
+                        HproseInstance.setUserData(user)
                     }
                 }
             }
