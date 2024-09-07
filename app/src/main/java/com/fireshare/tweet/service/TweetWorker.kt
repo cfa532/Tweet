@@ -41,13 +41,11 @@ class UploadTweetWorker @AssistedInject constructor(
                 }
                 inputStream.use { HproseInstance.uploadToIPFS(it) }
             }
-
             val tweet = Tweet(
                 authorId = appUser.mid,
                 content = tweetContent ?: " ",
                 attachments = attachments.mapNotNull { it.toString() }
             )
-
             HproseInstance.uploadTweet(tweet)?.let { newTweet: Tweet ->
                 Log.d("UploadTweetWorker", tweet.toString())
                 withContext(Dispatchers.Main) {
@@ -55,8 +53,8 @@ class UploadTweetWorker @AssistedInject constructor(
                 }
                 return Result.success()
             }
-
             Result.failure()
+
         } catch (e: Exception) {
             Log.e("UploadTweetWorker", "Error in doWork", e)
             Result.failure()
