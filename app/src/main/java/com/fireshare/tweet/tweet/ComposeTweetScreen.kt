@@ -44,8 +44,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.TweetActivity
+import com.fireshare.tweet.navigation.ComposeComment
+import com.fireshare.tweet.navigation.LocalViewModelProvider
+import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.CoroutineScope
@@ -61,8 +66,7 @@ fun ComposeTweetScreen(
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val viewModelStoreOwner = LocalViewModelStoreOwner.current
 
 // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -100,12 +104,15 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            viewModel.uploadTweet(
-                                localContext,
-                                tweetContent,
-                                selectedAttachments
-                            )
-                            navController.popBackStack()
+                                if (viewModelStoreOwner != null) {
+                                    viewModel.uploadTweet(
+                                        viewModelStoreOwner,
+                                        localContext,
+                                        tweetContent,
+                                        selectedAttachments
+                                    )
+                                }
+                                navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
                             .width(intrinsicSize = IntrinsicSize.Min) // Adjust width to fit content

@@ -104,10 +104,8 @@ class TweetFeedViewModel @Inject constructor(
 
     fun uploadTweet(viewModelStoreOwner: ViewModelStoreOwner, context: Context, content: String, attachments: List<Uri>?) {
         val data = workDataOf(
-            "viewModelStoreOwner" to viewModelStoreOwner.toString(),
             "tweetContent" to content,
-            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
-            "context" to context.toString()
+            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
         )
         val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
             .setInputData(data)
