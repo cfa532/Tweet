@@ -1,19 +1,14 @@
 package com.fireshare.tweet.tweet
 
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -25,29 +20,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.navigation.ComposeComment
+import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.LocalViewModelProvider
+import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 
-@Composable
-fun GuestNotice() {
-    Snackbar(modifier = Modifier.fillMaxWidth()
-        .padding(horizontal = 30.dp),
-        action = {}
-    ) {
-        Text(text = "Please Login")
-    }
+suspend fun guestNotice() {
+    SnackbarController.sendEvent(
+        event = SnackbarEvent(
+            message = "Please login or register.",
+            action = SnackbarAction(
+                name = "Go!",
+                action = {}
+            )
+        )
+    )
 }
 
 @Composable
@@ -59,26 +57,16 @@ fun CommentButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val viewModelProvider = LocalViewModelProvider.current
 
-    val scope = rememberCoroutineScope()
-
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            scope.launch {
-                SnackbarController.sendEvent(
-                    event = SnackbarEvent(
-                        message = "Please login or register.",
-                        action = SnackbarAction(
-                            name = "Go!",
-                            action = {}
-                        )
-                    )
-                )
+            viewModel.viewModelScope.launch {
+                guestNotice()
             }
-        } else {
-            viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
-                sharedViewModel.sharedTVMInstance = viewModel
-                tweet.mid?.let { navController.navigate(ComposeComment(it)) }
-            }
+            return@IconButton
+        }
+        viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
+            sharedViewModel.sharedTVMInstance = viewModel
+            tweet.mid?.let { navController.navigate(ComposeComment(it)) }
         }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -101,6 +89,12 @@ fun RetweetButton(viewModel: TweetViewModel) {
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
 
     IconButton(onClick = {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
+                guestNotice()
+            }
+            return@IconButton
+        }
         tweetFeedViewModel.toggleRetweet(tweet) { updatedTweet ->
             viewModel.updateTweet(updatedTweet)
         }
@@ -130,6 +124,12 @@ fun LikeButton(viewModel: TweetViewModel) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     IconButton(onClick = {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
+                guestNotice()
+            }
+            return@IconButton
+        }
         viewModel.likeTweet { updatedTweet ->
             tweetFeedViewModel.updateTweet(updatedTweet)
         }
@@ -158,6 +158,12 @@ fun BookmarkButton(viewModel: TweetViewModel) {
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     IconButton(onClick = {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
+                guestNotice()
+            }
+            return@IconButton
+        }
         viewModel.bookmarkTweet { updatedTweet ->
             tweetFeedViewModel.updateTweet(updatedTweet)
         }

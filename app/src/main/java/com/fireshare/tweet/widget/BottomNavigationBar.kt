@@ -16,11 +16,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
+import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.NavigationItem
+import com.fireshare.tweet.tweet.guestNotice
+import kotlinx.coroutines.launch
 
 @Composable
 fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) {
@@ -53,12 +58,20 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
         )
     )
     NavigationBar {
+        val scope = rememberCoroutineScope()
+
         items.forEachIndexed { index, item ->
             NavigationBarItem(
                 selected = index == selectedIndex,
                 label = { Text(text = item.title) },
                 onClick = {
                     selectedItemIndex = index
+                    if (appUser.mid == TW_CONST.GUEST_ID && index>0) {
+                        scope.launch {
+                            guestNotice()
+                        }
+                        return@NavigationBarItem
+                    }
                     navController.navigate(item.route) },
                 icon = {
                     BadgedBox(
