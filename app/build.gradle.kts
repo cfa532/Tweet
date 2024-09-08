@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -54,8 +55,8 @@ android {
 }
 
 dependencies {
+
     implementation(libs.androidx.hilt.common)
-    val work_version = "2.9.1"
     implementation(libs.androidx.work.runtime)
     implementation(libs.work.runtime.ktx)
 

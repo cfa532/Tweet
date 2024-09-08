@@ -25,9 +25,8 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.navigation.NavigationItem
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.UserAvatar
-import com.fireshare.tweet.navigation.UserProfile
 
 @Composable
 fun CommentItem(
@@ -43,14 +42,14 @@ fun CommentItem(
     // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
-            comment.mid?.let {navController.navigate(NavigationItem.TweetDetail(it))}
+            comment.mid?.let {navController.navigate(NavTweet.TweetDetail(it))}
         } )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
-            IconButton(onClick = { navController.navigate(UserProfile(comment.authorId)) })
+            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(comment.authorId)) })
             {
                 UserAvatar(author, 40)
             }

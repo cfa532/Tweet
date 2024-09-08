@@ -15,6 +15,7 @@ activityCompose = "1.9.2"
 composeBom = "2024.09.00"
 navigationRuntimeKtx = "2.8.0"
 navigationCompose = "2.8.0"
+navigationSafeArgsGradlePlugin = "2.8.0"
 okhttpBom = "4.12.0"
 hproseJava = "2.0.38"
 loggingInterceptor = "4.12.0"
@@ -24,7 +25,6 @@ media3Common = "1.4.1"
 coilCompose = "2.7.0"
 gson = "2.10.1"
 appcompat = "1.7.0"
-webkit = "1.11.0"
 workRuntime = "2.9.1"
 workRuntimeKtx = "2.9.1"
 hiltCommon = "1.2.0"
@@ -32,8 +32,8 @@ hiltCommon = "1.2.0"
 [libraries]
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx" }
+androidx-navigation-safe-args-gradle-plugin = { module = "androidx.navigation:navigation-safe-args-gradle-plugin", version.ref = "navigationSafeArgsGradlePlugin" }
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
-androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx" }
 assisted-inject-annotations-dagger2 = { module = "com.squareup.inject:assisted-inject-annotations-dagger2", version.ref = "assistedInjectAnnotationsDagger2" }
 assisted-inject-processor-dagger2 = { module = "com.squareup.inject:assisted-inject-processor-dagger2", version.ref = "assistedInjectProcessorDagger2" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
@@ -73,4 +73,3 @@ androidx-hilt-common = { group = "androidx.hilt", name = "hilt-common", version.
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinxSerializationJson"}

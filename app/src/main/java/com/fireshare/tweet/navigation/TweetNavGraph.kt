@@ -1,17 +1,13 @@
 package com.fireshare.tweet.navigation
 
-import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -19,9 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.TweetActivity
-import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.message.MessageScreen
 import com.fireshare.tweet.profile.EditProfileScreen
@@ -32,6 +25,7 @@ import com.fireshare.tweet.tweet.TweetDetailScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.MediaViewerScreen
 
 val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")
@@ -56,17 +50,17 @@ fun TweetNavGraph(
         NavHost(
             modifier = modifier,
             navController = navController,
-            startDestination = NavigationItem.TweetFeed,
+            startDestination = NavTweet.TweetFeed,
             route = NavRoot::class
         ) {
-            composable<NavigationItem.TweetFeed> {
+            composable<NavTweet.TweetFeed> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavRoot)
                 }
                 TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
             }
-            composable<NavigationItem.TweetDetail> { navBackStackEntry ->
-                val args = navBackStackEntry.toRoute<NavigationItem.TweetDetail>()
+            composable<NavTweet.TweetDetail> { navBackStackEntry ->
+                val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()
                 val parentEntry = remember(navBackStackEntry) {
                     navController.getBackStackEntry(NavRoot)
                 }
@@ -85,28 +79,35 @@ fun TweetNavGraph(
                     }
                 TweetDetailScreen(viewModel, parentEntry, 0)
             }
-            composable<NavigationItem.ComposeTweet> {
+            composable<NavTweet.ComposeTweet> {
                 ComposeTweetScreen(navController)
             }
             composable<ComposeComment> {
                 ComposeCommentScreen(navController)
             }
-            composable<UserProfile> {
+            composable<NavTweet.UserProfile> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavRoot)
                 }
-                val profile = it.toRoute<UserProfile>()
+                val profile = it.toRoute<NavTweet.UserProfile>()
                 UserProfileScreen(navController, profile.userId, parentEntry)
             }
             composable<ProfileEditor> {
                 EditProfileScreen(navController)
             }
-            composable<NavigationItem.MessageBox> {
+            composable<NavTweet.MessageBox> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavRoot)
                 }
                 MessageScreen(parentEntry, 1)
             }
+            composable<MediaViewer> {
+                val md = it.toRoute<MediaViewer>()
+                MediaViewerScreen(md.midList, md.index)
+            }
+            composable<NavTweet.Login> {  }
+
+            composable<NavTweet.Registration> {  }
         }
     }
 }

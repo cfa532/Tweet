@@ -1,4 +1,4 @@
-package com.fireshare.tweet.widget
+package com.fireshare.tweet.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.navigation.NavigationItem
 import com.fireshare.tweet.tweet.guestNotice
 import kotlinx.coroutines.launch
 
@@ -36,14 +35,14 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
     val items = listOf(
         BottomNavigationItem(
             title = "Home",
-            route = NavigationItem.TweetFeed,
+            route = NavTweet.TweetFeed,
             selectedIcon = Icons.Filled.Home,
             unselectedIcon = Icons.Outlined.Home,
             hasNews = false,
         ),
         BottomNavigationItem(
             title = "Chat",
-            route = NavigationItem.MessageBox(),
+            route = NavTweet.MessageBox(),
             selectedIcon = Icons.Filled.Email,
             unselectedIcon = Icons.Outlined.Email,
             hasNews = false,
@@ -51,7 +50,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
         ),
         BottomNavigationItem(
             title = "Post",
-            route = NavigationItem.ComposeTweet,
+            route = NavTweet.ComposeTweet,
             selectedIcon = Icons.Filled.Create,
             unselectedIcon = Icons.Outlined.Create,
             hasNews = true
@@ -98,7 +97,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
 
 data class BottomNavigationItem(
     val title: String,
-    val route: NavigationItem,
+    val route: NavTweet,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
     val hasNews: Boolean,

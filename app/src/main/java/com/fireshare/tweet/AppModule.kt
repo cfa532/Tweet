@@ -18,12 +18,6 @@ object AppModule {
         return TweetFeedViewModel()
     }
 
-    @Provides
-    @Singleton
-    fun provideSnackbarHostState(): SnackbarHostState {
-        return SnackbarHostState()
-    }
-
 //    @Provides
 //    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
 //        return TweetViewModel(tweet)

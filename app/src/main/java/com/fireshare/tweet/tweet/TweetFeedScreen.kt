@@ -18,15 +18,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -42,9 +39,8 @@ import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
-import com.fireshare.tweet.widget.BottomNavigationBar
-import com.fireshare.tweet.navigation.NavigationItem
-import com.fireshare.tweet.navigation.UserProfile
+import com.fireshare.tweet.navigation.BottomNavigationBar
+import com.fireshare.tweet.navigation.NavTweet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,14 +103,14 @@ fun MainTopAppBar(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable(onClick = { navController.navigate(NavigationItem.TweetFeed) })
+                        .clickable(onClick = { navController.navigate(NavTweet.TweetFeed) })
                 ) {
                     AppIcon()
                 }
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.navigate(UserProfile(appUser.mid!!)) })
+            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(appUser.mid!!)) })
             {
                 appUser.baseUrl?.let { getMediaUrl(appUser.avatar, it) }?.let {
                     Image(

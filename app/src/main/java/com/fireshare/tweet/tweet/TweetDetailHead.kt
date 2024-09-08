@@ -20,11 +20,11 @@ import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
-import com.fireshare.tweet.navigation.UserProfile
 
 @Composable
 fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
@@ -43,7 +43,7 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
             ) {
                 val author = tweet.author
                 val navController = LocalNavController.current
-                IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
+                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
                 {
                     UserAvatar(author, 40)
                 }

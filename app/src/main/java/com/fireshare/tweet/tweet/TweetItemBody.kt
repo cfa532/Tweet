@@ -26,9 +26,8 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.navigation.NavigationItem
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.UserAvatar
-import com.fireshare.tweet.navigation.UserProfile
 
 @Composable
 fun TweetBlock(
@@ -43,7 +42,7 @@ fun TweetBlock(
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
         modifier = Modifier.clickable( onClick = {
-            tweet.mid?.let { navController.navigate(NavigationItem.TweetDetail(it)) }
+            tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
         })
     ) {
         Column(
@@ -56,7 +55,7 @@ fun TweetBlock(
                 horizontalArrangement = Arrangement.Start
             ) {
                 val author = tweet.author
-                IconButton(onClick = { navController.navigate(UserProfile(tweet.authorId)) })
+                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
                 {
                     UserAvatar(author, 40)
                 }
