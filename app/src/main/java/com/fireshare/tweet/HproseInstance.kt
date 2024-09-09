@@ -113,6 +113,7 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         json = client.runMApp(entry, request) as String
         val user = gson.fromJson<User>(json, User::class.java)
+        user.baseUrl = BASE_URL
         return user
     }
 

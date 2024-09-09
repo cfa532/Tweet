@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
 ): ViewModel() {
-    private var _user = MutableStateFlow(User(mid = userId))
+    private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
 
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -100,7 +100,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             context.contentResolver.openInputStream(uri)?.let { stream ->
                 val mimeiId = HproseInstance.uploadToIPFS(stream)
-                user.value.avatar = mimeiId
+                appUser.avatar = mimeiId
                 if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
                     // update avatar for logon user right away
                     // otherwise wait for user to submit.
@@ -154,9 +154,9 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
                 && keyPhrase.value?.isNotEmpty() == true) {
-                val user = User(mid = TW_CONST.GUEST_ID,
+                val user = User(mid = TW_CONST.GUEST_ID, name = name.value,
                     username = username.value, password = password.value,
-                    profile = profile.value, avatar = user.value.avatar
+                    profile = profile.value, avatar = appUser.avatar
                 )
                 HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
                     appUser = it1
@@ -183,10 +183,10 @@ class UserViewModel @AssistedInject constructor(
         username.value = value.trim()
     }
     fun onNameChange(value: String) {
-        name.value = value.trim()
+        name.value = value
     }
     fun onProfileChange(value: String) {
-        profile.value = value.trim()
+        profile.value = value
     }
     fun onKeyPhraseChange(phrase: String) {
         keyPhrase.value = phrase

@@ -165,7 +165,7 @@ fun AvatarSection( viewModel: UserViewModel,
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(user, 200)
+            UserAvatar(appUser, 200)
         }
     }
 }
