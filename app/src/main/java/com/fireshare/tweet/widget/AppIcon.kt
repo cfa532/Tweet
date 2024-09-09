@@ -26,10 +26,10 @@ fun AppIcon() {
 }
 
 @Composable
-fun UserAvatar(author: User?, size: Int = 40) {
+fun UserAvatar(user: User?, size: Int = 40) {
     Image(
         painter = rememberAsyncImagePainter(
-            getMediaUrl(author?.avatar, author?.baseUrl)
+            getMediaUrl(user?.avatar, user?.baseUrl)
         ),
         contentDescription = "User Avatar",
         contentScale = ContentScale.Crop,

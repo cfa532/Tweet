@@ -4,12 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTweet
 
 @Composable
 fun LoginScreen() {
@@ -117,27 +120,27 @@ fun LoginScreen() {
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-//        if (TweetApplication.preferencesHelper.getKeyPhrase()?.isNotEmpty() == true) {
         // no valid key phrase on record, ask for it.
-        OutlinedTextField(
-            value = keyPhrase ?: "",
-            onValueChange = { viewModel.onKeyPhraseChange(it) },
-            label = { Text("Key phrase") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-//        }
+        if (keyPhrase?.isEmpty() == true) {
+            OutlinedTextField(
+                value = keyPhrase ?: "",
+                onValueChange = { viewModel.onKeyPhraseChange(it) },
+                label = { Text("Key phrase") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
             onClick = { viewModel.onLoginClick(navController) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading
         ) {
             if (isLoading) {
@@ -146,7 +149,7 @@ fun LoginScreen() {
                     modifier = Modifier.size(24.dp)
                 )
             } else {
-                Text("Login")
+                Text("     Login     ")
             }
         }
 
@@ -169,12 +172,7 @@ fun LoginScreen() {
         Text(
             text = annotatedText,
             modifier = Modifier.clickable {
-                // Handle the click event
-                val annotation = annotatedText.getStringAnnotations(tag = "REGISTER", start = 0, end = annotatedText.length)
-                    .firstOrNull()
-                annotation?.let {
-                    navController.navigate(it.item)
-                }
+                navController.navigate(NavTweet.Registration)
             }
         )
     }

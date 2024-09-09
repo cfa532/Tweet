@@ -56,9 +56,7 @@ data class Tweet(
 
 @Serializable
 data class User(
-    var phraseHint: String? = null,        // key phrase reminder to show user.
     var baseUrl: String? = null,        // most recent url used to access user data
-
     var mid: MimeiId,                   // Unique identifier for the user, and the mimei database
     var name: String? = null,
     var username: String? = null,

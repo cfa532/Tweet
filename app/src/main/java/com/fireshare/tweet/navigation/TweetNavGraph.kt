@@ -109,7 +109,9 @@ fun TweetNavGraph(
             composable<NavTweet.Login> {
                 LoginScreen()
             }
-            composable<NavTweet.Registration> {  }
+            composable<NavTweet.Registration> {
+                EditProfileScreen(navController)
+            }
         }
     }
 }

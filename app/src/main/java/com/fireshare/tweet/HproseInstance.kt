@@ -85,7 +85,8 @@ object HproseInstance {
         return Pair(preferencesHelper.getAppId().toString(), "http://$baseUrl")
     }
 
-    // only used for registered user, that has userId in preference
+    // only used for registered user, that has userId in preference.
+    // if preferenceHelper has current User'd ID, the user is in logon status.
     private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
         if (userId == null && keyPhrase.isEmpty()) return null
         val method = "init_user_mid"
@@ -102,17 +103,17 @@ object HproseInstance {
         return null
     }
 
-    fun login(user: User, keyPhrase: String): User? {
+    fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
         val entry = "login"
-        val userId = if (user.mid == TW_CONST.GUEST_ID) null else user.mid
-        val json = """
-            {"phrase": "$keyPhrase", "username": "${user.username}", "password": "${user.password}",
-            "aid": "$appId", "ver": "last"}
+        var json = """
+            {"phrase": "$keyPhrase", "username": "$username", "password": "$password", "aid": "$appId", "ver": "last"}
         """.trimIndent()
-        val request = gson.fromJson(json, object : TypeToken<Map<String, String?>>() {}.type) as Map<String, String?>
-        val result = client.runMApp(entry, request) as String?
-        return gson.fromJson(result, User::class.java)
+//        val request = gson.fromJson(json, object : TypeToken<Map<String, String?>>() {}.type) as Map<String, String?>
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        json = client.runMApp(entry, request) as String
+        val user = gson.fromJson<User>(json, User::class.java)
+        return user
     }
 
     // get the first user account, or a list of accounts.
@@ -164,22 +165,49 @@ object HproseInstance {
         return null
     }
 
-    fun setUserData(user: User) {
+    fun setUserData(user: User, phrase: String): User? {
         // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
         // that have value in incoming data.
-        val method = "set_author_core_data"
-        val tmp = User(mid = TW_CONST.GUEST_ID).copy(followingCount = appUser.followingCount,
-            phraseHint = appUser.phraseHint, mid = appUser.mid, name = appUser.name,
-            username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
-            timestamp = appUser.timestamp, fansCount = appUser.fansCount)
-        val url = "${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
-            Json.encodeToString(tmp)
-        }"
+        val url: String
+        if (phrase.isEmpty()) return null
+        if (user.mid == TW_CONST.GUEST_ID) {
+            // register a new User account
+            val method = "register"
+            url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&phrase=$phrase&user=${
+                Json.encodeToString(user)
+            }"
+        } else {
+            // update existing account
+            val method = "set_author_core_data"
+            val tmp = User(mid = appUser.mid, name = appUser.name,
+                followingCount = appUser.followingCount,
+                username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
+                timestamp = appUser.timestamp, fansCount = appUser.fansCount
+            )
+            url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
+                Json.encodeToString(tmp)
+            }"
+        }
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            Log.d("HproseInstance.setUserData", "Set user data error")
+        if (response.isSuccessful) {
+            val json = response.body?.string()
+            val gson = Gson()
+            val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
+            return ret
         }
+        Log.d("HproseInstance.setUserData", "Set user data error")
+        return null
+    }
+
+    fun setUserAvatar(userId: MimeiId, avatar: MimeiId) {
+        val entry = "set_user_avatar"
+        val json = """
+            {"aid": $appId, "ver": "last", "userid": $userId, "avatar": $avatar}
+        """.trimIndent()
+        val gson = Gson()
+        val request = gson.fromJson(json, Map::class.java)
+        client.runMApp(entry, request)
     }
 
     // get Ids of users who the current user is following
@@ -581,7 +609,7 @@ interface ScorePair {
 }
 
 interface HproseService {
-    fun runMApp(entry: String, request: Map<String, String?>, args: List<Any>? = null): Any?
+    fun runMApp(entry: String, request: Map<*, *>, args: List<ByteArray?> = emptyList()): Any?
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String

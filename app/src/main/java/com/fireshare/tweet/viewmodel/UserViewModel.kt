@@ -1,5 +1,7 @@
 package com.fireshare.tweet.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -13,6 +15,8 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.service.SnackbarEvent
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -24,10 +28,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
-    @Assisted private val userId: MimeiId
+    @Assisted private val userId: MimeiId,
 ): ViewModel() {
     private var _user = MutableStateFlow(User(mid = userId))
     val user: StateFlow<User> get() = _user.asStateFlow()
@@ -46,9 +51,11 @@ class UserViewModel @AssistedInject constructor(
         mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
 
     // variable for login management
-    val preferencesHelper = TweetApplication.preferencesHelper
-    var username = mutableStateOf(preferencesHelper.getUsername())
+    private val preferencesHelper = TweetApplication.preferencesHelper
+    var username = mutableStateOf(user.value.username)
     var password = mutableStateOf("")
+    var name = mutableStateOf(user.value.name)
+    var profile = mutableStateOf(user.value.profile)
     var keyPhrase = mutableStateOf(preferencesHelper.getKeyPhrase())
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
@@ -88,6 +95,22 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
+        isLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.let { stream ->
+                val mimeiId = HproseInstance.uploadToIPFS(stream)
+                user.value.avatar = mimeiId
+                if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
+                    // update avatar for logon user right away
+                    // otherwise wait for user to submit.
+                    HproseInstance.setUserAvatar(userId, mimeiId)
+                }
+                isLoading.value = false
+            }
+        }
+    }
+
     fun getFollows(user: User) {
         viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.getFollowings(user)
@@ -108,30 +131,70 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun onUsernameChange(value: String) {
-        username.value = value
-    }
-
-    fun onKeyPhraseChange(phrase: String) {
-        keyPhrase.value = phrase
-    }
-
-    fun onPasswordChange(pwd: String) {
-        password.value = pwd
-    }
-
-    fun onPasswordVisibilityChange() {
-        isPasswordVisible.value = ! isPasswordVisible.value
+    private fun showSnackbar(event: SnackbarEvent) {
+        viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
     fun onLoginClick(navController: NavController) {
         isLoading.value = true
-        val user = keyPhrase.value?.let { HproseInstance.login(user.value, it) }
-        if (user == null)
-            loginError.value = "Login failed"
-        else {
-            appUser = user
-            navController.popBackStack()
+        if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
+            && keyPhrase.value?.isNotEmpty() == true) {
+            val user =
+                HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
+            isLoading.value = false
+            if (user == null) {
+                loginError.value = "Login failed"
+            } else {
+                appUser = user
+                navController.popBackStack()
+            }
         }
+    }
+    fun register() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
+                && keyPhrase.value?.isNotEmpty() == true) {
+                val user = User(mid = TW_CONST.GUEST_ID,
+                    username = username.value, password = password.value,
+                    profile = profile.value, avatar = user.value.avatar
+                )
+                HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
+                    appUser = it1
+                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
+                }
+            } else {
+                isLoading.value = false
+                var message: String = ""
+                if (username.value?.isEmpty() == true) {
+                    message = "Username is required to register and login."
+                } else if (password.value.isEmpty())  {
+                    message = "Password is required to register and login."
+                } else if (keyPhrase.value?.isEmpty() == true) {
+                    message = "Key phrase is required to register and login."
+                }
+                val event = SnackbarEvent(
+                    message = message
+                )
+                showSnackbar(event)
+            }
+        }
+    }
+    fun onUsernameChange(value: String) {
+        username.value = value.trim()
+    }
+    fun onNameChange(value: String) {
+        name.value = value.trim()
+    }
+    fun onProfileChange(value: String) {
+        profile.value = value.trim()
+    }
+    fun onKeyPhraseChange(phrase: String) {
+        keyPhrase.value = phrase
+    }
+    fun onPasswordChange(pwd: String) {
+        password.value = pwd.trim()
+    }
+    fun onPasswordVisibilityChange() {
+        isPasswordVisible.value = ! isPasswordVisible.value
     }
 }
