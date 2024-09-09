@@ -46,7 +46,6 @@ import com.fireshare.tweet.datamodel.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun EditProfileScreen(
@@ -201,7 +200,6 @@ fun SaveButton(
                 it.name = name
                 it.profile = profile
                 it.baseUrl = "http://$baseUrl"
-                it.keyPhrase = keyPhrase
                 coroutineScope.launch(Dispatchers.Default) {
                     HproseInstance.setUserData(it)
                 }

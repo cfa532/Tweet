@@ -18,6 +18,7 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.message.MessageScreen
 import com.fireshare.tweet.profile.EditProfileScreen
+import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
 import com.fireshare.tweet.tweet.ComposeTweetScreen
@@ -105,8 +106,9 @@ fun TweetNavGraph(
                 val md = it.toRoute<MediaViewer>()
                 MediaViewerScreen(md.midList, md.index)
             }
-            composable<NavTweet.Login> {  }
-
+            composable<NavTweet.Login> {
+                LoginScreen()
+            }
             composable<NavTweet.Registration> {  }
         }
     }

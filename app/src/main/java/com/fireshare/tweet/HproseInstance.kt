@@ -60,7 +60,7 @@ object HproseInstance {
         val request = Request.Builder().url("http://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
-            // retrieve window.Param from source code of http://base_url
+            // retrieve window.Param from page source code of http://base_url
             val htmlContent = response.body?.string()?.trimIndent()
             val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
             val matcher = pattern.matcher(htmlContent as CharSequence)
@@ -87,6 +87,7 @@ object HproseInstance {
 
     // only used for registered user, that has userId in preference
     private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
+        if (userId == null && keyPhrase.isEmpty()) return null
         val method = "init_user_mid"
         val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
         val request = Request.Builder().url(url).build()
@@ -99,6 +100,19 @@ object HproseInstance {
             return user
         }
         return null
+    }
+
+    fun login(user: User, keyPhrase: String): User? {
+        val gson = Gson()
+        val entry = "login"
+        val userId = if (user.mid == TW_CONST.GUEST_ID) null else user.mid
+        val json = """
+            {"phrase": "$keyPhrase", "username": "${user.username}", "password": "${user.password}",
+            "aid": "$appId", "ver": "last"}
+        """.trimIndent()
+        val request = gson.fromJson(json, object : TypeToken<Map<String, String?>>() {}.type) as Map<String, String?>
+        val result = client.runMApp(entry, request) as String?
+        return gson.fromJson(result, User::class.java)
     }
 
     // get the first user account, or a list of accounts.
@@ -154,11 +168,10 @@ object HproseInstance {
         // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
         // that have value in incoming data.
         val method = "set_author_core_data"
-        val tmp = User(mid = TW_CONST.GUEST_ID).copy(keyPhrase = appUser.keyPhrase,
-            keyHint = appUser.keyHint, mid = appUser.mid, name = appUser.name,
+        val tmp = User(mid = TW_CONST.GUEST_ID).copy(followingCount = appUser.followingCount,
+            phraseHint = appUser.phraseHint, mid = appUser.mid, name = appUser.name,
             username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
-            timestamp = appUser.timestamp, fansCount = appUser.fansCount,
-            followingCount = appUser.followingCount)
+            timestamp = appUser.timestamp, fansCount = appUser.fansCount)
         val url = "${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
             Json.encodeToString(tmp)
         }"
@@ -568,7 +581,7 @@ interface ScorePair {
 }
 
 interface HproseService {
-    fun runMApp(entry: String, request: Map<String, String>, args: List<Any>?): Any
+    fun runMApp(entry: String, request: Map<String, String?>, args: List<Any>? = null): Any?
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String

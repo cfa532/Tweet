@@ -67,7 +67,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
                     selectedItemIndex = index
                     if (appUser.mid == TW_CONST.GUEST_ID && index>0) {
                         scope.launch {
-                            guestNotice()
+                            guestNotice(navController)
                         }
                         return@NavigationBarItem
                     }

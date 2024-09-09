@@ -56,6 +56,7 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.hilt.common)
     implementation(libs.androidx.work.runtime)
     implementation(libs.work.runtime.ktx)
@@ -63,6 +64,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.assisted.inject.annotations.dagger2)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.espresso.core)
+    implementation(libs.androidx.constraintlayout.compose)
     kapt(libs.assisted.inject.processor.dagger2)
     implementation(libs.gson)
     api(libs.androidx.navigation.fragment.ktx)

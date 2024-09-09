@@ -35,6 +35,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.navigation.ProfileEditor
@@ -88,6 +89,7 @@ fun UserProfileScreen(
                     onClick = {
                         when (userViewModel.followButtonText) {
                             "Edit" -> navController.navigate(ProfileEditor)
+                            "Login" -> navController.navigate(NavTweet.Login)
                             else -> userViewModel.toggleFollow(userId)
                         }
                     },

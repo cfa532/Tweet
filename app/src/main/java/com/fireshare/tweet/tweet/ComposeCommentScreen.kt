@@ -67,7 +67,6 @@ fun ComposeCommentScreen(
     var isChecked by remember { mutableStateOf(false) }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
-    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
 
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)

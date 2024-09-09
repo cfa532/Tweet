@@ -1,14 +1,18 @@
 package com.fireshare.tweet.viewmodel
 
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.navigation.LocalNavController
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -17,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -40,9 +45,18 @@ class UserViewModel @AssistedInject constructor(
     private var endTimestamp =
         mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
 
+    // variable for login management
+    val preferencesHelper = TweetApplication.preferencesHelper
+    var username = mutableStateOf(preferencesHelper.getUsername())
+    var password = mutableStateOf("")
+    var keyPhrase = mutableStateOf(preferencesHelper.getKeyPhrase())
+    var isPasswordVisible = mutableStateOf(false)
+    var isLoading = mutableStateOf(false)
+    var loginError = mutableStateOf("")
+
     val followButtonText: String =
-        when(userId) {
-            appUser.mid -> "Edit"
+        when(appUser.mid) {
+            userId -> { if (appUser.mid != TW_CONST.GUEST_ID) "Edit" else "Login" }
             else -> {
                 if (appUser.followingList.contains(userId))
                     "Unfollow"
@@ -91,6 +105,33 @@ class UserViewModel @AssistedInject constructor(
             val tweetsList = _tweets.value.toMutableList()
             HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList }
+        }
+    }
+
+    fun onUsernameChange(value: String) {
+        username.value = value
+    }
+
+    fun onKeyPhraseChange(phrase: String) {
+        keyPhrase.value = phrase
+    }
+
+    fun onPasswordChange(pwd: String) {
+        password.value = pwd
+    }
+
+    fun onPasswordVisibilityChange() {
+        isPasswordVisible.value = ! isPasswordVisible.value
+    }
+
+    fun onLoginClick(navController: NavController) {
+        isLoading.value = true
+        val user = keyPhrase.value?.let { HproseInstance.login(user.value, it) }
+        if (user == null)
+            loginError.value = "Login failed"
+        else {
+            appUser = user
+            navController.popBackStack()
         }
     }
 }
