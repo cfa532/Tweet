@@ -65,7 +65,7 @@ class UserViewModel @AssistedInject constructor(
         when(appUser.mid) {
             userId -> { if (appUser.mid != TW_CONST.GUEST_ID) "Edit" else "Login" }
             else -> {
-                if (appUser.followingList.contains(userId))
+                if (appUser.followingList.contains(userId) && appUser.mid != TW_CONST.GUEST_ID)
                     "Unfollow"
                 else "Follow"
             }
@@ -131,7 +131,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    private fun showSnackbar(event: SnackbarEvent) {
+    fun showSnackbar(event: SnackbarEvent) {
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 

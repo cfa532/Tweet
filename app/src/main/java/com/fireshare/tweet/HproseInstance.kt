@@ -39,7 +39,7 @@ object HproseInstance {
         appId = pair.first
         BASE_URL = pair.second
 
-        var userId = preferencesHelper.getUserId()
+        val userId = preferencesHelper.getUserId()
 //        userId = getAlphaIds()[0]     // TEMP: for testing
 
         if (userId != TW_CONST.GUEST_ID) {

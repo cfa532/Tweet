@@ -29,16 +29,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.navigation.ProfileEditor
+import com.fireshare.tweet.service.SnackbarAction
+import com.fireshare.tweet.service.SnackbarEvent
 
 @Composable
 fun UserProfileScreen(
@@ -90,7 +94,20 @@ fun UserProfileScreen(
                         when (userViewModel.followButtonText) {
                             "Edit" -> navController.navigate(ProfileEditor)
                             "Login" -> navController.navigate(NavTweet.Login)
-                            else -> userViewModel.toggleFollow(userId)
+                            else -> {
+                                if (appUser.mid != TW_CONST.GUEST_ID)
+                                    userViewModel.toggleFollow(userId)
+                                else {
+                                    val event = SnackbarEvent(
+                                        message = "Login to follow.",
+                                        action = SnackbarAction(
+                                            name = "Go!",
+                                            action = { navController.navigate(NavTweet.Login) }
+                                        )
+                                    )
+                                    userViewModel.showSnackbar(event)
+                                }
+                            }
                         }
                     },
                     modifier = Modifier.width(IntrinsicSize.Min)
