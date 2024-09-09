@@ -107,9 +107,9 @@ object HproseInstance {
         val gson = Gson()
         val entry = "login"
         var json = """
-            {"phrase": "$keyPhrase", "username": "$username", "password": "$password", "aid": "$appId", "ver": "last"}
+            {"phrase": "$keyPhrase", "username": "$username", "password": "$password", 
+            "aid": "$appId", "ver": "last"}
         """.trimIndent()
-//        val request = gson.fromJson(json, object : TypeToken<Map<String, String?>>() {}.type) as Map<String, String?>
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         json = client.runMApp(entry, request) as String
         val user = gson.fromJson<User>(json, User::class.java)
