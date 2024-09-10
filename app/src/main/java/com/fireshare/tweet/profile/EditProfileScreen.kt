@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -22,15 +24,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,19 +36,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.TweetApplication
-import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.service.SnackbarAction
-import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import org.hamcrest.Description
 
 @Composable
 fun EditProfileScreen(
@@ -84,8 +72,14 @@ fun EditProfileScreen(
             .fillMaxWidth()
             .padding(16.dp)
     ) {
-        ProfileTopAppBar(navController)
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        IconButton(onClick = { navController.popBackStack()})
+        {
+            Icon(
+                imageVector = Icons.Default.Clear,
+                contentDescription = "Cancel"
+            )
+        }
         AvatarSection(viewModel, launcher)
         Spacer(modifier = Modifier.height(16.dp))
         Column {
