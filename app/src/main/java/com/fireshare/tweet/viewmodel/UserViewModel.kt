@@ -155,10 +155,13 @@ class UserViewModel @AssistedInject constructor(
         }
         return false
     }
+
     fun logout(navController: NavController) {
         appUser = User(mid = TW_CONST.GUEST_ID)
         navController.navigate(NavTweet.TweetFeed)
     }
+
+    // handle both register and update of user profile
     fun register() {
         viewModelScope.launch(Dispatchers.IO) {
             if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
@@ -169,8 +172,7 @@ class UserViewModel @AssistedInject constructor(
                 )
                 HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
                     appUser = it1
-                    // Do NOT save phrase until user has successfully logon.
-//                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
+                    // Do NOT save phrase or userId until user has successfully logon.
                 }
             } else {
                 isLoading.value = false
