@@ -15,6 +15,7 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import dagger.assisted.Assisted
@@ -136,7 +137,8 @@ class UserViewModel @AssistedInject constructor(
 
     fun onLoginClick(): Boolean {
         isLoading.value = true
-        if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
+        if (username.value?.isNotEmpty() == true
+            && password.value.isNotEmpty()
             && keyPhrase.value?.isNotEmpty() == true) {
             val user =
                 HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
@@ -145,11 +147,17 @@ class UserViewModel @AssistedInject constructor(
                 loginError.value = "Login failed"
                 return false
             } else {
+                preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
+                preferencesHelper.setUserId(user.mid)
                 appUser = user
                 return true
             }
         }
         return false
+    }
+    fun logout(navController: NavController) {
+        appUser = User(mid = TW_CONST.GUEST_ID)
+        navController.navigate(NavTweet.TweetFeed)
     }
     fun register() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -161,7 +169,8 @@ class UserViewModel @AssistedInject constructor(
                 )
                 HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
                     appUser = it1
-                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
+                    // Do NOT save phrase until user has successfully logon.
+//                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
                 }
             } else {
                 isLoading.value = false
