@@ -43,6 +43,7 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun UserProfileScreen(
@@ -76,18 +77,7 @@ fun UserProfileScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom,
         ) {
-            Image(
-                painter = rememberAsyncImagePainter(user.baseUrl?.let {
-                    HproseInstance.getMediaUrl(
-                        user.avatar, it
-                    )
-                }),
-                contentDescription = "User Avatar",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape)
-            )
+            UserAvatar(user, 100)
             Row(modifier = Modifier.padding(bottom = 4.dp)) {
                 Button(
                     onClick = {

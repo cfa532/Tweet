@@ -118,7 +118,7 @@ object HproseInstance {
     }
 
     // get the first user account, or a list of accounts.
-    private fun getAlphaIds(): List<MimeiId> {
+    fun getAlphaIds(): List<MimeiId> {
         return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
     }
 
@@ -214,9 +214,7 @@ object HproseInstance {
     // get Ids of users who the current user is following
     fun getFollowings( user: User ) =
         try {
-            if (user.mid == TW_CONST.GUEST_ID)
-                user.followingList = getAlphaIds()
-            else {
+            if (user.mid != TW_CONST.GUEST_ID) {
                 val method = "get_followings"
                 val url =
                     "${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${user.mid}"
@@ -226,13 +224,12 @@ object HproseInstance {
                     val json = response.body?.string()
                     val gson = Gson()
                     user.followingList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
-                } else {
-                    user.followingList = getAlphaIds()
                 }
             }
+            user.followingList
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
-            user.followingList = getAlphaIds()   // get default following for testing
+            getAlphaIds()   // get default following for testing
         }
 
     // get fans list of the user
@@ -250,9 +247,10 @@ object HproseInstance {
                     user.fansList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
                 }
             }
-            null
+            user.fansList
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
+            emptyList<MimeiId>()
         }
 
     // get tweets of a given author in a given span of time

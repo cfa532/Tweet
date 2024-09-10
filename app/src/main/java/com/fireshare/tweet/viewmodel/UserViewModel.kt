@@ -56,7 +56,8 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    var keyPhrase = mutableStateOf(preferencesHelper.getKeyPhrase())
+    val preferencePhrase = preferencesHelper.getKeyPhrase()
+    var keyPhrase = mutableStateOf(preferencePhrase)
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
@@ -113,10 +114,8 @@ class UserViewModel @AssistedInject constructor(
 
     fun getFollows(user: User) {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.getFollowings(user)
-            HproseInstance.getFans(user)
-            _fans.value = user.fansList
-            _followings.value = user.followingList
+            _fans.value = HproseInstance.getFans(user)
+            _followings.value = HproseInstance.getFollowings(user)
         }
     }
     private fun getTweets(
@@ -135,7 +134,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    fun onLoginClick(navController: NavController) {
+    fun onLoginClick(): Boolean {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
             && keyPhrase.value?.isNotEmpty() == true) {
@@ -144,11 +143,13 @@ class UserViewModel @AssistedInject constructor(
             isLoading.value = false
             if (user == null) {
                 loginError.value = "Login failed"
+                return false
             } else {
                 appUser = user
-                navController.popBackStack()
+                return true
             }
         }
+        return false
     }
     fun register() {
         viewModelScope.launch(Dispatchers.IO) {

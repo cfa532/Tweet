@@ -41,6 +41,7 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,22 +111,9 @@ fun MainTopAppBar(
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(appUser.mid!!)) })
+            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(appUser.mid)) })
             {
-                appUser.baseUrl?.let { getMediaUrl(appUser.avatar, it) }?.let {
-                    Image(
-                        painter = rememberAsyncImagePainter(appUser.baseUrl?.let {
-                            getMediaUrl(
-                                appUser.avatar, it
-                            )
-                        }),
-                        contentDescription = "User Avatar",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                    )
-                }
+                UserAvatar(appUser)
             }
         },
         actions = {

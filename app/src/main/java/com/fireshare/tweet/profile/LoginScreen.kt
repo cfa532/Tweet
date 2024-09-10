@@ -53,7 +53,7 @@ import com.fireshare.tweet.navigation.NavTweet
 @Composable
 fun LoginScreen() {
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = TW_CONST.GUEST_ID) {
-            factory -> factory.create(appUser.mid)
+            factory -> factory.create(TW_CONST.GUEST_ID)
     }
     val navController = LocalNavController.current
     val focusManager = LocalFocusManager.current
@@ -121,7 +121,7 @@ fun LoginScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         // no valid key phrase on record, ask for it.
-        if (keyPhrase?.isEmpty() == true) {
+//        if (viewModel.preferencePhrase?.isNotEmpty() == true) {
             OutlinedTextField(
                 value = keyPhrase ?: "",
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
@@ -135,11 +135,13 @@ fun LoginScreen() {
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-        }
+//        }
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
-            onClick = { viewModel.onLoginClick(navController) },
+            onClick = {
+                if (viewModel.onLoginClick())
+                    navController.popBackStack() },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading
         ) {
