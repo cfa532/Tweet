@@ -94,12 +94,12 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                                viewModel.uploadTweet(
-                                    localContext,
-                                    tweetContent,
-                                    selectedAttachments
-                                )
-                                navController.popBackStack()
+                            viewModel.uploadTweet(
+                                localContext,
+                                tweetContent,
+                                selectedAttachments
+                            )
+                            navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
                             .width(intrinsicSize = IntrinsicSize.Min) // Adjust width to fit content

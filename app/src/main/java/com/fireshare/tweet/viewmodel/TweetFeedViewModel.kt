@@ -2,25 +2,36 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.service.UploadTweetWorker
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,13 +46,15 @@ class TweetFeedViewModel @Inject constructor(
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
     init {
-        _followings.value = HproseInstance.getFollowings(appUser)
-        _followings.update { newList -> newList + appUser.mid }     // always follow oneself and default ones
-        val list = HproseInstance.getAlphaIds().filter { !followings.value.contains(it) }
-        _followings.update { newList -> newList + list }
+        viewModelScope.launch(Dispatchers.IO) {
+            _followings.value = HproseInstance.getFollowings(appUser)
+            _followings.update { newList -> newList + appUser.mid }     // always follow oneself and default ones
+            val list = HproseInstance.getAlphaIds().filter { !followings.value.contains(it) }
+            _followings.update { newList -> newList + list }
 
 //        getTweets(startTimestamp.longValue, endTimestamp.longValue)
-        getTweets(startTimestamp.longValue)
+            getTweets(startTimestamp.longValue)
+        }
     }
 
     // given a tweet, update its counterpart in Tweet list
@@ -96,9 +109,41 @@ class TweetFeedViewModel @Inject constructor(
             .setInputData(data)
             .build()
 
-        WorkManager.getInstance(context).enqueue(uploadRequest)
+        val workManager = WorkManager.getInstance(context)
+        workManager.enqueue(uploadRequest)
 
-        // Update UI (optional)
-        // You can show a progress indicator while the upload is happening
+        // Observe the work status
+        workManager.getWorkInfoByIdLiveData(uploadRequest.id)
+            .observe(context as LifecycleOwner) { workInfo ->
+                if (workInfo != null) {
+                    when (workInfo.state) {
+                        WorkInfo.State.SUCCEEDED -> {
+                            val outputData = workInfo.outputData
+                            val json = outputData.getString("tweet")
+                            Log.d("UploadTweet", "Tweet uploaded successfully: $json")
+                            // Handle the success and update UI
+                            val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
+                            if (tweet != null) {
+                                tweet.author = appUser
+                                addTweet(tweet)
+                            }
+                        }
+
+                        WorkInfo.State.FAILED -> {
+                            // Handle the failure and update UI
+                            Log.e("UploadTweet", "Tweet upload failed")
+                        }
+
+                        WorkInfo.State.RUNNING -> {
+                            // Optionally, show a progress indicator
+                            Log.d("UploadTweet", "Tweet upload in progress")
+                        }
+
+                        else -> {
+                            // Handle other states if necessary
+                        }
+                    }
+                }
+            }
     }
 }

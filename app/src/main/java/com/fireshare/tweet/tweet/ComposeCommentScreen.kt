@@ -44,16 +44,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.SharedTweetViewModel
-import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.widget.Gadget.uploadAttachments
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.service.SnackbarAction
+import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -64,14 +62,14 @@ fun ComposeCommentScreen(
     navController: NavHostController,
 ) {
     var tweetContent by remember { mutableStateOf("") }
-    var isChecked by remember { mutableStateOf(false) }
+    var isCheckedToTweet by remember { mutableStateOf(false) }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
 
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
-    val viewModel = sharedViewModel?.sharedTVMInstance
-    val tweet by viewModel?.tweetState?.collectAsState() ?: return
+    val viewModel = sharedViewModel?.sharedTVMInstance ?: return
+    val tweet by viewModel.tweetState.collectAsState() ?: return
     val author = tweet.author
 
     // Create a launcher for the file picker
@@ -97,8 +95,17 @@ fun ComposeCommentScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // show warning snack bar
-                        navController.popBackStack()
+                        if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                            val event = SnackbarEvent(
+                                message = "Are you sure to quit?",
+                                action = SnackbarAction(name = "Quit",
+                                    action = { navController.popBackStack() })
+                            )
+                            viewModel.viewModelScope.launch {
+                                SnackbarController.sendEvent(event)
+                            }
+                        } else
+                            navController.popBackStack()
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -107,31 +114,18 @@ fun ComposeCommentScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            viewModel?.viewModelScope?.launch {
-                                val attachments =
-                                    uploadAttachments(localContext, selectedAttachments)
-                                val comment = Tweet(
-                                     authorId = appUser.mid,
-                                    content = tweetContent,
-                                    attachments = attachments
-                                )
-                                viewModel.uploadComment( comment ) { updatedTweet ->
-//                                    tweetFeedViewModel.updateTweet(updatedTweet)
-                                }
-                                if (isChecked) {
-                                    comment.originalTweetId = tweet.mid
-                                    comment.originalAuthorId = tweet.authorId
-//                                    tweetFeedViewModel.uploadTweet(comment)
-                                }
-
-                                // clear and return to previous screen
-                                selectedAttachments.clear()
-                                tweetContent = ""
-                                navController.popBackStack()
-                            }
+                    IconButton( onClick = {
+                        viewModel.uploadComment(localContext, tweetContent, isCheckedToTweet, selectedAttachments )
+                        if (isCheckedToTweet) {
+//                            comment.originalTweetId = tweet.mid
+//                            comment.originalAuthorId = tweet.authorId
+//                            tweetFeedViewModel.uploadTweet(comment)
                         }
+
+                        // clear and return to previous screen
+                        selectedAttachments.clear()
+                        tweetContent = ""
+                        navController.popBackStack()}
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
@@ -169,8 +163,8 @@ fun ComposeCommentScreen(
                             .padding(end = 8.dp)
                     ) {
                         Checkbox(
-                            checked = isChecked,
-                            onCheckedChange = { isChecked = it },
+                            checked = isCheckedToTweet,
+                            onCheckedChange = { isCheckedToTweet = it },
                             modifier = Modifier
                                 .size(18.dp)
                                 .alpha(0.8f)

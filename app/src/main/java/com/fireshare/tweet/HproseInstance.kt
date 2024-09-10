@@ -39,8 +39,8 @@ object HproseInstance {
         appId = pair.first
         BASE_URL = pair.second
 
-        val userId = preferencesHelper.getUserId()
-//        userId = getAlphaIds()[0]     // TEMP: for testing
+        var userId = preferencesHelper.getUserId()
+        userId = getAlphaIds()[0]     // TEMP: for testing
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
@@ -278,14 +278,13 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    private suspend fun getTweet(
+    suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
-        tweets: MutableList<Tweet>
+        tweets: List<Tweet>
     ): Tweet? {
         // if the tweet is fetched already, return null
         tweets.find { it.mid == tweetId }?.let { return null }
-
         val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
         val method = "get_tweet"
         val url =
@@ -403,14 +402,12 @@ object HproseInstance {
                 }
             }
         } else {
-            var retweet = appUser.mid?.let {
-                Tweet(
-                    content = "",
-                    authorId = it,
-                    originalTweetId = tweet.mid,
-                    originalAuthorId = tweet.authorId
-                )
-            } ?: return
+            var retweet = Tweet(
+                content = "",
+                authorId = appUser.mid,
+                originalTweetId = tweet.mid,
+                originalAuthorId = tweet.authorId
+            )
             retweet = uploadTweet(retweet) ?: return
             url.append("&retweetid=${retweet.mid}")
 

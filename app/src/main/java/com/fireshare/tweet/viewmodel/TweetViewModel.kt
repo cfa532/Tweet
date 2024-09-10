@@ -1,9 +1,16 @@
 package com.fireshare.tweet.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.service.UploadCommentWorker
+import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -14,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -31,7 +40,7 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _comments.value = HproseInstance.getComments(tweet).map {
                 it.author = HproseInstance.getUserBase(it.authorId)
                 it
@@ -44,53 +53,30 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     // add new Comment object to its parent Tweet
-    fun uploadComment(comment: Tweet, updateTweetFeed: (Tweet) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // comment is changed within uploadComment()
-                val updatedTweet = HproseInstance.uploadComment(tweetState.value, comment)
-                updateTweet(updatedTweet)
-//                updateTweetFeed(updatedTweet)
-                addComment(comment)
-            } catch (e: Exception) {
-                println(e.message)
-            }
-        }
-    }
-
-    private fun addComment(comment: Tweet) {
-        _comments.update { newComments ->
-            listOf(comment) + newComments
-        }
+    fun uploadComment( context: Context, content: String, isChecked: Boolean, attachments: List<Uri>? = null ) {
+        val data = workDataOf(
+            "tweet" to Json.encodeToString(tweetState.value),
+            "isChecked" to isChecked,
+            "tweetContent" to content,
+            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
+        )
+        val uploadRequest = OneTimeWorkRequest.Builder(UploadCommentWorker::class.java)
+            .setInputData(data)
+            .build()
+        WorkManager.getInstance(context).enqueue(uploadRequest)
     }
 
     fun likeTweet(updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val updatedTweet = HproseInstance.likeTweet(tweetState.value)
-                updateTweet(updatedTweet)
-//                updateTweetFeed(updatedTweet)
-            } catch (e: Exception) {
-                // Handle the like error (e.g., show a toast)
-                println(e.message)
-            }
+            HproseInstance.likeTweet(tweetState.value)
+            _tweetState.value = tweet
         }
     }
 
     fun bookmarkTweet(updateTweetFeed: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val updatedTweet = HproseInstance.bookmarkTweet(tweetState.value)
-                updateTweet(updatedTweet)
-//                updateTweetFeed(updatedTweet)
-            } catch (e: Exception) {
-                // Handle the bookmark error (e.g., show a toast)
-                println(e.message)
-            }
+            HproseInstance.bookmarkTweet(tweetState.value)
+            _tweetState.value = tweet
         }
     }
 }
-
-//    private val viewModelStoreOwner = requireNotNull(
-//        LocalViewModelStoreOwner.current as? HasDefaultViewModelProviderFactory
-//    )
