@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,7 +31,6 @@ import kotlinx.serialization.json.Json
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
-//    @ApplicationContext private val context: Context
 ) : ViewModel()
 {
     @AssistedFactory
@@ -87,19 +87,28 @@ class TweetViewModel @AssistedInject constructor(
 //                            Log.d("UploadComment", "Tweet uploaded successfully: $json")
                             // Handle the success and update UI
                             val map = Json.decodeFromString<Map<String, String?>>(json)
+
+                            // the comment also posted as tweet.
                             val retweet = if (isCheckedToTweet.value) {
                                 map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
                             } else null
 
                             Log.d("UploadComment", "ReTweet: $retweet")
                             val comment = Json.decodeFromString<Tweet>(map["comment"]!!)
+
                             Log.d("UploadComment", "Comment: $comment")
-//                            comment.author = appUser
                             _comments.update { list -> listOf(comment) + list }
 
+                            // parent tweet with the new comment.
                             val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
                             Log.d("UploadComment", "Updated tweet: $newTweet")
                             _tweetState.value = newTweet
+
+                            if (retweet != null) {
+                                retweet.originalTweet = comment
+                                retweet.originalAuthor = comment.author
+                                HproseInstance.tweetFeedViewModel.addTweet(retweet)
+                            }
                         }
 
                         WorkInfo.State.FAILED -> {

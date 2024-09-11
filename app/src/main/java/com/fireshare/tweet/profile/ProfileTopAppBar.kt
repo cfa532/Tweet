@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -65,23 +67,31 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
             }
         },
         actions = {
-            Box {
-                IconButton(onClick = { expanded = !expanded }) {
+            if (appUser.mid != TW_CONST.GUEST_ID) {
+                IconButton(onClick = {}) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More"
+                        imageVector = Icons.Default.MailOutline,
+                        contentDescription = "Message"
                     )
                 }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier
-                        .wrapContentWidth(align = Alignment.End)
-                        .height(IntrinsicSize.Min)
-                ) {
-                    DropdownMenuItem(onClick = {viewModel.logout(navController)},
-                        text = { Text("Logout") }
-                    )
+                Box {
+                    IconButton(onClick = { expanded = !expanded }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier
+                            .wrapContentWidth(align = Alignment.End)
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        DropdownMenuItem(onClick = { viewModel.logout(navController) },
+                            text = { Text("Logout") }
+                        )
+                    }
                 }
             }
         },
