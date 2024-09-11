@@ -63,7 +63,7 @@ class PreferencesHelper(context: Context) {
         if (uid == null) uid = TW_CONST.GUEST_ID
         return uid
     }
-    fun setUserId(id: String) {
+    fun setUserId(id: String?) {
         sharedPreferences.edit().putString("userId", id).apply()
     }
 }

@@ -40,7 +40,7 @@ object HproseInstance {
         BASE_URL = pair.second
 
         var userId = preferencesHelper.getUserId()
-        userId = getAlphaIds()[0]     // TEMP: for testing
+//        userId = getAlphaIds()[0]     // TEMP: for testing
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
@@ -106,17 +106,18 @@ object HproseInstance {
     fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
         val entry = "login"
-        var json = """
+        val json = """
             {"phrase": "$keyPhrase", "username": "$username", "password": "$password", 
             "aid": "$appId", "ver": "last"}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-        json = client.runMApp(entry, request) as String
-        val user = gson.fromJson<User>(json, User::class.java)
-        if (user != null) {
+        val ret = client.runMApp(entry, request) as String?
+        ret?.let {
+            val user = Json.decodeFromString<User>(ret)
             user.baseUrl = BASE_URL
+            return user
         }
-        return user
+        return null
     }
 
     // get the first user account, or a list of accounts.
@@ -172,7 +173,6 @@ object HproseInstance {
         // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
         // that have value in incoming data.
         val url: String
-        if (phrase.isEmpty()) return null
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account
             val method = "register"
@@ -197,6 +197,7 @@ object HproseInstance {
             val json = response.body?.string()
             val gson = Gson()
             val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
+            ret.baseUrl = BASE_URL
             return ret
         }
         Log.d("HproseInstance.setUserData", "Set user data error")
@@ -244,8 +245,8 @@ object HproseInstance {
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
-                    val json = response.body?.string()
                     val gson = Gson()
+                    val json = response.body?.string()
                     user.fansList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
                 }
             }

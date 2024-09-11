@@ -132,7 +132,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    fun onLoginClick(): Boolean {
+    fun login(): Boolean {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
@@ -155,14 +155,17 @@ class UserViewModel @AssistedInject constructor(
 
     fun logout(navController: NavController) {
         appUser = User(mid = TW_CONST.GUEST_ID)
+        preferencesHelper.setUserId(null)
         navController.navigate(NavTweet.TweetFeed)
     }
 
     // handle both register and update of user profile
     fun register() {
         viewModelScope.launch(Dispatchers.IO) {
-            if (username.value?.isNotEmpty() == true && password.value.isNotEmpty()
-                && keyPhrase.value?.isNotEmpty() == true) {
+            if (username.value?.isNotEmpty() == true
+                && password.value.isNotEmpty()
+                && keyPhrase.value?.isNotEmpty() == true)
+            {
                 val user = User(mid = TW_CONST.GUEST_ID, name = name.value,
                     username = username.value, password = password.value,
                     profile = profile.value, avatar = appUser.avatar

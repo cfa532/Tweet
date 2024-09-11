@@ -136,7 +136,7 @@ fun LoginScreen() {
 
         Button(
             onClick = {
-                if (viewModel.onLoginClick())
+                if (viewModel.login())
                     navController.popBackStack() },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading
