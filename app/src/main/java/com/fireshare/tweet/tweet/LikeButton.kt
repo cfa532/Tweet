@@ -15,14 +15,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -39,7 +37,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 
-suspend fun guestNotice(navController: NavController) {
+suspend fun guestWarning(navController: NavController) {
     SnackbarController.sendEvent(
         event = SnackbarEvent(
             message = "Please login or register.",
@@ -63,7 +61,7 @@ fun CommentButton(viewModel: TweetViewModel) {
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestNotice(navController)
+                guestWarning(navController)
             }
             return@IconButton
         }
@@ -95,7 +93,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestNotice(navController)
+                guestWarning(navController)
             }
             return@IconButton
         }
@@ -131,13 +129,9 @@ fun LikeButton(viewModel: TweetViewModel) {
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestNotice(navController)
+                guestWarning(navController)
             }
-            return@IconButton
-        }
-        viewModel.likeTweet { updatedTweet ->
-            tweetFeedViewModel.updateTweet(updatedTweet)
-        }
+        } else viewModel.likeTweet()
     })
     {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -167,13 +161,9 @@ fun BookmarkButton(viewModel: TweetViewModel) {
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestNotice(navController)
+                guestWarning(navController)
             }
-            return@IconButton
-        }
-        viewModel.bookmarkTweet { updatedTweet ->
-            tweetFeedViewModel.updateTweet(updatedTweet)
-        }
+        } else viewModel.bookmarkTweet()
     })
     {
         Row(horizontalArrangement = Arrangement.Center) {

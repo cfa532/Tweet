@@ -6,8 +6,8 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.widget.Gadget
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.widget.Gadget
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient

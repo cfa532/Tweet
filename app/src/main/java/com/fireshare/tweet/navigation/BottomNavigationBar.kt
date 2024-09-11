@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.tweet.guestNotice
+import com.fireshare.tweet.tweet.guestWarning
 import kotlinx.coroutines.launch
 
 @Composable
@@ -67,7 +67,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
                     selectedItemIndex = index
                     if (appUser.mid == TW_CONST.GUEST_ID && index>0) {
                         scope.launch {
-                            guestNotice(navController)
+                            guestWarning(navController)
                         }
                         return@NavigationBarItem
                     }

@@ -18,8 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
-import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.BottomNavigationBar
+import com.fireshare.tweet.navigation.LocalNavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

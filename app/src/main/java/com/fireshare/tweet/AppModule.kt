@@ -1,6 +1,5 @@
 package com.fireshare.tweet
 
-import androidx.compose.material3.SnackbarHostState
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
 import dagger.Provides

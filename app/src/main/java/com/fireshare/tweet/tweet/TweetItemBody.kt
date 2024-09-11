@@ -23,10 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable

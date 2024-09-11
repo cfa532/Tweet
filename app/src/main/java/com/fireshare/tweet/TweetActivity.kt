@@ -1,7 +1,6 @@
 package com.fireshare.tweet
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,8 +23,8 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.ObserveAsEvents
-import com.fireshare.tweet.ui.theme.TweetTheme
 import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.ui.theme.TweetTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

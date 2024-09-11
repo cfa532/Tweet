@@ -12,23 +12,19 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadCommentWorker
-import com.fireshare.tweet.service.UploadTweetWorker
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
@@ -124,16 +120,16 @@ class TweetViewModel @AssistedInject constructor(
             }
     }
 
-    fun likeTweet(updateTweetFeed: (Tweet) -> Unit) {
+    fun likeTweet() {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.likeTweet(tweetState.value)
+            val tweet = HproseInstance.likeTweet(tweetState.value)
             _tweetState.value = tweet
         }
     }
 
-    fun bookmarkTweet(updateTweetFeed: (Tweet) -> Unit) {
+    fun bookmarkTweet() {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.bookmarkTweet(tweetState.value)
+            val tweet = HproseInstance.bookmarkTweet(tweetState.value)
             _tweetState.value = tweet
         }
     }
