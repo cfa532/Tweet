@@ -94,9 +94,13 @@ fun TweetItem(
                 Column(modifier = Modifier.padding(start = 8.dp))
                 {
                     TweetHeader(tweet)
-                    Text(modifier = Modifier.padding(start = 16.dp),
-                        text = tweet.content,
-                        style = MaterialTheme.typography.bodyMedium)
+                    tweet.content?. let {
+                        Text(
+                            modifier = Modifier.padding(start = 16.dp),
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                     Surface(
                         border = BorderStroke(0.5.dp, color = Color.LightGray),
                         tonalElevation = 1.dp,

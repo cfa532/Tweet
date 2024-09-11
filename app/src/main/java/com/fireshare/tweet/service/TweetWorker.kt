@@ -39,7 +39,7 @@ class UploadCommentWorker @AssistedInject constructor(
             }
             val comment = Tweet(
                 authorId = appUser.mid,
-                content = commentContent ?: "",
+                content = commentContent,
                 attachments = attachments.mapNotNull { it.toString() }
             )
             HproseInstance.uploadComment(parentTweet, comment).let { newTweet: Tweet ->

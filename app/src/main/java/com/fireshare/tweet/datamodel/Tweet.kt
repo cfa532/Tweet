@@ -17,7 +17,7 @@ object UserFavorites {
 data class Tweet(
     var mid: MimeiId? = null,   // mid of the tweet
     val authorId: MimeiId,        // mid of the author, is also the mimei database Id
-    var content: String,
+    var content: String ? = null,   // content or attachments must have one.
     val timestamp: Long = System.currentTimeMillis(),
 
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet

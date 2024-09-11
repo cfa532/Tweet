@@ -102,7 +102,7 @@ class TweetViewModel @AssistedInject constructor(
                             _comments.update { list -> listOf(comment) + list }
 
                             val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
-                            Log.d("UploadComment", "Comment: $newTweet")
+                            Log.d("UploadComment", "Updated tweet: $newTweet")
                             _tweetState.value = newTweet
                         }
 

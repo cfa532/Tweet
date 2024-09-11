@@ -61,8 +61,9 @@ fun CommentItem(
 
         Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
         {
-            Text(text = comment.content, style = MaterialTheme.typography.bodyMedium)
-
+            comment.content?. let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium)
+            }
             // attached media files
             Box(
                 modifier = Modifier
