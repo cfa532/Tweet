@@ -123,7 +123,6 @@ fun LikeButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.likeCount
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
     IconButton(onClick = {
@@ -155,7 +154,6 @@ fun BookmarkButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
     IconButton(onClick = {
