@@ -62,15 +62,16 @@ fun ComposeCommentScreen(
     navController: NavHostController,
 ) {
     var tweetContent by remember { mutableStateOf("") }
-    var isCheckedToTweet by remember { mutableStateOf(false) }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val localContext = LocalContext.current
 
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
     val viewModel = sharedViewModel?.sharedTVMInstance ?: return
-    val tweet by viewModel.tweetState.collectAsState() ?: return
+    val tweet by viewModel.tweetState.collectAsState()
     val author = tweet.author
+
+    val isCheckedToTweet by viewModel.isCheckedToTweet
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -115,12 +116,7 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     IconButton( onClick = {
-                        viewModel.uploadComment(localContext, tweetContent, isCheckedToTweet, selectedAttachments )
-                        if (isCheckedToTweet) {
-//                            comment.originalTweetId = tweet.mid
-//                            comment.originalAuthorId = tweet.authorId
-//                            tweetFeedViewModel.uploadTweet(comment)
-                        }
+                        viewModel.uploadComment(localContext, tweetContent, selectedAttachments )
 
                         // clear and return to previous screen
                         selectedAttachments.clear()
@@ -164,7 +160,7 @@ fun ComposeCommentScreen(
                     ) {
                         Checkbox(
                             checked = isCheckedToTweet,
-                            onCheckedChange = { isCheckedToTweet = it },
+                            onCheckedChange = { viewModel.onCheckedChange(it) },
                             modifier = Modifier
                                 .size(18.dp)
                                 .alpha(0.8f)

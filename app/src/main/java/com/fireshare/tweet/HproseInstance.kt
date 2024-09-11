@@ -278,7 +278,7 @@ object HproseInstance {
         Log.e("HproseInstance.getTweets", e.toString())
     }
 
-    suspend fun getTweet(
+    private suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         tweets: List<Tweet>
@@ -453,7 +453,7 @@ object HproseInstance {
         // remove a comment from parent tweet in Mimei DB
     }
 
-    // update input parameter "comment" with new mid, and return count
+    // update input parameter "comment" with new mid, and return update parent Tweet
     fun uploadComment(tweet: Tweet, comment: Tweet): Tweet {
         // add the comment to tweetId
         val method = "add_comment"
