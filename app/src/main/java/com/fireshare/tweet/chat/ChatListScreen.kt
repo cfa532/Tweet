@@ -1,8 +1,8 @@
-package com.fireshare.tweet.message
+package com.fireshare.tweet.chat
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -15,18 +15,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.viewmodel.ChatListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessageScreen(
-    parentEntry: NavBackStackEntry,
-    selectedBottomBarItemIndex: Int,
-) {
+fun ChatListScreen(
+    viewModel: ChatListViewModel)
+{
     val navController = LocalNavController.current
     Scaffold(
         topBar = {
@@ -52,16 +52,15 @@ fun MessageScreen(
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding))
         {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 8.dp, end = 8.dp)
+                    .padding(innerPadding)
             ) {
-                Text(text = "Message box")
             }
         }
     }

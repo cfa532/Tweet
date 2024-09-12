@@ -15,8 +15,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.chat.ChatListScreen
+import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.message.MessageScreen
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.UserProfileScreen
@@ -24,6 +25,8 @@ import com.fireshare.tweet.tweet.ComposeCommentScreen
 import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetDetailScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
+import com.fireshare.tweet.viewmodel.ChatListViewModel
+import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaViewerScreen
@@ -72,13 +75,15 @@ fun TweetNavGraph(
                     )
                     { factory ->
                         factory.create(
+                            // The tweet is surely created. The right key will locate it.
+                            // so the init value do not matter here.
                             Tweet(
                                 authorId = "default",
                                 content = "nothing"
                             )
                         )
                     }
-                TweetDetailScreen(viewModel, parentEntry, 0)
+                TweetDetailScreen(viewModel, parentEntry)
             }
             composable<NavTweet.ComposeTweet> {
                 ComposeTweetScreen(navController)
@@ -96,11 +101,19 @@ fun TweetNavGraph(
             composable<ProfileEditor> {
                 EditProfileScreen(navController)
             }
-            composable<NavTweet.MessageBox> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavRoot)
+            composable<NavTweet.ChatBox> {
+                // go to individual chatbox
+                val args = it.toRoute<NavTweet.ChatBox>()
+                val viewModel = hiltViewModel<ChatViewModel, ChatViewModel.ChatViewModelFactory>(
+                    key = args.receiptId ) { factory ->
+                    factory.create(receiptId = args.receiptId)
                 }
-                MessageScreen(parentEntry, 1)
+                ChatScreen(viewModel)
+            }
+            composable<NavTweet.ChatList> {
+                // chatbox list
+                val viewModel = hiltViewModel<ChatListViewModel>()
+                ChatListScreen(viewModel)
             }
             composable<MediaViewer> {
                 val md = it.toRoute<MediaViewer>()

@@ -1,6 +1,7 @@
 package com.fireshare.tweet
 
 import android.util.Log
+import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -101,6 +102,29 @@ object HproseInstance {
             return user
         }
         return null
+    }
+
+    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+        val gson = Gson()
+        val entry = "message_outgoing"
+        val json = """
+            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "receiptid":$receiptId,
+            "msg": ${Json.encodeToString(msg)}}
+        """.trimIndent()
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        // write outgoing message to user's Mimei db
+        client.runMApp(entry, request)
+
+        // write message to receipt's Mimei db on the receipt's node
+        val receipt = getUserBase(receiptId)
+        val method = "message_incoming"
+        val url =
+            "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&senderid=${appUser.mid}&receiptid=$receiptId&msg=${Json.encodeToString(msg)}"
+        val request2 = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request2).execute()
+        if (response.isSuccessful) {
+            return
+        }
     }
 
     fun login(username: String, password: String, keyPhrase: String): User? {

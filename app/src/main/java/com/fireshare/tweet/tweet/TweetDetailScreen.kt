@@ -32,7 +32,6 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetDetailScreen(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    selectedBottomBarItemIndex: Int,
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -61,7 +60,7 @@ fun TweetDetailScreen(
                 }
             },
         )},
-        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+        bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
         Column(
             modifier = Modifier

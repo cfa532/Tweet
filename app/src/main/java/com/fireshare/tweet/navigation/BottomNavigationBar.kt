@@ -42,7 +42,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
         ),
         BottomNavigationItem(
             title = "Chat",
-            route = NavTweet.MessageBox(),
+            route = NavTweet.ChatBox(),
             selectedIcon = Icons.Filled.Email,
             unselectedIcon = Icons.Outlined.Email,
             hasNews = false,

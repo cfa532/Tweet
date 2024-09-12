@@ -27,7 +27,10 @@ sealed interface NavTweet {
     data object ComposeTweet : NavTweet
 
     @Serializable
-    data class MessageBox(val userId: MimeiId? = null) : NavTweet
+    data object ChatList: NavTweet
+
+    @Serializable
+    data class ChatBox(val receiptId: MimeiId) : NavTweet
 
     @Serializable
     data object Registration : NavTweet

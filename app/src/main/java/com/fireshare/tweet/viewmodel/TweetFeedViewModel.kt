@@ -28,8 +28,8 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @HiltViewModel
-class TweetFeedViewModel @Inject constructor(
-) : ViewModel() {
+class TweetFeedViewModel @Inject constructor() : ViewModel()
+{
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
