@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel( assistedFactory = ChatViewModel.ChatViewModelFactory::class)
@@ -31,7 +32,11 @@ class ChatViewModel @AssistedInject constructor(
     init {
         viewModelScope.launch {
             HproseInstance.getUserBase(receiptId)?.let { receipt = it }
-            // load past 100 chat messages with the receipt
+            // get messages stored at local
+            loadLocalMessages()
+
+            // get unread messages
+            fetchMessage()
         }
     }
     @AssistedFactory
@@ -52,7 +57,23 @@ class ChatViewModel @AssistedInject constructor(
         }
     }
 
-    fun fetchMessage() {
+    private fun fetchMessage(numOfMsgs: Int = 50) {
         // read message from server proactively.
+        _chatMessages.update { msgs ->
+            HproseInstance.fetchMessages(receiptId, numOfMsgs) + msgs
+        }
+    }
+
+    private fun loadLocalMessages() {
+        viewModelScope.launch(Dispatchers.IO) {
+//            val localMessages = HproseInstance.loadLocalMessages(receiptId, 50)
+//            _chatMessages.update { localMessages }
+        }
+    }
+
+    private fun saveMessageLocally(message: ChatMessage) {
+        viewModelScope.launch(Dispatchers.IO) {
+//            HproseInstance.saveMessageLocally(receiptId, message)
+        }
     }
 }

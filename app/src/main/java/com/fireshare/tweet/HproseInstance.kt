@@ -33,6 +33,7 @@ object HproseInstance {
 
     // all loaded User objects will be inserted in the list, for better performance.
     private var cachedUsers: MutableList<User> = emptyList<User>().toMutableList()
+    private val localDatabase = LocalDatabase()
 
     fun init(preferencesHelper: PreferencesHelper) {
         // Use default AppUrl to enter App network, update with IP of the fastest node.
@@ -125,6 +126,32 @@ object HproseInstance {
         if (response.isSuccessful) {
             return
         }
+    }
+
+    // get the recent unread message from a sender.
+    fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage> {
+        val gson = Gson()
+        val entry = "message_fetch"
+        val json = """
+            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "senderid":${senderId}
+        """.trimIndent()
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        // write outgoing message to user's Mimei db
+        val msgs = client.runMApp(entry, request)  as List<ChatMessage>
+        return msgs
+    }
+
+    // get a list of unread last messages from other users
+    fun loadMostRecentMessages(): List<ChatMessage> {
+        val gson = Gson()
+        val entry = "message_check"
+        val json = """
+            {"aid": $appId, "ver":"last", "userid":${appUser.mid}}
+        """.trimIndent()
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        // write outgoing message to user's Mimei db
+        val msgs = client.runMApp(entry, request) as List<ChatMessage>
+        return msgs
     }
 
     fun login(username: String, password: String, keyPhrase: String): User? {

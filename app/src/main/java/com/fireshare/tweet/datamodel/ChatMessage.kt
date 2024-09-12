@@ -9,12 +9,10 @@ data class ChatMessage (
     val authorId: MimeiId,      // author of the message
     val content: String? = null,
     val attachment: MimeiId? = null,
-    val hasRead: Boolean = false,
 )
 
 @Serializable
 data class ChatSession (
     val userId: MimeiId,
-    val startTime: Long = System.currentTimeMillis(),
-    var lastMessage: MimeiId,
+    var lastMessage: ChatMessage,
 )

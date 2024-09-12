@@ -83,7 +83,7 @@ fun ChatScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                items(chatMessages) { msg ->
+                items(chatMessages.reversed()) { msg ->
                     ChatItem(msg)
                 }
             }
