@@ -26,6 +26,8 @@ media3Common = "1.4.1"
 coilCompose = "2.7.0"
 gson = "2.10.1"
 appcompat = "1.7.0"
+roomKtx = "2.6.1"
+roomRuntime = "2.6.1"
 workRuntime = "2.9.1"
 workRuntimeKtx = "2.9.1"
 hiltCommon = "1.2.0"
@@ -35,6 +37,8 @@ constraintlayoutCompose = "1.0.1"
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIconsCore" }
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
 assisted-inject-annotations-dagger2 = { module = "com.squareup.inject:assisted-inject-annotations-dagger2", version.ref = "assistedInjectAnnotationsDagger2" }
 assisted-inject-processor-dagger2 = { module = "com.squareup.inject:assisted-inject-processor-dagger2", version.ref = "assistedInjectProcessorDagger2" }

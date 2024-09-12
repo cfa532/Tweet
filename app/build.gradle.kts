@@ -56,6 +56,10 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.room.runtime)
+    kapt("androidx.room:room-compiler:2.6.1")
+    implementation(libs.androidx.room.ktx)
+
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.hilt.common)
     implementation(libs.androidx.work.runtime)
