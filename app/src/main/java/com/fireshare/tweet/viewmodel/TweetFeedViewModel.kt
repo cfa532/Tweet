@@ -76,7 +76,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    private fun getTweets(
+    fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null
     ) {

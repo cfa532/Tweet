@@ -29,6 +29,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.internal.wait
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -37,46 +38,48 @@ class TweetActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            HproseInstance.init(TweetApplication.preferencesHelper)
-            withContext(Dispatchers.Main) {
+        lifecycleScope.launch {
+            (application as TweetApplication).initJob.await()
 
-                setContent {
-                    TweetTheme {
-                        val snackbarHostState = remember { SnackbarHostState() }
-                        val scope = rememberCoroutineScope()
-                        ObserveAsEvents(
-                            flow = SnackbarController.events,
-                            snackbarHostState
-                        ) { event ->
-                            scope.launch {
-                                snackbarHostState.currentSnackbarData?.dismiss()    // dismiss old message
-                                // show new snackbar
-                                val result = snackbarHostState.showSnackbar(
-                                    message = event.message,
-                                    actionLabel = event.action?.name,
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    event.action?.action?.invoke()
-                                }
+            setContent {
+                TweetTheme {
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val scope = rememberCoroutineScope()
+                    ObserveAsEvents(
+                        flow = SnackbarController.events,
+                        snackbarHostState
+                    ) { event ->
+                        scope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()    // dismiss old message
+                            // show new snackbar
+                            val result = snackbarHostState.showSnackbar(
+                                message = event.message,
+                                actionLabel = event.action?.name,
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                event.action?.action?.invoke()
                             }
                         }
+                    }
 
-                        val localContext = LocalContext.current
-                        val viewModelStoreOwner = LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
-                        val viewModelProvider: ViewModelProvider = remember { ViewModelProvider(viewModelStoreOwner) }
-                        CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
-                            Scaffold(
-                                snackbarHost = { SnackbarHost(
+                    val localContext = LocalContext.current
+                    val viewModelStoreOwner =
+                        LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
+                    val viewModelProvider: ViewModelProvider =
+                        remember { ViewModelProvider(viewModelStoreOwner) }
+                    CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
+                        Scaffold(
+                            snackbarHost = {
+                                SnackbarHost(
                                     hostState = snackbarHostState
-                                )},
-                                modifier = Modifier.fillMaxWidth()
-                            ) {innerPadding ->
-                                TweetNavGraph()
-                                Row(modifier = Modifier.fillMaxWidth().padding(innerPadding))
-                                {
-                                }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { innerPadding ->
+                            TweetNavGraph()
+                            Row(modifier = Modifier.fillMaxWidth().padding(innerPadding))
+                            {
                             }
                         }
                     }

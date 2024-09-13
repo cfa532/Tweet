@@ -1,6 +1,8 @@
 package com.fireshare.tweet
 
+import android.content.Context
 import android.util.Log
+import androidx.room.Room
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -34,8 +36,9 @@ object HproseInstance {
     // all loaded User objects will be inserted in the list, for better performance.
     private var cachedUsers: MutableList<User> = emptyList<User>().toMutableList()
     private val localDatabase = LocalDatabase()
+    private lateinit var database: ChatDatabase
 
-    fun init(preferencesHelper: PreferencesHelper) {
+    fun init(context: Context, preferencesHelper: PreferencesHelper) {
         // Use default AppUrl to enter App network, update with IP of the fastest node.
         val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
         appId = pair.first
@@ -52,6 +55,31 @@ object HproseInstance {
             }
         } else {
             appUser.baseUrl = BASE_URL
+        }
+        database = Room.databaseBuilder(
+            context.applicationContext,
+            ChatDatabase::class.java,
+            "chat_database"
+        ).build()
+    }
+
+    suspend fun saveMessageLocally(receiptId: MimeiId, message: ChatMessage) {
+        val messageEntity = ChatMessageEntity(
+            receiptId = receiptId.toString(),
+            authorId = message.authorId,
+            content = message.content ?: "",
+            timestamp = System.currentTimeMillis()
+        )
+        database.chatMessageDao().insertMessage(messageEntity)
+    }
+
+    suspend fun loadLocalMessages(receiptId: MimeiId, limit: Int): List<ChatMessage> {
+        return database.chatMessageDao().loadMessages(receiptId.toString(), limit).map {
+            ChatMessage(
+                id = it.id,
+                authorId = it.authorId,
+                content = it.content
+            )
         }
     }
 
