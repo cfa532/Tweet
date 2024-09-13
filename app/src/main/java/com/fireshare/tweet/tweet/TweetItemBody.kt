@@ -1,7 +1,6 @@
 package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,14 +10,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
@@ -27,7 +24,6 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetBlock(
@@ -50,20 +46,7 @@ fun TweetBlock(
                 .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
-            ) {
-                val author = tweet.author
-                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-                {
-                    UserAvatar(author, 40)
-                }
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
-            }
+            TweetItemHeader(tweet)
 
             Spacer(modifier = Modifier.padding(2.dp))
             Surface(
@@ -109,16 +92,5 @@ fun TweetBlock(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun UpdateTweetButton(viewModel: TweetViewModel) {
-    Button(onClick = {
-        val updatedTweet =
-            viewModel.tweetState.value.copy(commentCount = viewModel.tweetState.value.commentCount + 1)
-        viewModel.updateTweet(updatedTweet)
-    }) {
-        Text("comment")
     }
 }

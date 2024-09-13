@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,11 +19,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -28,6 +36,8 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val navController = LocalNavController.current
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -37,21 +47,46 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
         Column( modifier = Modifier
             .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
         ) {
-            // Tweet Header
-            Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
+            // Tweet detail Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                val author = tweet.author
-                val navController = LocalNavController.current
-                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-                {
-                    UserAvatar(author, 40)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    val author = tweet.author
+                    val navController = LocalNavController.current
+                    IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
+                    {
+                        UserAvatar(author, 40)
+                    }
+                    Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                    Text(
+                        text = author?.name ?: "No One",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                    Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
                 }
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+                // the 3 dots at the right end
+                Row(modifier = Modifier.width( 24.dp).alpha(0.8f).rotate(-90f),
+                    horizontalArrangement = Arrangement.End) {
+                    IconButton( onClick = { tweet.mid?.let {
+                        tweetFeedViewModel.delTweet(it)
+                        navController.popBackStack()
+                    } })
+                    {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More",
+                            tint = Color.Gray,
+                        )
+                    }
+                }
             }
+            // Tweet detail's content
             Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border

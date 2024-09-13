@@ -10,12 +10,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -46,19 +52,35 @@ fun CommentItem(
         } )
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Start
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(comment.authorId)) })
-            {
-                UserAvatar(author, 40)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(comment.authorId)) })
+                {
+                    UserAvatar(author, 40)
+                }
+                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
             }
-            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-            Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-            Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+            Row(modifier = Modifier.width( 24.dp).alpha(0.8f).rotate(-90f),
+                horizontalArrangement = Arrangement.End) {
+                IconButton( onClick = { comment.mid?.let { viewModel.delComment(it) } })
+                {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More",
+                        tint = Color.Gray,
+                    )
+                }
+            }
         }
-
         Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
         {
             comment.content?. let {

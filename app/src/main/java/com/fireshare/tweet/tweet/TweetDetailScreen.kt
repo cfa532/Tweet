@@ -31,7 +31,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 @Composable
 fun TweetDetailScreen(
     viewModel: TweetViewModel,
-    parentEntry: NavBackStackEntry,
+    parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()

@@ -45,7 +45,7 @@ object HproseInstance {
         BASE_URL = pair.second
 
         var userId = preferencesHelper.getUserId()
-//        userId = getAlphaIds()[0]     // TEMP: for testing
+        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
@@ -413,7 +413,7 @@ object HproseInstance {
         return null
     }
 
-    private fun deleteTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
+    fun delTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
         val method = "delete_tweet"
         val url =
             "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
@@ -421,6 +421,17 @@ object HproseInstance {
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             delTweet(tweetId)
+        }
+    }
+
+    fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) {
+        val method = "delete_comment"
+        val url =
+            "${parentTweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            delComment(commentId)
         }
     }
 
@@ -476,7 +487,7 @@ object HproseInstance {
                 updateTweetViewModel(tweet.copy(retweetCount = count))
 
                 if (retweetId != null) {
-                    deleteTweet(retweetId) {
+                    delTweet(retweetId) {
                         tweetFeedViewModel.delTweet(retweetId)
                     }
                 }
@@ -529,8 +540,11 @@ object HproseInstance {
         return listOf<Tweet>()
     }
 
-    fun delComment(tweetId: MimeiId, commentId: MimeiId) {
-        // remove a comment from parent tweet in Mimei DB
+    fun delTweet(tweetId: MimeiId) {
+        val entry = "del_tweet"
+        val json = """
+            {}
+        """.trimIndent()
     }
 
     // update input parameter "comment" with new mid, and return update parent Tweet

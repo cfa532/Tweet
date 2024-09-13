@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -30,6 +34,7 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -93,7 +98,7 @@ fun TweetItem(
                 // retweet with comments
                 Column(modifier = Modifier.padding(start = 8.dp))
                 {
-                    TweetHeader(tweet)
+                    TweetItemHeader(tweet)
                     tweet.content?. let {
                         Text(
                             modifier = Modifier.padding(start = 16.dp),
@@ -136,22 +141,42 @@ fun TweetItem(
     }
 }
 
+// Tweet header when displayed as an item in a list.
 @Composable
-fun TweetHeader(tweet: Tweet) {
+fun TweetItemHeader(tweet: Tweet) {
     // Use a Row to align author name and potential verification badge
+    val viewModel = hiltViewModel<TweetFeedViewModel>()
+    val navController = LocalNavController.current
+    val author = tweet.author
+
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Start
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        val navController = LocalNavController.current
-        val author = tweet.author
-        IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-        {
-            UserAvatar(author, 40)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
+            {
+                UserAvatar(author, 36)
+            }
+            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+            Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+            Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
         }
-        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-        Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-        Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+
+        // the 3 dots at the right end
+        Row(modifier = Modifier.width( 24.dp).alpha(0.8f).rotate(-90f),
+            horizontalArrangement = Arrangement.End) {
+            IconButton( onClick = { tweet.mid?.let { viewModel.delTweet(it) } })
+            {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More",
+                    tint = Color.Gray,
+                )
+            }
+        }
     }
 }

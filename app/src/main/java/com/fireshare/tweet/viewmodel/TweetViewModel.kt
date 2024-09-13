@@ -13,6 +13,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadCommentWorker
 import com.google.gson.Gson
@@ -61,6 +62,13 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = tweet
     }
 
+    fun delComment(commentId: MimeiId) {
+            HproseInstance.delComment(tweetState.value, commentId) {tid ->
+                _comments.update { currentTweets ->
+                    currentTweets.filterNot { it.mid == tid }
+                }
+            }
+    }
     // add new Comment object to its parent Tweet
     fun uploadComment(context: Context, content: String, attachments: List<Uri>? = null ) {
         val gson = Gson()
