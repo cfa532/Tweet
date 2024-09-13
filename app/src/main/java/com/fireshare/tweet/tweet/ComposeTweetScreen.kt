@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,10 +44,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.service.SnackbarAction
+import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,12 +87,20 @@ fun ComposeTweetScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // show warning snack bar
-                        selectedAttachments.clear() // Clear attachments before navigating back
-                        navController.popBackStack()
+                        if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                            val event = SnackbarEvent(
+                                message = "Are you sure to quit?",
+                                action = SnackbarAction(name = "Quit",
+                                    action = { navController.popBackStack() })
+                            )
+                            viewModel.viewModelScope.launch {
+                                SnackbarController.sendEvent(event)
+                            }
+                        } else
+                            navController.popBackStack()
                     }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.Filled.Close,
                             contentDescription = "Back"
                         )
                     }
