@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -48,6 +49,7 @@ fun EditProfileScreen(
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = appUser.mid) { factory ->
             factory.create(appUser.mid)
         }
+    val user by viewModel.user.collectAsState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val username by viewModel.username
@@ -78,7 +80,9 @@ fun EditProfileScreen(
                 contentDescription = "Cancel"
             )
         }
-        AvatarSection(viewModel, launcher)
+        // show and edit user avatar
+        AvatarSection(user, launcher)
+
         Spacer(modifier = Modifier.height(16.dp))
         Column {
             OutlinedTextField(
@@ -134,7 +138,7 @@ fun EditProfileScreen(
                 viewModel.register()
                 navController.popBackStack()
                       },
-            enabled = !isLoading,
+            enabled = isLoading,
             modifier = Modifier
                 .width(intrinsicSize = IntrinsicSize.Max)
                 .align(Alignment.CenterHorizontally)
@@ -145,9 +149,7 @@ fun EditProfileScreen(
 }
 
 @Composable
-fun AvatarSection( viewModel: UserViewModel,
-    launcher: ManagedActivityResultLauncher<String, Uri?>) {
-    val user by viewModel.user.collectAsState()
+fun AvatarSection(user: User, launcher: ManagedActivityResultLauncher<String, Uri?>) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -157,7 +159,7 @@ fun AvatarSection( viewModel: UserViewModel,
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(appUser, 200)
+            UserAvatar(user, 200)
         }
     }
 }

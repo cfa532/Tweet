@@ -64,7 +64,7 @@ class UserViewModel @AssistedInject constructor(
         when(appUser.mid) {
             userId -> { if (appUser.mid != TW_CONST.GUEST_ID) "Edit" else "Login" }
             else -> {
-                if (appUser.followingList.contains(userId) && appUser.mid != TW_CONST.GUEST_ID)
+                if (appUser.followingList?.contains(userId) == true && appUser.mid != TW_CONST.GUEST_ID)
                     "Unfollow"
                 else "Follow"
             }
@@ -95,11 +95,12 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
-        isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             context.contentResolver.openInputStream(uri)?.let { stream ->
+                isLoading.value = true
                 val mimeiId = HproseInstance.uploadToIPFS(stream)
                 appUser.avatar = mimeiId
+                _user.value = user.value.copy(avatar = mimeiId)
                 if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
                     // update avatar for logon user right away
                     // otherwise wait for user to submit.
@@ -112,8 +113,8 @@ class UserViewModel @AssistedInject constructor(
 
     fun getFollows(user: User) {
         viewModelScope.launch(Dispatchers.IO) {
-            _fans.value = HproseInstance.getFans(user)
-            _followings.value = HproseInstance.getFollowings(user)
+            _fans.value = HproseInstance.getFans(user) ?: emptyList()
+            _followings.value = HproseInstance.getFollowings(user) ?: emptyList()
         }
     }
     private fun getTweets(
@@ -166,6 +167,7 @@ class UserViewModel @AssistedInject constructor(
                 && password.value.isNotEmpty()
                 && keyPhrase.value?.isNotEmpty() == true)
             {
+                isLoading.value = true
                 val user = User(mid = TW_CONST.GUEST_ID, name = name.value,
                     username = username.value, password = password.value,
                     profile = profile.value, avatar = appUser.avatar
@@ -174,8 +176,8 @@ class UserViewModel @AssistedInject constructor(
                     appUser = it1
                     // Do NOT save phrase or userId until user has successfully logon.
                 }
-            } else {
                 isLoading.value = false
+            } else {
                 var message: String = ""
                 if (username.value?.isEmpty() == true) {
                     message = "Username is required to register and login."
@@ -193,18 +195,23 @@ class UserViewModel @AssistedInject constructor(
     }
     fun onUsernameChange(value: String) {
         username.value = value.trim()
+        isLoading.value = false
     }
     fun onNameChange(value: String) {
         name.value = value
+        isLoading.value = false
     }
     fun onProfileChange(value: String) {
         profile.value = value
+        isLoading.value = false
     }
     fun onKeyPhraseChange(phrase: String) {
         keyPhrase.value = phrase
+        isLoading.value = false
     }
     fun onPasswordChange(pwd: String) {
         password.value = pwd.trim()
+        isLoading.value = false
     }
     fun onPasswordVisibilityChange() {
         isPasswordVisible.value = ! isPasswordVisible.value

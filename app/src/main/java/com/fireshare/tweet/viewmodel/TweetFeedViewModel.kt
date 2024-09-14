@@ -40,7 +40,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _followings.value = HproseInstance.getFollowings(appUser)
+            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
             _followings.update { newList -> newList + appUser.mid }     // always follow oneself and default ones
             val list = HproseInstance.getAlphaIds().filter { !followings.value.contains(it) }
             _followings.update { newList -> newList + list }

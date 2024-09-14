@@ -311,7 +311,7 @@ object HproseInstance {
             user.followingList
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
-            getAlphaIds()   // get default following for testing
+            null   // get default following for testing
         }
 
     // get fans list of the user
@@ -332,7 +332,7 @@ object HproseInstance {
             user.fansList
         } catch (e: Exception) {
             Log.e("HproseInstance.getFollowings", e.toString())
-            emptyList<MimeiId>()
+            null
         }
 
     // get tweets of a given author in a given span of time
