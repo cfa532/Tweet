@@ -33,17 +33,23 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
+    // get all followings of current user, and load tweets.
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
+
     init {
         viewModelScope.launch(Dispatchers.IO) {
             _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            _followings.update { newList -> newList + appUser.mid }     // always follow oneself and default ones
-            val list = HproseInstance.getAlphaIds().filter { !followings.value.contains(it) }
-            _followings.update { newList -> newList + list }
+            if (! followings.value.contains(appUser.mid))
+                _followings.update { newList -> newList + appUser.mid }     // always follow oneself
+
+            val list = HproseInstance.getAlphaIds().filter {
+                !followings.value.contains(it)
+            }
+            _followings.update { newList -> newList + list }        // add default ones
 
 //        getTweets(startTimestamp.longValue, endTimestamp.longValue)
             getTweets(startTimestamp.longValue)

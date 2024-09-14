@@ -127,18 +127,19 @@ class UserViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
                 getTweets()
+
+                _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
+                if (userId != appUser.mid) {
+                    // followings of current user has been loaded at startup
+                    _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
+                }
             }
-            // only load current user data by default.
-            if (userId == appUser.mid) getFollows(appUser)
         }
     }
 
     // whether the userId is in current user's following list
     fun isFollowing(userId: MimeiId): Boolean {
         return followings.value.contains(userId)
-    }
-    fun isFollowed(userId: MimeiId): Boolean {
-        return fans.value.contains(userId)
     }
 
     fun getFollows(user: User) {
