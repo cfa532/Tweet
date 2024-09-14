@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,8 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -167,16 +163,6 @@ fun TweetItemHeader(tweet: Tweet) {
         }
 
         // the 3 dots at the right end
-        Row(modifier = Modifier.width( 24.dp).alpha(0.8f).rotate(-90f),
-            horizontalArrangement = Arrangement.End) {
-            IconButton( onClick = { tweet.mid?.let { viewModel.delTweet(it) } })
-            {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "More",
-                    tint = Color.Gray,
-                )
-            }
-        }
+        TweetDropdownMenu(tweet, viewModel, navController)
     }
 }

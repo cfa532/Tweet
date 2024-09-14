@@ -4,19 +4,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -25,10 +35,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -70,17 +83,7 @@ fun CommentItem(
                 Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                 Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
             }
-            Row(modifier = Modifier.width( 20.dp).alpha(0.8f).rotate(-90f),
-                horizontalArrangement = Arrangement.End) {
-                IconButton( onClick = { comment.mid?.let { parentTweetViewModel.delComment(it) } } )
-                {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More",
-                        tint = Color.Gray,
-                    )
-                }
-            }
+            CommentDropdownMenu(comment, parentTweetViewModel)
         }
         Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
         {
@@ -112,6 +115,46 @@ fun CommentItem(
                 CommentButton(viewModel)
                 Spacer(modifier = Modifier.width(8.dp))
                 RetweetButton(viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            modifier = Modifier.width(24.dp).alpha(0.8f).rotate(-90f),
+            onClick = { expanded = !expanded }) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "More",
+                tint = Color.Gray
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .wrapContentWidth(align = Alignment.End)
+                .height(IntrinsicSize.Min)
+        ) {
+            if (comment.author?.mid == appUser.mid) {
+                DropdownMenuItem( modifier = Modifier.alpha(0.7f),
+                    onClick = { comment.mid?.let { parentTweetViewModel.delComment(it) } },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Delete",
+                                tint = Color.Red
+                            )
+                            Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                            Text("Delete", color = Color.Red)
+                        }
+                    }
+                )
             }
         }
     }

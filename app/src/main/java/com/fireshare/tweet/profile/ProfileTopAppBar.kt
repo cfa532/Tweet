@@ -88,9 +88,11 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
                             .wrapContentWidth(align = Alignment.End)
                             .height(IntrinsicSize.Min)
                     ) {
-                        DropdownMenuItem(onClick = { viewModel.logout(navController) },
-                            text = { Text("Logout") }
-                        )
+                        if (user.mid == appUser.mid) {
+                            DropdownMenuItem(onClick = { viewModel.logout(navController) },
+                                text = { Text("Logout") }
+                            )
+                        }
                     }
                 }
             }
