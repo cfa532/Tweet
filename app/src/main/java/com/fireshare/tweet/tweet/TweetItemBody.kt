@@ -56,8 +56,10 @@ fun TweetBlock(
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 16.dp)
             ) {
                 Column {
-                    tweet.content?. let {
-                        Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                    if (tweet.content?.isNotEmpty() == true) {
+                        tweet.content?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                     // attached media files
                     Box(

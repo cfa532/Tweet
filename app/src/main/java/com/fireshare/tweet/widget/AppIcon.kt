@@ -4,13 +4,20 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImagePainter.State.Empty.painter
 import coil.compose.rememberAsyncImagePainter
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 
 @Composable
@@ -27,10 +34,9 @@ fun AppIcon() {
 
 @Composable
 fun UserAvatar(user: User?, size: Int = 40) {
+    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
     Image(
-        painter = rememberAsyncImagePainter(
-            getMediaUrl(user?.avatar, user?.baseUrl)
-        ),
+        painter = rememberAsyncImagePainter(avatarUrl),
         contentDescription = "User Avatar",
         contentScale = ContentScale.Crop,
         modifier = Modifier

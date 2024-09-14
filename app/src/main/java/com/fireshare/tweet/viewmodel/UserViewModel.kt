@@ -1,7 +1,10 @@
 package com.fireshare.tweet.viewmodel
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -27,6 +30,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
@@ -54,9 +59,9 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    val preferencePhrase = preferencesHelper.getKeyPhrase()
-    var keyPhrase = mutableStateOf(preferencePhrase)
+    var keyPhrase = mutableStateOf(preferencesHelper.getKeyPhrase())
     var isPasswordVisible = mutableStateOf(false)
+
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
@@ -69,6 +74,40 @@ class UserViewModel @AssistedInject constructor(
                 else "Follow"
             }
         }
+
+    fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.let { stream ->
+                isLoading.value = true
+
+                // Decode the image from the input stream
+                val originalBitmap = BitmapFactory.decodeStream(stream)
+                var compressedBitmap: Bitmap? = null
+                var quality = 100
+                val outputStream = ByteArrayOutputStream()
+
+                // Compress the image to be less than 1MB
+                do {
+                    outputStream.reset()
+                    originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+                    quality -= 5
+                } while (outputStream.size() > 500_000 && quality > 0)
+
+                // Convert the compressed image to an input stream
+                val compressedStream = ByteArrayInputStream(outputStream.toByteArray())
+
+                val mimeiId = HproseInstance.uploadToIPFS(compressedStream)
+                if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
+                    // Update avatar for logged-in user right away
+                    // Otherwise, wait for user to submit.
+                    HproseInstance.setUserAvatar(userId, mimeiId)   // Update database value
+                    appUser.avatar = mimeiId
+                    _user.value = appUser.copy()
+                }
+                isLoading.value = false
+            }
+        }
+    }
 
     fun toggleFollow(userId: MimeiId) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -94,21 +133,12 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            context.contentResolver.openInputStream(uri)?.let { stream ->
-                isLoading.value = true
-                val mimeiId = HproseInstance.uploadToIPFS(stream)
-                appUser.avatar = mimeiId
-                _user.value = user.value.copy(avatar = mimeiId)
-                if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
-                    // update avatar for logon user right away
-                    // otherwise wait for user to submit.
-                    HproseInstance.setUserAvatar(userId, mimeiId)
-                }
-                isLoading.value = false
-            }
-        }
+    // whether the userId is in current user's following list
+    fun isFollowing(userId: MimeiId): Boolean {
+        return followings.value.contains(userId)
+    }
+    fun isFollowed(userId: MimeiId): Boolean {
+        return fans.value.contains(userId)
     }
 
     fun getFollows(user: User) {

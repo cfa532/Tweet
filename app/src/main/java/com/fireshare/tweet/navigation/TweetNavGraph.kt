@@ -15,10 +15,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.profile.EditProfileScreen
+import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
@@ -29,6 +31,7 @@ import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaViewerScreen
 
 val LocalNavController = compositionLocalOf<NavController> {
@@ -124,6 +127,16 @@ fun TweetNavGraph(
             }
             composable<NavTweet.Registration> {
                 EditProfileScreen(navController)
+            }
+            composable<NavTweet.Following> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
+                val user = it.toRoute<NavTweet.Following>()
+                val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = user.userId) {
+                        factory -> factory.create(user.userId)
+                }
+                FollowingScreen(userViewModel, parentEntry)
             }
         }
     }

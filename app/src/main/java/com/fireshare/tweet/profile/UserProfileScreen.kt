@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
 
@@ -77,7 +79,12 @@ fun UserProfileScreen(
                     Row {
                         Text(text = "${fans.count()} Followers", style = MaterialTheme.typography.titleSmall)
                         Spacer(modifier = Modifier.padding(horizontal = 20.dp))
-                        Text(text = "${followings.count()} Following", style = MaterialTheme.typography.titleSmall)
+                        Text(text = "${followings.count()} Following",
+                            modifier = Modifier.clickable(onClick = {
+                                // go to list of followings of the user
+                                navController.navigate(NavTweet.Following(userId))
+                            }),
+                            style = MaterialTheme.typography.titleSmall)
                     }
                 }
                 HorizontalDivider(

@@ -136,9 +136,8 @@ fun EditProfileScreen(
         Button(
             onClick = {
                 viewModel.register()
-                navController.popBackStack()
-                      },
-            enabled = isLoading,
+                navController.popBackStack() },
+            enabled = ! isLoading,
             modifier = Modifier
                 .width(intrinsicSize = IntrinsicSize.Max)
                 .align(Alignment.CenterHorizontally)

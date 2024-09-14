@@ -103,7 +103,7 @@ fun TweetItem(
                         )
                     }
                     Surface(
-                        border = BorderStroke(0.5.dp, color = Color.LightGray),
+                        border = BorderStroke(0.8.dp, color = Color.LightGray),
                         tonalElevation = 1.dp,
                         modifier = Modifier.padding(start = 8.dp, top = 8.dp)
                     ) {

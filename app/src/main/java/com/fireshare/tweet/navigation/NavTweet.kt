@@ -40,4 +40,10 @@ sealed interface NavTweet {
 
     @Serializable
     data class UserProfile(val userId: MimeiId) : NavTweet
+
+    @Serializable
+    data class Following(val userId: MimeiId) : NavTweet        // accounts the user is following
+
+    @Serializable
+    data class Follower(val userId: MimeiId) : NavTweet
 }

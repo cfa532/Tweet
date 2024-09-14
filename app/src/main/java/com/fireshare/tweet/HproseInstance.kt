@@ -45,7 +45,7 @@ object HproseInstance {
         BASE_URL = pair.second
 
         var userId = preferencesHelper.getUserId()
-        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
+//        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
 
         if (userId != TW_CONST.GUEST_ID) {
             // There is a registered user. Initiate account data.
