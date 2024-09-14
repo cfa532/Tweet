@@ -325,8 +325,8 @@ object HproseInstance {
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     val gson = Gson()
-                    val json = response.body?.string()
-                    user.fansList = gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+                    val jsonStr = response.body?.string()
+                    user.fansList = gson.fromJson(jsonStr, object : TypeToken<List<MimeiId>>() {}.type)
                 }
             }
             user.fansList

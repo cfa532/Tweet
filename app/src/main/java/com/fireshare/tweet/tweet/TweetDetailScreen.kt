@@ -84,7 +84,7 @@ fun TweetDetailScreen(
                         thickness = 0.5.dp,
                         color = Color.LightGray
                     )
-                    CommentItem(comment, parentEntry)
+                    CommentItem(comment, viewModel, parentEntry)
                 }
             }
         }

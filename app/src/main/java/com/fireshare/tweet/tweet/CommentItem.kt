@@ -37,6 +37,7 @@ import com.fireshare.tweet.widget.UserAvatar
 @Composable
 fun CommentItem(
     comment: Tweet,
+    parentTweetViewModel: TweetViewModel,
     parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
@@ -69,9 +70,9 @@ fun CommentItem(
                 Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                 Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
             }
-            Row(modifier = Modifier.width( 24.dp).alpha(0.8f).rotate(-90f),
+            Row(modifier = Modifier.width( 20.dp).alpha(0.8f).rotate(-90f),
                 horizontalArrangement = Arrangement.End) {
-                IconButton( onClick = { comment.mid?.let { viewModel.delComment(it) } })
+                IconButton( onClick = { comment.mid?.let { parentTweetViewModel.delComment(it) } } )
                 {
                     Icon(
                         imageVector = Icons.Default.MoreVert,

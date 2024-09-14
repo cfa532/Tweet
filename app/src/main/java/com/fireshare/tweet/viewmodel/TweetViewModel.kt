@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -59,15 +60,18 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun updateTweet(tweet: Tweet) {
-        _tweetState.value = tweet
+        _tweetState.value = tweet.copy()
     }
 
     fun delComment(commentId: MimeiId) {
-            HproseInstance.delComment(tweetState.value, commentId) {tid ->
-                _comments.update { currentTweets ->
-                    currentTweets.filterNot { it.mid == tid }
+        viewModelScope.launch(Dispatchers.IO) {
+            HproseInstance.delComment(tweetState.value, commentId) { tid ->
+                _comments.update { currentComments ->
+                    currentComments.filterNot { it.mid == tid }
                 }
+                updateTweet(tweet.copy(commentCount = _comments.value.size))
             }
+        }
     }
     // add new Comment object to its parent Tweet
     fun uploadComment(context: Context, content: String, attachments: List<Uri>? = null ) {
