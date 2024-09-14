@@ -48,10 +48,10 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
+fun FollowerScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 {
     val navController = LocalNavController.current
-    val followings by viewModel.followings.collectAsState()
+    val followers by viewModel.fans.collectAsState()
     val user by viewModel.user.collectAsState()
 
     Scaffold(
@@ -90,86 +90,10 @@ fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
                 modifier = Modifier
 
             ) {
-                items(followings) { userId ->
+                items(followers) { userId ->
                     FollowingItem(userId, parentEntry)
                 }
             }
         }
-    }
-}
-
-@Composable
-fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry) {
-    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
-            factory -> factory.create(userId)
-    }
-    val user by viewModel.user.collectAsState()
-
-    Row(modifier = Modifier
-        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
-        .heightIn(max = 200.dp)
-        .fillMaxWidth()
-    ) {
-        UserAvatar(user, 40)
-        Spacer(modifier = Modifier.width(8.dp))
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    Text(
-                        text = "${user.name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "@${user.username}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-                ProfileActionButton(userId, viewModel)
-            }
-            Text(
-                text = "${user.profile}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-    HorizontalDivider(
-        modifier = Modifier.padding(vertical = 1.dp),
-        thickness = 1.dp,
-        color = Color.LightGray
-    )
-}
-
-@Composable
-fun ProfileActionButton(userId: MimeiId, viewModel: UserViewModel) {
-    // text changes based on user roles.
-    val buttonText = if (viewModel.isFollowing(userId)) {
-        "Unfollow"
-    } else {
-        " Follow "
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
-    ) {
-        Text(
-            text = buttonText,
-            color = Color.DarkGray,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .clickable(onClick = { viewModel.toggleFollow(userId) })
-                .border(
-                    width = 1.dp,
-                    color = Color.DarkGray,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-        )
     }
 }

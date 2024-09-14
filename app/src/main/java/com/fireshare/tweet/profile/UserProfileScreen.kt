@@ -77,14 +77,21 @@ fun UserProfileScreen(
                         text = user.profile ?: "Profile",
                         style = MaterialTheme.typography.titleSmall)
                     Row {
-                        Text(text = "${fans.count()} Followers", style = MaterialTheme.typography.titleSmall)
+                        Text(text = "${fans.count()} Followers",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.clickable(onClick = {
+                                navController.navigate((NavTweet.Follower(userId)))
+                            })
+                        )
                         Spacer(modifier = Modifier.padding(horizontal = 20.dp))
+
                         Text(text = "${followings.count()} Following",
+                            style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.clickable(onClick = {
                                 // go to list of followings of the user
                                 navController.navigate(NavTweet.Following(userId))
                             }),
-                            style = MaterialTheme.typography.titleSmall)
+                        )
                     }
                 }
                 HorizontalDivider(

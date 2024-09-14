@@ -20,6 +20,7 @@ import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.profile.EditProfileScreen
+import com.fireshare.tweet.profile.FollowerScreen
 import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.UserProfileScreen
@@ -137,6 +138,16 @@ fun TweetNavGraph(
                         factory -> factory.create(user.userId)
                 }
                 FollowingScreen(userViewModel, parentEntry)
+            }
+            composable<NavTweet.Follower> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
+                val user = it.toRoute<NavTweet.Following>()
+                val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = user.userId) {
+                        factory -> factory.create(user.userId)
+                }
+                FollowerScreen(userViewModel, parentEntry)
             }
         }
     }
