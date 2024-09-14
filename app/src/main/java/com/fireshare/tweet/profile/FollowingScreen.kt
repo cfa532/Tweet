@@ -159,11 +159,7 @@ fun ProfileActionButton(userId: MimeiId, viewModel: UserViewModel) {
             color = Color.DarkGray,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
-                .clickable(onClick = {
-                    if (userId != appUser.mid) {
-                        viewModel.toggleFollow(userId)
-                    }
-                })
+                .clickable(onClick = { viewModel.toggleFollow(userId) })
                 .border(
                     width = 1.dp,
                     color = Color.DarkGray,
