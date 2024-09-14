@@ -117,7 +117,7 @@ fun LoginScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         // no valid key phrase on record, ask for it.
-//        if (viewModel.preferencePhrase?.isNotEmpty() == true) {
+        if (viewModel.preferencePhrase?.isEmpty() == true) {
             OutlinedTextField(
                 value = keyPhrase ?: "",
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
@@ -131,7 +131,7 @@ fun LoginScreen() {
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-//        }
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(

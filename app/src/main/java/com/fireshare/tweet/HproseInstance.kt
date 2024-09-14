@@ -38,6 +38,20 @@ object HproseInstance {
     private val localDatabase = LocalDatabase()
     private lateinit var database: ChatDatabase
 
+    // Keys within the mimei of the user's database
+    private const val TWT_LIST_KEY = "list_of_tweets_mid"
+    private const val CHUNK_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+
+    private val client: HproseService by lazy {
+        HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
+    }
+    private val loggingInterceptor = HttpLoggingInterceptor().apply {
+        level = HttpLoggingInterceptor.Level.BODY
+    }
+    private val httpClient = OkHttpClient.Builder()
+        .addInterceptor(loggingInterceptor)
+        .build()
+
     fun init(context: Context, preferencesHelper: PreferencesHelper) {
         // Use default AppUrl to enter App network, update with IP of the fastest node.
         val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
@@ -201,22 +215,9 @@ object HproseInstance {
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
-        return listOf("yFENuWKht06-Hc2L4-Ymk21n-8y")
+        return listOf("yifT_a-gWN9-JXsJ6P7gqizKMDM")
     }
 
-    // Keys within the mimei of the user's database
-    private const val TWT_LIST_KEY = "list_of_tweets_mid"
-    private const val CHUNK_SIZE = 5 * 1024 * 1024 // 50MB in bytes
-
-    private val client: HproseService by lazy {
-        HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
-    }
-    private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
-    }
-    private val httpClient = OkHttpClient.Builder()
-        .addInterceptor(loggingInterceptor)
-        .build()
     private fun getUser(userId: MimeiId): User? {
         return cachedUsers.firstOrNull { it.mid == userId }
     }

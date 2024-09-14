@@ -45,6 +45,7 @@ fun UserProfileScreen(
     // current user's detail has been loaded by default. Load other users' data only when opening their profile.
     if (user.mid != appUser.mid)
         userViewModel.getFollows(user)
+    userViewModel.getTweets()
 
     Scaffold(
         topBar = { ProfileTopAppBar(userViewModel, navController, user) }

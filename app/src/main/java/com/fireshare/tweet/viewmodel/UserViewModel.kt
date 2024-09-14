@@ -59,7 +59,8 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    var keyPhrase = mutableStateOf(preferencesHelper.getKeyPhrase())
+    var preferencePhrase = preferencesHelper.getKeyPhrase()
+    var keyPhrase = mutableStateOf(preferencePhrase)
     var isPasswordVisible = mutableStateOf(false)
 
     var isLoading = mutableStateOf(false)
@@ -126,8 +127,6 @@ class UserViewModel @AssistedInject constructor(
             // read data from db
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
-                getTweets()
-
                 _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
                 if (userId != appUser.mid) {
                     // followings of current user has been loaded at startup
@@ -148,7 +147,7 @@ class UserViewModel @AssistedInject constructor(
             _followings.value = HproseInstance.getFollowings(user) ?: emptyList()
         }
     }
-    private fun getTweets(
+    fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null
     ) {
@@ -174,6 +173,9 @@ class UserViewModel @AssistedInject constructor(
             isLoading.value = false
             if (user == null) {
                 loginError.value = "Login failed"
+                preferencesHelper.saveKeyPhrase("")
+                preferencePhrase = ""
+                keyPhrase.value = null
                 return false
             } else {
                 preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
@@ -181,8 +183,9 @@ class UserViewModel @AssistedInject constructor(
                 appUser = user
                 return true
             }
+        } else {
+            return false
         }
-        return false
     }
 
     fun logout(navController: NavController) {
@@ -227,22 +230,27 @@ class UserViewModel @AssistedInject constructor(
     fun onUsernameChange(value: String) {
         username.value = value.trim()
         isLoading.value = false
+        loginError.value = ""
     }
     fun onNameChange(value: String) {
         name.value = value
         isLoading.value = false
+        loginError.value = ""
     }
     fun onProfileChange(value: String) {
         profile.value = value
         isLoading.value = false
+        loginError.value = ""
     }
     fun onKeyPhraseChange(phrase: String) {
         keyPhrase.value = phrase
         isLoading.value = false
+        loginError.value = ""
     }
     fun onPasswordChange(pwd: String) {
         password.value = pwd.trim()
         isLoading.value = false
+        loginError.value = ""
     }
     fun onPasswordVisibilityChange() {
         isPasswordVisible.value = ! isPasswordVisible.value
