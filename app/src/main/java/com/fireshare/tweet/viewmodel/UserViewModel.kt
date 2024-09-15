@@ -127,27 +127,14 @@ class UserViewModel @AssistedInject constructor(
             // read data from db
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
+                _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
+                getTweets()
                 _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
-                if (userId != appUser.mid) {
-                    // followings of current user has been loaded at startup
-                    _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-                }
             }
         }
     }
 
-    // whether the userId is in current user's following list
-    fun isFollowing(userId: MimeiId): Boolean {
-        return followings.value.contains(userId)
-    }
-
-    fun getFollows(user: User) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _fans.value = HproseInstance.getFans(user) ?: emptyList()
-            _followings.value = HproseInstance.getFollowings(user) ?: emptyList()
-        }
-    }
-    fun getTweets(
+    private fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null
     ) {
@@ -157,6 +144,11 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList }
         }
+    }
+
+    // whether the userId is in current user's following list
+    fun isFollowing(userId: MimeiId): Boolean {
+        return followings.value.contains(userId)
     }
 
     fun showSnackbar(event: SnackbarEvent) {
