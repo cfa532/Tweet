@@ -7,6 +7,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +22,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,12 +38,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -48,6 +57,7 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.fireshare.tweet.R
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import kotlinx.coroutines.Dispatchers
@@ -82,14 +92,21 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem?>, containerWidth: Dp = 400.dp) 
                 MediaItemPreview(mediaItem,
                     Modifier.size(containerWidth/gridCells)
                         .clip(RoundedCornerShape(4.dp))
+                        .clickable { openFullScreen(mediaItem.url) },
+                    isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems
                 )
             }
         }
     }
 }
 
+fun openFullScreen(url: String) {
+    // Implement the logic to open a full-screen view for the media item
+    // This could involve navigating to a new screen or showing a dialog
+}
+
 @Composable
-fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier) {
+fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLastItem: Boolean = false) {
     val fileType = remember(mediaItem.url) {
         mutableStateOf<String?>(null)
     }
@@ -123,6 +140,22 @@ fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier) {
             else -> {
                 // Handle unknown file type
                 println("unknown file type ${fileType.value}")
+            }
+        }
+        if (isLastItem) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color(0x40FFFFFF)), // Lighter shaded background
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(100.dp)
+                        .alpha(0.7f)
+                )
             }
         }
     }

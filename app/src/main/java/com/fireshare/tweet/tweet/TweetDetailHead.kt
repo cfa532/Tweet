@@ -89,7 +89,7 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
+                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 8.dp)
             ) {
                 Column {
                     tweet.content?. let {
