@@ -47,10 +47,7 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                     .align(Alignment.CenterVertically)
             ) {
                 IconButton(
-                    onClick = {
-                        Log.d("MediaBrowser", "Close button clicked")
-                        navController.popBackStack()
-                    },
+                    onClick = { navController.popBackStack() },
                     modifier = Modifier.align(Alignment.Start)
                 ) {
                     Icon(
