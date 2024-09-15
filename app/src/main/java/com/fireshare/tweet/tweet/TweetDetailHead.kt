@@ -133,7 +133,8 @@ fun TweetDropdownMenu(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, navC
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
-            modifier = Modifier.width(24.dp).alpha(0.8f).rotate(-90f),
+            modifier = Modifier.width(36.dp).alpha(0.8f).rotate(-90f)
+                .padding(end = 12.dp),
             onClick = { expanded = !expanded }) {
             Icon(
                 imageVector = Icons.Default.MoreVert,

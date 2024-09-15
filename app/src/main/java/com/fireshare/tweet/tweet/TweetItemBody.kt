@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,7 +19,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.navigation.LocalNavController
@@ -47,7 +47,7 @@ fun TweetBlock(
     ) {
         Column(
             modifier = Modifier
-                .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
+                .padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 4.dp)
         ) {
             // Tweet Header
             TweetItemHeader(tweet)
@@ -57,23 +57,23 @@ fun TweetBlock(
                 shape = MaterialTheme.shapes.small, // Inner border
                 tonalElevation = 0.dp,
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 16.dp)
+                    .padding(start = 20.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
 
                     // Text content of the tweet
                     if (tweet.content?.isNotEmpty() == true) {
-                        tweet.content?.let {
+                        tweet.content?.let { txt ->
                             var isExpanded by remember { mutableStateOf(false) }
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 11
                             Text(
-                                text = it,
+                                text = txt,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = maxLines,
 //                                overflow = TextOverflow.Ellipsis
                             )
 
-                            if (!isExpanded && it.lines().size > 10) {
+                            if (!isExpanded && txt.lines().size > 10) {
                                 Text(
                                     text = "Show more...",
                                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
@@ -85,7 +85,6 @@ fun TweetBlock(
                             }
                         }
                     }
-
                     // attached media files
                     Box(
                         modifier = Modifier

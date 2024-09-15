@@ -6,15 +6,25 @@ import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
@@ -29,6 +39,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
@@ -54,31 +65,76 @@ import java.security.MessageDigest
 data class MediaItem( val url: String )
 
 @Composable
-fun MediaPreviewGrid(mediaItems: List<MediaItem?>) {
-    val maxItems = 4 // 2 rows * 2 columns = 4 items
+fun MediaPreviewGrid(mediaItems: List<MediaItem?>, containerWidth: Dp = 400.dp) {
+    val gridCells = if (mediaItems.size>1) 2 else 1
+    val maxItems = when(mediaItems.size) {
+        1 -> 1
+        in 2..3 -> 2
+        else -> 4
+    }
     val limitedMediaList = mediaItems.take(maxItems)
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.padding(0.dp, 8.dp, 0.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        columns = GridCells.Fixed(gridCells),
     ) {
         items(limitedMediaList) { mediaItem ->
             if (mediaItem != null) {
-                MediaItemPreview(mediaItem)
+                MediaItemPreview(mediaItem,
+                    Modifier.size(containerWidth/gridCells)
+                        .clip(RoundedCornerShape(4.dp))
+                )
             }
         }
     }
 }
 
 @Composable
-fun ImagePreview(imageUrl: String) {
+fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier) {
+    val fileType = remember(mediaItem.url) {
+        mutableStateOf<String?>(null)
+    }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(mediaItem.url) {
+        coroutineScope.launch {
+            val header = withContext(Dispatchers.IO) {
+                downloadFileHeader(mediaItem.url)
+            }
+            val detectedFileType = detectMimeTypeFromHeader(header)
+            fileType.value = detectedFileType
+        }
+    }
+
+    Box(
+        contentAlignment = Alignment.Center
+    ) {
+        when (fileType.value) {
+            "image/jpeg", "image/png" -> {
+                ImagePreview(mediaItem.url, modifier)
+            }
+            "video/mp4" -> {
+                // Implement video player here
+                VideoPreview(url = mediaItem.url, modifier)
+            }
+            "audio/mpeg", "audio/ogg", "audio/flac", "audio/wav" ->  {
+                // Implement audio player here
+                VideoPreview(url = mediaItem.url, modifier)
+            }
+            else -> {
+                // Handle unknown file type
+                println("unknown file type ${fileType.value}")
+            }
+        }
+    }
+}
+
+@Composable
+fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     // In-memory cache for image URLs and their cached paths
     val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
-
     val cachedPath = cachedImageUrls[imageUrl]
 
     // Check if image is already cached and use it directly
@@ -89,9 +145,9 @@ fun ImagePreview(imageUrl: String) {
                     painter = BitmapPainter(it),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(200.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                    modifier = modifier
+//                        .size(200.dp)
+//                        .clip(RoundedCornerShape(4.dp))
                 )
             }
         }
@@ -113,10 +169,25 @@ fun ImagePreview(imageUrl: String) {
             }
         }
         // Display placeholder while image is downloading
-        Box(contentAlignment = Alignment.Center) {
+        Box(contentAlignment = Alignment.Center,
+            modifier = modifier) {
             CircularProgressIndicator()
         }
     }
+}
+
+@Composable
+fun VideoPreview(url: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val exoPlayer = ExoPlayer.Builder(context).build().apply {
+        setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+        prepare()
+    }
+
+    AndroidView(
+        factory = { PlayerView(context).apply { player = exoPlayer } },
+        modifier = modifier
+    )
 }
 
 // Function to load image from cache
@@ -149,7 +220,7 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
 
             result?.let { drawable ->
                 val bitmap = (drawable as BitmapDrawable).bitmap
-                var quality = 60
+                var quality = 80
                 var fileSize: Long
 
                 do {
@@ -158,7 +229,7 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
                     }
                     fileSize = cacheFile.length()
                     quality -= 10
-                } while (fileSize > 100 * 1024 && quality > 0) // 200KB = 200 * 1024 bytes
+                } while (fileSize > 200 * 1024 && quality > 0) // 200KB = 200 * 1024 bytes
             }
 
             cacheFile.absolutePath
@@ -172,60 +243,4 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
 fun hashString(type: String, input: String): String {
     val bytes = MessageDigest.getInstance(type).digest(input.toByteArray())
     return bytes.joinToString("") { "%02x".format(it) }
-}
-
-@Composable
-fun MediaItemPreview(mediaItem: MediaItem) {
-    val fileType = remember(mediaItem.url) {
-        mutableStateOf<String?>(null)
-    }
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(mediaItem.url) {
-        coroutineScope.launch {
-            val header = withContext(Dispatchers.IO) {
-                downloadFileHeader(mediaItem.url)
-            }
-            val detectedFileType = detectMimeTypeFromHeader(header)
-            fileType.value = detectedFileType
-        }
-    }
-
-    Box(
-        contentAlignment = Alignment.Center
-    ) {
-        when (fileType.value) {
-            "image/jpeg", "image/png" -> {
-                ImagePreview(mediaItem.url)
-            }
-            "video/mp4" -> {
-                // Implement video player here
-                VideoPreview(url = mediaItem.url)
-            }
-            "audio/mpeg", "audio/ogg", "audio/flac", "audio/wav" ->  {
-                // Implement audio player here
-                VideoPreview(url = mediaItem.url)
-            }
-            else -> {
-                // Handle unknown file type
-                println("unknown file type ${fileType.value}")
-            }
-        }
-    }
-}
-
-@Composable
-fun VideoPreview(url: String) {
-    val context = LocalContext.current
-    val exoPlayer = ExoPlayer.Builder(context).build().apply {
-        setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
-        prepare()
-    }
-
-    AndroidView(
-        factory = { PlayerView(context).apply { player = exoPlayer } },
-        modifier = Modifier
-            .size(200.dp)
-            .clip(RoundedCornerShape(8.dp))
-    )
 }
