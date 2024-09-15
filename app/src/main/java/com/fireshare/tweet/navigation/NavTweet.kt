@@ -1,6 +1,7 @@
 package com.fireshare.tweet.navigation
 
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.widget.MediaItem
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -45,5 +46,5 @@ sealed interface NavTweet {
     data class Follower(val userId: MimeiId) : NavTweet
 
     @Serializable
-    data class MediaViewer(val midList: List<MimeiId>, val index: Int = 0)   // preview media file by Mimei ID
+    data class MediaViewer(val midList: List<String>, val index: Int = 0)
 }

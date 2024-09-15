@@ -58,24 +58,25 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.fireshare.tweet.R
+import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTwee
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 
-//sealed class MediaItem {
-//    data class Image(val url: String) : MediaItem()
-//    data class Video(val thumbnailUrl: String) : MediaItem()
-//    data object Audio : MediaItem()
-//}
+@Serializable
 data class MediaItem( val url: String )
 
 @Composable
-fun MediaPreviewGrid(mediaItems: List<MediaItem?>, containerWidth: Dp = 400.dp) {
+fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
+    val navController = LocalNavController.current
     val gridCells = if (mediaItems.size>1) 2 else 1
     val maxItems = when(mediaItems.size) {
         1 -> 1
@@ -88,14 +89,17 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem?>, containerWidth: Dp = 400.dp) 
         columns = GridCells.Fixed(gridCells),
     ) {
         items(limitedMediaList) { mediaItem ->
-            if (mediaItem != null) {
-                MediaItemPreview(mediaItem,
-                    Modifier.size(containerWidth/gridCells)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { openFullScreen(mediaItem.url) },
-                    isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems
-                )
-            }
+            MediaItemPreview(mediaItem,
+                Modifier.size(containerWidth/gridCells)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable { openFullScreen(mediaItem.url) }
+                    .clickable {
+                        val index = mediaItems.indexOf(mediaItem)
+                        navController.navigate(NavTweet.MediaViewer(
+                            mediaItems.map {it.url}, index))
+                    },
+                isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems
+            )
         }
     }
 }
