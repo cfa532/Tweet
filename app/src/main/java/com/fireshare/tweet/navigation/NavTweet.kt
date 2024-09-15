@@ -13,9 +13,6 @@ data class ComposeComment(val tweetId: MimeiId)
 object ProfileEditor
 
 @Serializable
-data class MediaViewer(val midList: List<MimeiId>, val index: Int = 0)   // preview media file by Mimei ID
-
-@Serializable
 sealed interface NavTweet {
     @Serializable
     data object TweetFeed : NavTweet
@@ -46,4 +43,7 @@ sealed interface NavTweet {
 
     @Serializable
     data class Follower(val userId: MimeiId) : NavTweet
+
+    @Serializable
+    data class MediaViewer(val midList: List<MimeiId>, val index: Int = 0)   // preview media file by Mimei ID
 }
