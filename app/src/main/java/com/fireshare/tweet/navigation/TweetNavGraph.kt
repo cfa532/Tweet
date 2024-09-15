@@ -120,8 +120,8 @@ fun TweetNavGraph(
                 val viewModel = hiltViewModel<ChatListViewModel>()
                 ChatListScreen(viewModel)
             }
-            composable<NavTweet.MediaViewer> {
-                val md = it.toRoute<NavTweet.MediaViewer>()
+            composable<NavTweet.MediaViewer> {navBackStackEntry ->
+                val md = navBackStackEntry.toRoute<NavTweet.MediaViewer>()
                 MediaBrowser(navController, md.midList.map { MediaItem(it) }, md.index)
             }
             composable<NavTweet.Login> {
