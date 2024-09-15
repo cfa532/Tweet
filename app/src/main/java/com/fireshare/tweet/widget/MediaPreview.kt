@@ -5,31 +5,20 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
@@ -40,14 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -57,9 +44,7 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.NavTwee
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
@@ -69,7 +54,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileOutputStream
-import java.security.MessageDigest
 
 @Serializable
 data class MediaItem( val url: String )
@@ -92,7 +76,6 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
             MediaItemPreview(mediaItem,
                 Modifier.size(containerWidth/gridCells)
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable { openFullScreen(mediaItem.url) }
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
                         navController.navigate(NavTweet.MediaViewer(
@@ -102,11 +85,6 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
             )
         }
     }
-}
-
-fun openFullScreen(url: String) {
-    // Implement the logic to open a full-screen view for the media item
-    // This could involve navigating to a new screen or showing a dialog
 }
 
 @Composable
@@ -143,7 +121,7 @@ fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLast
             }
             else -> {
                 // Handle unknown file type
-                println("unknown file type ${fileType.value}")
+                Log.d("MediaItemPreview", "unknown file type ${fileType.value} ${mediaItem.url}")
             }
         }
         if (isLastItem) {
@@ -169,10 +147,11 @@ fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLast
 fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val cachedMid = imageUrl.substringAfterLast('/') + "_preview"
 
     // In-memory cache for image URLs and their cached paths
     val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
-    val cachedPath = cachedImageUrls[imageUrl]
+    val cachedPath = cachedImageUrls[cachedMid]
 
     // Check if image is already cached and use it directly
     if (cachedPath != null) {
@@ -201,7 +180,7 @@ fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
                     null
                 }
                 if (downloadedPath != null) {
-                    cachedImageUrls[imageUrl] = downloadedPath
+                    cachedImageUrls[cachedMid] = downloadedPath
                 }
             }
         }
@@ -252,7 +231,7 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
 
             // Save the drawable to a file in the cache directory
             val cacheDir = context.cacheDir
-            val fileName = hashString("SHA-256", imageUrl) + ".jpg" // Use JPEG for better compression
+            val fileName = imageUrl.substringAfterLast('/') + "_preview.jpg" // Use JPEG for better compression
             val cacheFile = File(cacheDir, fileName)
 
             result?.let { drawable ->
@@ -290,7 +269,7 @@ suspend fun downloadFullImageToCache(context: Context, imageUrl: String): String
 
             // Save the drawable to a file in the cache directory
             val cacheDir = context.cacheDir
-            val fileName = imageUrl.substringAfterLast('/')
+            val fileName = imageUrl.substringAfterLast('/') + ".png"
             val cacheFile = File(cacheDir, fileName)
 
             result?.let { drawable ->
@@ -306,9 +285,4 @@ suspend fun downloadFullImageToCache(context: Context, imageUrl: String): String
             null
         }
     }
-}
-
-fun hashString(type: String, input: String): String {
-    val bytes = MessageDigest.getInstance(type).digest(input.toByteArray())
-    return bytes.joinToString("") { "%02x".format(it) }
 }
