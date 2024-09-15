@@ -16,7 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.navigation.LocalNavController
@@ -56,11 +60,32 @@ fun TweetBlock(
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 16.dp)
             ) {
                 Column {
+
+                    // Text content of the tweet
                     if (tweet.content?.isNotEmpty() == true) {
                         tweet.content?.let {
-                            Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                            var isExpanded by remember { mutableStateOf(false) }
+                            val maxLines = if (isExpanded) Int.MAX_VALUE else 11
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = maxLines,
+//                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (!isExpanded && it.lines().size > 10) {
+                                Text(
+                                    text = "Show more...",
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.clickable {
+//                                        isExpanded = true
+                                        tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
+                                    }
+                                )
+                            }
                         }
                     }
+
                     // attached media files
                     Box(
                         modifier = Modifier
