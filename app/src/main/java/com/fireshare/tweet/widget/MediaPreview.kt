@@ -277,6 +277,37 @@ suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
     }
 }
 
+suspend fun downloadFullImageToCache(context: Context, imageUrl: String): String? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val imageLoader = ImageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .memoryCachePolicy(CachePolicy.READ_ONLY)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .build()
+            val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
+
+            // Save the drawable to a file in the cache directory
+            val cacheDir = context.cacheDir
+            val fileName = imageUrl.substringAfterLast('/')
+            val cacheFile = File(cacheDir, fileName)
+
+            result?.let { drawable ->
+                val bitmap = (drawable as BitmapDrawable).bitmap
+                FileOutputStream(cacheFile).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) // Use PNG format to avoid compression
+                }
+            }
+
+            cacheFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+}
+
 fun hashString(type: String, input: String): String {
     val bytes = MessageDigest.getInstance(type).digest(input.toByteArray())
     return bytes.joinToString("") { "%02x".format(it) }

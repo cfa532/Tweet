@@ -1,6 +1,5 @@
 package com.fireshare.tweet.widget
 
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -62,8 +61,8 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val mediaUrl = mediaItems[page].url
-                val cachedPath = cachedImageUrls[mediaUrl]
+                val mid = mediaItems[page].url.substringAfterLast('/')
+                val cachedPath = cachedImageUrls[mid]
 
                 if (cachedPath != null) {
                     loadImageFromCache(cachedPath)?.let {
@@ -75,20 +74,20 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                         )
                     }
                 } else {
-                    LaunchedEffect(mediaUrl) {
+                    LaunchedEffect(mid) {
                         coroutineScope.launch {
                             val downloadedPath = try {
                                 withContext(Dispatchers.IO) {
-                                    downloadImageToCache(
+                                    downloadFullImageToCache(
                                         context,
-                                        mediaUrl
+                                        mediaItems[page].url
                                     )
                                 }
                             } catch (e: Exception) {
                                 null
                             }
                             if (downloadedPath != null) {
-                                cachedImageUrls[mediaUrl] = downloadedPath
+                                cachedImageUrls[mid] = downloadedPath
                             }
                         }
                     }
