@@ -46,50 +46,59 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
     val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        IconButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier
-                .size(48.dp)
-                .align(Alignment.TopStart)
-                .zIndex(1f)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = Color.White
-            )
-        }
-
-        HorizontalPager(
-            verticalAlignment = Alignment.Top,
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 48.dp)
-                .zIndex(0.2f)
-        ) { page ->
-            val mediaUrl = mediaItems[page].url
-            val cachedPath = cachedImageUrls[mediaUrl]
-
-            if (cachedPath != null) {
-                loadImageFromCache(cachedPath)?.let {
-                    Image(
-                        painter = BitmapPainter(it),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
+        Row(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .width(32.dp) // Adjust the width as needed
+                    .align(Alignment.CenterVertically)
+            ) {
+                IconButton(
+                    onClick = {
+                        Log.d("MediaBrowser", "Close button clicked")
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier.align(Alignment.Start)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
                     )
                 }
-            } else {
-                LaunchedEffect(mediaUrl) {
-                    coroutineScope.launch {
-                        val downloadedPath = try {
-                            withContext(Dispatchers.IO) { downloadImageToCache(context, mediaUrl) }
-                        } catch (e: Exception) {
-                            null
-                        }
-                        if (downloadedPath != null) {
-                            cachedImageUrls[mediaUrl] = downloadedPath
+            }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val mediaUrl = mediaItems[page].url
+                val cachedPath = cachedImageUrls[mediaUrl]
+
+                if (cachedPath != null) {
+                    loadImageFromCache(cachedPath)?.let {
+                        Image(
+                            painter = BitmapPainter(it),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    LaunchedEffect(mediaUrl) {
+                        coroutineScope.launch {
+                            val downloadedPath = try {
+                                withContext(Dispatchers.IO) {
+                                    downloadImageToCache(
+                                        context,
+                                        mediaUrl
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (downloadedPath != null) {
+                                cachedImageUrls[mediaUrl] = downloadedPath
+                            }
                         }
                     }
                 }
