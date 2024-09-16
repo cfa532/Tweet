@@ -1,11 +1,13 @@
 package com.fireshare.tweet.widget
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,6 +23,27 @@ import java.io.FileNotFoundException
 import java.io.IOException
 
 object Gadget {
+
+    suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val retriever = MediaMetadataRetriever()
+                retriever.setDataSource(videoUrl, HashMap())
+                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()
+                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt()
+                retriever.release()
+                if (width != null && height != null) {
+                    Pair(width, height)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+    }
+
     fun downloadFileHeader(url: String, byteCount: Int = 1024): ByteArray? {
         val client = OkHttpClient()
         val request = Request.Builder()

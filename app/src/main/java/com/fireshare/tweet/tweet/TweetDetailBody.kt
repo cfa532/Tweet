@@ -117,12 +117,12 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel) {
                             items(it as List<MediaItem>) { mi ->
                                 MediaItemPreview(mi,
                                     Modifier.fillMaxWidth()
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .clip(RoundedCornerShape(8.dp))
                                         .clickable {
                                             navController.navigate(NavTweet.MediaViewer(
                                                 mediaItems.map { it.url }, it.indexOf(mi)
                                             ))
-                                        })
+                                        }, false, it.indexOf(mi), false)
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 1.dp),
                                     thickness = 0.8.dp,

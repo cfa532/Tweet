@@ -27,10 +27,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -55,7 +57,9 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
+import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -89,14 +93,19 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
                         navController.navigate(NavTweet.MediaViewer(
                             mediaItems.map {it.url}, index))
                     },
-                isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems
+                isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
+                index = if (mediaItems.indexOf(mediaItem) == 0) 0 else -1,
             )
         }
     }
 }
 
 @Composable
-fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLastItem: Boolean = false) {
+fun MediaItemPreview(mediaItem: MediaItem,
+                     modifier: Modifier = Modifier,
+                     isLastItem: Boolean = false,
+                     index: Int = -1,
+                     inPreviewGrid: Boolean = true) {
     val fileType = remember(mediaItem.url.substringAfterLast("/")) {    // take mimei Id as key
         mutableStateOf<String?>(null)
     }
@@ -121,7 +130,7 @@ fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLast
             }
             "video/mp4" -> {
                 // Implement video player here
-                VideoPreview(url = mediaItem.url, modifier)
+                VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid)
             }
             "audio/mpeg", "audio/ogg", "audio/flac", "audio/wav" ->  {
                 // Implement audio player here
@@ -199,19 +208,25 @@ fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun VideoPreview(url: String, modifier: Modifier = Modifier) {
+fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, inPreviewGrid: Boolean = true) {
     val context = LocalContext.current
     val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
     val exoPlayer = ExoPlayer.Builder(context).build().apply {
         setMediaItem(item)
         prepare()
+        playWhenReady = index==0
     }
+    var videoDimension by remember { mutableStateOf(Pair(400, 400)) }
+    LaunchedEffect(Unit) {
+        videoDimension = getVideoDimensions(url) ?: Pair(400, 400)
+    }
+    val aspectRatio = if (inPreviewGrid) 1f else videoDimension.first.toFloat() / videoDimension.second.toFloat()
 
     Box(modifier = modifier) {
         AndroidView(
             factory = { PlayerView(context).apply { player = exoPlayer } },
             modifier = modifier
-//                .aspectRatio((item as androidx.media3.common.MediaItem).aspectRatio)
+                .aspectRatio(aspectRatio)
         )
         // Fullscreen button
         IconButton(
