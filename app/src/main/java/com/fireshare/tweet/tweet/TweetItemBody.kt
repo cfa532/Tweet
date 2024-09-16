@@ -64,7 +64,7 @@ fun TweetBlock(
                     // Text content of the tweet
                     if (tweet.content?.isNotEmpty() == true) {
                         tweet.content?.let { txt ->
-                            var isExpanded by remember { mutableStateOf(false) }
+                            val isExpanded by remember { mutableStateOf(false) }
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 11
                             Text(
                                 text = txt,

@@ -1,5 +1,8 @@
 package com.fireshare.tweet.widget
 
+import android.media.MediaPlayer
+import android.net.Uri
+import android.widget.VideoView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -26,6 +29,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,33 +65,39 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val mid = mediaItems[page].url.substringAfterLast('/')
+                val mediaItem = mediaItems[page]
+                val mid = mediaItem.url.substringAfterLast('/')
                 val cachedPath = cachedImageUrls[mid]
 
-                if (cachedPath != null) {
-                    loadImageFromCache(cachedPath)?.let {
-                        Image(
-                            painter = BitmapPainter(it),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                if (mediaItem.type == MediaType.Video) {
+                    // Directly play the video without caching
+                    VideoPlayer(uri = Uri.parse(mediaItem.url))
                 } else {
-                    LaunchedEffect(mid) {
-                        coroutineScope.launch {
-                            val downloadedPath = try {
-                                withContext(Dispatchers.IO) {
-                                    downloadFullImageToCache(
-                                        context,
-                                        mediaItems[page].url
-                                    )
+                    if (cachedPath != null) {
+                        loadImageFromCache(cachedPath)?.let {
+                            Image(
+                                painter = BitmapPainter(it),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    } else {
+                        LaunchedEffect(mid) {
+                            coroutineScope.launch {
+                                val downloadedPath = try {
+                                    withContext(Dispatchers.IO) {
+                                        downloadFullImageToCache(
+                                            context,
+                                            mediaItem.url
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    null
                                 }
-                            } catch (e: Exception) {
-                                null
-                            }
-                            if (downloadedPath != null) {
-                                cachedImageUrls[mid] = downloadedPath
+                                if (downloadedPath != null) {
+                                    cachedImageUrls[mid] = downloadedPath
+                                }
                             }
                         }
                     }
@@ -97,3 +107,19 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
     }
 }
 
+@Composable
+fun VideoPlayer(uri: Uri) {
+    val context = LocalContext.current
+    AndroidView(
+        factory = {
+            VideoView(context).apply {
+                setVideoURI(uri)
+                setOnPreparedListener { mediaPlayer: MediaPlayer ->
+                    mediaPlayer.isLooping = false
+                    start()
+                }
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}

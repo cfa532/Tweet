@@ -68,7 +68,14 @@ import java.io.FileOutputStream
 import kotlin.io.encoding.Base64
 
 @Serializable
-data class MediaItem( val url: String )
+sealed class MediaType {
+    object Video : MediaType()
+    object Audio : MediaType()
+    object Image : MediaType()
+}
+
+@Serializable
+data class MediaItem( val url: String, var type: MediaType = MediaType.Image )
 
 @Composable
 fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
@@ -127,14 +134,17 @@ fun MediaItemPreview(mediaItem: MediaItem,
     ) {
         when (fileType.value) {
             "image/jpeg", "image/png" -> {
+                mediaItem.type = MediaType.Image
                 ImagePreview(mediaItem.url, modifier)
             }
             "video/mp4" -> {
                 // Implement video player here
+                mediaItem.type = MediaType.Video
                 VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid)
             }
             "audio/mpeg", "audio/ogg", "audio/flac", "audio/wav" ->  {
                 // Implement audio player here
+                mediaItem.type = MediaType.Audio
                 VideoPreview(url = mediaItem.url, modifier)
             }
             else -> {
@@ -232,7 +242,7 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
         // Fullscreen button
         IconButton(
             onClick = {
-                println("click to open full screen")
+                println("click to open full screen")    // full view will open
             },
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
