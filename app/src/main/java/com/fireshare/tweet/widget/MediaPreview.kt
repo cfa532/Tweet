@@ -103,9 +103,10 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
 @Composable
 fun MediaItemPreview(mediaItem: MediaItem,
                      modifier: Modifier = Modifier,
-                     isLastItem: Boolean = false,
-                     index: Int = -1,
-                     inPreviewGrid: Boolean = true) {
+                     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items hidden
+                     index: Int = -1,               // autoplay first video item, index 0
+                     inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
+) {
     val fileType = remember(mediaItem.url.substringAfterLast("/")) {    // take mimei Id as key
         mutableStateOf<String?>(null)
     }
