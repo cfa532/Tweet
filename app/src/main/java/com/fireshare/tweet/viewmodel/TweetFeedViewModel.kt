@@ -41,25 +41,38 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
 
     init {
+        refresh()
+    }
+
+    private fun getTweets(
+        startTimestamp: Long = System.currentTimeMillis(),
+        endTimestamp: Long? = null
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+            coroutineScope {  // Create a child coroutine scope
+                followings.value.forEach { userId ->
+                    launch(Dispatchers.IO) {
+                        val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
+                        _tweets.update { currentTweets -> (currentTweets + tweetsList).sortedByDescending { it.timestamp } }
+                    }
+                }
+            }
+        }
+    }
+
+    fun refresh() {
+        _followings.value = appUser.followingList ?: emptyList()
+//        _tweets.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
             if (! followings.value.contains(appUser.mid))
                 _followings.update { newList -> newList + appUser.mid }     // always follow oneself
 
             val list = HproseInstance.getAlphaIds().filter {
+                // get default list, no duplication.
                 !followings.value.contains(it)
             }
             _followings.update { newList -> newList + list }        // add default ones
-
-//        getTweets(startTimestamp.longValue, endTimestamp.longValue)
             getTweets(startTimestamp.longValue)
-        }
-    }
-
-    // given a tweet, update its counterpart in Tweet list
-    fun updateTweet(tweet: Tweet) {
-        _tweets.value = _tweets.value.map {
-            if (it.mid == tweet.mid) tweet else it
         }
     }
 
@@ -84,23 +97,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             // tweet object is updated in toggleRetweet()
             HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel ) { newTweet ->
                 updateTweetViewModel(newTweet)
-            }
-        }
-    }
-
-    fun getTweets(
-        startTimestamp: Long = System.currentTimeMillis(),
-        endTimestamp: Long? = null
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            coroutineScope {  // Create a child coroutine scope
-                followings.value.forEach { userId ->
-                    launch(Dispatchers.IO) {
-                        val tweetsList = _tweets.value.filter { it.authorId == userId }.toMutableList()
-                        HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)
-                        _tweets.update { currentTweets -> currentTweets + tweetsList }
-                    }
-                }
             }
         }
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -17,8 +18,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
@@ -39,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SimpleExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.ImageLoader
 import coil.request.CachePolicy
@@ -54,6 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.io.encoding.Base64
 
 @Serializable
 data class MediaItem( val url: String )
@@ -89,7 +97,7 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
 
 @Composable
 fun MediaItemPreview(mediaItem: MediaItem, modifier: Modifier = Modifier, isLastItem: Boolean = false) {
-    val fileType = remember(mediaItem.url) {
+    val fileType = remember(mediaItem.url.substringAfterLast("/")) {    // take mimei Id as key
         mutableStateOf<String?>(null)
     }
     val coroutineScope = rememberCoroutineScope()
@@ -162,8 +170,6 @@ fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = modifier
-//                        .size(200.dp)
-//                        .clip(RoundedCornerShape(4.dp))
                 )
             }
         }
@@ -195,15 +201,33 @@ fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
 @Composable
 fun VideoPreview(url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
     val exoPlayer = ExoPlayer.Builder(context).build().apply {
-        setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+        setMediaItem(item)
         prepare()
     }
 
-    AndroidView(
-        factory = { PlayerView(context).apply { player = exoPlayer } },
-        modifier = modifier
-    )
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { PlayerView(context).apply { player = exoPlayer } },
+            modifier = modifier
+//                .aspectRatio((item as androidx.media3.common.MediaItem).aspectRatio)
+        )
+        // Fullscreen button
+        IconButton(
+            onClick = {
+                println("click to open full screen")
+            },
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = "Full screen",
+                tint = Color.White,
+                modifier = modifier.size(ButtonDefaults.IconSize)
+            )
+        }
+    }
 }
 
 // Function to load image from cache

@@ -1,22 +1,29 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -43,11 +51,12 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
@@ -95,17 +104,32 @@ fun TweetDetailHead(tweet: Tweet, viewModel: TweetViewModel) {
                     tweet.content?. let {
                         Text(text = it, style = MaterialTheme.typography.bodyMedium)
                     }
-                    Box(
-                        // media files
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 800.dp) // Set a specific height for the grid
-                    ) {
-                        val mediaItems = tweet.attachments?.mapNotNull {
-                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                                ?.let { it2 -> MediaItem(it2) }
+
+                    val mediaItems = tweet.attachments?.mapNotNull {
+                        tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
+                            ?.let { it2 -> MediaItem(it2) }
+                    }
+                    mediaItems?.let {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth()
+                                .heightIn(max = 800.dp) // Set a specific height for the grid
+                        ) {
+                            items(it as List<MediaItem>) { mi ->
+                                MediaItemPreview(mi,
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            navController.navigate(NavTweet.MediaViewer(
+                                                mediaItems.map { it.url }, it.indexOf(mi)
+                                            ))
+                                        })
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 1.dp),
+                                    thickness = 0.8.dp,
+                                    color = Color.LightGray
+                                )
+                            }
                         }
-                        mediaItems?.let { MediaPreviewGrid(it) }
                     }
 
                     // Actions Row

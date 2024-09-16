@@ -21,7 +21,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.InputStream
-import java.math.BigInteger
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
@@ -338,60 +337,65 @@ object HproseInstance {
 
     // get tweets of a given author in a given span of time
     // if end is null, get all tweets
-    suspend fun getTweetList(
-        authorId: MimeiId,      // author ID of the tweets
-        tweets: MutableList<Tweet>,
-        startTimestamp: Long,
-        endTimestamp: Long?
+    suspend fun getTweetList(userId: MimeiId,
+                             startTimestamp: Long,
+                             endTimestamp: Long?
     ) = try {
-        client.mmOpen("", authorId, "last").also {
-            client.zRevRange(it, TWT_LIST_KEY, 0, -1).forEach { e ->
-                val sp = e as Map<*, *>
-                val score = (sp["score"] as BigInteger).toLong()
-                val tweetId = sp["member"] as MimeiId
-                if (score <= startTimestamp && (endTimestamp == null || score > endTimestamp)) {
-                    // check if the tweet is in the tweets already.
-                    getTweet(tweetId, authorId, tweets)?.let { t -> tweets += t }
+        val user = getUserBase(userId)      // author of the list of tweet
+        val method = "get_tweets"
+        val url = StringBuilder("${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
+            .append("&userid=${user?.mid}&start=$startTimestamp&end=$endTimestamp").toString()
+        val request = Request.Builder().url(url).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val responseBody = response.body?.string()
+            val gson = Gson()
+            val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
+                Log.d("getTweet()","fetchTweet=$it")
+                // assign every tweet its author object.
+                it.author = user
+                it
+            }
+            tweets.forEach {
+                it.originalTweetId?.let {ori ->
+                    // this is a retweet or quoted tweet, now get the original tweet
+                    val cachedTweet = tweets.find { twt -> twt.mid == ori }
+                    if (cachedTweet != null) {
+                        // the original tweet has been fetched.
+                        it.originalTweet = cachedTweet
+                    } else {
+                        // the tweet might belong to other users.
+                        it.originalTweet =
+                            it.originalAuthorId?.let {oa -> getTweet(ori, oa) }
+                    }
                 }
             }
-        }
+            tweets
+        } else
+            emptyList<Tweet>()
     } catch (e: Exception) {
-        Log.e("HproseInstance.getTweets", e.toString())
+        Log.e("getTweets()", e.toString())
+        emptyList<Tweet>()
     }
 
     private suspend fun getTweet(
         tweetId: MimeiId,
-        authorId: MimeiId,
-        tweets: List<Tweet>
+        authorId: MimeiId
     ): Tweet? {
-        // if the tweet is fetched already, return null
-        tweets.find { it.mid == tweetId }?.let { return null }
         val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
         val method = "get_tweet"
-        val url =
-            "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=$tweetId&userid=${appUser.mid}"
+        val url = StringBuilder("${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
+            .append("&tweetid=$tweetId")
+            // appUser is passed to sever, to check if the current user has liked or bookmarked.
+            .append("&userid=${appUser.mid}").toString()
+
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             response.body?.string()?.let { json ->
-                Log.d("getTweet()","fetchTweet=$json")
                 val gson = Gson()
                 val tweet = gson.fromJson(json, Tweet::class.java)
                 tweet.author = author
-
-                if (tweet.originalTweetId != null) {
-                    val cachedTweet = tweets.find { it.mid == tweet.originalTweetId }
-                    if (cachedTweet != null) {
-                        // isPrivate could be null
-                        tweet.originalAuthor = cachedTweet.author
-                        tweet.originalTweet = cachedTweet
-                    } else {
-                        tweet.originalTweet =
-                            tweet.originalAuthorId?.let { getTweet(tweet.originalTweetId!!, it, tweets) }
-                                ?: return null
-                        tweet.originalAuthor = tweet.originalTweet!!.author
-                    }
-                }
                 return tweet
             }
         }
@@ -522,7 +526,7 @@ object HproseInstance {
 
     // given a tweet, load its comments. If commentId is not Null, retrieve that one alone.
     fun getComments(tweet: Tweet, commentId: MimeiId? = null, pageNumber: Int = 0): List<Tweet> {
-        val method = "get_tweets"
+        val method = "get_comments"
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}&userid=${appUser.mid}")
             .append("&pn=$pageNumber&commentid=$commentId").toString()
@@ -539,13 +543,6 @@ object HproseInstance {
             Log.e("OkHttp", "Network failure: Unexpected status line", e)
         }
         return listOf<Tweet>()
-    }
-
-    fun delTweet(tweetId: MimeiId) {
-        val entry = "del_tweet"
-        val json = """
-            {}
-        """.trimIndent()
     }
 
     // update input parameter "comment" with new mid, and return update parent Tweet

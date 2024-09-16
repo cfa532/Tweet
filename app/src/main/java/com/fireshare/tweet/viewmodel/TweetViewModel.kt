@@ -118,7 +118,7 @@ class TweetViewModel @AssistedInject constructor(
 
                             if (retweet != null) {
                                 retweet.originalTweet = comment
-                                retweet.originalAuthor = comment.author
+                                retweet.originalTweet!!.author = comment.author
                                 HproseInstance.tweetFeedViewModel.addTweet(retweet)
                             }
                         }

@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,9 +42,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable
@@ -51,6 +54,7 @@ fun LoginScreen() {
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = TW_CONST.GUEST_ID) {
             factory -> factory.create(TW_CONST.GUEST_ID)
     }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
     val focusManager = LocalFocusManager.current
     val username by viewModel.username
@@ -135,9 +139,11 @@ fun LoginScreen() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
-            onClick = {
-                if (viewModel.login())
-                    navController.popBackStack() },
+            onClick = { if (viewModel.login() != null) {
+                // refresh tweet feed view
+                tweetFeedViewModel.refresh()
+                navController.popBackStack()
+            } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading
         ) {

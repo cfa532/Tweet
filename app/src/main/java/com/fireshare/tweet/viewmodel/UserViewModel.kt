@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -128,8 +127,8 @@ class UserViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
                 _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-                getTweets()
                 _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
+                getTweets()
             }
         }
     }
@@ -140,8 +139,7 @@ class UserViewModel @AssistedInject constructor(
     ) {
         if (userId == TW_CONST.GUEST_ID) return
         viewModelScope.launch(Dispatchers.IO) {
-            val tweetsList = _tweets.value.toMutableList()
-            HproseInstance.getTweetList(userId, tweetsList, startTimestamp, endTimestamp)
+            val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList }
         }
     }
@@ -155,7 +153,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    fun login(): Boolean {
+    fun login(): User? {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
@@ -168,15 +166,21 @@ class UserViewModel @AssistedInject constructor(
                 preferencesHelper.saveKeyPhrase("")
                 preferencePhrase = ""
                 keyPhrase.value = null
-                return false
+                return null
             } else {
                 preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
                 preferencesHelper.setUserId(user.mid)
                 appUser = user
-                return true
+                _user.value = user
+                return user
             }
         } else {
-            return false
+            loginError.value = "Login failed"
+            preferencesHelper.saveKeyPhrase("")
+            preferencePhrase = ""
+            keyPhrase.value = null
+            isLoading.value = false
+            return null
         }
     }
 

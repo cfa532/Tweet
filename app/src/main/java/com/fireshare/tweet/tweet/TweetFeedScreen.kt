@@ -31,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -106,7 +107,11 @@ fun MainTopAppBar(
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(appUser.mid)) })
+            IconButton(onClick = {
+                if (appUser.mid == TW_CONST.GUEST_ID)
+                    navController.navigate(NavTweet.Login)
+                else
+                    navController.navigate(NavTweet.UserProfile(appUser.mid)) })
             {
                 UserAvatar(appUser)
             }

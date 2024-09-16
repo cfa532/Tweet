@@ -21,21 +21,6 @@ import java.io.FileNotFoundException
 import java.io.IOException
 
 object Gadget {
-    suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {
-        return attachments.map { uri ->
-            withContext(IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        HproseInstance.uploadToIPFS(inputStream)
-                    } ?: throw FileNotFoundException("File not found for URI: $uri")
-                }.getOrElse { e ->
-                    Log.e("uploadAttachments", "Failed to upload file: $uri", e)
-                    throw IOException("Upload failed.")
-                }
-            }
-        }
-    }
-
     fun downloadFileHeader(url: String, byteCount: Int = 1024): ByteArray? {
         val client = OkHttpClient()
         val request = Request.Builder()
@@ -100,6 +85,21 @@ object Gadget {
             is JsonObject -> jsonElement.toString() // For objects, you might want to handle specific properties
             is JsonArray -> jsonElement.joinToString(", ") { removeParentheses(it) } // Recursively handle array elements
             else -> "" // Handle other types as needed
+        }
+    }
+
+    suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {
+        return attachments.map { uri ->
+            withContext(IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        HproseInstance.uploadToIPFS(inputStream)
+                    } ?: throw FileNotFoundException("File not found for URI: $uri")
+                }.getOrElse { e ->
+                    Log.e("uploadAttachments", "Failed to upload file: $uri", e)
+                    throw IOException("Upload failed.")
+                }
+            }
         }
     }
 }

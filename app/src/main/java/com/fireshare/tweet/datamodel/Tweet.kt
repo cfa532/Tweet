@@ -25,7 +25,7 @@ data class Tweet(
 
     // the following six attributes are for display only. Not stored in database.
     var author: User? = null,
-    var originalAuthor: User? = null,
+//    var originalAuthor: User? = null,
     var originalTweet: Tweet? = null,        // the original tweet for display only.
 
     // if the current user has liked or bookmarked this tweet

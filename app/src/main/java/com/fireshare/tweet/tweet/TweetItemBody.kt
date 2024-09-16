@@ -87,8 +87,7 @@ fun TweetBlock(
                     }
                     // attached media files
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                             .heightIn(max = 800.dp) // Set a specific height for the grid
                     ) {
                         val mediaItems = tweet.attachments?.mapNotNull {

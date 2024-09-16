@@ -68,7 +68,7 @@ fun TweetDetailScreen(
                 .padding(innerPadding)
         ) {
             // main body of the parent Tweet.
-            TweetDetailHead(tweet, viewModel)
+            TweetDetailBody(tweet, viewModel)
 
             // divider between tweet and its comment list
             HorizontalDivider(
