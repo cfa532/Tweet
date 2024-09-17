@@ -19,9 +19,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -73,36 +76,39 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                     // Directly play the video without caching
                     VideoPlayer(uri = Uri.parse(mediaItem.url))
                 } else {
-                    if (cachedPath != null) {
-                        loadImageFromCache(cachedPath)?.let {
-                            Image(
-                                painter = BitmapPainter(it),
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    } else {
-                        LaunchedEffect(mid) {
-                            coroutineScope.launch {
-                                val downloadedPath = try {
-                                    withContext(Dispatchers.IO) {
-                                        downloadFullImageToCache(
-                                            context,
-                                            mediaItem.url
-                                        )
-                                    }
-                                } catch (e: Exception) {
-                                    null
-                                }
-                                if (downloadedPath != null) {
-                                    cachedImageUrls[mid] = downloadedPath
-                                }
-                            }
-                        }
-                    }
+                    ImageLoader(mediaItem.url)
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ImageLoader(imageUrl: String) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var cachedPath by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(imageUrl) {
+        coroutineScope.launch {
+            cachedPath = try {
+                withContext(Dispatchers.IO) {
+                    downloadFullImageToCache(context, imageUrl)
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    cachedPath?.let { path ->
+        loadImageFromCache(path)?.let { bitmap ->
+            Image(
+                painter = BitmapPainter(bitmap),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
