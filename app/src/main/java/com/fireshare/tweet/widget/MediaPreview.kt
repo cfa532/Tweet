@@ -69,9 +69,9 @@ import kotlin.io.encoding.Base64
 
 @Serializable
 sealed class MediaType {
-    object Video : MediaType()
-    object Audio : MediaType()
-    object Image : MediaType()
+    data object Video : MediaType()
+    data object Audio : MediaType()
+    data object Image : MediaType()
 }
 
 @Serializable
@@ -225,7 +225,8 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
     val exoPlayer = ExoPlayer.Builder(context).build().apply {
         setMediaItem(item)
         prepare()
-        playWhenReady = index==0
+        playWhenReady = false
+//        playWhenReady = index==0
     }
     var videoDimension by remember { mutableStateOf(Pair(400, 400)) }
     LaunchedEffect(Unit) {

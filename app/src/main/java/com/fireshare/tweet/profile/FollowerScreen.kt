@@ -91,7 +91,7 @@ fun FollowerScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 
             ) {
                 items(followers) { userId ->
-                    FollowingItem(userId, parentEntry)
+                    FollowingItem(userId, parentEntry, navController)
                 }
             }
         }

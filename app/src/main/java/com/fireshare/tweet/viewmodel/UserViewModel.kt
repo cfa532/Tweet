@@ -140,7 +140,7 @@ class UserViewModel @AssistedInject constructor(
         if (userId == TW_CONST.GUEST_ID) return
         viewModelScope.launch(Dispatchers.IO) {
             val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
-            _tweets.update { currentTweets -> currentTweets + tweetsList }
+            _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }
     }
 

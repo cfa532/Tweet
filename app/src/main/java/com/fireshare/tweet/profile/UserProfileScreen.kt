@@ -57,7 +57,7 @@ fun UserProfileScreen(
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),
                     thickness = 1.dp,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.outline
                 )
                 Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
                     Text(

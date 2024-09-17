@@ -39,10 +39,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -91,7 +94,7 @@ fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 
             ) {
                 items(followings) { userId ->
-                    FollowingItem(userId, parentEntry)
+                    FollowingItem(userId, parentEntry, navController)
                 }
             }
         }
@@ -99,7 +102,7 @@ fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 }
 
 @Composable
-fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry) {
+fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry, navController: NavController) {
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
             factory -> factory.create(userId)
     }
@@ -110,7 +113,14 @@ fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry) {
         .heightIn(max = 200.dp)
         .fillMaxWidth()
     ) {
-        UserAvatar(user, 40)
+        IconButton(onClick = {
+            if (appUser.mid == TW_CONST.GUEST_ID)
+                navController.navigate(NavTweet.Login)
+            else
+                navController.navigate(NavTweet.UserProfile(appUser.mid)) })
+        {
+            UserAvatar(user,40)
+        }
         Spacer(modifier = Modifier.width(8.dp))
         Column {
             Row(
@@ -135,7 +145,7 @@ fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry) {
             Text(
                 text = "${user.profile}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.secondary
             )
         }
     }
@@ -160,7 +170,7 @@ fun ProfileActionButton(userId: MimeiId, viewModel: UserViewModel) {
     ) {
         Text(
             text = buttonText,
-            color = Color.DarkGray,
+            color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = { viewModel.toggleFollow(userId) })

@@ -62,30 +62,29 @@ fun TweetDetailScreen(
         )},
         bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // main body of the parent Tweet.
-            TweetDetailBody(tweet, viewModel)
+            item {
+                // main body of the parent Tweet.
+                TweetDetailBody(tweet, viewModel)
 
-            // divider between tweet and its comment list
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 1.dp),
-                thickness = 0.5.dp,
-                color = Color.LightGray
-            )
-            // user comment list
-            LazyColumn{
-                items(comments) { comment ->
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
-                        thickness = 0.5.dp,
-                        color = Color.LightGray
-                    )
-                    CommentItem(comment, viewModel, parentEntry)
-                }
+                // divider between tweet and its comment list
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 1.dp),
+                    thickness = 0.5.dp,
+                    color = Color.LightGray
+                )
+            }
+            items(comments) { comment ->
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 1.dp),
+                    thickness = 0.5.dp,
+                    color = Color.LightGray
+                )
+                CommentItem(comment, viewModel, parentEntry)
             }
         }
     }
