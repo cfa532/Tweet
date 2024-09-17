@@ -108,14 +108,12 @@ fun TweetItem(
                         border = BorderStroke(0.4.dp,
                             color = MaterialTheme.colorScheme.surfaceTint),
                         tonalElevation = 1.dp,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp)
                     ) {
-                        TweetBlock( viewModel  =
-                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry,
-                            key = tweet.originalTweetId
+                        TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry, key = tweet.originalTweetId
+                        ) { factory -> factory.create(tweet.originalTweet!!) }, true
                         )
-                        { factory -> factory.create(tweet.originalTweet!!) }, true)
                     }
                     Row(
                         modifier = Modifier
