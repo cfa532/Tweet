@@ -38,8 +38,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
-    private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
+    private var startTimestamp = System.currentTimeMillis()    // current time
 
     init {
         _followings.update { list -> list + (appUser.followingList ?: HproseInstance.getAlphaIds()) }
@@ -48,7 +47,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     private fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
-        endTimestamp: Long? = null
+        endTimestamp: Long? = null      // earlier in time
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             coroutineScope {  // Create a child coroutine scope
@@ -73,9 +72,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             val seenMids = mutableSetOf<MimeiId>()
             currentList.filter { seenMids.add(it) }
         }
-        getTweets(startTimestamp.longValue)
-//        viewModelScope.launch(Dispatchers.IO) {
-//        }
+        getTweets(startTimestamp, startTimestamp- java.lang.Long.valueOf(2_592_000_000))  // 30 days
     }
 
     fun addTweet(tweet: Tweet) {

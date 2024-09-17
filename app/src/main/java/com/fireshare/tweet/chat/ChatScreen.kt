@@ -1,18 +1,23 @@
 package com.fireshare.tweet.chat
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -21,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -28,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -47,6 +54,7 @@ fun ChatScreen(
 ) {
     val chatMessages by viewModel.chatMessages.collectAsState()
     val navController = LocalNavController.current
+    val receipt by viewModel.receipt.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -55,12 +63,16 @@ fun ChatScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    Column {
-                        UserAvatar(viewModel.receipt, 40)
-                        Text(
-                            text = "Message",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        Column {
+                            UserAvatar(receipt, 32)
+                            Text(
+                                text = receipt?.profile ?: " ",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 },
                 navigationIcon = {
@@ -76,19 +88,24 @@ fun ChatScreen(
         },
         bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
-        Surface(modifier = Modifier.padding(innerPadding))
-        {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                items(chatMessages.reversed()) { msg ->
-                    ChatItem(msg)
+        Surface(modifier = Modifier.padding(innerPadding)) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 100.dp) // Adjust padding to make space for the input field
+                ) {
+                    items(chatMessages) { msg ->
+                        ChatItem(msg)
+                    }
                 }
+                ChatInput(
+                    viewModel = viewModel,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp)
+                )
             }
-            // Input field at the bottom
-            ChatInput(viewModel)
         }
     }
 }
@@ -118,32 +135,35 @@ fun ChatItem(message: ChatMessage) {
 }
 
 @Composable
-fun ChatInput(viewModel: ChatViewModel) {
+fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val textState by viewModel.textState
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(0.dp)
     ) {
-        BasicTextField(
-            value = TextFieldValue(textState),
-            onValueChange = { viewModel.textState.value = it.text },
+        TextField(
+            value = textState,
+            onValueChange = { viewModel.textState.value = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp) // Adjust height as needed
-                .padding(8.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(
-            onClick = {
-                if (textState.isNotBlank()) {
-                    viewModel.sendMessage()
-                    viewModel.textState.value = "" // Clear the input field after sending
+                .heightIn(min = 56.dp, max = 150.dp)
+                .padding(0.dp),
+            placeholder = { Text("Type a message...") },
+            trailingIcon = {
+                IconButton(onClick = {
+                    if (textState.isNotBlank()) {
+                        viewModel.sendMessage()
+                        viewModel.textState.value = "" // Clear the input field after sending
+                    }
+                }) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                 }
             },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Send")
-        }
+            singleLine = false
+        )
     }
 }

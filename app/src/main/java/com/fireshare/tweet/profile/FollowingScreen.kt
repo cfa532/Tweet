@@ -117,7 +117,7 @@ fun FollowingItem(userId: MimeiId, parentEntry: NavBackStackEntry, navController
             if (appUser.mid == TW_CONST.GUEST_ID)
                 navController.navigate(NavTweet.Login)
             else
-                navController.navigate(NavTweet.UserProfile(appUser.mid)) })
+                navController.navigate(NavTweet.UserProfile(user.mid)) })
         {
             UserAvatar(user,40)
         }

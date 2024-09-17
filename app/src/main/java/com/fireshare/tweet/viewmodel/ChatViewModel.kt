@@ -26,12 +26,12 @@ class ChatViewModel @AssistedInject constructor(
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
 
-    var receipt: User? = null
+    var receipt = MutableStateFlow<User?>(null)
     var textState = mutableStateOf("")
 
     init {
         viewModelScope.launch {
-            HproseInstance.getUserBase(receiptId)?.let { receipt = it }
+            HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
             // get messages stored at local
             loadLocalMessages()
 

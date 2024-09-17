@@ -53,9 +53,11 @@ object HproseInstance {
 
     fun init(context: Context, preferencesHelper: PreferencesHelper) {
         // Use default AppUrl to enter App network, update with IP of the fastest node.
-        val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
-        appId = pair.first
-        BASE_URL = pair.second
+//        val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
+//        appId = pair.first
+//        BASE_URL = pair.second
+        appId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
+        BASE_URL = "http://192.168.0.61:8081"
 
         var userId = preferencesHelper.getUserId()
 //        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
@@ -174,7 +176,7 @@ object HproseInstance {
         val gson = Gson()
         val entry = "message_fetch"
         val json = """
-            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "senderid":${senderId}
+            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "senderid":${senderId}}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         // write outgoing message to user's Mimei db
@@ -350,6 +352,7 @@ object HproseInstance {
         if (response.isSuccessful) {
             val responseBody = response.body?.string()
             val gson = Gson()
+//            val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
             val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
                 Log.d("getTweet()","fetchTweet=$it")
                 // assign every tweet its author object.

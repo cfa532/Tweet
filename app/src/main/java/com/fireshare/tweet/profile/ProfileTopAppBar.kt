@@ -73,7 +73,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController)
         },
         actions = {
             if (appUser.mid != TW_CONST.GUEST_ID) {
-                IconButton(onClick = {}) {
+                IconButton(onClick = {navController.navigate(NavTweet.ChatBox(user.mid))}) {
                     Icon(
                         imageVector = Icons.Default.MailOutline,
                         contentDescription = "Message"
