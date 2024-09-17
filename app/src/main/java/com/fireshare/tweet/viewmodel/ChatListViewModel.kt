@@ -18,10 +18,10 @@ class ChatListViewModel @Inject constructor(): ViewModel()
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatSessions.asStateFlow()
 
     init {
-        _chatSessions.value = loadChatSessions()
+        _chatSessions.value = loadChatSessions() ?: emptyList()
     }
 
-    private fun loadChatSessions(): List<ChatMessage> {
+    private fun loadChatSessions(): List<ChatMessage>? {
         return HproseInstance.loadMostRecentMessages()
     }
 

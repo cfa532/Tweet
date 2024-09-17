@@ -60,7 +60,7 @@ class ChatViewModel @AssistedInject constructor(
     private fun fetchMessage(numOfMsgs: Int = 50) {
         // read message from server proactively.
         _chatMessages.update { msgs ->
-            HproseInstance.fetchMessages(receiptId, numOfMsgs) + msgs
+            HproseInstance.fetchMessages(receiptId, numOfMsgs)?.plus(msgs) ?: emptyList()
         }
     }
 

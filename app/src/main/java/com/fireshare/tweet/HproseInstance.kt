@@ -149,30 +149,31 @@ object HproseInstance {
     }
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
-        val gson = Gson()
-        val entry = "message_outgoing"
-        val json = """
-            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "receiptid":$receiptId,
-            "msg": ${Json.encodeToString(msg)}}
-        """.trimIndent()
-        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        var entry = "message_outgoing"
+        var url =
+            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
+                    "&receiptid=$receiptId&msg=${Json.encodeToString(msg)}"
         // write outgoing message to user's Mimei db
-        client.runMApp(entry, request)
-
-        // write message to receipt's Mimei db on the receipt's node
-        val receipt = getUserBase(receiptId)
-        val method = "message_incoming"
-        val url =
-            "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&senderid=${appUser.mid}&receiptid=$receiptId&msg=${Json.encodeToString(msg)}"
-        val request2 = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request2).execute()
+        var request = Request.Builder().url(url).build()
+        var response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
-            return
+            // write message to receipt's Mimei db on the receipt's node
+            val receipt = getUserBase(receiptId)
+            entry = "message_incoming"
+            url =
+                "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                        "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
+                    Json.encodeToString(msg)}"
+            request = Request.Builder().url(url).build()
+            response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                return
+            }
         }
     }
 
     // get the recent unread message from a sender.
-    fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage> {
+    fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage>? {
         val gson = Gson()
         val entry = "message_fetch"
         val json = """
@@ -180,12 +181,12 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         // write outgoing message to user's Mimei db
-        val msgs = client.runMApp(entry, request)  as List<ChatMessage>
+        val msgs = client.runMApp(entry, request)  as List<ChatMessage>?
         return msgs
     }
 
     // get a list of unread last messages from other users
-    fun loadMostRecentMessages(): List<ChatMessage> {
+    fun loadMostRecentMessages(): List<ChatMessage>? {
         val gson = Gson()
         val entry = "message_check"
         val json = """
@@ -193,7 +194,7 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         // write outgoing message to user's Mimei db
-        val msgs = client.runMApp(entry, request) as List<ChatMessage>
+        val msgs = client.runMApp(entry, request) as List<ChatMessage>?
         return msgs
     }
 
@@ -292,7 +293,7 @@ object HproseInstance {
         """.trimIndent()
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
-        client.runMApp(entry, request)
+        client.runMApp(entry, request) as Unit?
     }
 
     // get Ids of users who the current user is following
@@ -702,7 +703,7 @@ interface ScorePair {
 }
 
 interface HproseService {
-    fun runMApp(entry: String, request: Map<*, *>, args: List<ByteArray?> = emptyList()): Any?
+    fun<T> runMApp(entry: String, request: Map<*, *>, args: List<ByteArray?> = emptyList()): T?
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String
