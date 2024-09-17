@@ -35,78 +35,79 @@ fun UserProfileScreen(
     userId: MimeiId,
     parentEntry: NavBackStackEntry,
 ) {
-    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
-        factory -> factory.create(userId)
+    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry,
+        key = userId
+    ) { factory ->
+        factory.create(userId)
     }
-    val user by userViewModel.user.collectAsState()
     val tweets by userViewModel.tweets.collectAsState()
-    val fans by userViewModel.fans.collectAsState()
-    val followings by userViewModel.followings.collectAsState()
 
     Scaffold(
-        topBar = { ProfileTopAppBar(userViewModel, navController, user) }
+        topBar = { ProfileTopAppBar(userViewModel, navController) }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding))
-        {
-            Spacer(modifier = Modifier.padding(top = 8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.Start
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding)
+        ) {
+            item {
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                     thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outline
+                    color = MaterialTheme.colorScheme.surfaceTint
                 )
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
-                    Text(
-                        text = user.name ?: "No one",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        text = "@" + (user.username ?: "NoOne"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.padding(start = 0.dp)
-                    )
-                    Text(
-                        text = user.profile ?: "Profile",
-                        style = MaterialTheme.typography.titleSmall)
-                    Row {
-                        Text(text = "${fans.count()} Followers",
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.clickable(onClick = {
-                                navController.navigate((NavTweet.Follower(userId)))
-                            })
-                        )
-                        Spacer(modifier = Modifier.padding(horizontal = 20.dp))
-
-                        Text(text = "${followings.count()} Following",
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.clickable(onClick = {
-                                // go to list of followings of the user
-                                navController.navigate(NavTweet.Following(userId))
-                            }),
-                        )
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 1.dp,
-                    color = Color.Gray
-                )
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 8.dp, bottom = 8.dp)
-                )
-                {
-                    items(tweets) { tweet ->
-                        if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-                    }
-                }
+                ProfileDetail(userViewModel, navController)
             }
+            items(tweets) { tweet ->
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 1.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.surfaceTint
+                )
+                if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController) {
+    val user by viewModel.user.collectAsState()
+    val fansList by viewModel.fans.collectAsState()
+    val followingsList by viewModel.followings.collectAsState()
+
+    // go to list of followings of the user
+    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
+        Text(
+            text = user.name ?: "No one",
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = "@" + (user.username ?: "NoOne"),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.padding(start = 0.dp)
+        )
+        Text(
+            text = user.profile ?: "Profile",
+            style = MaterialTheme.typography.titleSmall
+        )
+        Row {
+            Text(
+                text = "${fansList.count()} Followers",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.clickable(onClick = {
+                    navController.navigate((NavTweet.Follower(user.mid)))
+                })
+            )
+            Spacer(modifier = Modifier.padding(horizontal = 20.dp))
+
+            Text(
+                text = "${followingsList.count()} Following",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.clickable(onClick = {
+                    navController.navigate(NavTweet.Following(user.mid))
+                }),
+            )
         }
     }
 }

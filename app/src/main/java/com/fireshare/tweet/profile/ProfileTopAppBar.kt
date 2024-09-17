@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,8 +44,9 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController, user: User) {
+fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController) {
     var expanded by remember { mutableStateOf(false) }
+    val user by viewModel.user.collectAsState()
 
     LargeTopAppBar(
         title = {
