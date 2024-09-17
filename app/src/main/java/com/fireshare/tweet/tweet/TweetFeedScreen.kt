@@ -71,9 +71,9 @@ fun TweetFeedScreen(
         {
             items(tweets) { tweet ->
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 0.8.dp,
-                    color = Color.LightGray
+                    modifier = Modifier.padding(vertical = 0.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.surfaceTint
                 )
                 if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
             }

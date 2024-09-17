@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -103,9 +104,11 @@ fun TweetItem(
                         )
                     }
                     Surface(
-                        border = BorderStroke(0.8.dp, color = Color.LightGray),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(0.4.dp,
+                            color = MaterialTheme.colorScheme.surfaceTint),
                         tonalElevation = 1.dp,
-                        modifier = Modifier.padding(start = 8.dp, top = 8.dp)
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp)
                     ) {
                         TweetBlock( viewModel  =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
