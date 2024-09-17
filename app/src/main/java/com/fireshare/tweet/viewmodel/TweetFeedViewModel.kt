@@ -14,6 +14,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,6 +42,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
 
     init {
+        _followings.update { list -> list + (appUser.followingList ?: HproseInstance.getAlphaIds()) }
         refresh()
     }
 
@@ -60,20 +62,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-        _followings.value = appUser.followingList ?: emptyList()
-//        _tweets.value = emptyList()
-        viewModelScope.launch(Dispatchers.IO) {
-            if (! followings.value.contains(appUser.mid))
-                _followings.update { newList -> newList + appUser.mid }     // always follow oneself
-
-            val list = HproseInstance.getAlphaIds().filter {
-                // get default list, no duplication.
-                !followings.value.contains(it)
-            }
-            _followings.update { newList -> newList + list }        // add default ones
-            getTweets(startTimestamp.longValue)
+        _tweets.value = emptyList()
+        _followings.update { appUser.followingList?.plus(HproseInstance.getAlphaIds()) ?: emptyList() }
+        // remember to watch oneself.
+        if (appUser.mid != TW_CONST.GUEST_ID) _followings.update { list -> list + appUser.mid }
+        // remove duplication
+        _followings.update { currentList ->
+            val seenMids = mutableSetOf<MimeiId>()
+            currentList.filter { seenMids.add(it) }
         }
+        getTweets(startTimestamp.longValue)
+//        viewModelScope.launch(Dispatchers.IO) {
+//        }
     }
 
     fun addTweet(tweet: Tweet) {

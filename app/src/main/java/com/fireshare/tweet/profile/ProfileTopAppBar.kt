@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -39,6 +40,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -47,6 +49,7 @@ import com.fireshare.tweet.widget.UserAvatar
 fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LargeTopAppBar(
         title = {
@@ -91,7 +94,11 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController)
                             .height(IntrinsicSize.Min)
                     ) {
                         if (user.mid == appUser.mid) {
-                            DropdownMenuItem(onClick = { viewModel.logout(navController) },
+                            DropdownMenuItem(onClick = {
+                                viewModel.logout()
+                                tweetFeedViewModel.refresh()
+                                navController.navigate(NavTweet.TweetFeed)
+                            },
                                 text = { Text("Logout") }
                             )
                         }

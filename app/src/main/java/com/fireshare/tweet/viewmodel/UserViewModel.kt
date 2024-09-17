@@ -91,7 +91,7 @@ class UserViewModel @AssistedInject constructor(
                     outputStream.reset()
                     originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
                     quality -= 5
-                } while (outputStream.size() > 500_000 && quality > 0)
+                } while (outputStream.size() > 200_000 && quality > 0)
 
                 // Convert the compressed image to an input stream
                 val compressedStream = ByteArrayInputStream(outputStream.toByteArray())
@@ -184,10 +184,10 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout(navController: NavController) {
+    fun logout() {
         appUser = User(mid = TW_CONST.GUEST_ID)
+        appUser.followingList = HproseInstance.getAlphaIds()
         preferencesHelper.setUserId(null)
-        navController.navigate(NavTweet.TweetFeed)
     }
 
     // handle both register and update of user profile
