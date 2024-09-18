@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -175,13 +176,19 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
 
     // Check if image is already cached and use it directly
     val cachedImage = remember { mutableStateOf(cacheManager.loadImageFromCache(cachedPath)) }
+    val adjustedModifier = if (isPreview) {
+        modifier.fillMaxSize()
+    } else {
+        modifier.fillMaxWidth()
+    }
+
     if (cachedImage.value != null) {
         Box(modifier = modifier) {
             Image(
                 painter = BitmapPainter(cachedImage.value!!),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = adjustedModifier
             )
         }
     } else {
@@ -209,16 +216,14 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
         // Display light gray background while image is downloading
         if (isDownloading) {
             Box(
-                modifier = modifier
+                modifier = adjustedModifier
                     .background(Color.LightGray)
-                    .fillMaxSize()
             )
         } else if (downloadError) {
             // Display a placeholder image or error message if download failed
             Box(
-                modifier = modifier
-                    .background(Color.LightGray)
-                    .fillMaxSize(),
+                modifier = adjustedModifier
+                    .background(Color.LightGray),
                 contentAlignment = Alignment.Center
             ) {
                 Text("404", color = Color.White)
