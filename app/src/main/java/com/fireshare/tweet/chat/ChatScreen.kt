@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -118,7 +119,8 @@ fun ChatItem(message: ChatMessage) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             color = if (isSentByCurrentUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
@@ -130,6 +132,10 @@ fun ChatItem(message: ChatMessage) {
                 color = if (isSentByCurrentUser) Color.White else Color.Black,
                 modifier = Modifier.padding(8.dp)
             )
+        }
+        if (isSentByCurrentUser) {
+            Spacer(modifier = Modifier.width(8.dp))
+            UserAvatar(user = appUser, size = 32)
         }
     }
 }
