@@ -1,9 +1,5 @@
 package com.fireshare.tweet.widget
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.Image
@@ -11,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -18,17 +15,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,8 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -47,38 +38,35 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.SimpleExoPlayer
 import androidx.media3.ui.PlayerView
-import coil.ImageLoader
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.request.SuccessResult
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import java.io.File
-import java.io.FileOutputStream
-import kotlin.io.encoding.Base64
 
 @Serializable
 sealed class MediaType {
+    @Serializable
     data object Video : MediaType()
+    @Serializable
     data object Audio : MediaType()
+    @Serializable
     data object Image : MediaType()
+    @Serializable
+    data object Unknown : MediaType()
 }
 
 @Serializable
+// url is in the format of http://ip/mm/mimei_id
 data class MediaItem( val url: String, var type: MediaType = MediaType.Image )
 
 @Composable
-fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
+fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {    // need to check container width later
     val navController = LocalNavController.current
     val gridCells = if (mediaItems.size>1) 2 else 1
     val maxItems = when(mediaItems.size) {
@@ -110,46 +98,43 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
 @Composable
 fun MediaItemPreview(mediaItem: MediaItem,
                      modifier: Modifier = Modifier,
-                     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items hidden
+                     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
                      index: Int = -1,               // autoplay first video item, index 0
                      inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
 ) {
-    val fileType = remember(mediaItem.url.substringAfterLast("/")) {    // take mimei Id as key
-        mutableStateOf<String?>(null)
-    }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(mediaItem.url) {
+    LaunchedEffect(mediaItem.url.substringAfterLast("/")) {
         coroutineScope.launch {
             val header = withContext(Dispatchers.IO) {
                 downloadFileHeader(mediaItem.url)
             }
-            val detectedFileType = detectMimeTypeFromHeader(header)
-            fileType.value = detectedFileType
+            detectMimeTypeFromHeader(header)?.let {
+                mediaItem.type = when (it.substringBefore("/")) {
+                    "image" -> MediaType.Image
+                    "audio" -> MediaType.Audio
+                    "video" -> MediaType.Video
+                    else -> MediaType.Unknown
+                }
+            }
         }
     }
 
     Box(
         contentAlignment = Alignment.Center
     ) {
-        when (fileType.value) {
-            "image/jpeg", "image/png" -> {
-                mediaItem.type = MediaType.Image
-                ImagePreview(mediaItem.url, modifier)
+        when (mediaItem.type) {
+            MediaType.Image -> {
+                ImageViewer(mediaItem.url, modifier)
             }
-            "video/mp4" -> {
-                // Implement video player here
-                mediaItem.type = MediaType.Video
+            MediaType.Video -> {
                 VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid)
             }
-            "audio/mpeg", "audio/ogg", "audio/flac", "audio/wav" ->  {
-                // Implement audio player here
-                mediaItem.type = MediaType.Audio
+            MediaType.Audio ->  {
                 VideoPreview(url = mediaItem.url, modifier)
             }
-            else -> {
-                // Handle unknown file type
-                Log.d("MediaItemPreview", "unknown file type ${fileType.value} ${mediaItem.url}")
+            else -> {       // Handle unknown file type
+                Log.d("MediaItemPreview", "unknown file type ${mediaItem.url}")
             }
         }
         if (isLastItem) {
@@ -172,52 +157,59 @@ fun MediaItemPreview(mediaItem: MediaItem,
 }
 
 @Composable
-fun ImagePreview(imageUrl: String, modifier: Modifier = Modifier) {
+fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Boolean = true) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val cachedMid = imageUrl.substringAfterLast('/') + "_preview"
+    val cacheManager = remember { CacheManager(context) }
+    val cachedPath = cacheManager.getCachedImagePath(imageUrl, isPreview)
 
-    // In-memory cache for image URLs and their cached paths
-    val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
-    val cachedPath = cachedImageUrls[cachedMid]
+    // State to track if the image is being downloaded
+    var isDownloading by remember { mutableStateOf(false) }
 
     // Check if image is already cached and use it directly
-    if (cachedPath != null) {
-        Box(contentAlignment = Alignment.Center) {
-            loadImageFromCache(cachedPath)?.let {
-                Image(
-                    painter = BitmapPainter(it),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = modifier
-                )
-            }
+    val cachedImage = cacheManager.loadImageFromCache(cachedPath)
+    if (cachedImage != null) {
+        Box(modifier = modifier) {
+            Image(
+                painter = BitmapPainter(cachedImage),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     } else {
         // Download and cache image if not already cached
         LaunchedEffect(imageUrl) {
             coroutineScope.launch {
+                isDownloading = true
                 val downloadedPath = try {
-                    withContext(Dispatchers.IO) {
-                        downloadImageToCache(context, imageUrl) // New function
-                    }
+                    cacheManager.downloadImageToCache(imageUrl, isPreview)
                 } catch (e: Exception) {
                     // Handle download error gracefully (e.g., log error, show placeholder image)
                     null
                 }
+                isDownloading = false
                 if (downloadedPath != null) {
-                    cachedImageUrls[cachedMid] = downloadedPath
+                    // Trigger recomposition to load the cached image
                 }
             }
         }
-        // Display placeholder while image is downloading
-        Box(contentAlignment = Alignment.Center,
-            modifier = modifier) {
-            CircularProgressIndicator()
+        // Display light gray background while image is downloading
+        if (isDownloading) {
+            Box(
+                modifier = modifier
+                    .background(Color.LightGray)
+                    .fillMaxSize()
+            )
         }
     }
 }
 
+/**
+ * inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list. The aspect
+ *                ratio shall be 1:1, otherwise use the video's real aspectRatio
+ * index: when there are multiple videos in a grid, the first one is played automatically.
+ * **/
 @Composable
 fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, inPreviewGrid: Boolean = true) {
     val context = LocalContext.current
@@ -226,13 +218,15 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
         setMediaItem(item)
         prepare()
         playWhenReady = false
-//        playWhenReady = index==0
+//        playWhenReady = index==0      // wait until globalPosition is figured out.
     }
-    var videoDimension by remember { mutableStateOf(Pair(400, 400)) }
-    LaunchedEffect(Unit) {
-        videoDimension = getVideoDimensions(url) ?: Pair(400, 400)
+    var aspectRatio by remember { mutableFloatStateOf(1f) }
+    if ( !inPreviewGrid ) {
+         LaunchedEffect(url.substringAfterLast("/")) {
+             val pair = getVideoDimensions(url) ?: Pair(400, 400)
+             aspectRatio = pair.first.toFloat() / pair.second.toFloat()
+        }
     }
-    val aspectRatio = if (inPreviewGrid) 1f else videoDimension.first.toFloat() / videoDimension.second.toFloat()
 
     Box(modifier = modifier) {
         AndroidView(
@@ -253,87 +247,6 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
                 tint = Color.White,
                 modifier = modifier.size(ButtonDefaults.IconSize)
             )
-        }
-    }
-}
-
-// Function to load image from cache
-fun loadImageFromCache(cachedPath: String): ImageBitmap? {
-    val file = File(cachedPath) // Use the absolute path directly
-    val bitmap = if (file.exists()) {
-        BitmapFactory.decodeFile(file.path)
-    } else {
-        null
-    }
-    return bitmap?.asImageBitmap()
-}
-
-// Function to download image to cache
-suspend fun downloadImageToCache(context: Context, imageUrl: String): String? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val imageLoader = ImageLoader(context)
-            val request = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .memoryCachePolicy(CachePolicy.READ_ONLY)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .build()
-            val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
-
-            // Save the drawable to a file in the cache directory
-            val cacheDir = context.cacheDir
-            val fileName = imageUrl.substringAfterLast('/') + "_preview.jpg" // Use JPEG for better compression
-            val cacheFile = File(cacheDir, fileName)
-
-            result?.let { drawable ->
-                val bitmap = (drawable as BitmapDrawable).bitmap
-                var quality = 80
-                var fileSize: Long
-
-                do {
-                    FileOutputStream(cacheFile).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
-                    }
-                    fileSize = cacheFile.length()
-                    quality -= 10
-                } while (fileSize > 200 * 1024 && quality > 0) // 200KB = 200 * 1024 bytes
-            }
-
-            cacheFile.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-}
-
-suspend fun downloadFullImageToCache(context: Context, imageUrl: String): String? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val imageLoader = ImageLoader(context)
-            val request = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .memoryCachePolicy(CachePolicy.READ_ONLY)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .build()
-            val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
-
-            // Save the drawable to a file in the cache directory
-            val cacheDir = context.cacheDir
-            val fileName = imageUrl.substringAfterLast('/') + ".png"
-            val cacheFile = File(cacheDir, fileName)
-
-            result?.let { drawable ->
-                val bitmap = (drawable as BitmapDrawable).bitmap
-                FileOutputStream(cacheFile).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) // Use PNG format to avoid compression
-                }
-            }
-
-            cacheFile.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
         }
     }
 }

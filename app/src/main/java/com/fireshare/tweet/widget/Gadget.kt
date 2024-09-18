@@ -25,7 +25,7 @@ import java.io.IOException
 object Gadget {
 
     suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
-        return withContext(Dispatchers.IO) {
+        return withContext(IO) {
             try {
                 val retriever = MediaMetadataRetriever()
                 retriever.setDataSource(videoUrl, HashMap())
@@ -44,8 +44,8 @@ object Gadget {
         }
     }
 
-    fun downloadFileHeader(url: String, byteCount: Int = 1024): ByteArray? {
-        val client = OkHttpClient()
+    fun downloadFileHeader(url: String, byteCount: Int = 128): ByteArray? {
+        val client = HproseInstance.httpClient
         val request = Request.Builder()
             .url(url)
             .head()
@@ -73,13 +73,16 @@ object Gadget {
     fun detectMimeTypeFromHeader(header: ByteArray?): String? {
         if (header == null) return null
         return when {
-            header.startsWith(byteArrayOf(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70)) -> "video/mp4"
+            header.startsWith(byteArrayOf(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70)
+            ) -> "video/mp4"
+
             header.startsWith(byteArrayOf(0xFF.toByte(), 0xD8.toByte())) -> "image/jpeg"
             header.startsWith(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)) -> "image/png"
             header.startsWith(byteArrayOf(0x49, 0x44, 0x33)) -> "audio/mpeg" // MP3
             header.startsWith(byteArrayOf(0x4F, 0x67, 0x67, 0x53)) -> "audio/ogg" // OGG
             header.startsWith(byteArrayOf(0x66, 0x4C, 0x61, 0x43)) -> "audio/flac" // FLAC
-            header.startsWith(byteArrayOf(0x52, 0x49, 0x46, 0x46)) && header.sliceArray(8..11).contentEquals(byteArrayOf(0x57, 0x41, 0x56, 0x45)) -> "audio/wav" // WAV
+            header.startsWith(byteArrayOf(0x52, 0x49, 0x46, 0x46)) && header.sliceArray(8..11)
+                .contentEquals(byteArrayOf(0x57, 0x41, 0x56, 0x45)) -> "audio/wav" // WAV
             else -> "application/octet-stream"
         }
     }

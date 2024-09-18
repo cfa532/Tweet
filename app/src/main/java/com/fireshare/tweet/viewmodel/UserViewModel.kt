@@ -83,7 +83,7 @@ class UserViewModel @AssistedInject constructor(
                 // Decode the image from the input stream
                 val originalBitmap = BitmapFactory.decodeStream(stream)
                 var compressedBitmap: Bitmap? = null
-                var quality = 100
+                var quality = 80
                 val outputStream = ByteArrayOutputStream()
 
                 // Compress the image to be less than 1MB
@@ -91,7 +91,7 @@ class UserViewModel @AssistedInject constructor(
                     outputStream.reset()
                     originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
                     quality -= 5
-                } while (outputStream.size() > 200_000 && quality > 0)
+                } while (outputStream.size() > 500_000 && quality > 0)
 
                 // Convert the compressed image to an input stream
                 val compressedStream = ByteArrayInputStream(outputStream.toByteArray())
@@ -128,7 +128,7 @@ class UserViewModel @AssistedInject constructor(
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
                 _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
                 _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
-                getTweets()
+                getTweets(startTimestamp.longValue, startTimestamp.longValue - java.lang.Long.valueOf(2_592_000_000))  // 30 days
             }
         }
     }

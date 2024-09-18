@@ -3,7 +3,6 @@ package com.fireshare.tweet.widget
 import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.VideoView
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,30 +17,18 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, startIndex: Int) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
 
@@ -69,46 +56,13 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val mediaItem = mediaItems[page]
-                val mid = mediaItem.url.substringAfterLast('/')
-                val cachedPath = cachedImageUrls[mid]
-
                 if (mediaItem.type == MediaType.Video) {
                     // Directly play the video without caching
                     VideoPlayer(uri = Uri.parse(mediaItem.url))
                 } else {
-                    ImageLoader(mediaItem.url)
+                    ImageViewer(mediaItem.url, isPreview = false)
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun ImageLoader(imageUrl: String) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    var cachedPath by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(imageUrl) {
-        coroutineScope.launch {
-            cachedPath = try {
-                withContext(Dispatchers.IO) {
-                    downloadFullImageToCache(context, imageUrl)
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
-    cachedPath?.let { path ->
-        loadImageFromCache(path)?.let { bitmap ->
-            Image(
-                painter = BitmapPainter(bitmap),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
-            )
         }
     }
 }
