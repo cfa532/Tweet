@@ -18,7 +18,9 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -103,6 +105,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
                      inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val mediaType = remember { mutableStateOf<MediaType>(MediaType.Image) }
 
     LaunchedEffect(mediaItem.url.substringAfterLast("/")) {
         coroutineScope.launch {
@@ -116,6 +119,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
                     "video" -> MediaType.Video
                     else -> MediaType.Unknown
                 }
+                mediaType.value = mediaItem.type
             }
         }
     }
@@ -123,7 +127,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
     Box(
         contentAlignment = Alignment.Center
     ) {
-        when (mediaItem.type) {
+        when (mediaType.value) {
             MediaType.Image -> {
                 ImageViewer(mediaItem.url, modifier)
             }
@@ -166,12 +170,15 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
     // State to track if the image is being downloaded
     var isDownloading by remember { mutableStateOf(false) }
 
+    // State to track if there was an error during download
+    var downloadError by remember { mutableStateOf(false) }
+
     // Check if image is already cached and use it directly
-    val cachedImage = cacheManager.loadImageFromCache(cachedPath)
-    if (cachedImage != null) {
+    val cachedImage = remember { mutableStateOf(cacheManager.loadImageFromCache(cachedPath)) }
+    if (cachedImage.value != null) {
         Box(modifier = modifier) {
             Image(
-                painter = BitmapPainter(cachedImage),
+                painter = BitmapPainter(cachedImage.value!!),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -179,19 +186,24 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
         }
     } else {
         // Download and cache image if not already cached
-        LaunchedEffect(imageUrl) {
-            coroutineScope.launch {
+        DisposableEffect(imageUrl) {
+            val job = coroutineScope.launch {
                 isDownloading = true
+                downloadError = false
                 val downloadedPath = try {
                     cacheManager.downloadImageToCache(imageUrl, isPreview)
                 } catch (e: Exception) {
-                    // Handle download error gracefully (e.g., log error, show placeholder image)
+                    Log.e("ImageViewer", "Error downloading image: ${e.message}")
+                    downloadError = true
                     null
                 }
                 isDownloading = false
                 if (downloadedPath != null) {
-                    // Trigger recomposition to load the cached image
+                    cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
                 }
+            }
+            onDispose {
+                job.cancel()
             }
         }
         // Display light gray background while image is downloading
@@ -201,14 +213,24 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
                     .background(Color.LightGray)
                     .fillMaxSize()
             )
+        } else if (downloadError) {
+            // Display a placeholder image or error message if download failed
+            Box(
+                modifier = modifier
+                    .background(Color.LightGray)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("404", color = Color.White)
+            }
         }
     }
 }
 
 /**
- * inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list. The aspect
- *                ratio shall be 1:1, otherwise use the video's real aspectRatio
- * index: when there are multiple videos in a grid, the first one is played automatically.
+ * @param index: when there are multiple videos in a grid, the first one is played automatically.
+ * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
+ *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
  * **/
 @Composable
 fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, inPreviewGrid: Boolean = true) {

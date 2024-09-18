@@ -17,8 +17,15 @@ import java.io.FileOutputStream
 
 class CacheManager(private val context: Context) {
 
+    // Directory where cached images will be stored
     private val cacheDir: File = context.cacheDir
 
+    /**
+     * Generates the file path for a cached image based on the image URL and whether it's a preview.
+     * @param imageUrl The URL of the image.
+     * @param isPreview Boolean indicating if the image is a preview.
+     * @return The absolute path of the cached image file.
+     */
     fun getCachedImagePath(imageUrl: String, isPreview: Boolean = true): String {
         val fileName = if (isPreview) {
             imageUrl.substringAfterLast('/') + "_preview.jpg"
@@ -28,6 +35,11 @@ class CacheManager(private val context: Context) {
         return File(cacheDir, fileName).absolutePath
     }
 
+    /**
+     * Loads an image from the cache.
+     * @param cachedPath The path of the cached image file.
+     * @return The loaded ImageBitmap, or null if the file does not exist.
+     */
     fun loadImageFromCache(cachedPath: String): ImageBitmap? {
         val file = File(cachedPath)
         val bitmap = if (file.exists()) {
@@ -38,6 +50,13 @@ class CacheManager(private val context: Context) {
         return bitmap?.asImageBitmap()
     }
 
+    /**
+     * Downloads an image from the given URL and caches it.
+     * @param imageUrl The URL of the image to download.
+     * @param isPreview Boolean indicating if the image is a preview.
+     * @param imageSize The target size of the image in kilobytes (for previews).
+     * @return The absolute path of the cached image file, or null if an error occurs.
+     */
     suspend fun downloadImageToCache(imageUrl: String, isPreview: Boolean = true, imageSize: Int = 200): String? {
         return withContext(Dispatchers.IO) {
             try {
