@@ -44,12 +44,12 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import com.fireshare.tweet.datamodel.User
-import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +106,7 @@ fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 
             ) {
                 items(followingsOfProfile) { userId ->
-                    FollowingItem(userId, navController, appUserViewModel)
+                    FollowingItem(userId, navController, appUserViewModel, parentEntry)
                 }
             }
         }
@@ -114,11 +114,13 @@ fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
 }
 
 @Composable
-fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel) {
+fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel, parentEntry: NavBackStackEntry) {
     val user = remember { mutableStateOf<User?>(null) }
 
-    LaunchedEffect(user) {
-        user.value = HproseInstance.getUserBase(userId)
+    LaunchedEffect(userId) {
+        withContext(Dispatchers.IO) {
+            user.value = HproseInstance.getUserBase(userId)
+        }
     }
 
     Row(modifier = Modifier
@@ -154,7 +156,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
                         color = Color.Gray
                     )
                 }
-                ProfileActionButton(userId, appUserViewModel)
+                ToggleFollowingButton(userId, appUserViewModel, parentEntry)
             }
             Text(
                 text = "${user.value?.profile}",
@@ -171,7 +173,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
 }
 
 @Composable
-fun ProfileActionButton(userId: MimeiId, appUserViewModel: UserViewModel) {
+fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel, parentEntry: NavBackStackEntry) {
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollowing) }
@@ -184,13 +186,17 @@ fun ProfileActionButton(userId: MimeiId, appUserViewModel: UserViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
+        val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
+                factory -> factory.create(userId)
+        }
         Text(
             text = if (followState.value) "Unfollow" else "  Follow  ",
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId)
+                    appUserViewModel.toggleFollow(userId) {
+                    }
                 })
                 .border(
                     width = 1.dp,

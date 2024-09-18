@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
@@ -23,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,10 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
@@ -46,10 +46,11 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController) {
+fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
+                     parentEntry: NavBackStackEntry
+) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LargeTopAppBar(
         title = {
@@ -60,7 +61,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController)
                 verticalAlignment = Alignment.Bottom,
             ) {
                 UserAvatar(user, 90)
-                ButtonFollow(viewModel, navController, user)
+                ProfileTopBarButton(viewModel, navController, parentEntry)
             }
         },
         navigationIcon = {
@@ -94,6 +95,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController)
                             .height(IntrinsicSize.Min)
                     ) {
                         if (user.mid == appUser.mid) {
+                            val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                             DropdownMenuItem(onClick = {
                                 viewModel.logout()
                                 tweetFeedViewModel.refresh()
@@ -110,17 +112,31 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController)
 }
 
 @Composable
-fun ButtonFollow(viewModel: UserViewModel, navController: NavHostController, user: User) {
+fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostController, parentEntry: NavBackStackEntry ) {
+    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
+            factory -> factory.create(appUser.mid)
+    }
+    val followings by appUserViewModel.followings.collectAsState()
+    val user by viewModel.user.collectAsState()
+    val buttonText = remember { mutableStateOf("Follow") }
+
+    LaunchedEffect(followings) {
+        buttonText.value = if (user.mid == appUser.mid) "Edit"
+        else if (followings.contains(user.mid)) "Unfollow"
+        else "Follow"
+    }
+
     Row(modifier = Modifier.padding(bottom = 4.dp)) {
         // Follow button
         Button(
             onClick = {
-                when (viewModel.followButtonText) {
+                when (buttonText.value) {
                     "Edit" -> navController.navigate(ProfileEditor)
-                    "Login" -> navController.navigate(NavTweet.Login)
                     else -> {
                         if (appUser.mid != TW_CONST.GUEST_ID)
-                            viewModel.toggleFollow(user.mid)
+                            appUserViewModel.toggleFollow(user.mid) {
+
+                            }
                         else {
                             val event = SnackbarEvent(
                                 message = "Login to follow.",
@@ -136,7 +152,7 @@ fun ButtonFollow(viewModel: UserViewModel, navController: NavHostController, use
             },
             modifier = Modifier.width(IntrinsicSize.Min)
         ) {
-            Text(text = viewModel.followButtonText)
+            Text(text = buttonText.value)
         }
     }
 }

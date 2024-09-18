@@ -44,7 +44,7 @@ fun UserProfileScreen(
     val tweets by userViewModel.tweets.collectAsState()
 
     Scaffold(
-        topBar = { ProfileTopAppBar(userViewModel, navController) }
+        topBar = { ProfileTopAppBar(userViewModel, navController, parentEntry) }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
@@ -55,7 +55,8 @@ fun UserProfileScreen(
                     thickness = 1.dp,
                     color = MaterialTheme.colorScheme.surfaceTint
                 )
-                ProfileDetail(userViewModel, navController)
+
+                ProfileDetail(userViewModel, navController, parentEntry)
             }
             items(tweets) { tweet ->
                 HorizontalDivider(
@@ -70,10 +71,18 @@ fun UserProfileScreen(
 }
 
 @Composable
-fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController) {
+fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController, parentEntry: NavBackStackEntry) {
+    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
+            factory -> factory.create(appUser.mid)
+    }
     val user by viewModel.user.collectAsState()
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
+    val appUserFollowings by appUserViewModel.followings.collectAsState()
+
+    LaunchedEffect(appUserFollowings) {
+        if (user.mid != appUser.mid) viewModel.updateFans()
+    }
 
     // go to list of followings of the user
     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {

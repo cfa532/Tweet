@@ -65,16 +65,6 @@ class UserViewModel @AssistedInject constructor(
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
-    val followButtonText: String =
-        when(appUser.mid) {
-            userId -> { if (appUser.mid != TW_CONST.GUEST_ID) "Edit" else "Login" }
-            else -> {
-                if (appUser.followingList?.contains(userId) == true && appUser.mid != TW_CONST.GUEST_ID)
-                    "Unfollow"
-                else "Follow"
-            }
-        }
-
     fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             context.contentResolver.openInputStream(uri)?.let { stream ->
@@ -109,20 +99,31 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun toggleFollow(userId: MimeiId) {
+    fun toggleFollow(userId: MimeiId, updateFollowed: (MimeiId) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
+            // toggle the Following status on the given UserId
             HproseInstance.toggleFollowing(userId)?.let {
                 _followings.update { list ->
-                    if (it) { list + userId }
+                    if (it && !list.contains(userId)) { list + userId }
                     else { list.filter { id -> id != userId }}
                 }
-            }
-            HproseInstance.toggleFollower(userId)?.let {
-                _fans.update {  list ->
-                    if (it) { list + userId }
-                    else { list.filter { id -> id != userId }}
+                HproseInstance.toggleFollower(userId)?.let {
+                    // update account of the followed UserID
+                    updateFollowed(userId)
                 }
             }
+//            HproseInstance.toggleFollower(userId)?.let {
+//                _fans.update {  list ->
+//                    if (it && !list.contains(userId)) { list + userId }
+//                    else { list.filter { id -> id != userId }}
+//                }
+//            }
+        }
+    }
+
+    fun updateFans() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _fans.value = HproseInstance.getFans(user.value) ?: fans.value
         }
     }
 
