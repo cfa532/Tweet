@@ -111,8 +111,18 @@ class UserViewModel @AssistedInject constructor(
 
     fun toggleFollow(userId: MimeiId) {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.toggleFollowing(userId)?.let { _followings.value = it }
-            HproseInstance.toggleFollower(userId)?.let { _fans.value = it}
+            HproseInstance.toggleFollowing(userId)?.let {
+                _followings.update { list ->
+                    if (it) { list + userId }
+                    else { list.filter { id -> id != userId }}
+                }
+            }
+            HproseInstance.toggleFollower(userId)?.let {
+                _fans.update {  list ->
+                    if (it) { list + userId }
+                    else { list.filter { id -> id != userId }}
+                }
+            }
         }
     }
 
@@ -142,11 +152,6 @@ class UserViewModel @AssistedInject constructor(
             val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }
-    }
-
-    // whether the userId is in current user's following list
-    fun isFollowing(userId: MimeiId): Boolean {
-        return followings.value.contains(userId)
     }
 
     fun showSnackbar(event: SnackbarEvent) {

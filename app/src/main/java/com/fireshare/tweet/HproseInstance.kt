@@ -444,7 +444,7 @@ object HproseInstance {
         }
     }
 
-    fun toggleFollowing(userId: MimeiId): List<MimeiId>? {
+    fun toggleFollowing(userId: MimeiId): Boolean? {
         val method = "toggle_following"
         val url =
             "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
@@ -453,21 +453,22 @@ object HproseInstance {
         if (response.isSuccessful) {
             val json = response.body?.string()
             val gson = Gson()
-            return gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+            return gson.fromJson(json, Boolean::class.java)
         }
         return null
     }
 
-    fun toggleFollower(userId: MimeiId): List<MimeiId>? {
+    suspend fun toggleFollower(userId: MimeiId): Boolean? {
+        val user = getUserBase(userId)
         val method = "toggle_follower"
         val url =
-            "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
+            "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val json = response.body?.string()
             val gson = Gson()
-            return gson.fromJson(json, object : TypeToken<List<MimeiId>>() {}.type)
+            return gson.fromJson(json, Boolean::class.java)
         }
         return null
     }

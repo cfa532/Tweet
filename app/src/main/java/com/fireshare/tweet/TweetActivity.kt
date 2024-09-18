@@ -26,10 +26,7 @@ import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.internal.wait
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -43,6 +40,7 @@ class TweetActivity : ComponentActivity() {
 
             setContent {
                 TweetTheme {
+                    // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
                     val scope = rememberCoroutineScope()
                     ObserveAsEvents(
@@ -68,6 +66,7 @@ class TweetActivity : ComponentActivity() {
                         LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
                     val viewModelProvider: ViewModelProvider =
                         remember { ViewModelProvider(viewModelStoreOwner) }
+
                     CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
                         Scaffold(
                             snackbarHost = {

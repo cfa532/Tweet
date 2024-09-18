@@ -65,6 +65,9 @@ fun CommentButton(viewModel: TweetViewModel) {
             }
             return@IconButton
         }
+
+        // save the current tweetViewModel as sharedViewModel, and change its state
+        // after the comment is submitted.
         viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
             sharedViewModel.sharedTVMInstance = viewModel
             tweet.mid?.let { navController.navigate(ComposeComment(it)) }
