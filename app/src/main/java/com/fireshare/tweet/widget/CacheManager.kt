@@ -57,7 +57,7 @@ class CacheManager(private val context: Context) {
      * @param imageSize The target size of the image in kilobytes (for previews).
      * @return The absolute path of the cached image file, or null if an error occurs.
      */
-    suspend fun downloadImageToCache(imageUrl: String, isPreview: Boolean = true, imageSize: Int = 200): String? {
+    suspend fun downloadImageToCache(imageUrl: String, isPreview: Boolean = true, imageSize: Int): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val imageLoader = ImageLoader(context)

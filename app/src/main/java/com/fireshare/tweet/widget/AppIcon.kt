@@ -1,6 +1,7 @@
 package com.fireshare.tweet.widget
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -11,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImagePainter.State.Empty.painter
@@ -34,13 +36,10 @@ fun AppIcon() {
 
 @Composable
 fun UserAvatar(user: User?, size: Int = 40) {
-    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
-    Image(
-        painter = rememberAsyncImagePainter(avatarUrl),
-        contentDescription = "User Avatar",
-        contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .size(size.dp)
-            .clip(CircleShape)
-    )
+    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl).toString()
+    ImageViewer(avatarUrl, modifier = Modifier
+        .size(size.dp)
+        .clip(CircleShape)
+        .background(Color.Gray),
+        isPreview = true, imageSize = 50)
 }

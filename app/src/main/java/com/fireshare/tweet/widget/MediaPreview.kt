@@ -162,7 +162,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
 }
 
 @Composable
-fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Boolean = true) {
+fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Boolean = true, imageSize: Int = 200) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val cacheManager = remember { CacheManager(context) }
@@ -193,12 +193,12 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
         }
     } else {
         // Download and cache image if not already cached
-        DisposableEffect(imageUrl) {
+        LaunchedEffect(imageUrl.substringAfterLast("/")) { // Use imageUrl as the key
             val job = coroutineScope.launch {
                 isDownloading = true
                 downloadError = false
                 val downloadedPath = try {
-                    cacheManager.downloadImageToCache(imageUrl, isPreview)
+                    cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
                 } catch (e: Exception) {
                     Log.e("ImageViewer", "Error downloading image: ${e.message}")
                     downloadError = true
@@ -209,24 +209,22 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
                     cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
                 }
             }
-            onDispose {
-                job.cancel()
-            }
         }
         // Display light gray background while image is downloading
         if (isDownloading) {
             Box(
                 modifier = adjustedModifier
-                    .background(Color.LightGray)
+                    .fillMaxSize()
+                    .background(Color.Gray)
             )
         } else if (downloadError) {
             // Display a placeholder image or error message if download failed
             Box(
                 modifier = adjustedModifier
-                    .background(Color.LightGray),
+                    .fillMaxSize()
+                    .background(Color.Gray),
                 contentAlignment = Alignment.Center
             ) {
-                Text("404", color = Color.White)
             }
         }
     }

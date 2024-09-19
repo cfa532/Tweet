@@ -1,16 +1,21 @@
 package com.fireshare.tweet.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,13 +34,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import java.text.SimpleDateFormat
@@ -87,9 +96,9 @@ fun ChatListScreen(
                 verticalArrangement = Arrangement.Top
             ) {
                 items(chatMessages) { chatMessage ->
-                    ChatSession(viewModel, chatMessage)
+                    ChatSession(viewModel, chatMessage, navController)
                     HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
+                        modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.tertiary
                     )
@@ -100,7 +109,7 @@ fun ChatListScreen(
 }
 
 @Composable
-fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage) {
+fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage, navController: NavController) {
     var user by remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(chatMessage.authorId) {
@@ -108,9 +117,18 @@ fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage) {
         user = viewModel.getSender(id)
     }
     Row(modifier = Modifier.padding(8.dp)) {
-        UserAvatar(user)
+        Box(modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(onClick = { user?.mid?.let { navController.navigate(NavTweet.UserProfile(it))
+            }})
+        ) {
+            UserAvatar(user)
+        }
         Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-        Column {
+        Column(modifier = Modifier
+            .clickable( onClick = { user?.mid?.let { navController.navigate(NavTweet.ChatBox(it))}
+            })) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
