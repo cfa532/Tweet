@@ -54,6 +54,9 @@ fun ChatScreen(
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
 
+    // fetch new messages every time open chat screen.
+    viewModel.fetchMessage()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -114,6 +117,7 @@ fun ChatScreen(
 fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     var user by remember { mutableStateOf<User?>(null) }
+
     LaunchedEffect(message.authorId) {
         user = viewModel.getSender(message.authorId)
     }

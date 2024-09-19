@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatRepository
+import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
+import com.fireshare.tweet.datamodel.ChatSessionEntity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.toChatMessage
@@ -25,7 +27,8 @@ import kotlinx.coroutines.launch
 @HiltViewModel( assistedFactory = ChatViewModel.ChatViewModelFactory::class)
 class ChatViewModel @AssistedInject constructor(
     @Assisted private val receiptId: MimeiId,
-    private val repository: ChatRepository
+    private val repository: ChatRepository,
+    private val database: ChatDatabase
     ): ViewModel()
 {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -38,9 +41,9 @@ class ChatViewModel @AssistedInject constructor(
         viewModelScope.launch {
             HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
             // get messages stored at local
-            _chatMessages.value = loadChatMessages()
+            _chatMessages.value = loadChatMessages().sortedBy { it.timestamp }
 
-            // get unread messages
+            // get unread messages from network
             fetchMessage()
         }
     }
@@ -60,10 +63,30 @@ class ChatViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             repository.insertMessage(message.toEntity())
             HproseInstance.sendMessage(receiptId, message)
+
+            // Update the ChatSession with the last new message
+            val sessionEntity = database.chatSessionDao().getSession(appUser.mid, receiptId)
+            if (sessionEntity != null) {
+                val updatedSession = sessionEntity.copy(
+                    timestamp = message.timestamp,
+                    lastMessageId = message.timestamp,
+                    hasNews = false
+                )
+                database.chatSessionDao().insertSession(updatedSession)
+            } else {
+                val newSession = ChatSessionEntity(
+                    timestamp = message.timestamp,
+                    userId = message.authorId,
+                    receiptId = message.receiptId,
+                    hasNews = false,
+                    lastMessageId = message.timestamp
+                )
+                database.chatSessionDao().insertSession(newSession)
+            }
         }
     }
 
-    private fun fetchMessage(numOfMsgs: Int = 50) {
+    fun fetchMessage(numOfMsgs: Int = 50) {
         viewModelScope.launch {
             val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
             _chatMessages.update { fetchedMessages?.plus(it) ?: it }
@@ -77,9 +100,5 @@ class ChatViewModel @AssistedInject constructor(
 
     suspend fun getSender(userId: MimeiId): User? {
         return HproseInstance.getUserBase(userId)
-    }
-
-    suspend fun saveMessage(chatMessage: ChatMessage) {
-        repository.insertMessage(chatMessage.toEntity())
     }
 }

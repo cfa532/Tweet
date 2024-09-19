@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.User
@@ -58,6 +59,9 @@ fun ChatListScreen(
 {
     val chatMessages by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
+
+    viewModel.loadNewMessages()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -96,7 +100,7 @@ fun ChatListScreen(
                 verticalArrangement = Arrangement.Top
             ) {
                 items(chatMessages) { chatMessage ->
-                    ChatSession(viewModel, chatMessage, navController)
+                    ChatSession(viewModel, chatMessage.lastMessage, navController)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
                         thickness = 1.dp,
@@ -114,7 +118,7 @@ fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage, navContr
 
     LaunchedEffect(chatMessage.authorId) {
         val id = if (chatMessage.authorId != appUser.mid) chatMessage.authorId else chatMessage.receiptId
-        user = viewModel.getSender(id)
+        user = HproseInstance.getUserBase(id)
     }
     Row(modifier = Modifier.padding(8.dp)) {
         Box(modifier = Modifier

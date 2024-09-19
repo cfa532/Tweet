@@ -165,7 +165,7 @@ object HproseInstance {
     }
 
     // get a list of unread incoming messages from other users
-    fun loadMostRecentMessages(): List<ChatMessage>? {
+    fun previewNewMessages(): List<ChatMessage>? {
         val gson = Gson()
         val entry = "message_check"
         val json = """
