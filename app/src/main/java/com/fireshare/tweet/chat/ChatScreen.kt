@@ -31,8 +31,12 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -42,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
+import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatListViewModel
@@ -56,6 +61,7 @@ fun ChatScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -97,7 +103,7 @@ fun ChatScreen(
                         .padding(bottom = 100.dp) // Adjust padding to make space for the input field
                 ) {
                     items(chatMessages) { msg ->
-                        ChatItem(msg)
+                        ChatMessageItem(viewModel, msg)
                     }
                 }
                 ChatInput(
@@ -113,8 +119,13 @@ fun ChatScreen(
 
 
 @Composable
-fun ChatItem(message: ChatMessage) {
+fun ChatMessageItem(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
+    var user by remember { mutableStateOf<User?>(null) }
+    LaunchedEffect(message.authorId) {
+        user = viewModel.getSender(message.authorId)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -5,9 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.chat.ChatRepository
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.datamodel.toChatMessage
+import com.fireshare.tweet.datamodel.toEntity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -21,7 +24,9 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel( assistedFactory = ChatViewModel.ChatViewModelFactory::class)
 class ChatViewModel @AssistedInject constructor(
-    @Assisted private val receiptId: MimeiId ): ViewModel()
+    @Assisted private val receiptId: MimeiId,
+    private val repository: ChatRepository
+    ): ViewModel()
 {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
@@ -33,7 +38,7 @@ class ChatViewModel @AssistedInject constructor(
         viewModelScope.launch {
             HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
             // get messages stored at local
-            loadLocalMessages()
+            _chatMessages.value = loadChatMessages() ?: emptyList()
 
             // get unread messages
             fetchMessage()
@@ -45,35 +50,36 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     fun sendMessage() {
-        // add message to its own MM db and that of the receipt
         val message = ChatMessage(
+            receiptId = receiptId,
             authorId = appUser.mid,
+            timestamp = System.currentTimeMillis(),
             content = textState.value
         )
-        // For now, just add it to the local list
         _chatMessages.value += message
         viewModelScope.launch(Dispatchers.IO) {
+            repository.insertMessage(message.toEntity())
             HproseInstance.sendMessage(receiptId, message)
         }
     }
 
     private fun fetchMessage(numOfMsgs: Int = 50) {
-        // read message from server proactively.
-        _chatMessages.update { msgs ->
-            HproseInstance.fetchMessages(receiptId, numOfMsgs)?.plus(msgs) ?: emptyList()
+        viewModelScope.launch {
+            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
+            _chatMessages.update { fetchedMessages?.plus(it) ?: it }
         }
     }
 
-    private fun loadLocalMessages() {
-        viewModelScope.launch(Dispatchers.IO) {
-//            val localMessages = HproseInstance.loadLocalMessages(receiptId, 50)
-//            _chatMessages.update { localMessages }
-        }
+    private suspend fun loadChatMessages(): List<ChatMessage> {
+        val messages = repository.loadMessages(receiptId, 50)
+        return messages.map { it.toChatMessage() }
     }
 
-    private fun saveMessageLocally(message: ChatMessage) {
-        viewModelScope.launch(Dispatchers.IO) {
-//            HproseInstance.saveMessageLocally(receiptId, message)
-        }
+    suspend fun getSender(userId: MimeiId): User? {
+        return HproseInstance.getUserBase(userId)
+    }
+
+    suspend fun saveMessage(chatMessage: ChatMessage) {
+        repository.insertMessage(chatMessage.toEntity())
     }
 }

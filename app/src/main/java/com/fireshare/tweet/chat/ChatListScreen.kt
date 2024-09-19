@@ -113,7 +113,7 @@ fun ChatMessageItem(viewModel: ChatListViewModel, chatMessage: ChatMessage) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(chatMessage.id)),
+                    text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(chatMessage.timestamp)),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )

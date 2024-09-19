@@ -1,18 +1,59 @@
 package com.fireshare.tweet.datamodel
 
-import androidx.test.services.events.TimeStamp
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.RoomDatabase
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ChatMessage (
-    val id: Long = System.currentTimeMillis(),      // used as key
-    val authorId: MimeiId,      // author of the message
-    val content: String? = null,
-    val attachment: MimeiId? = null,
+data class ChatMessage(
+    val receiptId: MimeiId,
+    val authorId: MimeiId,
+    val content: String,
+    val timestamp: Long
 )
 
-@Serializable
-data class ChatSession (
-    val userId: MimeiId,
-    var lastMessage: ChatMessage,
+@Entity(tableName = "chat_messages")
+data class ChatMessageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val receiptId: String,
+    val authorId: String,
+    val content: String,
+    val timestamp: Long
 )
+
+fun ChatMessage.toEntity(): ChatMessageEntity {
+    return ChatMessageEntity(
+        receiptId = this.receiptId,
+        authorId = this.authorId,
+        content = this.content,
+        timestamp = this.timestamp
+    )
+}
+
+fun ChatMessageEntity.toChatMessage(): ChatMessage {
+    return ChatMessage(
+        receiptId = this.receiptId,
+        authorId = this.authorId,
+        content = this.content,
+        timestamp = this.timestamp
+    )
+}
+
+@Dao
+interface ChatMessageDao {
+    @Insert
+    suspend fun insertMessage(message: ChatMessageEntity)
+
+    @Query("SELECT * FROM chat_messages WHERE receiptId = :receiptId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity>
+}
+
+@Database(entities = [ChatMessageEntity::class], version = 1)
+abstract class ChatDatabase : RoomDatabase() {
+    abstract fun chatMessageDao(): ChatMessageDao
+}
