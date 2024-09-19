@@ -3,6 +3,7 @@ package com.fireshare.tweet.chat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.User
@@ -37,9 +38,6 @@ import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,7 +47,7 @@ import java.util.Locale
 fun ChatListScreen(
     viewModel: ChatListViewModel)
 {
-    val chatMessages by viewModel.chatMessages.collectAsState()
+    val chatMessages by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
     Scaffold(
         topBar = {
@@ -60,7 +58,7 @@ fun ChatListScreen(
                 ),
                 title = {
                     Text(
-                        text = "Messages",
+                        text = "Chat Messages",
                         style = MaterialTheme.typography.bodyLarge
                     )
                 },
@@ -77,15 +75,24 @@ fun ChatListScreen(
         },
         bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
-        Surface(modifier = Modifier.padding(innerPadding))
-        {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize() // Ensure Surface fills the available space
+                .padding(innerPadding)
+        ) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.Top
             ) {
                 items(chatMessages) { chatMessage ->
-                    ChatMessageItem(viewModel, chatMessage)
+                    ChatSession(viewModel, chatMessage)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 1.dp),
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
                 }
             }
         }
@@ -93,15 +100,16 @@ fun ChatListScreen(
 }
 
 @Composable
-fun ChatMessageItem(viewModel: ChatListViewModel, chatMessage: ChatMessage) {
+fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage) {
     var user by remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(chatMessage.authorId) {
-        user = viewModel.getSender(chatMessage.authorId)
+        val id = if (chatMessage.authorId != appUser.mid) chatMessage.authorId else chatMessage.receiptId
+        user = viewModel.getSender(id)
     }
     Row(modifier = Modifier.padding(8.dp)) {
         UserAvatar(user)
-
+        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),

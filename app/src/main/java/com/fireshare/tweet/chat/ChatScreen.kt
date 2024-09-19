@@ -1,6 +1,5 @@
 package com.fireshare.tweet.chat
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,18 +7,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,15 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -103,7 +95,7 @@ fun ChatScreen(
                         .padding(bottom = 100.dp) // Adjust padding to make space for the input field
                 ) {
                     items(chatMessages) { msg ->
-                        ChatMessageItem(viewModel, msg)
+                        ChatSession(viewModel, msg)
                     }
                 }
                 ChatInput(
@@ -119,7 +111,7 @@ fun ChatScreen(
 
 
 @Composable
-fun ChatMessageItem(viewModel: ChatViewModel, message: ChatMessage) {
+fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     var user by remember { mutableStateOf<User?>(null) }
     LaunchedEffect(message.authorId) {

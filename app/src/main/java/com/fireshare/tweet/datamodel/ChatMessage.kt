@@ -51,6 +51,16 @@ interface ChatMessageDao {
 
     @Query("SELECT * FROM chat_messages WHERE receiptId = :receiptId ORDER BY timestamp DESC LIMIT :limit")
     suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity>
+
+    @Query("""
+        SELECT * FROM chat_messages 
+        WHERE id IN (
+            SELECT MAX(id) FROM chat_messages 
+            GROUP BY receiptId
+        )
+        ORDER BY timestamp DESC
+    """)
+    suspend fun loadMostRecentMessages(): List<ChatMessageEntity>
 }
 
 @Database(entities = [ChatMessageEntity::class], version = 1)

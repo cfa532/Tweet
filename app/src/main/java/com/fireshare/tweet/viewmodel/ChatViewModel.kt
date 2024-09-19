@@ -38,7 +38,7 @@ class ChatViewModel @AssistedInject constructor(
         viewModelScope.launch {
             HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
             // get messages stored at local
-            _chatMessages.value = loadChatMessages() ?: emptyList()
+            _chatMessages.value = loadChatMessages()
 
             // get unread messages
             fetchMessage()

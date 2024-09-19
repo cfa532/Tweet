@@ -166,7 +166,7 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
-        color = Color.LightGray
+        color = MaterialTheme.colorScheme.tertiary
     )
 }
 

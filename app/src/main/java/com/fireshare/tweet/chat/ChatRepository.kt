@@ -12,4 +12,8 @@ class ChatRepository(private val chatMessageDao: ChatMessageDao) {
     suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity> {
         return chatMessageDao.loadMessages(receiptId, limit)
     }
+
+    suspend fun loadMostRecentMessages(): List<ChatMessageEntity> {
+        return chatMessageDao.loadMostRecentMessages()
+    }
 }
