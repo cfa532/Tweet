@@ -6,6 +6,7 @@ import com.fireshare.tweet.datamodel.ChatMessageEntity
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.MimeiId
+import com.google.gson.Gson
 
 class ChatRepository(private val chatMessageDao: ChatMessageDao) {
 
@@ -16,10 +17,6 @@ class ChatRepository(private val chatMessageDao: ChatMessageDao) {
     suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity> {
         return chatMessageDao.loadMessages(receiptId, limit)
     }
-
-    suspend fun loadMostRecentMessages(): List<ChatMessageEntity> {
-        return chatMessageDao.loadMostRecentMessages()
-    }
 }
 
 fun mergeMessagesWithSessions(
@@ -27,29 +24,26 @@ fun mergeMessagesWithSessions(
     newMessages: List<ChatMessage>
 ): List<ChatSession> {
     val messageMap = mutableMapOf<Pair<MimeiId, MimeiId>, ChatMessage>()
-
-    // Add existing messages to the map
-    existingSessions.forEach { session ->
-        val message = session.lastMessage
-        val key = if (message.receiptId < message.authorId) {
+    fun normalizedKey(message: ChatMessage): Pair<MimeiId, MimeiId> {
+        return if (message.receiptId < message.authorId) {
             Pair(message.receiptId, message.authorId)
         } else {
             Pair(message.authorId, message.receiptId)
         }
+    }
+    // Add existing messages to the map
+    existingSessions.forEach { session ->
+        val message = session.lastMessage
+        val key = normalizedKey(message)
         messageMap[key] = message
     }
 
     // Normalize the new messages and merge them into the map
-    for(msg in newMessages) {
-
-//    }
-//    newMessages.forEach { msg ->
-        println(msg)
-        val key = if (msg.receiptId < msg.authorId) {
-            Pair(msg.receiptId, msg.authorId)
-        } else {
-            Pair(msg.authorId, msg.receiptId)
-        }
+    val gson = Gson()
+    for (i in newMessages.indices) {
+        val json = gson.toJson(newMessages[i])
+        val msg = gson.fromJson(json, ChatMessage::class.java)
+        val key = normalizedKey(msg)
         val existingMessage = messageMap[key]
         if (existingMessage == null || msg.timestamp > existingMessage.timestamp) {
             messageMap[key] = msg
@@ -61,12 +55,26 @@ fun mergeMessagesWithSessions(
         val receiptId = if (lastMessage.authorId == appUser.mid) {
             lastMessage.receiptId
         } else lastMessage.authorId
+
+        // if the session receipt is author of any new message
+        val hasNews = hasNews(newMessages, receiptId)
         ChatSession(
             timestamp = lastMessage.timestamp,
             userId = appUser.mid,
             receiptId = receiptId,
-            hasNews = true,
+            hasNews = hasNews,
             lastMessage = lastMessage
         )
     }
+}
+
+fun hasNews(newMessages: List<ChatMessage>, receiptId: MimeiId): Boolean {
+    val gson = Gson()
+    for (i in newMessages.indices) {
+        val json = gson.toJson(newMessages[i])
+        val msg = gson.fromJson(json, ChatMessage::class.java)
+        if (msg.authorId == receiptId)
+            return true
+    }
+    return false
 }

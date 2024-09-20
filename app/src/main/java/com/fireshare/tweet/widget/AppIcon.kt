@@ -35,6 +35,25 @@ fun AppIcon() {
 }
 
 @Composable
+//fun UserAvatar(user: User?, size: Int = 40) {
+//    val avatarUrl = remember { getMediaUrl(user?.avatar, user?.baseUrl).toString() }
+//    val painter = rememberAsyncImagePainter(
+//        model = avatarUrl,
+////        placeholder = rememberAsyncImagePainter(R.drawable.ic_placeholder),
+////        error = rememberAsyncImagePainter(R.drawable.ic_error)
+//    )
+//
+//    Image(
+//        painter = painter,
+//        contentDescription = "User Avatar",
+//        modifier = Modifier
+//            .size(size.dp)
+//            .clip(CircleShape)
+//            .background(Color.Gray),
+//        contentScale = ContentScale.Crop
+//    )
+//}
+
 fun UserAvatar(user: User?, size: Int = 40) {
     val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl).toString()
     ImageViewer(avatarUrl, modifier = Modifier

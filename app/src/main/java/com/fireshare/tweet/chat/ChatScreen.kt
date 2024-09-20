@@ -112,7 +112,6 @@ fun ChatScreen(
     }
 }
 
-
 @Composable
 fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid

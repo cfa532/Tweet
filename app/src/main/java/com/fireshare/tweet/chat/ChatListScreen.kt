@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -42,12 +42,17 @@ import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
+import com.fireshare.tweet.datamodel.ChatSession
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,7 +62,7 @@ import java.util.Locale
 fun ChatListScreen(
     viewModel: ChatListViewModel)
 {
-    val chatMessages by viewModel.chatSessions.collectAsState()
+    val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
 
     viewModel.loadNewMessages()
@@ -99,8 +104,8 @@ fun ChatListScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Top
             ) {
-                items(chatMessages) { chatMessage ->
-                    ChatSession(viewModel, chatMessage.lastMessage, navController)
+                items(chatSessions) { chatSession ->
+                    ChatSession(viewModel, chatSession, navController)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
                         thickness = 1.dp,
@@ -113,13 +118,16 @@ fun ChatListScreen(
 }
 
 @Composable
-fun ChatSession(viewModel: ChatListViewModel, chatMessage: ChatMessage, navController: NavController) {
-    var user by remember { mutableStateOf<User?>(null) }
+fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navController: NavController) {
+//    val user by remember { mutableStateOf<User?>(null) }
+    val chatMessage = chatSession.lastMessage
+    val userMap by viewModel.userMap.collectAsState()
+    val user = userMap[chatSession.receiptId]
 
-    LaunchedEffect(chatMessage.authorId) {
-        val id = if (chatMessage.authorId != appUser.mid) chatMessage.authorId else chatMessage.receiptId
-        user = HproseInstance.getUserBase(id)
+    LaunchedEffect(chatSession.receiptId) {
+        viewModel.getSender(chatSession.receiptId)
     }
+
     Row(modifier = Modifier.padding(8.dp)) {
         Box(modifier = Modifier
             .size(40.dp)

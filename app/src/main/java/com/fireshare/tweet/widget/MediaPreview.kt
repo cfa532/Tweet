@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -161,12 +162,24 @@ fun MediaItemPreview(mediaItem: MediaItem,
     }
 }
 
+/**
+ * Download and compress image in cache
+ * @param imageUrl: Leither image url in the format of
+ *                  http://ip/ipfs/mimeiId
+ * @param isPreview: download the original image to cache without compression if False
+ * @param imageSize: compress download image below imageSize(KB)
+ * */
 @Composable
-fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Boolean = true, imageSize: Int = 200) {
+fun ImageViewer(
+    imageUrl: String,
+    modifier: Modifier = Modifier,
+    isPreview: Boolean = true,
+    imageSize: Int = 200
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val cacheManager = remember { CacheManager(context) }
-    val cachedPath = cacheManager.getCachedImagePath(imageUrl, isPreview)
+    val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, isPreview))
 
     // State to track if the image is being downloaded
     var isDownloading by remember { mutableStateOf(false) }
@@ -175,13 +188,13 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
     var downloadError by remember { mutableStateOf(false) }
 
     // Check if image is already cached and use it directly
-    val cachedImage = remember { mutableStateOf(cacheManager.loadImageFromCache(cachedPath)) }
+    val cachedImage = remember { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
     val adjustedModifier = if (isPreview) {
-        modifier.fillMaxSize()
+        modifier.fillMaxSize()      // image is viewed within a parent composable
     } else {
-        modifier.fillMaxWidth()
+        modifier.fillMaxWidth()     // image is viewed full screen
     }
-
+    val scope = rememberCoroutineScope()
     if (cachedImage.value != null) {
         Box(modifier = modifier) {
             Image(
@@ -193,8 +206,8 @@ fun ImageViewer(imageUrl: String, modifier: Modifier = Modifier, isPreview: Bool
         }
     } else {
         // Download and cache image if not already cached
-        LaunchedEffect(imageUrl.substringAfterLast("/")) { // Use imageUrl as the key
-            val job = coroutineScope.launch {
+        LaunchedEffect(cachedPath.value) { // Use imageUrl as the key
+            val job = scope.launch {
                 isDownloading = true
                 downloadError = false
                 val downloadedPath = try {

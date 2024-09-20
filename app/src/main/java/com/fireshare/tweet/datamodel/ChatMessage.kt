@@ -86,21 +86,14 @@ fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
 
 @Dao
 interface ChatMessageDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessageEntity)
 
     @Query("SELECT * FROM chat_messages WHERE receiptId = :receiptId ORDER BY timestamp DESC LIMIT :limit")
     suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity>
 
-    @Query("""
-        SELECT * FROM chat_messages 
-        WHERE id IN (
-            SELECT MAX(id) FROM chat_messages 
-            GROUP BY receiptId
-        )
-        ORDER BY timestamp DESC
-    """)
-    suspend fun loadMostRecentMessages(): List<ChatMessageEntity>
+    @Query("SELECT * FROM chat_messages WHERE id = :messageId LIMIT 1")
+    suspend fun getMessageById(messageId: Long): ChatMessageEntity?
 }
 
 @Dao

@@ -38,7 +38,7 @@ class ChatViewModel @AssistedInject constructor(
     var textState = mutableStateOf("")
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
             // get messages stored at local
             _chatMessages.value = loadChatMessages().sortedBy { it.timestamp }

@@ -30,7 +30,6 @@ import androidx.navigation.NavController
 @Composable
 fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, startIndex: Int) {
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
-    val cachedImageUrls = remember { mutableStateMapOf<String, String>() }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Row(modifier = Modifier.fillMaxSize()) {
