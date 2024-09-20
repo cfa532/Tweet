@@ -108,7 +108,6 @@ fun ChatListScreen(
 
 @Composable
 fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navController: NavController) {
-//    val user by remember { mutableStateOf<User?>(null) }
     val chatMessage = chatSession.lastMessage
     val userMap by viewModel.userMap.collectAsState()
     val user = userMap[chatSession.receiptId]

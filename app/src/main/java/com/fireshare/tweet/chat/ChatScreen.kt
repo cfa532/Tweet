@@ -98,7 +98,7 @@ fun ChatScreen(
                         .padding(bottom = 100.dp) // Adjust padding to make space for the input field
                 ) {
                     items(chatMessages) { msg ->
-                        ChatSession(viewModel, msg)
+                        ChatItem(viewModel, msg)
                     }
                 }
                 ChatInput(
@@ -113,7 +113,7 @@ fun ChatScreen(
 }
 
 @Composable
-fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
+fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     var user by remember { mutableStateOf<User?>(null) }
     val receipt by viewModel.receipt.collectAsState()
@@ -135,7 +135,7 @@ fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
         }
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer,
-            shape = MaterialTheme.shapes.medium,
+            shape = ChatBubbleShape(),
             modifier = Modifier.padding(4.dp)
         ) {
             Text(
