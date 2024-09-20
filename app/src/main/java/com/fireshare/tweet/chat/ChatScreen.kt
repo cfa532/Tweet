@@ -116,26 +116,31 @@ fun ChatScreen(
 fun ChatSession(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     var user by remember { mutableStateOf<User?>(null) }
+    val receipt by viewModel.receipt.collectAsState()
 
-    LaunchedEffect(message.authorId) {
+    LaunchedEffect(Unit) {
         user = viewModel.getSender(message.authorId)
     }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
         horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (!isSentByCurrentUser) {
+            UserAvatar(user = receipt, size = 32)
+            Spacer(modifier = Modifier.width(8.dp))
+        }
         Surface(
-            color = if (isSentByCurrentUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.primaryContainer,
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier.padding(4.dp)
         ) {
             Text(
-                text = message.content ?: "",
-                color = if (isSentByCurrentUser) Color.White else Color.Black,
+                text = message.content,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(8.dp)
             )
         }

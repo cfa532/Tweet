@@ -3,18 +3,11 @@ package com.fireshare.tweet.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.chat.mergeMessagesWithSessions
-import com.fireshare.tweet.datamodel.ChatDatabase
-import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.datamodel.toChatMessage
-import com.fireshare.tweet.datamodel.toChatSession
-import com.fireshare.tweet.datamodel.toEntity
-import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,9 +39,9 @@ class ChatListViewModel @Inject constructor(
         return chatSessionRepository.getAllSessions()
     }
 
-    fun loadNewMessages() {
+    fun previewMessages() {
         viewModelScope.launch(Dispatchers.IO) {
-            val newMessages = HproseInstance.previewNewMessages() ?: return@launch
+            val newMessages = HproseInstance.checkNewMessages() ?: return@launch
             val updatedSessions = mergeMessagesWithSessions(_chatSessions.value, newMessages)
             // Do not update session database, only show new sessions on UI
             // Update session database only when user opens chat screen.
