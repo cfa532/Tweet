@@ -89,8 +89,14 @@ interface ChatMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessageEntity)
 
-    @Query("SELECT * FROM chat_messages WHERE receiptId = :receiptId ORDER BY timestamp DESC LIMIT :limit")
-    suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity>
+    @Query("""
+        SELECT * FROM chat_messages 
+        WHERE (authorId = :userId AND receiptId = :receiptId) 
+           OR (authorId = :receiptId AND receiptId = :userId) 
+        ORDER BY timestamp DESC 
+        LIMIT :limit
+    """)
+    suspend fun loadMessages(userId: String, receiptId: String, limit: Int): List<ChatMessageEntity>
 
     @Query("SELECT * FROM chat_messages WHERE id = :messageId LIMIT 1")
     suspend fun getMessageById(messageId: Long): ChatMessageEntity?
@@ -106,6 +112,9 @@ interface ChatSessionDao {
 
     @Query("SELECT * FROM chat_sessions")
     suspend fun getAllSessions(): List<ChatSessionEntity>
+
+    @Query("UPDATE chat_sessions SET timestamp = :timestamp, lastMessageId = :lastMessageId, hasNews = :hasNews WHERE userId = :userId AND receiptId = :receiptId")
+    suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 }
 
 @Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 1)

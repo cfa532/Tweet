@@ -39,12 +39,12 @@ class ChatViewModel @AssistedInject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.getUserBase(receiptId)?.let { receipt.value = it }
-            // get messages stored at local
-            _chatMessages.value = loadChatMessages().sortedBy { it.timestamp }
+            receipt.value = getSender(receiptId)
+            // get messages stored at local database
+            _chatMessages.value = loadChatMessages(receiptId).sortedBy { it.timestamp }
 
             // get unread messages from network
-            fetchMessage()
+            fetchNewMessage()
         }
     }
     @AssistedFactory
@@ -65,38 +65,43 @@ class ChatViewModel @AssistedInject constructor(
             HproseInstance.sendMessage(receiptId, message)
 
             // Update the ChatSession with the last new message
-            val sessionEntity = database.chatSessionDao().getSession(appUser.mid, receiptId)
-            if (sessionEntity != null) {
-                val updatedSession = sessionEntity.copy(
-                    timestamp = message.timestamp,
-                    lastMessageId = message.timestamp,
-                    hasNews = false
-                )
-                database.chatSessionDao().insertSession(updatedSession)
-            } else {
-                val newSession = ChatSessionEntity(
-                    timestamp = message.timestamp,
-                    userId = message.authorId,
-                    receiptId = message.receiptId,
-                    hasNews = false,
-                    lastMessageId = message.timestamp
-                )
-                database.chatSessionDao().insertSession(newSession)
+            updateSessionDatabase(message)
+        }
+    }
+
+    fun fetchNewMessage(numOfMsgs: Int = 50) {
+        viewModelScope.launch {
+            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
+            fetchedMessages?.let{news ->
+                _chatMessages.update { news.plus(it) }
+                // update chat session
+                updateSessionDatabase(news[news.size-1])
             }
         }
     }
 
-    fun fetchMessage(numOfMsgs: Int = 50) {
-        viewModelScope.launch {
-            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
-            _chatMessages.update { fetchedMessages?.plus(it) ?: it }
+    private suspend fun updateSessionDatabase(message: ChatMessage) {
+        val sessionEntity = database.chatSessionDao().getSession(appUser.mid, receiptId)
+        if (sessionEntity != null) {
+            database.chatSessionDao().updateSession(appUser.mid, receiptId, message.timestamp,
+                message.timestamp, false)
+        } else {
+            val newSession = ChatSessionEntity(
+                timestamp = message.timestamp,
+                userId = message.authorId,
+                receiptId = message.receiptId,
+                hasNews = false,
+                lastMessageId = message.timestamp
+            )
+            database.chatSessionDao().insertSession(newSession)
         }
     }
 
-    private suspend fun loadChatMessages(): List<ChatMessage> {
-        val messages = repository.loadMessages(receiptId, 50)
+    private suspend fun loadChatMessages(receiptId: MimeiId): List<ChatMessage> {
+        val messages = repository.loadMessages(appUser.mid, receiptId, 50)
         return messages.map { it.toChatMessage() }
     }
+
 
     suspend fun getSender(userId: MimeiId): User? {
         return HproseInstance.getUserBase(userId)

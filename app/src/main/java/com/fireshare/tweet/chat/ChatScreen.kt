@@ -55,7 +55,7 @@ fun ChatScreen(
     val receipt by viewModel.receipt.collectAsState()
 
     // fetch new messages every time open chat screen.
-    viewModel.fetchMessage()
+    viewModel.fetchNewMessage()
 
     Scaffold(
         topBar = {

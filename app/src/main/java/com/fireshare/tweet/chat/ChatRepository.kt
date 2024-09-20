@@ -9,16 +9,22 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.google.gson.Gson
 
 class ChatRepository(private val chatMessageDao: ChatMessageDao) {
+    suspend fun loadMessages(userId: String, receiptId: String, limit: Int): List<ChatMessageEntity> {
+        return chatMessageDao.loadMessages(userId, receiptId, limit)
+    }
 
     suspend fun insertMessage(message: ChatMessageEntity) {
         chatMessageDao.insertMessage(message)
     }
-
-    suspend fun loadMessages(receiptId: String, limit: Int): List<ChatMessageEntity> {
-        return chatMessageDao.loadMessages(receiptId, limit)
-    }
 }
 
+/**
+ * Update existing chat sessions with incoming chat message.
+ * Chat message is identified by its pair of authorId and receiptId. Depending on
+ * the direction of message flow, the pair change switch. Whereas the session's
+ * author is always the current app user, and its receipt is the one engaging in
+ * conversation with the appUser.
+ * */
 fun mergeMessagesWithSessions(
     existingSessions: List<ChatSession>,
     newMessages: List<ChatMessage>

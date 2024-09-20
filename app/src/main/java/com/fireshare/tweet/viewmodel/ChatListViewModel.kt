@@ -37,7 +37,7 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _chatSessions.value = loadChatSessions()
+            _chatSessions.update { list -> list + loadChatSessions() }
         }
     }
 
@@ -55,10 +55,12 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val newMessages = HproseInstance.previewNewMessages() ?: return@launch
             val updatedSessions = mergeMessagesWithSessions(_chatSessions.value, newMessages)
-            updatedSessions.forEach { session ->
-                val sessionEntity = session.toEntity()
-                database.chatSessionDao().insertSession(sessionEntity)
-            }
+            // Do not update session database, only show new sessions on UI
+            // Update session database only when user opens chat screen.
+//            updatedSessions.forEach { session ->
+//                val sessionEntity = session.toEntity()
+//                database.chatSessionDao().insertSession(sessionEntity)
+//            }
             _chatSessions.update {updatedSessions}
         }
     }
