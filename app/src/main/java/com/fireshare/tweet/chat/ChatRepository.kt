@@ -6,6 +6,7 @@ import com.fireshare.tweet.datamodel.ChatMessageEntity
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.toEntity
 import com.google.gson.Gson
 
 class ChatRepository(private val chatMessageDao: ChatMessageDao) {
@@ -13,8 +14,13 @@ class ChatRepository(private val chatMessageDao: ChatMessageDao) {
         return chatMessageDao.loadMessages(userId, receiptId, limit)
     }
 
-    suspend fun insertMessage(message: ChatMessageEntity) {
-        chatMessageDao.insertMessage(message)
+    suspend fun insertMessage(message: ChatMessage) {
+        chatMessageDao.insertMessage(message.toEntity())
+    }
+
+    suspend fun insertMessages(messages: List<ChatMessage>) {
+        val messageEntities = messages.map { it.toEntity() }
+        chatMessageDao.insertMessages(messageEntities)
     }
 }
 

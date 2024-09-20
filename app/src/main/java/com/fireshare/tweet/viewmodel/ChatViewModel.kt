@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatRepository
+import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatSessionEntity
@@ -28,7 +29,7 @@ import kotlinx.coroutines.launch
 class ChatViewModel @AssistedInject constructor(
     @Assisted private val receiptId: MimeiId,
     private val repository: ChatRepository,
-    private val database: ChatDatabase
+    private val chatSessionRepository: ChatSessionRepository
     ): ViewModel()
 {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -47,10 +48,6 @@ class ChatViewModel @AssistedInject constructor(
             fetchNewMessage()
         }
     }
-    @AssistedFactory
-    interface ChatViewModelFactory {
-        fun create(receiptId: MimeiId): ChatViewModel
-    }
 
     fun sendMessage() {
         val message = ChatMessage(
@@ -61,39 +58,22 @@ class ChatViewModel @AssistedInject constructor(
         )
         _chatMessages.value += message
         viewModelScope.launch(Dispatchers.IO) {
-            repository.insertMessage(message.toEntity())
+            repository.insertMessage(message)
             HproseInstance.sendMessage(receiptId, message)
-
-            // Update the ChatSession with the last new message
-            updateSessionDatabase(message)
+            chatSessionRepository.updateLastMessage(appUser.mid, receiptId)
         }
     }
 
     fun fetchNewMessage(numOfMsgs: Int = 50) {
         viewModelScope.launch {
             val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
-            fetchedMessages?.let{news ->
-                _chatMessages.update { news.plus(it) }
-                // update chat session
-                updateSessionDatabase(news[news.size-1])
+            fetchedMessages?.let { news ->
+                if (news.isNotEmpty()) {
+                    repository.insertMessages(news)
+                    _chatMessages.update { news.plus(it) }
+                    chatSessionRepository.updateLastMessage(appUser.mid, receiptId)
+                }
             }
-        }
-    }
-
-    private suspend fun updateSessionDatabase(message: ChatMessage) {
-        val sessionEntity = database.chatSessionDao().getSession(appUser.mid, receiptId)
-        if (sessionEntity != null) {
-            database.chatSessionDao().updateSession(appUser.mid, receiptId, message.timestamp,
-                message.timestamp, false)
-        } else {
-            val newSession = ChatSessionEntity(
-                timestamp = message.timestamp,
-                userId = message.authorId,
-                receiptId = message.receiptId,
-                hasNews = false,
-                lastMessageId = message.timestamp
-            )
-            database.chatSessionDao().insertSession(newSession)
         }
     }
 
@@ -102,8 +82,12 @@ class ChatViewModel @AssistedInject constructor(
         return messages.map { it.toChatMessage() }
     }
 
-
     suspend fun getSender(userId: MimeiId): User? {
         return HproseInstance.getUserBase(userId)
+    }
+
+    @AssistedFactory
+    interface ChatViewModelFactory {
+        fun create(receiptId: MimeiId): ChatViewModel
     }
 }

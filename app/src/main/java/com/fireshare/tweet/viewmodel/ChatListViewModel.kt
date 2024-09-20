@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.chat.mergeMessagesWithSessions
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -26,7 +27,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
-    private val database: ChatDatabase
+    private val chatSessionRepository: ChatSessionRepository
 ) : ViewModel() {
 
     private val _chatSessions = MutableStateFlow<List<ChatSession>>(emptyList())
@@ -37,18 +38,12 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _chatSessions.update { list -> list + loadChatSessions() }
+            _chatSessions.update { loadChatSessions() }
         }
     }
 
     private suspend fun loadChatSessions(): List<ChatSession> {
-        val sessionEntities = database.chatSessionDao().getAllSessions()
-        return sessionEntities.mapNotNull { sessionEntity ->
-            val lastMessageEntity = database.chatMessageDao().getMessageById(sessionEntity.lastMessageId)
-            lastMessageEntity?.toChatMessage()?.let { lastMessage ->
-                sessionEntity.toChatSession(lastMessage)
-            }
-        }
+        return chatSessionRepository.getAllSessions()
     }
 
     fun loadNewMessages() {
@@ -57,11 +52,7 @@ class ChatListViewModel @Inject constructor(
             val updatedSessions = mergeMessagesWithSessions(_chatSessions.value, newMessages)
             // Do not update session database, only show new sessions on UI
             // Update session database only when user opens chat screen.
-//            updatedSessions.forEach { session ->
-//                val sessionEntity = session.toEntity()
-//                database.chatSessionDao().insertSession(sessionEntity)
-//            }
-            _chatSessions.update {updatedSessions}
+            _chatSessions.update { updatedSessions }
         }
     }
 

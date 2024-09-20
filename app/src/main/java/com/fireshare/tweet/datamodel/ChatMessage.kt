@@ -64,13 +64,13 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
     )
 }
 
-fun ChatSession.toEntity(): ChatSessionEntity {
+fun ChatSession.toEntity(lastMessageId: Long): ChatSessionEntity {
     return ChatSessionEntity(
         timestamp = this.timestamp,
         userId = this.userId,
         receiptId = this.receiptId,
         hasNews = this.hasNews,
-        lastMessageId = this.lastMessage.timestamp // Assuming timestamp is unique for each message
+        lastMessageId = lastMessageId
     )
 }
 
@@ -89,6 +89,9 @@ interface ChatMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessageEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<ChatMessageEntity>)
+
     @Query("""
         SELECT * FROM chat_messages 
         WHERE (authorId = :userId AND receiptId = :receiptId) 
@@ -100,6 +103,9 @@ interface ChatMessageDao {
 
     @Query("SELECT * FROM chat_messages WHERE id = :messageId LIMIT 1")
     suspend fun getMessageById(messageId: Long): ChatMessageEntity?
+
+    @Query("SELECT * FROM chat_messages WHERE authorId = :userId AND receiptId = :receiptId ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestMessage(userId: String, receiptId: String): ChatMessageEntity?
 }
 
 @Dao

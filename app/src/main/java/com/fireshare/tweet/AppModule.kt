@@ -3,8 +3,10 @@ package com.fireshare.tweet
 import android.content.Context
 import androidx.room.Room
 import com.fireshare.tweet.chat.ChatRepository
+import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessageDao
+import com.fireshare.tweet.datamodel.ChatSessionDao
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
 import dagger.Provides
@@ -27,10 +29,15 @@ object AppModule {
     @Singleton
     fun provideChatDatabase(@ApplicationContext context: Context): ChatDatabase {
         return Room.databaseBuilder(
-            context,
+            context.applicationContext,
             ChatDatabase::class.java,
             "chat_database"
         ).build()
+    }
+
+    @Provides
+    fun provideChatSessionDao(database: ChatDatabase): ChatSessionDao {
+        return database.chatSessionDao()
     }
 
     @Provides
@@ -41,6 +48,15 @@ object AppModule {
     @Provides
     fun provideChatRepository(chatMessageDao: ChatMessageDao): ChatRepository {
         return ChatRepository(chatMessageDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideChatSessionRepository(
+        chatSessionDao: ChatSessionDao,
+        chatMessageDao: ChatMessageDao
+    ): ChatSessionRepository {
+        return ChatSessionRepository(chatSessionDao, chatMessageDao)
     }
 }
 
