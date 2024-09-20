@@ -88,7 +88,7 @@ fun ChatScreen(
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 1) }
+//        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
             Box(modifier = Modifier.fillMaxSize()) {

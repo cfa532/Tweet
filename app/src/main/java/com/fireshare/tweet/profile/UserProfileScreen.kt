@@ -25,6 +25,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
@@ -44,7 +45,8 @@ fun UserProfileScreen(
     val tweets by userViewModel.tweets.collectAsState()
 
     Scaffold(
-        topBar = { ProfileTopAppBar(userViewModel, navController, parentEntry) }
+        topBar = { ProfileTopAppBar(userViewModel, navController, parentEntry) },
+        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
