@@ -49,7 +49,7 @@ fun TweetItem(
     // Log the tweet ID to see if the component is being recomposed
     Log.d("TweetItem", "Displaying tweet with ID: ${tweet.mid}")
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(0.dp)
