@@ -44,11 +44,13 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
@@ -309,17 +311,18 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
             Icon(
-                imageVector = Icons.Outlined.Add,
+                painter = painterResource(R.drawable.ic_full_screen),
                 contentDescription = "Full screen",
                 tint = Color.White,
                 modifier = modifier.size(ButtonDefaults.IconSize)
+                    .alpha(0.7f)
             )
         }
     }
 }
 
 fun isElementVisible(layoutCoordinates: LayoutCoordinates): Boolean {
-    val threshold = 80
+    val threshold = 70
     val layoutHeight = layoutCoordinates.size.height
     val thresholdHeight = layoutHeight * threshold / 100
     val layoutTop = layoutCoordinates.positionInRoot().y
