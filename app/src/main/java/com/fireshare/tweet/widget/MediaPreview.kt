@@ -25,6 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -49,6 +53,7 @@ import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -252,21 +257,43 @@ fun ImageViewer(
 fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, inPreviewGrid: Boolean = true) {
     val context = LocalContext.current
     val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
-    val exoPlayer = ExoPlayer.Builder(context).build().apply {
-        setMediaItem(item)
-        prepare()
-        playWhenReady = false
-//        playWhenReady = index==0      // wait until globalPosition is figured out.
+
+    var isVideoVisible by remember { mutableStateOf(false) }
+
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(item)
+            prepare()
+        }
     }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
-    if ( !inPreviewGrid ) {
-         LaunchedEffect(url.substringAfterLast("/")) {
-             val pair = getVideoDimensions(url) ?: Pair(400, 400)
-             aspectRatio = pair.first.toFloat() / pair.second.toFloat()
+    if (!inPreviewGrid) {
+        LaunchedEffect(url.substringAfterLast("/")) {
+            val pair = getVideoDimensions(url) ?: Pair(400, 400)
+            aspectRatio = pair.first.toFloat() / pair.second.toFloat()
         }
     }
 
-    Box(modifier = modifier) {
+    LaunchedEffect(isVideoVisible) {
+        if (isVideoVisible && index == 0) {
+            delay(500) // Wait for 0.5 seconds
+            exoPlayer.playWhenReady = true
+        } else {
+            exoPlayer.playWhenReady = false
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Box(modifier = modifier
+        .onGloballyPositioned { layoutCoordinates ->
+            isVideoVisible = isElementVisible(layoutCoordinates)
+        }
+    ) {
         AndroidView(
             factory = { PlayerView(context).apply { player = exoPlayer } },
             modifier = modifier
@@ -287,4 +314,12 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
             )
         }
     }
+}
+
+fun isElementVisible(layoutCoordinates: LayoutCoordinates): Boolean {
+    // Implement your logic to determine visibility based on layout coordinates
+    // For example, check if the element is within the viewport:
+    val parentCoordinates = layoutCoordinates.parentLayoutCoordinates ?: return false
+    val viewport = parentCoordinates.boundsInRoot()
+    return viewport.contains(layoutCoordinates.boundsInRoot().center)
 }
