@@ -20,13 +20,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.TweetNavGraph
+import com.fireshare.tweet.service.ChatWorker
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -37,6 +43,7 @@ class TweetActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             (application as TweetApplication).initJob.await()
+            scheduleNetworkCheck()
 
             setContent {
                 TweetTheme {
@@ -85,5 +92,22 @@ class TweetActivity : ComponentActivity() {
                 }
             }
         }
+    }
+//    private fun scheduleNetworkCheck() {
+//        val networkCheckRequest = OneTimeWorkRequestBuilder<ChatWorker>()
+//            .build()
+//
+//        WorkManager.getInstance(this).enqueue(networkCheckRequest)
+//    }
+
+    private fun scheduleNetworkCheck() {
+        val networkCheckRequest = PeriodicWorkRequestBuilder<ChatWorker>(15, TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "ChatWork",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            networkCheckRequest
+        )
     }
 }

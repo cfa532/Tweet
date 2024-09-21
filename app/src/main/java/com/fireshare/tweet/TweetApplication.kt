@@ -7,9 +7,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import android.content.Context
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
+import javax.inject.Inject
 
 @HiltAndroidApp
-class TweetApplication : Application() {
+class TweetApplication : Application(), Configuration.Provider {
     lateinit var initJob: Deferred<Unit>
 
     override fun onCreate() {
@@ -23,6 +27,14 @@ class TweetApplication : Application() {
     companion object {
         lateinit var preferenceHelper: PreferenceHelper
     }
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 }
 
 object AppContainer {

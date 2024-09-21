@@ -56,9 +56,11 @@ android {
 
 dependencies {
 
+    kapt(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.hilt.work)
     kapt("androidx.room:room-compiler:2.6.1")
     implementation(libs.androidx.room.ktx)
 

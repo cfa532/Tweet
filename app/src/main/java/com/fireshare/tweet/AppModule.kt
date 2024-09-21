@@ -7,6 +7,7 @@ import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSessionDao
+import com.fireshare.tweet.viewmodel.BadgeViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
 import dagger.Provides
@@ -23,6 +24,12 @@ object AppModule {
     @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBadgeViewModel(): BadgeViewModel {
+        return BadgeViewModel()
     }
 
     @Provides
