@@ -35,12 +35,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -317,9 +319,29 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
 }
 
 fun isElementVisible(layoutCoordinates: LayoutCoordinates): Boolean {
-    // Implement your logic to determine visibility based on layout coordinates
-    // For example, check if the element is within the viewport:
-    val parentCoordinates = layoutCoordinates.parentLayoutCoordinates ?: return false
-    val viewport = parentCoordinates.boundsInRoot()
-    return viewport.contains(layoutCoordinates.boundsInRoot().center)
+    val threshold = 80
+    val layoutHeight = layoutCoordinates.size.height
+    val thresholdHeight = layoutHeight * threshold / 100
+    val layoutTop = layoutCoordinates.positionInRoot().y
+    val layoutBottom = layoutTop + layoutHeight
+
+    // This should be parentLayoutCoordinates not parentCoordinates
+    val parent =
+        layoutCoordinates.parentLayoutCoordinates
+
+    parent?.boundsInRoot()?.let { rect: Rect ->
+        val parentTop = rect.top
+        val parentBottom = rect.bottom
+
+        val ret = if (
+            parentBottom - layoutTop > thresholdHeight &&
+            (parentTop < layoutBottom - thresholdHeight)
+        ) {
+            true
+        } else {
+            false
+        }
+        return ret
+    }
+    return false
 }
