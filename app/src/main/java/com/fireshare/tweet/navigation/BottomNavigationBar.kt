@@ -46,7 +46,7 @@ fun BottomNavigationBar(navController: NavController, selectedIndex: Int = 100) 
             selectedIcon = Icons.Filled.Email,
             unselectedIcon = Icons.Outlined.Email,
             hasNews = false,
-            badgeCount = 12,
+            badgeCount = null,
         ),
         BottomNavigationItem(
             title = "Post",
