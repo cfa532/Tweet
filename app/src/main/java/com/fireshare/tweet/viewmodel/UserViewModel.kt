@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.TweetApplication
@@ -16,7 +15,6 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import dagger.assisted.Assisted
@@ -53,7 +51,7 @@ class UserViewModel @AssistedInject constructor(
         mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
 
     // variable for login management
-    private val preferencesHelper = TweetApplication.preferencesHelper
+    private val preferencesHelper = TweetApplication.preferenceHelper
     var username = mutableStateOf(user.value.username)
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)

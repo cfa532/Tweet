@@ -50,15 +50,15 @@ object HproseInstance {
         .addInterceptor(loggingInterceptor)
         .build()
 
-    fun init(context: Context, preferencesHelper: PreferencesHelper) {
+    fun init(context: Context, preferenceHelper: PreferenceHelper) {
         // Use default AppUrl to enter App network, update with IP of the fastest node.
-        val pair =  initAppEntry( preferencesHelper )       // load default url: twbe.fireshare.us
-        appId = pair.first
-        BASE_URL = pair.second
-//        appId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
-//        BASE_URL = "http://192.168.0.61:8081"
+//        val pair =  initAppEntry( preferenceHelper )       // load default url: twbe.fireshare.us
+//        appId = pair.first
+//        BASE_URL = pair.second
+        appId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
+        BASE_URL = "http://192.168.0.61:8081"
 
-        var userId = preferencesHelper.getUserId()
+        var userId = preferenceHelper.getUserId()
 //        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
 
         if (userId != TW_CONST.GUEST_ID) {
@@ -79,8 +79,8 @@ object HproseInstance {
 
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
-    private fun initAppEntry(preferencesHelper: PreferencesHelper): Pair<MimeiId, String> {
-        val baseUrl = preferencesHelper.getAppUrl().toString()
+    private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String> {
+        val baseUrl = preferenceHelper.getAppUrl().toString()
         val request = Request.Builder().url("http://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -100,13 +100,13 @@ object HproseInstance {
                 val paramMap = mapper.fromJson(jsonString, Map::class.java) as Map<*, *>                // Print the resulting map
                 val ip = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
 
-                preferencesHelper.setAppId(paramMap["mid"].toString())
+                preferenceHelper.setAppId(paramMap["mid"].toString())
                 return Pair(paramMap["mid"] as MimeiId, "http://$ip")
             } else {
                 Log.e("initAppEntry", "No data found within window.setParam()")
             }
         }
-        return Pair(preferencesHelper.getAppId().toString(), "http://$baseUrl")
+        return Pair(preferenceHelper.getAppId().toString(), "http://$baseUrl")
     }
 
     // only used for registered user, that has userId in preference.

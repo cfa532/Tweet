@@ -4,15 +4,15 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.fireshare.tweet.datamodel.TW_CONST
 
-class PreferencesHelper(context: Context) {
+class PreferenceHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    fun saveProfile(url: String) {
-        sharedPreferences.edit().putString("profile", url).apply()
+    fun saveAutoplay(autoplay: Boolean) {
+        sharedPreferences.edit().putBoolean("autoplay", autoplay).apply()
     }
 
-    fun getProfile(): String? {
-        return sharedPreferences.getString("profile", null)
+    fun getAutoplay(): Boolean {
+        return sharedPreferences.getBoolean("profile", true)
     }
 
     fun saveUsername(username: String) {
