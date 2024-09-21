@@ -135,7 +135,7 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
         }
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer,
-            shape = ChatBubbleShape(),
+            shape = CustomBubbleShape(),
             modifier = Modifier.padding(4.dp)
         ) {
             Text(
