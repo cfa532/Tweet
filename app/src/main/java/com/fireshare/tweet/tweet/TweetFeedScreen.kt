@@ -1,4 +1,4 @@
-package com.fireshare.tweet.tweet
+ package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
