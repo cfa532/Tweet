@@ -24,9 +24,7 @@ class ChatWorker @AssistedInject constructor(
     override fun doWork(): Result {
         Log.d("ChatWorker", "Scheduled worker checking incoming message")
         // Perform the network check here
-        CoroutineScope(Dispatchers.Default).launch {
-            badgeViewModel.updateBadgeCount()
-        }
+        badgeViewModel.updateBadgeCount()
 
         // Indicate whether the work finished successfully with the Result
         return Result.success()

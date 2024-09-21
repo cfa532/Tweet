@@ -1,5 +1,9 @@
 package com.fireshare.tweet
 
+import android.app.job.JobInfo
+import android.app.job.JobScheduler
+import android.content.ComponentName
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +31,7 @@ import androidx.work.WorkManager
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.ChatWorker
+import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
@@ -43,7 +48,8 @@ class TweetActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             (application as TweetApplication).initJob.await()
-            scheduleNetworkCheck()
+//            scheduleNetworkCheck()
+            scheduleNetworkCheckJob()
 
             setContent {
                 TweetTheme {
@@ -93,6 +99,19 @@ class TweetActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun scheduleNetworkCheckJob() {
+        val componentName = ComponentName(this, NetworkCheckJobService::class.java)
+        val jobInfo = JobInfo.Builder(1, componentName)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setPeriodic(TimeUnit.MINUTES.toMillis(15)) // Set the interval to 15 minutes
+            .setPersisted(true) // Persist the job across device reboots
+            .build()
+
+        val jobScheduler = getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+        jobScheduler.schedule(jobInfo)
+    }
+
 //    private fun scheduleNetworkCheck() {
 //        val networkCheckRequest = OneTimeWorkRequestBuilder<ChatWorker>()
 //            .build()
@@ -100,14 +119,14 @@ class TweetActivity : ComponentActivity() {
 //        WorkManager.getInstance(this).enqueue(networkCheckRequest)
 //    }
 
-    private fun scheduleNetworkCheck() {
-        val networkCheckRequest = PeriodicWorkRequestBuilder<ChatWorker>(15, TimeUnit.MINUTES)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "ChatWork",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            networkCheckRequest
-        )
-    }
+//    private fun scheduleNetworkCheck() {
+//        val networkCheckRequest = PeriodicWorkRequestBuilder<ChatWorker>(15, TimeUnit.MINUTES)
+//            .build()
+//
+//        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+//            "ChatWork",
+//            ExistingPeriodicWorkPolicy.KEEP,
+//            networkCheckRequest
+//        )
+//    }
 }

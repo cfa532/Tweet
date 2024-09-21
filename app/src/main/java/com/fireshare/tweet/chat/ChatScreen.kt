@@ -44,6 +44,7 @@ import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +56,12 @@ fun ChatScreen(
     val receipt by viewModel.receipt.collectAsState()
 
     // fetch new messages every time open chat screen.
-    viewModel.fetchNewMessage()
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.fetchNewMessage()
+            delay(15000) // 15 seconds
+        }
+    }
 
     Scaffold(
         topBar = {
