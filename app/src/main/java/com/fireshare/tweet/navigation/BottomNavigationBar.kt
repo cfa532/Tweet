@@ -26,17 +26,17 @@ import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.tweet.guestWarning
-import com.fireshare.tweet.viewmodel.BadgeViewModel
+import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun BottomNavigationBar(
     navController: NavController,
     selectedIndex: Int = 100,
-    badgeViewModel: BadgeViewModel = hiltViewModel()
+    bottomBarViewModel: BottomBarViewModel = hiltViewModel()
 ) {
     var selectedItemIndex by rememberSaveable { mutableIntStateOf(0) }
-    val badgeCount by badgeViewModel.badgeCount.collectAsState()
+    val badgeCount by bottomBarViewModel.badgeCount.collectAsState()
 
     val items = listOf(
         BottomNavigationItem(

@@ -7,7 +7,7 @@ import androidx.work.ListenableWorker
 import androidx.work.Worker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
-import com.fireshare.tweet.viewmodel.BadgeViewModel
+import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
@@ -15,13 +15,13 @@ import dagger.assisted.AssistedInject
 class ChatWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val badgeViewModel: BadgeViewModel
+    private val bottomBarViewModel: BottomBarViewModel
 ) : Worker(appContext, workerParams) {
 
     override fun doWork(): Result {
         Log.d("ChatWorker", "Scheduled worker checking incoming message")
         // Perform the network check here
-        badgeViewModel.updateBadgeCount()
+        bottomBarViewModel.updateBadgeCount()
 
         // Indicate whether the work finished successfully with the Result
         return Result.success()
@@ -29,7 +29,7 @@ class ChatWorker @AssistedInject constructor(
 }
 
 class ChatWorkerFactory(
-    private val badgeViewModel: BadgeViewModel
+    private val bottomBarViewModel: BottomBarViewModel
 ) : WorkerFactory() {
 
     override fun createWorker(
@@ -39,7 +39,7 @@ class ChatWorkerFactory(
     ): ListenableWorker? {
         return when (workerClassName) {
             ChatWorker::class.java.name ->
-                ChatWorker(appContext, workerParameters, badgeViewModel)
+                ChatWorker(appContext, workerParameters, bottomBarViewModel)
             else -> null
         }
     }

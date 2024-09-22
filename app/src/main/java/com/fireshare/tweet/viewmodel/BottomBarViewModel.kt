@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class BadgeViewModel : ViewModel() {
+class BottomBarViewModel : ViewModel() {
     private val _badgeCount = MutableStateFlow<Int?>(null)
     val badgeCount: StateFlow<Int?> get() = _badgeCount
 

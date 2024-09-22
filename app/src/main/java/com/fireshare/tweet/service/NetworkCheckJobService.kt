@@ -3,7 +3,7 @@ package com.fireshare.tweet.service
 import android.app.job.JobParameters
 import android.app.job.JobService
 import android.util.Log
-import com.fireshare.tweet.viewmodel.BadgeViewModel
+import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
 
@@ -11,7 +11,7 @@ import jakarta.inject.Inject
 class NetworkCheckJobService : JobService() {
 
     @Inject
-    lateinit var badgeViewModel: BadgeViewModel
+    lateinit var bottomBarViewModel: BottomBarViewModel
 
     override fun onStartJob(params: JobParameters?): Boolean {
         // Perform the network check here
@@ -21,7 +21,7 @@ class NetworkCheckJobService : JobService() {
         // You can replace this with actual network check logic
         val isNetworkAvailable = checkNetworkAvailability()
 //        CoroutineScope(Dispatchers.Default).launch {
-        badgeViewModel.updateBadgeCount()
+        bottomBarViewModel.updateBadgeCount()
 //        }
         // Job finished
         jobFinished(params, !isNetworkAvailable)
