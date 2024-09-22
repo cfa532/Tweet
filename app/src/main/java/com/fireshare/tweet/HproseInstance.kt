@@ -160,8 +160,7 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         // write outgoing message to user's Mimei db
-        val msgs = client.runMApp(entry, request)  as List<ChatMessage>?
-        return msgs
+        return client.runMApp(entry, request)  as List<ChatMessage>?
     }
 
     // get a list of unread incoming messages from other users
@@ -173,8 +172,17 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         // write outgoing message to user's Mimei db
-        val msgs = client.runMApp(entry, request) as List<ChatMessage>?
-        return msgs
+        return client.runMApp(entry, request) as List<ChatMessage>?
+    }
+
+    fun checkUpdates(): Map<String, String>? {
+        val gson = Gson()
+        val entry = "upgrade"
+        val json = """
+             {"aid": $appId, "ver":"last"}
+        """.trimIndent()
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        return client.runMApp(entry,request)
     }
 
     fun login(username: String, password: String, keyPhrase: String): User? {
