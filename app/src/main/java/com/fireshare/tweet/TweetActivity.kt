@@ -1,5 +1,6 @@
 package com.fireshare.tweet
 
+import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.app.job.JobInfo
@@ -145,21 +146,23 @@ class ActivityViewModel: ViewModel() {
             val versionInfo = HproseInstance.checkUpdates() ?: return@launch
             val currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName
             if (currentVersion != versionInfo["version"]) {
-                val downloadUrl = "${appUser.baseUrl}/ipfs/${versionInfo["version"]}"
+                val downloadUrl = "${appUser.baseUrl}/mm/${versionInfo["packageId"]}"
                 showUpdateDialog(context, downloadUrl)
             }
         }
     }
 
     private fun showUpdateDialog(context: Context, downloadUrl: String) {
-        AlertDialog.Builder(context)
-            .setTitle("Update Available")
-            .setMessage("A new version of the app is available. Would you like to update?")
-            .setPositiveButton("Update") { _, _ ->
-                downloadAndInstall(context, downloadUrl)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        (context as Activity).runOnUiThread {
+            AlertDialog.Builder(context)
+                .setTitle("Update Available")
+                .setMessage("A new version of the app is available. Would you like to update?")
+                .setPositiveButton("Update") { _, _ ->
+                    downloadAndInstall(context, downloadUrl)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun downloadAndInstall(context: Context, downloadUrl: String) {

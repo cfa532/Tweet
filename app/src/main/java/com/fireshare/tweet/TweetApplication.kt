@@ -13,7 +13,7 @@ import androidx.work.Configuration
 import javax.inject.Inject
 
 @HiltAndroidApp
-class TweetApplication : Application(), Configuration.Provider {
+class TweetApplication : Application(){
     lateinit var initJob: Deferred<Unit>
 
     override fun onCreate() {
@@ -28,13 +28,14 @@ class TweetApplication : Application(), Configuration.Provider {
         lateinit var preferenceHelper: PreferenceHelper
     }
 
-    @Inject
-    lateinit var workerFactory: HiltWorkerFactory
+//    @Inject
+//    lateinit var workerFactory: HiltWorkerFactory
 
-    override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .build()
+//    , Configuration.Provider
+//    override val workManagerConfiguration: Configuration
+//        get() = Configuration.Builder()
+//            .setWorkerFactory(workerFactory)
+//            .build()
 }
 
 object AppContainer {
