@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImagePainter.State.Empty.painter
 import coil.compose.rememberAsyncImagePainter
@@ -55,10 +56,31 @@ fun AppIcon() {
 //}
 
 fun UserAvatar(user: User?, size: Int = 40) {
-    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl).toString()
-    ImageViewer(avatarUrl, modifier = Modifier
-        .size(size.dp)
-        .clip(CircleShape)
-        .background(Color.Gray),
-        isPreview = true, imageSize = 50)
+    var avatarUrl by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(user) {
+        avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
+    }
+    if (avatarUrl == null) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_user_avatar),
+            contentDescription = "Placeholder Avatar",
+            modifier = Modifier
+                .size(size.dp)
+                .clip(CircleShape)
+                .background(Color.Gray),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        // Display the actual avatar image
+        ImageViewer(
+            avatarUrl!!,
+            modifier = Modifier
+                .size(size.dp)
+                .clip(CircleShape)
+                .background(Color.Gray),
+            isPreview = true,
+            imageSize = 50
+        )
+    }
 }

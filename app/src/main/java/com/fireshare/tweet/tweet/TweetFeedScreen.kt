@@ -113,7 +113,7 @@ fun MainTopAppBar(
                 else
                     navController.navigate(NavTweet.UserProfile(appUser.mid)) })
             {
-                UserAvatar(appUser)
+                UserAvatar(appUser,32)
             }
         },
         actions = {

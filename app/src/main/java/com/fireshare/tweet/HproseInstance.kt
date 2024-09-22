@@ -654,15 +654,15 @@ object HproseInstance {
 //        return cid
 //    }
 
-    fun getMediaUrl(mid: MimeiId?, baseUrl: String?): Any {
-        if (mid?.isNotEmpty() == true && baseUrl?.isNotEmpty() == true) {
+    fun getMediaUrl(mid: MimeiId?, baseUrl: String?): String? {
+        if (mid != null && baseUrl!= null) {
             return if (mid.length > 27) {
                 "$baseUrl/ipfs/$mid"
             } else {
                 "$baseUrl/mm/$mid"
             }
         }
-        return R.drawable.ic_user_avatar
+        return null
     }
 
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {

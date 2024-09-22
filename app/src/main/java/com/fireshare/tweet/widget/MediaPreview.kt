@@ -186,7 +186,7 @@ fun ImageViewer(
     imageSize: Int = 200
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     val cacheManager = remember { CacheManager(context) }
     val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, isPreview))
 
@@ -203,7 +203,6 @@ fun ImageViewer(
     } else {
         modifier.fillMaxWidth()     // image is viewed full screen
     }
-    val scope = rememberCoroutineScope()
     if (cachedImage.value != null) {
         Box(modifier = modifier) {
             Image(
@@ -215,7 +214,7 @@ fun ImageViewer(
         }
     } else {
         // Download and cache image if not already cached
-        LaunchedEffect(cachedPath.value) { // Use imageUrl as the key
+        LaunchedEffect(cachedPath.value) {
             val job = scope.launch {
                 isDownloading = true
                 downloadError = false
