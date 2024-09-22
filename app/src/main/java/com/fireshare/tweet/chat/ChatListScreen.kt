@@ -128,6 +128,8 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
             }})
         ) {
             UserAvatar(user)
+
+            // show badge of new incoming message
             if (chatSession.hasNews) {
                 Box(
                     modifier = Modifier

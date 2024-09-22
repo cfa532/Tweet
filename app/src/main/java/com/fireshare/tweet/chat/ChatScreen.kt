@@ -59,7 +59,7 @@ fun ChatScreen(
     LaunchedEffect(Unit) {
         while (true) {
             viewModel.fetchNewMessage()
-            delay(15000) // 15 seconds
+            delay(30000) // 30 seconds
         }
     }
 

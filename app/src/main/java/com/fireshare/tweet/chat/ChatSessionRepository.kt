@@ -5,6 +5,7 @@ import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.ChatSessionDao
+import com.fireshare.tweet.datamodel.ChatSessionEntity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.toChatMessage
 import com.fireshare.tweet.datamodel.toChatSession
@@ -24,17 +25,28 @@ class ChatSessionRepository(
         }
     }
 
-    suspend fun updateLastMessage(userId: String, receiptId: String) {
+    suspend fun updateChatSession(userId: String, receiptId: String, hasNews: Boolean) {
         val sessionEntity = chatSessionDao.getSession(userId, receiptId)
-        sessionEntity?.let {
-            val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
-            lastMessageEntity?.let { messageEntity ->
-                val updatedSession = sessionEntity.copy(
-                    lastMessageId = messageEntity.id,
+        val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
+        lastMessageEntity?.let { messageEntity ->
+            if (sessionEntity != null) {
+                chatSessionDao.updateSession(
+                    userId = userId,
+                    receiptId = receiptId,
                     timestamp = messageEntity.timestamp,
-                    hasNews = true
+                    lastMessageId = messageEntity.id,
+                    hasNews = hasNews
                 )
-                chatSessionDao.insertSession(updatedSession)
+            } else {
+                chatSessionDao.insertSession(
+                    ChatSessionEntity(
+                        userId = userId,
+                        receiptId = receiptId,
+                        lastMessageId = messageEntity.id,
+                        timestamp = messageEntity.timestamp,
+                        hasNews = hasNews
+                    )
+                )
             }
         }
     }

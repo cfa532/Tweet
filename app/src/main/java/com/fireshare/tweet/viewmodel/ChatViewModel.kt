@@ -7,13 +7,10 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatRepository
 import com.fireshare.tweet.chat.ChatSessionRepository
-import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
-import com.fireshare.tweet.datamodel.ChatSessionEntity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.toChatMessage
-import com.fireshare.tweet.datamodel.toEntity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -60,18 +57,18 @@ class ChatViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             repository.insertMessage(message)
             HproseInstance.sendMessage(receiptId, message)
-            chatSessionRepository.updateLastMessage(appUser.mid, receiptId)
+            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
         }
     }
 
-    fun fetchNewMessage(numOfMsgs: Int = 50) {
-        viewModelScope.launch {
+    fun fetchNewMessage(numOfMsgs: Int = 500) {
+        viewModelScope.launch(Dispatchers.IO) {
             val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
             fetchedMessages?.let { news ->
                 if (news.isNotEmpty()) {
                     repository.insertMessages(news)
                     _chatMessages.update { news.plus(it) }
-                    chatSessionRepository.updateLastMessage(appUser.mid, receiptId)
+                    chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = true)
                 }
             }
         }

@@ -20,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -40,9 +42,11 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +78,15 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
         },
         actions = {
             if (appUser.mid != TW_CONST.GUEST_ID) {
-                IconButton(onClick = {navController.navigate(NavTweet.ChatBox(user.mid))}) {
+                IconButton(onClick = {
+                    if (appUser.mid != TW_CONST.GUEST_ID)
+                        navController.navigate(NavTweet.ChatBox(user.mid))
+                    else {
+                        viewModel.viewModelScope.launch {
+                            guestWarning(navController)
+                        }
+                    }
+                }) {
                     Icon(
                         imageVector = Icons.Default.MailOutline,
                         contentDescription = "Message"

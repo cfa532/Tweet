@@ -6,9 +6,6 @@ import android.util.Log
 import com.fireshare.tweet.viewmodel.BadgeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class NetworkCheckJobService : JobService() {
@@ -24,7 +21,7 @@ class NetworkCheckJobService : JobService() {
         // You can replace this with actual network check logic
         val isNetworkAvailable = checkNetworkAvailability()
 //        CoroutineScope(Dispatchers.Default).launch {
-            badgeViewModel.updateBadgeCount()
+        badgeViewModel.updateBadgeCount()
 //        }
         // Job finished
         jobFinished(params, !isNetworkAvailable)
