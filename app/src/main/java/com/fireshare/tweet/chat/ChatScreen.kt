@@ -172,7 +172,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 IconButton(onClick = {
                     if (textState.isNotBlank()) {
                         viewModel.sendMessage()
-                        viewModel.textState.value = "" // Clear the input field after sending
+                        viewModel.textState.value = ""
                     }
                 }) {
                     Icon(imageVector = Icons.AutoMirrored.Filled.Send,

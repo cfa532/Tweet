@@ -116,7 +116,7 @@ interface ChatSessionDao {
     @Query("SELECT * FROM chat_sessions WHERE userId = :userId AND receiptId = :receiptId LIMIT 1")
     suspend fun getSession(userId: String, receiptId: String): ChatSessionEntity?
 
-    @Query("SELECT * FROM chat_sessions")
+    @Query("SELECT * FROM chat_sessions ORDER BY timestamp DESC")
     suspend fun getAllSessions(): List<ChatSessionEntity>
 
     @Query("UPDATE chat_sessions SET timestamp = :timestamp, lastMessageId = :lastMessageId, hasNews = :hasNews WHERE userId = :userId AND receiptId = :receiptId")

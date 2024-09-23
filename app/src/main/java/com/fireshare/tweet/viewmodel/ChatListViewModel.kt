@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -41,7 +40,8 @@ class ChatListViewModel @Inject constructor(
     fun previewMessages() {
         viewModelScope.launch(Dispatchers.IO) {
             val newMessages = HproseInstance.checkNewMessages() ?: return@launch
-            val updatedSessions = chatSessionRepository.mergeMessagesWithSessions(_chatSessions.value, newMessages)
+            val updatedSessions =
+                chatSessionRepository.mergeMessagesWithSessions(_chatSessions.value, newMessages)
             // Do not update session database, only show new sessions on UI
             // Update session database only when user opens chat screen.
             _chatSessions.update { updatedSessions }
