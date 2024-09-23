@@ -23,6 +23,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -41,9 +42,13 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
+import androidx.compose.runtime.State
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -99,7 +104,9 @@ class TweetActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
                             TweetNavGraph()
-                            Row(modifier = Modifier.fillMaxWidth().padding(innerPadding))
+                            Row(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(innerPadding))
                             {
                             }
                         }
@@ -141,6 +148,9 @@ class TweetActivity : ComponentActivity() {
 }
 
 class ActivityViewModel: ViewModel() {
+    private val _isDownloading = MutableStateFlow<Boolean>(false)
+    val isDownloading = _isDownloading.asStateFlow()
+
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             val versionInfo = HproseInstance.checkUpdates() ?: return@launch
@@ -166,13 +176,35 @@ class ActivityViewModel: ViewModel() {
     }
 
     private fun downloadAndInstall(context: Context, downloadUrl: String) {
-        val request = DownloadManager.Request(Uri.parse(downloadUrl))
-            .setTitle("Downloading Update")
-            .setDescription("Downloading the latest version of the app")
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "advotweet.apk")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        downloadManager.enqueue(request)
+        val request = DownloadManager.Request(Uri.parse(downloadUrl))
+            .setMimeType("application/octet-stream") // Set appropriate MIME type if known
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setTitle("Downloading Update")
+
+        val downloadId = downloadManager.enqueue(request)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var finishDownload = false
+            while (!finishDownload) {
+                val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+                if (cursor.moveToFirst()) {
+                    val columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val status = cursor.getInt(columnIndex)
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        finishDownload = true
+                        _isDownloading.value = false
+                        // Optionally, start the installation process here
+                    } else if (status == DownloadManager.STATUS_FAILED) {
+                        finishDownload = true
+                        _isDownloading.value = false
+                        // Handle download failure
+                    }
+                }
+                cursor.close()
+                delay(1000)
+            }
+        }
     }
 }
