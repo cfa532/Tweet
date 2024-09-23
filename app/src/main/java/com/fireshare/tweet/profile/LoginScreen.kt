@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -76,7 +77,9 @@ fun LoginScreen() {
         IconButton(onClick = { navController.popBackStack() },
             modifier = Modifier.align(Alignment.Start).padding(16.dp)
         ) {
-            Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel")
+            Icon(imageVector = Icons.Default.Close,
+                tint = MaterialTheme.colorScheme.primary,
+                contentDescription = "Cancel")
         }
 
         Text(text = "Login", fontSize = 32.sp, color = Color.Black)
@@ -88,13 +91,14 @@ fun LoginScreen() {
             onValueChange = { viewModel.onUsernameChange(it)},
             label = { Text("Username") },
             singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions.Default.copy(
                 imeAction = ImeAction.Next
             ),
             keyboardActions = KeyboardActions(
                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -103,6 +107,7 @@ fun LoginScreen() {
             onValueChange = { viewModel.onPasswordChange(it) },
             label = { Text("Password") },
             singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
@@ -127,6 +132,7 @@ fun LoginScreen() {
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
                 label = { Text("Key phrase") },
                 singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(
                     imeAction = ImeAction.Next
                 ),
@@ -174,6 +180,7 @@ fun LoginScreen() {
         }
 
         Text(
+            color = MaterialTheme.colorScheme.primary,
             text = annotatedText,
             modifier = Modifier.clickable {
                 navController.navigate(NavTweet.Registration)
