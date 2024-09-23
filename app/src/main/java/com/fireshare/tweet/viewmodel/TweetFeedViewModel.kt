@@ -3,7 +3,6 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -20,7 +19,6 @@ import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,11 +38,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
     private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshing: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
+    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
+    private val _isRefreshingAtBottom = MutableStateFlow(false)
+    val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
     // current time, end time is earlier in time, therefore smaller timestamp
     private var startTimestamp = System.currentTimeMillis()
-    private var endTimestamp = System.currentTimeMillis() - java.lang.Long.valueOf(2_592_000_000)  // 30 days
+    private var endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
 
     init {
         _followings.update { list -> list + (appUser.followingList ?: HproseInstance.getAlphaIds()) }
@@ -53,9 +53,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     fun loadNewerTweets() {
         println("At top already")
+        _isRefreshing.value = true
+        val endTimestamp = startTimestamp
+        startTimestamp = System.currentTimeMillis()
+        getTweets(startTimestamp, endTimestamp)
+        _isRefreshing.value = false
     }
     fun loadOlderTweets() {
         println("At bottom already")
+        _isRefreshingAtBottom.value = true
+        val startTimestamp = endTimestamp
+        endTimestamp = startTimestamp - java.lang.Long.valueOf(648_000_000)  // 7 days
+        getTweets(startTimestamp, endTimestamp)
+        _isRefreshingAtBottom.value = false
     }
 
     private fun getTweets(
@@ -90,6 +100,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             val seenMids = mutableSetOf<MimeiId>()
             currentList.filter { seenMids.add(it) }
         }
+
+        startTimestamp = System.currentTimeMillis()
+        endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
         getTweets(startTimestamp, endTimestamp)
         _isRefreshing.value = false
     }
