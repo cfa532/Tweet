@@ -138,7 +138,8 @@ fun ChatScreen(
                 .imePadding()) {
                 LazyColumn(
                     modifier = Modifier
-                        .fillMaxSize(),
+                        .fillMaxSize()
+                        .padding(bottom = 64.dp),
                     state = listState
                 ) {
                     items(chatMessages) { msg ->
