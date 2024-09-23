@@ -15,7 +15,7 @@
       </SelectionState>
       <SelectionState runConfigName="Sharp">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2024-09-23T08:10:08.824617Z">
+        <DropdownSelection timestamp="2024-09-23T09:18:02.511092Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=VR2LHMB171001004" />

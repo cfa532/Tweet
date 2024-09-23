@@ -68,7 +68,7 @@ fun BottomNavigationBar(
         items.forEachIndexed { index, item ->
             NavigationBarItem(
                 selected = index == selectedIndex,
-                label = { Text(text = item.title) },
+//                label = { Text(text = item.title) },
                 onClick = {
                     selectedItemIndex = index
                     if (appUser.mid == TW_CONST.GUEST_ID && index>0) {

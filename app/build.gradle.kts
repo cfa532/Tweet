@@ -56,6 +56,7 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.material)
     kapt(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)

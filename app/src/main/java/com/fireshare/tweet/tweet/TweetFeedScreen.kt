@@ -9,7 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -22,9 +27,9 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,7 +44,7 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 
-@OptIn(ExperimentalMaterial3Api::class)
+ @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -49,10 +54,17 @@ fun TweetFeedScreen(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val listState = rememberLazyListState()
+
+     val refreshing by viewModel.isRefreshing.collectAsState()      // data loading indicator
+     val pullRefreshState = rememberPullRefreshState(refreshing, { viewModel.loadNewerTweets() })
 
     // Call it earlier to initiate some appUser fields that will be used for UI state.
-    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
-        factory -> factory.create(appUser.mid)
+    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry,
+        key = appUser.mid
+    ) { factory ->
+        factory.create(appUser.mid)
     }
 
     Scaffold(
@@ -62,21 +74,26 @@ fun TweetFeedScreen(
         topBar = { MainTopAppBar(navController, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
-
-        LazyColumn(
+        Box(
             modifier = Modifier
+                .pullRefresh(pullRefreshState)
                 .fillMaxSize()
-                .padding(innerPadding)
-        )
-        {
-            items(tweets) { tweet ->
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 0.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.surfaceTint
-                )
-                if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                .padding(innerPadding),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                items(tweets) { tweet ->
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 0.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.surfaceTint
+                    )
+                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                }
             }
+            PullRefreshIndicator(refreshing, state = pullRefreshState, Modifier.align(Alignment.TopCenter))
         }
     }
 }
