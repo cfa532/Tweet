@@ -158,7 +158,7 @@ fun AvatarSection(user: User, launcher: ManagedActivityResultLauncher<String, Ur
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(user, 200)
+            UserAvatar(user, 150)
         }
     }
 }

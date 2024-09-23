@@ -31,6 +31,8 @@ object HproseInstance {
     private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
     private lateinit var BASE_URL: String  // localhost in Android Simulator
     lateinit var tweetFeedViewModel: TweetFeedViewModel
+    lateinit var preferenceHelper: PreferenceHelper
+
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
 
     // all loaded User objects will be inserted in the list, for better performance.
@@ -51,30 +53,35 @@ object HproseInstance {
         .build()
 
     fun init(context: Context, preferenceHelper: PreferenceHelper) {
-        // Use default AppUrl to enter App network, update with IP of the fastest node.
-        val pair =  initAppEntry( preferenceHelper )       // load default url: twbe.fireshare.us
-        appId = pair.first
-        BASE_URL = pair.second
-//        appId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"
-//        BASE_URL = "http://192.168.0.61:8081"
+        this.preferenceHelper = preferenceHelper
+        try {
+            // Use default AppUrl to enter App network, update with IP of the fastest node.
+            val pair = initAppEntry(preferenceHelper)       // load default url: twbe.fireshare.us
+            appId = pair.first
+            BASE_URL = pair.second
+            preferenceHelper.setAppId(appId)
+        } catch (e: Exception) {
+            appId = preferenceHelper.getAppId().toString()
+            BASE_URL = preferenceHelper.getAppUrl().toString()
+            Log.e("HproseInstance.init()", e.toString())
+        } finally {
+            val userId = preferenceHelper.getUserId()
 
-        var userId = preferenceHelper.getUserId()
-//        userId = getAlphaIds()[0]     // Admin user that every one by default on creation.
-
-        if (userId != TW_CONST.GUEST_ID) {
-            // There is a registered user. Initiate account data.
-            initCurrentUser(userId)?.let {
-                appUser = it
-                cachedUsers.add(it) // the list shall be empty now.
+            if (userId != TW_CONST.GUEST_ID) {
+                // There is a registered user. Initiate account data.
+                initCurrentUser(userId)?.let {
+                    appUser = it
+                    cachedUsers.add(it) // the list shall be empty now.
+                }
+            } else {
+                appUser.baseUrl = BASE_URL
             }
-        } else {
-            appUser.baseUrl = BASE_URL
+            database = Room.databaseBuilder(
+                context.applicationContext,
+                ChatDatabase::class.java,
+                "chat_database"
+            ).build()
         }
-        database = Room.databaseBuilder(
-            context.applicationContext,
-            ChatDatabase::class.java,
-            "chat_database"
-        ).build()
     }
 
     // Find network entrance of the App
@@ -101,7 +108,6 @@ object HproseInstance {
                 println("paramMap=$paramMap")
                 val ip = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
 
-                preferenceHelper.setAppId(paramMap["mid"].toString())
                 return Pair(paramMap["mid"] as MimeiId, "http://$ip")
             } else {
                 Log.e("initAppEntry", "No data found within window.setParam()")
@@ -268,6 +274,9 @@ object HproseInstance {
             val gson = Gson()
             val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
             ret.baseUrl = BASE_URL
+
+            ret.name?.let { preferenceHelper.saveName(it) }
+            ret.profile?.let { preferenceHelper.saveProfile(it) }
             return ret
         }
         Log.d("HproseInstance.setUserData", "Set user data error")

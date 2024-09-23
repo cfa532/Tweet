@@ -7,12 +7,12 @@ import com.fireshare.tweet.datamodel.TW_CONST
 class PreferenceHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    fun saveAutoplay(autoplay: Boolean) {
-        sharedPreferences.edit().putBoolean("autoplay", autoplay).apply()
+    fun saveProfile(profile: String) {
+        sharedPreferences.edit().putString("profile", profile).apply()
     }
 
-    fun getAutoplay(): Boolean {
-        return sharedPreferences.getBoolean("profile", true)
+    fun getProfile(): String? {
+        return sharedPreferences.getString("profile", " ")
     }
 
     fun saveUsername(username: String) {
@@ -44,11 +44,6 @@ class PreferenceHelper(context: Context) {
 
     fun getKeyPhrase(): String? {
         return sharedPreferences.getString("keyPhrase", null)
-    }
-
-    // the default User Mid to be followed. Provided by App server
-    fun getInitMimei(): String? {
-        return sharedPreferences.getString("initMimei", "6-4DWxT6wpfClqZyAu0Bt4Dsx-q")
     }
 
     fun setAppId(id: String) {
