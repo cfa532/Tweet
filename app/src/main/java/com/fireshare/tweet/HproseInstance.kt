@@ -229,10 +229,9 @@ object HproseInstance {
                 Log.d("getUserBase()", providerList.toString())
                 val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
                 Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
-                    cachedUsers.find { it.mid == u.mid }.let { it1 ->
-                        if (it1 == null) cachedUsers.add(u)
+                    cachedUsers.find { it.mid == u.mid }.also {existingUser ->
+                        if (existingUser == null) cachedUsers.add(u)
                     }
-                    Log.d("getUserBase()", cachedUsers.toString())
                     return u
                 }
             }

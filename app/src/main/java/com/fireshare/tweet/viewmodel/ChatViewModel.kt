@@ -11,6 +11,7 @@ import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.toChatMessage
+import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -31,13 +32,15 @@ class ChatViewModel @AssistedInject constructor(
 {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
+    private val _receipt = MutableStateFlow<User?>(null)
+    val receipt: StateFlow<User?> get() = _receipt.asStateFlow()
 
-    var receipt = MutableStateFlow<User?>(null)
     var textState = mutableStateOf("")
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            receipt.value = getSender(receiptId)
+            _receipt.value = HproseInstance.getUserBase(receiptId)
+
             // get messages stored at local database
             _chatMessages.value = loadChatMessages(receiptId).sortedBy { it.timestamp }
 
@@ -63,13 +66,17 @@ class ChatViewModel @AssistedInject constructor(
 
     fun fetchNewMessage(numOfMsgs: Int = 500) {
         viewModelScope.launch(Dispatchers.IO) {
-            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs)
-            fetchedMessages?.let { news ->
-                if (news.isNotEmpty()) {
-                    repository.insertMessages(news)
-                    _chatMessages.update { news.plus(it) }
-                    chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = true)
-                }
+            val gson = Gson()
+            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs) ?: return@launch
+            val news = mutableListOf<ChatMessage>()
+            for(i in fetchedMessages.indices){
+                val str = gson.toJson(fetchedMessages[i])
+                news.add(gson.fromJson(str, ChatMessage::class.java))
+            }
+            if (news.isNotEmpty()) {
+                repository.insertMessages(news)
+                _chatMessages.update { news.plus(it) }
+                chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = true)
             }
         }
     }
@@ -77,10 +84,6 @@ class ChatViewModel @AssistedInject constructor(
     private suspend fun loadChatMessages(receiptId: MimeiId): List<ChatMessage> {
         val messages = repository.loadMessages(appUser.mid, receiptId, 50)
         return messages.map { it.toChatMessage() }
-    }
-
-    suspend fun getSender(userId: MimeiId): User? {
-        return HproseInstance.getUserBase(userId)
     }
 
     @AssistedFactory

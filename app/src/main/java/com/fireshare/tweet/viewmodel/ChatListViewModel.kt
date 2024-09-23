@@ -49,10 +49,8 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun getSender(userId: MimeiId) {
-        viewModelScope.launch {
-            val user = withContext(Dispatchers.IO) {
-                HproseInstance.getUserBase(userId)
-            }
+        viewModelScope.launch(Dispatchers.IO) {
+            val user = HproseInstance.getUserBase(userId)
             _userMap.value = _userMap.value.toMutableMap().apply { put(userId, user) }
         }
     }

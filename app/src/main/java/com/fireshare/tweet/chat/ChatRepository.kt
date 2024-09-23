@@ -19,7 +19,13 @@ class ChatRepository(private val chatMessageDao: ChatMessageDao) {
     }
 
     suspend fun insertMessages(messages: List<ChatMessage>) {
-        val messageEntities = messages.map { it.toEntity() }
+        val gson = Gson()
+        val messageEntities = mutableListOf<ChatMessageEntity>()
+        for(i in messages.indices) {
+            val str = gson.toJson(messages[i])
+            val message = gson.fromJson(str, ChatMessage::class.java)
+            messageEntities.add(message.toEntity())
+        }
         chatMessageDao.insertMessages(messageEntities)
     }
 }

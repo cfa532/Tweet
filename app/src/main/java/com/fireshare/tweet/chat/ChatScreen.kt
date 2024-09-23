@@ -54,11 +54,11 @@ fun ChatScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
+    viewModel.fetchNewMessage()
 
     // fetch new messages every time open chat screen.
     LaunchedEffect(Unit) {
         while (true) {
-            viewModel.fetchNewMessage()
             delay(30000) // 30 seconds
         }
     }
@@ -121,12 +121,7 @@ fun ChatScreen(
 @Composable
 fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
     val isSentByCurrentUser = message.authorId == appUser.mid
-    var user by remember { mutableStateOf<User?>(null) }
     val receipt by viewModel.receipt.collectAsState()
-
-    LaunchedEffect(Unit) {
-        user = viewModel.getSender(message.authorId)
-    }
 
     Row(
         modifier = Modifier
