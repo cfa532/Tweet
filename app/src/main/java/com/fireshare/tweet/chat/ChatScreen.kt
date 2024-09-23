@@ -1,5 +1,6 @@
 package com.fireshare.tweet.chat
 
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,10 +9,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -26,25 +31,26 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
-import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,12 +60,42 @@ fun ChatScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
-    viewModel.fetchNewMessage()
 
     // fetch new messages every time open chat screen.
     LaunchedEffect(Unit) {
         while (true) {
+            viewModel.fetchNewMessage()
             delay(30000) // 30 seconds
+        }
+    }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+
+    // Scroll to the bottom when a new message is added
+    LaunchedEffect(chatMessages) {
+        coroutineScope.launch {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    // Scroll to the bottom when the keyboard is opened
+    DisposableEffect(view) {
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val rect = android.graphics.Rect()
+            view.getWindowVisibleDisplayFrame(rect)
+            val screenHeight = view.height
+            val keypadHeight = screenHeight - rect.bottom
+            if (keypadHeight > screenHeight * 0.15) {
+                coroutineScope.launch {
+                    listState.animateScrollToItem(chatMessages.size - 1)
+                }
+            }
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose {
+            view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
         }
     }
 
@@ -97,11 +133,13 @@ fun ChatScreen(
 //        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .imePadding()) {
                 LazyColumn(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 100.dp) // Adjust padding to make space for the input field
+                        .fillMaxSize(),
+                    state = listState
                 ) {
                     items(chatMessages) { msg ->
                         ChatItem(viewModel, msg)
@@ -168,6 +206,16 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 .heightIn(min = 56.dp, max = 150.dp)
                 .padding(0.dp),
             placeholder = { Text("Type a message...") },
+            keyboardOptions = KeyboardOptions.Default.copy(
+                imeAction = ImeAction.Default, // Allow Enter key to add a new line
+                keyboardType = KeyboardType.Text
+            ),
+            keyboardActions = KeyboardActions(
+                onSend = {
+                    viewModel.sendMessage()
+                    viewModel.textState.value = ""
+                }
+            ),
             trailingIcon = {
                 IconButton(onClick = {
                     if (textState.isNotBlank()) {
@@ -181,7 +229,8 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                         modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                 }
             },
-            singleLine = false
+            singleLine = false,
+            maxLines = 5
         )
     }
 }

@@ -34,10 +34,10 @@ class ChatViewModel @AssistedInject constructor(
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
     private val _receipt = MutableStateFlow<User?>(null)
     val receipt: StateFlow<User?> get() = _receipt.asStateFlow()
-
     var textState = mutableStateOf("")
 
     init {
+
         viewModelScope.launch(Dispatchers.IO) {
             _receipt.value = HproseInstance.getUserBase(receiptId)
 
@@ -54,7 +54,7 @@ class ChatViewModel @AssistedInject constructor(
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
-            content = textState.value
+            content = textState.value.trim()
         )
         _chatMessages.value += message
         viewModelScope.launch(Dispatchers.IO) {
