@@ -2,6 +2,7 @@ package com.fireshare.tweet.tweet
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -93,8 +93,12 @@ fun TweetItem(
                 }
             } else {
                 // retweet with comments
-                Column(modifier = Modifier.padding(start = 8.dp))
-                {
+                val navController = LocalNavController.current
+                Column(modifier = Modifier.padding(start = 8.dp)
+                    .clickable( onClick = {
+                        tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
+                    })
+                ) {
                     TweetItemHeader(tweet)
                     tweet.content?. let {
                         Text(
@@ -112,8 +116,7 @@ fun TweetItem(
                     ) {
                         TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                             parentEntry, key = tweet.originalTweetId
-                        ) { factory -> factory.create(tweet.originalTweet!!) }, true
-                        )
+                        ) { factory -> factory.create(tweet.originalTweet!!) }, true)
                     }
                     Row(
                         modifier = Modifier

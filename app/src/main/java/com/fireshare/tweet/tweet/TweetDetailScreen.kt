@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -69,7 +68,7 @@ fun TweetDetailScreen(
         ) {
             item {
                 // main body of the parent Tweet.
-                TweetDetailBody(tweet, viewModel)
+                TweetDetailBody(tweet, viewModel, parentEntry)
 
                 // divider between tweet and its comment list
                 HorizontalDivider(

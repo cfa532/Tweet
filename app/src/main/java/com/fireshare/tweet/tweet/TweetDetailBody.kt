@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,8 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,6 +41,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
@@ -52,11 +52,10 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
-import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
-fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel) {
+fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
@@ -129,6 +128,21 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel) {
                                     color = Color.LightGray
                                 )
                             }
+                        }
+                    }
+
+                    // This is a retweet
+                    if (tweet.originalTweet != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(0.4.dp,
+                                color = MaterialTheme.colorScheme.surfaceTint),
+                            tonalElevation = 1.dp,
+                            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp)
+                        ) {
+                            TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                parentEntry, key = tweet.originalTweetId
+                            ) { factory -> factory.create(tweet.originalTweet!!) }, true)
                         }
                     }
 

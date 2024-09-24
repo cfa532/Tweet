@@ -19,6 +19,7 @@ import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,17 +74,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         endTimestamp: Long? = null      // earlier in time
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val deferredTweets = followings.value.map { userId ->
-                async(Dispatchers.IO) {
-                    HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
-                }
-            }
-
-            // Collect tweets as they become available
-            deferredTweets.forEach { deferred ->
-                val tweetsList = deferred.await()
-                _tweets.update { currentTweets ->
-                    (currentTweets + tweetsList).sortedByDescending { it.timestamp }
+            coroutineScope {  // Create a child coroutine scope
+                followings.value.forEach { userId ->
+                    launch(Dispatchers.IO) {
+                        val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
+                        _tweets.update { currentTweets -> (currentTweets + tweetsList).sortedByDescending { it.timestamp } }
+                    }
                 }
             }
         }
