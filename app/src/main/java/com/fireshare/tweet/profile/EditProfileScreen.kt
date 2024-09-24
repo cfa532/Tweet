@@ -75,6 +75,8 @@ fun EditProfileScreen(
             viewModel.updateAvatar(context, appUser.mid, uri)
         }
     }
+    val scrollState = rememberScrollState()
+
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
@@ -83,8 +85,6 @@ fun EditProfileScreen(
     LaunchedEffect(Unit) {
         keyboardController?.show()
     }
-
-    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier

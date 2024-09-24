@@ -142,7 +142,8 @@ fun ComposeCommentScreen(
             )
         }) { innerPadding ->
         Surface(
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
+                .padding(innerPadding)
                 .imePadding()
         ) {
             Column(
