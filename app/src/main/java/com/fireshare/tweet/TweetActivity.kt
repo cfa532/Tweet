@@ -14,14 +14,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +50,9 @@ import kotlinx.coroutines.launch
 import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
 import androidx.compose.runtime.State
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -97,7 +103,7 @@ class TweetActivity : ComponentActivity() {
                     CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
                         Scaffold(
                             snackbarHost = {
-                                SnackbarHost(
+                                CustomSnackbarHost(
                                     hostState = snackbarHostState
                                 )
                             },
@@ -113,6 +119,23 @@ class TweetActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    @Composable
+    fun CustomSnackbarHost(hostState: SnackbarHostState) {
+        val configuration = LocalConfiguration.current
+        val screenHeightDp = configuration.screenHeightDp.dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .padding(bottom = screenHeightDp.minus(60.dp)) // Adjust the padding as needed
+        ) {
+            SnackbarHost(
+                hostState = hostState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 
