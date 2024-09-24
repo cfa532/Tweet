@@ -52,10 +52,10 @@ class TweetViewModel @AssistedInject constructor(
 
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.IO) {
-            _comments.value = HproseInstance.getComments(tweet).map {
+            _comments.value = HproseInstance.getComments(tweet)?.map {
                 it.author = HproseInstance.getUserBase(it.authorId)
                 it
-            }
+            } ?: emptyList()
         }
     }
 
@@ -75,6 +75,9 @@ class TweetViewModel @AssistedInject constructor(
     }
     // add new Comment object to its parent Tweet
     fun uploadComment(context: Context, content: String, attachments: List<Uri>? = null ) {
+        val originTweet = if (isCheckedToTweet.value && tweetState.value.originalTweet != null) {
+            tweetState.value.originalTweet
+        } else tweetState.value
         val gson = Gson()
         val data = workDataOf(
             "tweet" to gson.toJson(tweetState.value),

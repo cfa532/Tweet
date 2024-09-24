@@ -74,11 +74,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         endTimestamp: Long? = null      // earlier in time
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            coroutineScope {  // Create a child coroutine scope
+            coroutineScope {
                 followings.value.forEach { userId ->
                     launch(Dispatchers.IO) {
                         val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
-                        _tweets.update { currentTweets -> (currentTweets + tweetsList).sortedByDescending { it.timestamp } }
+                        _tweets.update { currentTweets ->
+                            val newTweets = tweetsList.filterNot { newTweet ->
+                                currentTweets.any { existingTweet -> existingTweet.mid == newTweet.mid }
+                            }
+                            (currentTweets + newTweets).sortedByDescending { it.timestamp }
+                        }
                     }
                 }
             }
@@ -122,7 +127,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun toggleRetweet(tweet: Tweet, updateTweetViewModel: (Tweet) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             // tweet object is updated in toggleRetweet()
-            HproseInstance.toggleRetweet( tweet, this@TweetFeedViewModel ) { newTweet ->
+            // if this is a retweet with comments, only forward the original tweet.
+            val t = if (tweet.originalTweet != null) tweet.originalTweet!! else tweet
+            HproseInstance.toggleRetweet( t, this@TweetFeedViewModel ) { newTweet ->
                 updateTweetViewModel(newTweet)
             }
         }

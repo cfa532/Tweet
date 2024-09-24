@@ -526,14 +526,19 @@ object HproseInstance {
         }
     }
 
-    // given a tweet, load its comments. If commentId is not Null, retrieve that one alone.
-    fun getComments(tweet: Tweet, commentId: MimeiId? = null, pageNumber: Int = 0): List<Tweet> {
-        val method = "get_comments"
-        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
-            .append("&tweetid=${tweet.mid}&userid=${appUser.mid}")
-            .append("&pn=$pageNumber&commentid=$commentId").toString()
-        val request = Request.Builder().url(url).build()
+    /**
+     * Load all comments on a tweet.
+     * @param pageNumber
+     * @param pageSize
+     * */
+    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
         try {
+            val pageSize = 50
+            val method = "get_comments"
+            val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last")
+                .append("&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}")
+                .append("&pn=$pageNumber&ps=$pageSize").toString()
+            val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return listOf()
@@ -544,7 +549,7 @@ object HproseInstance {
             // handle network failure (e.g., show an error message)
             Log.e("OkHttp", "Network failure: Unexpected status line", e)
         }
-        return listOf<Tweet>()
+        return null
     }
 
     // update input parameter "comment" with new mid, and return update parent Tweet
