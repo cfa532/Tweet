@@ -29,6 +29,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,8 @@ fun TweetFeedScreen(
      val initState = remember { mutableStateOf(true) }
      val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
      val listState = rememberLazyListState()
-     val isAtBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == listState.layoutInfo.totalItemsCount - 1
+     val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
+     val isAtBottom = layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
      LaunchedEffect(isAtBottom) {
          if (isAtBottom) {
              viewModel.loadOlderTweets()
@@ -84,8 +86,7 @@ fun TweetFeedScreen(
 
     Scaffold(
         modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+            .fillMaxSize(),
         topBar = { MainTopAppBar(navController, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
@@ -93,6 +94,7 @@ fun TweetFeedScreen(
             modifier = Modifier
                 .pullRefresh(pullRefreshState)
                 .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(innerPadding),
         ) {
             LazyColumn(
