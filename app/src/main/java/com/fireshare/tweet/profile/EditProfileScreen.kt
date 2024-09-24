@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
@@ -24,13 +27,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -50,7 +59,7 @@ fun EditProfileScreen(
             factory.create(appUser.mid)
         }
     val user by viewModel.user.collectAsState()
-    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val username by viewModel.username
     val password by viewModel.password
@@ -66,11 +75,24 @@ fun EditProfileScreen(
             viewModel.updateAvatar(context, appUser.mid, uri)
         }
     }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        keyboardController?.show()
+    }
+
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(8.dp)
+            .imePadding()
+            .verticalScroll(scrollState)
+//            .nestedScroll(scrollState)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
         IconButton(onClick = { navController.popBackStack()})
@@ -89,7 +111,9 @@ fun EditProfileScreen(
                 value = username ?: "",
                 onValueChange = { viewModel.onUsernameChange(it) },
                 label = { Text("Username") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -97,7 +121,9 @@ fun EditProfileScreen(
                 value = password,
                 onValueChange = { viewModel.onPasswordChange(it) },
                 label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
@@ -112,7 +138,9 @@ fun EditProfileScreen(
                 value = keyPhrase ?: "",
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
                 label = { Text("Key phrase") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -120,7 +148,9 @@ fun EditProfileScreen(
                 value = name ?: "",
                 onValueChange = { viewModel.onNameChange(it) },
                 label = { Text("Name") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -128,7 +158,9 @@ fun EditProfileScreen(
                 value = profile ?: "",
                 onValueChange = { viewModel.onProfileChange(it) },
                 label = { Text("Profile") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 singleLine = false
             )
         }
@@ -137,7 +169,7 @@ fun EditProfileScreen(
             onClick = {
                 viewModel.register()
                 navController.popBackStack() },
-            enabled = ! isLoading,
+            enabled = !isLoading,
             modifier = Modifier
                 .width(intrinsicSize = IntrinsicSize.Max)
                 .align(Alignment.CenterHorizontally)
