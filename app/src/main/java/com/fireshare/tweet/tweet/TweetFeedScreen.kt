@@ -49,6 +49,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.delay
 
  @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -65,24 +66,16 @@ fun TweetFeedScreen(
      val pullRefreshState = rememberPullRefreshState(refreshingAtTop, { viewModel.loadNewerTweets() })
 
      // for pulling up at the bottom of the list
-     val initState = remember { mutableStateOf(true) }
      val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
      val listState = rememberLazyListState()
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
      val isAtBottom = layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
      LaunchedEffect(isAtBottom) {
          if (isAtBottom) {
+             delay(300)
              viewModel.loadOlderTweets()
          }
      }
-
-    // Call it earlier to initiate some appUser fields that will be used for UI state.
-    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry,
-        key = appUser.mid
-    ) { factory ->
-        factory.create(appUser.mid)
-    }
 
     Scaffold(
         modifier = Modifier
@@ -110,16 +103,13 @@ fun TweetFeedScreen(
                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
                 item {
-                    if (refreshingAtBottom) {
-                        if (initState.value)
-                            initState.value = false
-                        else
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
-                            )
+                    if (refreshingAtBottom && tweets.isNotEmpty()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                        )
                     }
                 }
             }

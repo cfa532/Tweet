@@ -53,6 +53,8 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -60,6 +62,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class TweetActivity : ComponentActivity() {
 
     private val activityViewModel: ActivityViewModel by viewModels()
+    private lateinit var userViewModel: UserViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +75,13 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
+                // Initialize the userViewModel, which is a singleton needed in many UI states.
+                userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                    this@TweetActivity, key = appUser.mid
+                ) { factory ->
+                    factory.create(appUser.mid)
+                }
+
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
