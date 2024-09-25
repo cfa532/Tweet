@@ -63,7 +63,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class TweetActivity : ComponentActivity() {
 
     private val activityViewModel: ActivityViewModel by viewModels()
-    private lateinit var userViewModel: UserViewModel
+    private lateinit var appUserViewModel: UserViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,7 +77,7 @@ class TweetActivity : ComponentActivity() {
 
             setContent {
                 // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
-                userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
                     this@TweetActivity, key = appUser.mid
                 ) { factory ->
                     factory.create(appUser.mid)
@@ -85,7 +85,7 @@ class TweetActivity : ComponentActivity() {
                 // default no to update fans and followings list of user object.
                 // Do it only when opening its profile page.
                 if (appUser.mid != TW_CONST.GUEST_ID)
-                    userViewModel.updateFans()
+                    appUserViewModel.updateFans()
 
                 TweetTheme {
                     // Global snackbar host
@@ -124,7 +124,7 @@ class TweetActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph()
+                            TweetNavGraph(appUserViewModel)
                             Row(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(innerPadding))

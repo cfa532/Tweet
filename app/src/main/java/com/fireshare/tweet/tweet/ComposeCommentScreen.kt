@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
@@ -59,6 +60,7 @@ import com.fireshare.tweet.navigation.SharedTweetViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -122,8 +124,9 @@ fun ComposeCommentScreen(
                     }
                 },
                 actions = {
+                    val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton( onClick = {
-                        viewModel.uploadComment(localContext, tweetContent, selectedAttachments )
+                        viewModel.uploadComment(localContext, tweetContent, selectedAttachments, tweetViewModel)
 
                         // clear and return to previous screen
                         selectedAttachments.clear()

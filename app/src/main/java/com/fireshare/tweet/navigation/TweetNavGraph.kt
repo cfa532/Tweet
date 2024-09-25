@@ -47,14 +47,10 @@ class SharedTweetViewModel : ViewModel() {
 
 @Composable
 fun TweetNavGraph(
+    appUserViewModel: UserViewModel,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-
-    // Used by WorkManager to update tweetFeed
-    HproseInstance.tweetFeedViewModel = tweetFeedViewModel
-
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
             modifier = modifier,
@@ -66,7 +62,7 @@ fun TweetNavGraph(
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
+                TweetFeedScreen(navController, parentEntry, 0)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()
@@ -101,10 +97,10 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val profile = it.toRoute<NavTweet.UserProfile>()
-                UserProfileScreen(navController, profile.userId, parentEntry)
+                UserProfileScreen(navController, profile.userId, parentEntry, appUserViewModel)
             }
             composable<ProfileEditor> {
-                EditProfileScreen(navController)
+                EditProfileScreen(navController, appUserViewModel)
             }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
@@ -128,17 +124,14 @@ fun TweetNavGraph(
                 LoginScreen()
             }
             composable<NavTweet.Registration> {
-                EditProfileScreen(navController)
+                EditProfileScreen(navController, appUserViewModel)
             }
             composable<NavTweet.Following> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
                 val user = it.toRoute<NavTweet.Following>()
-                val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = user.userId) {
-                        factory -> factory.create(user.userId)
-                }
-                FollowingScreen(userViewModel, parentEntry)
+                FollowingScreen(user.userId, parentEntry, appUserViewModel)
             }
             composable<NavTweet.Follower> {
                 val parentEntry = remember(it) {
@@ -148,7 +141,7 @@ fun TweetNavGraph(
                 val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = user.userId) {
                         factory -> factory.create(user.userId)
                 }
-                FollowerScreen(userViewModel, parentEntry)
+                FollowerScreen(userViewModel, appUserViewModel)
             }
         }
     }

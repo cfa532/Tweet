@@ -74,7 +74,12 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
     // add new Comment object to its parent Tweet
-    fun uploadComment(context: Context, content: String, attachments: List<Uri>? = null ) {
+    fun uploadComment(
+        context: Context,
+        content: String,
+        attachments: List<Uri>? = null,
+        tweetFeedViewModel: TweetFeedViewModel
+    ) {
         val originTweet = if (isCheckedToTweet.value && tweetState.value.originalTweet != null) {
             tweetState.value.originalTweet
         } else tweetState.value
@@ -122,7 +127,7 @@ class TweetViewModel @AssistedInject constructor(
                             if (retweet != null) {
                                 retweet.originalTweet = comment
                                 retweet.originalTweet!!.author = comment.author
-                                HproseInstance.tweetFeedViewModel.addTweet(retweet)
+                                tweetFeedViewModel.addTweet(retweet)
                             }
                         }
 

@@ -53,11 +53,8 @@ import com.fireshare.tweet.widget.UserAvatar
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
+    viewModel: UserViewModel
 ) {
-    val viewModel =
-        hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = appUser.mid) { factory ->
-            factory.create(appUser.mid)
-        }
     val user by viewModel.user.collectAsState()
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
@@ -95,7 +92,7 @@ fun EditProfileScreen(
 //            .nestedScroll(scrollState)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
-        IconButton(onClick = { navController.popBackStack()})
+        IconButton(onClick = { navController.popBackStack() })
         {
             Icon(
                 imageVector = Icons.Default.Clear,
@@ -167,8 +164,10 @@ fun EditProfileScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
-                viewModel.register()
-                navController.popBackStack() },
+                viewModel.register {
+                    navController.popBackStack()
+                }
+            },
             enabled = !isLoading,
             modifier = Modifier
                 .width(intrinsicSize = IntrinsicSize.Max)

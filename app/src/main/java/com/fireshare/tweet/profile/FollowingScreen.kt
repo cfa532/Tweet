@@ -53,11 +53,11 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(viewModel: UserViewModel, parentEntry: NavBackStackEntry)
+fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
-            factory -> factory.create(appUser.mid)
+    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
+            factory -> factory.create(userId)
     }
 
     Scaffold(

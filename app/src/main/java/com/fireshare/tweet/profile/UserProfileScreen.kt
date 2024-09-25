@@ -33,6 +33,7 @@ fun UserProfileScreen(
     navController: NavHostController,
     userId: MimeiId,
     parentEntry: NavBackStackEntry,
+    appUserViewModel: UserViewModel,
 ) {
     val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
         parentEntry,
@@ -56,7 +57,7 @@ fun UserProfileScreen(
                     color = MaterialTheme.colorScheme.surfaceTint
                 )
 
-                ProfileDetail(userViewModel, navController, parentEntry)
+                ProfileDetail(userViewModel, navController, appUserViewModel)
             }
             items(tweets) { tweet ->
                 HorizontalDivider(
@@ -71,17 +72,15 @@ fun UserProfileScreen(
 }
 
 @Composable
-fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController, parentEntry: NavBackStackEntry) {
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
-            factory -> factory.create(appUser.mid)
-    }
+fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController, appUserViewModel: UserViewModel) {
+    val appUserFollowings by appUserViewModel.followings.collectAsState()
+
     val user by viewModel.user.collectAsState()
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
-    val appUserFollowings by appUserViewModel.followings.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
-        if (user.mid != appUser.mid) viewModel.updateFans()
+        viewModel.updateFans()
     }
 
     // go to list of followings of the user

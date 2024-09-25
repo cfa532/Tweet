@@ -46,9 +46,13 @@ class UserViewModel @AssistedInject constructor(
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
+    companion object {
+        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
+        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
+    }
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
     private var endTimestamp =
-        mutableLongStateOf(System.currentTimeMillis() - 1000 * 60 * 60 * 72)     // previous time
+        mutableLongStateOf(startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS)     // previous time
 
     // variable for login management
     private val preferencesHelper = TweetApplication.preferenceHelper
@@ -110,18 +114,13 @@ class UserViewModel @AssistedInject constructor(
                     updateFollowed(userId)
                 }
             }
-//            HproseInstance.toggleFollower(userId)?.let {
-//                _fans.update {  list ->
-//                    if (it && !list.contains(userId)) { list + userId }
-//                    else { list.filter { id -> id != userId }}
-//                }
-//            }
         }
     }
 
     fun updateFans() {
         viewModelScope.launch(Dispatchers.IO) {
-            _fans.value = HproseInstance.getFans(user.value) ?: fans.value
+            _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
+            _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
         }
     }
 
@@ -132,12 +131,9 @@ class UserViewModel @AssistedInject constructor(
 
     init {
         if (userId != TW_CONST.GUEST_ID) {
-            // read data from db
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = HproseInstance.getUserBase(userId) ?: return@launch
-                _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-                _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
-                getTweets(startTimestamp.longValue, startTimestamp.longValue - java.lang.Long.valueOf(2_592_000_000))  // 30 days
+                getTweets(startTimestamp.longValue, endTimestamp.longValue)
             }
         }
     }
@@ -195,38 +191,51 @@ class UserViewModel @AssistedInject constructor(
     }
 
     // handle both register and update of user profile
-    fun register() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (username.value?.isNotEmpty() == true
-                && password.value.isNotEmpty()
-                && keyPhrase.value?.isNotEmpty() == true)
-            {
-                isLoading.value = true
-                val user = User(mid = TW_CONST.GUEST_ID, name = name.value,
-                    username = username.value, password = password.value,
-                    profile = profile.value, avatar = appUser.avatar
-                )
+    fun register(popBack: () -> Unit) {
+        if (username.value?.isNotEmpty() == true
+            && password.value.isNotEmpty()
+            && keyPhrase.value?.isNotEmpty() == true
+        ) {
+            isLoading.value = true
+            val user = User(
+                mid = TW_CONST.GUEST_ID, name = name.value,
+                username = username.value, password = password.value,
+                profile = profile.value, avatar = appUser.avatar
+            )
+            viewModelScope.launch(Dispatchers.IO) {
                 HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
-                    appUser = it1
-                    // Do NOT save phrase or userId until user has successfully logon.
+                    if (appUser.mid == TW_CONST.GUEST_ID) {
+                        appUser = it1
+                        val event = SnackbarEvent(
+                            message = "Registration succeeded."
+                        )
+                        showSnackbar(event)
+                        popBack()
+                    } else {
+                        val event = SnackbarEvent(
+                            message = "User profile updated successfully"
+                        )
+                        showSnackbar(event)
+                    }
                 }
                 isLoading.value = false
-            } else {
-                var message: String = ""
-                if (username.value?.isEmpty() == true) {
-                    message = "Username is required to register and login."
-                } else if (password.value.isEmpty())  {
-                    message = "Password is required to register and login."
-                } else if (keyPhrase.value?.isEmpty() == true) {
-                    message = "Key phrase is required to register and login."
-                }
-                val event = SnackbarEvent(
-                    message = message
-                )
-                showSnackbar(event)
             }
+        } else {
+            var message = ""
+            if (username.value?.isEmpty() == true) {
+                message = "Username is required to register and login."
+            } else if (password.value.isEmpty()) {
+                message = "Password is required to register and login."
+            } else if (keyPhrase.value?.isEmpty() == true) {
+                message = "Key phrase is required to register and login."
+            }
+            val event = SnackbarEvent(
+                message = message
+            )
+            showSnackbar(event)
         }
     }
+
     fun onUsernameChange(value: String) {
         username.value = value.trim()
         isLoading.value = false
