@@ -109,7 +109,7 @@ object HproseInstance {
                 val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
                 val ips = ((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>).map { (it as ArrayList<*>)[0] as String }
 
-                return Pair(paramMap["mid"] as MimeiId, "http://${ips[1]}")     // should have been 0, but 1 is safe.
+                return Pair(paramMap["mid"] as MimeiId, "http://${ips[0]}")     // should have been 0, but 1 is safe.
             } else {
                 Log.e("initAppEntry", "No data found within window.setParam()")
             }
