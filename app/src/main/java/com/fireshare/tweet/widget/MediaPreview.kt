@@ -54,6 +54,7 @@ import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
@@ -96,8 +97,8 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
                     .clip(RoundedCornerShape(4.dp))
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
-                        navController.navigate(
-                            NavTweet.MediaViewer(mediaItems.map {it.url}, index))
+                        val params = MediaViewerParams(mediaItems, index)
+                        navController.navigate( NavTweet.MediaViewer(params) )
                     },
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
                 index = if (mediaItems.indexOf(mediaItem) == 0) 0 else -1,

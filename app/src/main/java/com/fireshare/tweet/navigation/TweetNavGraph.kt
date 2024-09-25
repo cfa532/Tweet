@@ -35,6 +35,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaBrowser
 import com.fireshare.tweet.widget.MediaItem
+import kotlin.reflect.typeOf
 
 val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")
@@ -116,9 +117,11 @@ fun TweetNavGraph(
                 val viewModel = hiltViewModel<ChatListViewModel>()
                 ChatListScreen(viewModel)
             }
-            composable<NavTweet.MediaViewer> {navBackStackEntry ->
+            composable<NavTweet.MediaViewer>(
+                typeMap = mapOf(typeOf<MediaViewerParams>() to TweetNavType.MediaViewerType)
+            ) {navBackStackEntry ->
                 val md = navBackStackEntry.toRoute<NavTweet.MediaViewer>()
-                MediaBrowser(navController, md.midList.map { MediaItem(it) }, md.index)
+                MediaBrowser(navController, md.params.mediaItems, md.params.index)
             }
             composable<NavTweet.Login> {
                 LoginScreen()

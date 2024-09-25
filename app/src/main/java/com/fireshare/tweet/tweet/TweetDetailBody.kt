@@ -47,6 +47,7 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -118,8 +119,10 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                                     Modifier.fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
+                                            val index = mediaItems.indexOf(mi)
+                                            val params = MediaViewerParams(mediaItems, index)
                                             navController.navigate(NavTweet.MediaViewer(
-                                                mediaItems.map { it.url }, it.indexOf(mi)
+                                                params
                                             ))
                                         }, false, it.indexOf(mi), false)
                                 HorizontalDivider(
