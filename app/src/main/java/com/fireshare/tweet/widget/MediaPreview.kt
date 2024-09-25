@@ -64,16 +64,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
-@Serializable
-sealed class MediaType {
-    @Serializable
-    data object Video : MediaType()
-    @Serializable
-    data object Audio : MediaType()
-    @Serializable
-    data object Image : MediaType()
-    @Serializable
-    data object Unknown : MediaType()
+enum class MediaType {
+    Image, Video, Audio, Unknown
 }
 
 @Serializable

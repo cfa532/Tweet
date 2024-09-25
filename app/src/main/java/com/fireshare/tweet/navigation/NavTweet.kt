@@ -46,5 +46,5 @@ sealed interface NavTweet {
     data class Follower(val userId: MimeiId) : NavTweet
 
     @Serializable
-    data class MediaViewer(val midList: List<String>, val index: Int = 0)
+    data class MediaViewer(val midList: List<String>, val index: Int = 0) : NavTweet
 }
