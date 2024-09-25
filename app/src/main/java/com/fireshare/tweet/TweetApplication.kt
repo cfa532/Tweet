@@ -7,10 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import android.content.Context
-import androidx.hilt.work.HiltWorkerFactory
-import androidx.work.Configuration
-import javax.inject.Inject
 
 @HiltAndroidApp
 class TweetApplication : Application(){

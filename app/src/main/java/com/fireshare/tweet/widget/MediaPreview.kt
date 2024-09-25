@@ -48,11 +48,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -71,7 +69,7 @@ enum class MediaType {
 
 @Serializable
 // url is in the format of http://ip/mm/mimei_id
-data class MediaItem( val url: String, var type: MediaType = MediaType.Image )
+data class MediaItem( val url: String, var type: MediaType = MediaType.Unknown )
 
 @Composable
 fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {    // need to check container width later
@@ -148,7 +146,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
                 VideoPreview(url = mediaItem.url, modifier)
             }
             else -> {       // Handle unknown file type
-                Log.d("MediaItemPreview", "unknown file type ${mediaItem.url}")
+                Log.e("MediaItemPreview", "unknown file type ${mediaItem.url}")
             }
         }
         if (isLastItem) {

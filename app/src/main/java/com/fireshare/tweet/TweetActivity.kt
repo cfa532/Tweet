@@ -26,38 +26,35 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
+import com.fireshare.tweet.viewmodel.UserViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.net.HttpURLConnection
-import java.util.concurrent.TimeUnit
-import androidx.compose.runtime.State
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {

@@ -14,8 +14,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
@@ -30,11 +28,9 @@ import com.fireshare.tweet.tweet.TweetDetailScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.viewmodel.ChatViewModel
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaBrowser
-import com.fireshare.tweet.widget.MediaItem
 import kotlin.reflect.typeOf
 
 val LocalNavController = compositionLocalOf<NavController> {

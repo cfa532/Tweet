@@ -18,7 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, startIndex: Int) {
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
+    val mediaType = remember { mutableStateOf(MediaType.Image) }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Row(modifier = Modifier.fillMaxSize()) {
@@ -76,11 +77,13 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
                                     "video" -> MediaType.Video
                                     else -> MediaType.Unknown
                                 }
+                                mediaType.value = mediaItem.type
                             }
                         }
                     }
                 }
-                when (mediaItem.type) {
+                // Display the media item based on its type and recompose
+                when (mediaType.value) {
                     MediaType.Video, MediaType.Audio -> {
                         // Consider caching for larger videos
                         VideoPlayer(uri = Uri.parse(mediaItem.url))

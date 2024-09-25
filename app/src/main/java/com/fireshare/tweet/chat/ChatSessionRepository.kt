@@ -9,7 +9,6 @@ import com.fireshare.tweet.datamodel.ChatSessionEntity
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.toChatMessage
 import com.fireshare.tweet.datamodel.toChatSession
-import com.fireshare.tweet.datamodel.toEntity
 import com.google.gson.Gson
 
 class ChatSessionRepository(

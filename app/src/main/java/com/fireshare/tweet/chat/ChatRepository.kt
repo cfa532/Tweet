@@ -1,8 +1,8 @@
 package com.fireshare.tweet.chat
 
 import com.fireshare.tweet.datamodel.ChatMessage
-import com.fireshare.tweet.datamodel.ChatMessageEntity
 import com.fireshare.tweet.datamodel.ChatMessageDao
+import com.fireshare.tweet.datamodel.ChatMessageEntity
 import com.fireshare.tweet.datamodel.toEntity
 import com.google.gson.Gson
 
