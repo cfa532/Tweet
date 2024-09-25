@@ -96,8 +96,8 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
                     .clip(RoundedCornerShape(4.dp))
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
-                        navController.navigate(NavTweet.MediaViewer(
-                            mediaItems.map {it.url}, index))
+                        navController.navigate(
+                            NavTweet.MediaViewer(mediaItems.map {it.url}, index))
                     },
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
                 index = if (mediaItems.indexOf(mediaItem) == 0) 0 else -1,
@@ -114,7 +114,7 @@ fun MediaItemPreview(mediaItem: MediaItem,
                      inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val mediaType = remember { mutableStateOf<MediaType>(MediaType.Image) }
+    val mediaType = remember { mutableStateOf(MediaType.Image) }
 
     LaunchedEffect(mediaItem.url.substringAfterLast("/")) {
         coroutineScope.launch {
