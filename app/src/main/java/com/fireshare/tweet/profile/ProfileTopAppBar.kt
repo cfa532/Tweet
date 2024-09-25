@@ -78,19 +78,21 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
         },
         actions = {
             if (appUser.mid != TW_CONST.GUEST_ID) {
-                IconButton(onClick = {
-                    if (appUser.mid != TW_CONST.GUEST_ID)
-                        navController.navigate(NavTweet.ChatBox(user.mid))
-                    else {
-                        viewModel.viewModelScope.launch {
-                            guestWarning(navController)
+                if (appUser.mid != user.mid) {
+                    IconButton(onClick = {
+                        if (appUser.mid != TW_CONST.GUEST_ID)
+                            navController.navigate(NavTweet.ChatBox(user.mid))
+                        else {
+                            viewModel.viewModelScope.launch {
+                                guestWarning(navController)
+                            }
                         }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.MailOutline,
+                            contentDescription = "Message"
+                        )
                     }
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.MailOutline,
-                        contentDescription = "Message"
-                    )
                 }
                 Box {
                     IconButton(onClick = { expanded = !expanded }) {

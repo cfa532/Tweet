@@ -34,11 +34,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
@@ -51,6 +55,7 @@ import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,41 +66,39 @@ fun ChatScreen(
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
 
-    // fetch new messages every time open chat screen.
-    LaunchedEffect(Unit) {
-        while (true) {
-            viewModel.fetchNewMessage()
-            delay(30000) // 30 seconds
-        }
-    }
     val listState = rememberLazyListState()
+    val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
     val coroutineScope = rememberCoroutineScope()
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val view = LocalView.current
 
-    // Scroll to the bottom when a new message is added
-    LaunchedEffect(chatMessages) {
+    fun scrollToBottom() {
         coroutineScope.launch {
             listState.animateScrollToItem(chatMessages.size - 1)
         }
     }
 
-    // Scroll to the bottom when the keyboard is opened
-    DisposableEffect(view) {
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val rect = android.graphics.Rect()
-            view.getWindowVisibleDisplayFrame(rect)
-            val screenHeight = view.height
-            val keypadHeight = screenHeight - rect.bottom
-            if (keypadHeight > screenHeight * 0.15) {
-                coroutineScope.launch {
-                    listState.animateScrollToItem(chatMessages.size - 1)
-                }
-            }
+    // Scroll to the bottom when the screen is first shown
+    LaunchedEffect(Unit) {
+        if (chatMessages.isNotEmpty()) {
+            delay(100)
+            scrollToBottom()
         }
-        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        onDispose {
-            view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+        // fetch new messages every time open chat screen.
+        timer(period = 30000, action = {
+            viewModel.fetchNewMessage()
+        }, initialDelay = 30000)
+    }
+
+    // Scroll to the bottom when a new message is added
+    LaunchedEffect(chatMessages) {
+        if (chatMessages.isNotEmpty()) {
+            snapshotFlow {
+                layoutInfo.visibleItemsInfo.lastOrNull()?.index
+            }
+                .collect { lastVisibleItemIndex ->
+                    if (lastVisibleItemIndex != null && lastVisibleItemIndex == chatMessages.size - 2) {
+                        scrollToBottom()
+                    }
+                }
         }
     }
 
@@ -107,8 +110,9 @@ fun ChatScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                        Spacer(modifier = Modifier.weight(1f))
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Column {
                             UserAvatar(receipt, 32)
                             Text(
@@ -135,7 +139,12 @@ fun ChatScreen(
         Surface(modifier = Modifier.padding(innerPadding)) {
             Box(modifier = Modifier
                 .fillMaxSize()
-                .imePadding()) {
+                .imePadding()
+                // Scroll to the bottom when the keyboard is opened
+                .onSizeChanged {
+                    scrollToBottom()
+                }
+            ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
