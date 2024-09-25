@@ -65,7 +65,7 @@ fun TweetBlock(
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 11
                             Text(
                                 text = txt,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 maxLines = maxLines,
 //                                overflow = TextOverflow.Ellipsis
                             )

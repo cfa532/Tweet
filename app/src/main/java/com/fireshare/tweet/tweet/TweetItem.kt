@@ -89,7 +89,7 @@ fun TweetItem(
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier
                                 .padding(start = 60.dp)
-                                .offset(y = (-6).dp) // Adjust the offset value as needed
+                                .offset(y = (0).dp, x = (-8).dp) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
                         )
                     }
@@ -107,7 +107,7 @@ fun TweetItem(
                         Text(
                             modifier = Modifier.padding(start = 16.dp),
                             text = it,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyLarge
                         )
                     }
                     Surface(
