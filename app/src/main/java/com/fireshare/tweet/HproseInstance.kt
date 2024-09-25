@@ -12,11 +12,13 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget
+import com.fireshare.tweet.widget.Gadget.getFirstReachableUri
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,8 +30,8 @@ import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-    private lateinit var appId: MimeiId    // Application Mimei ID, assigned by Leither
-    private lateinit var BASE_URL: String  // localhost in Android Simulator
+    private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
+    private var BASE_URL: String? = null    // in case no network
     lateinit var tweetFeedViewModel: TweetFeedViewModel
     lateinit var preferenceHelper: PreferenceHelper
 
@@ -86,8 +88,8 @@ object HproseInstance {
 
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
-    private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String> {
-        val baseUrl = preferenceHelper.getAppUrl().toString()
+    private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String?> {
+        var baseUrl = preferenceHelper.getAppUrl().toString()
         val request = Request.Builder().url("http://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -103,18 +105,17 @@ object HproseInstance {
 
             if (jsonString != null) {
                 // Step 2: Parse the extracted string into a Kotlin map
-                val mapper = Gson()
-                val paramMap = mapper.fromJson(jsonString, Map::class.java) as Map<*, *>
-                println("paramMap=$paramMap")
-                val ip = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
+                val gson = Gson()
+                val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
+                val ips = ((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>).map { (it as ArrayList<*>)[0] as String }
 
-                return Pair(paramMap["mid"] as MimeiId, "http://$ip")
+                return Pair(paramMap["mid"] as MimeiId, "http://${ips[1]}")     // should have been 0, but 1 is safe.
             } else {
                 Log.e("initAppEntry", "No data found within window.setParam()")
             }
         }
         Log.e("initAppEntry", "Failed to get AppId, using default ones.")
-        return Pair(preferenceHelper.getAppId().toString(), "http://$baseUrl")
+        return Pair(preferenceHelper.getAppId().toString(), null)
     }
 
     // only used for registered user, that has userId in preference.
@@ -219,7 +220,10 @@ object HproseInstance {
         return cachedUsers.firstOrNull { it.mid == userId }
     }
 
-    // Get base url where user data can be accessed, and user data
+    /**
+     * Get base url where user data can be accessed. Each user may has a different node.
+     * Therefore it is indispensable to acquire base url for each user.
+     * */
     suspend fun getUserBase( userId: MimeiId ): User? {
         // check if user data has been read
         getUser(userId)?.let { return it}
@@ -233,11 +237,13 @@ object HproseInstance {
             val providerList = Json.parseToJsonElement(providers).jsonArray
             if (providerList.isNotEmpty()) {
                 Log.d("getUserBase()", providerList.toString())
-                val ipAddresses = providerList[0].jsonArray.map { it.jsonArray }
-                Gadget.getFirstReachableUri(ipAddresses, userId)?.let { u ->
-                    cachedUsers.find { it.mid == u.mid }.also {existingUser ->
-                        if (existingUser == null) cachedUsers.add(u)
-                    }
+                val ipAddresses = providerList[0] as JsonArray
+                getFirstReachableUri(
+                    ipAddresses.map {
+                        Gadget.removeParentheses((it as JsonArray)[0])
+                    }, userId
+                )?.let { u ->
+                    cachedUsers.add(u)
                     return u
                 }
             }
@@ -679,7 +685,6 @@ object HproseInstance {
     }
 
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
-        val byteArray = byteArrayOf(0x01, 0x02, 0x03)
         try {
             val method = "get_user_core_data"
             val url =
@@ -691,6 +696,7 @@ object HproseInstance {
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
                 user.baseUrl = "http://$ip"
+                Log.d("isReachable()", "user=$user")
                 return user
             }
         } catch (e: Exception) {

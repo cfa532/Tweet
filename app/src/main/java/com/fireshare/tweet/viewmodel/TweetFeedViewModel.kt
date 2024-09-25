@@ -18,6 +18,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.concurrent.Executors
 import javax.inject.Inject
 
 @HiltViewModel
@@ -47,9 +49,26 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var startTimestamp = System.currentTimeMillis()
     private var endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
 
+    private val limitedDispatcher = Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+
     init {
-        _followings.update { list -> list + (appUser.followingList ?: HproseInstance.getAlphaIds()) }
         refresh()
+    }
+
+    // called after login or logout(). Update current user's following list within both calls.
+    fun refresh() {
+        _tweets.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+                _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
+
+            startTimestamp = System.currentTimeMillis()
+            endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
+            getTweets(startTimestamp, endTimestamp)
+            _isRefreshing.value = false
+        }
     }
 
     fun loadNewerTweets() {
@@ -73,10 +92,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null      // earlier in time
     ) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(limitedDispatcher) {
             coroutineScope {
                 followings.value.forEach { userId ->
-                    launch(Dispatchers.IO) {
+                    launch(limitedDispatcher) {
                         val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
                         _tweets.update { currentTweets ->
                             val newTweets = tweetsList.filterNot { newTweet ->
@@ -88,24 +107,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 }
             }
         }
-    }
-
-    // called after login or logout(). Update current user's following list within both calls.
-    fun refresh() {
-        _tweets.value = emptyList()
-        _followings.update { appUser.followingList?.plus(HproseInstance.getAlphaIds()) ?: emptyList() }
-        // remember to watch oneself.
-        if (appUser.mid != TW_CONST.GUEST_ID) _followings.update { list -> list + appUser.mid }
-        _followings.update { currentList ->
-            // remove duplication tweets.
-            val seenMids = mutableSetOf<MimeiId>()
-            currentList.filter { seenMids.add(it) }
-        }
-
-        startTimestamp = System.currentTimeMillis()
-        endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
-        getTweets(startTimestamp, endTimestamp)
-        _isRefreshing.value = false
     }
 
     fun addTweet(tweet: Tweet) {

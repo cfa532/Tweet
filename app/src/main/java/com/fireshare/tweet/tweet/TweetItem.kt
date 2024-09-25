@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
@@ -80,13 +81,15 @@ fun TweetItem(
                                 .offset(y = (-4).dp) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
                         )
+                        val forwardBy = if (tweet.authorId==appUser.mid) "Forwarded by you"
+                        else "Forwarded by @${tweet.author?.username}"
                         Text(
-                            text = "Forwarded by you",
+                            text = forwardBy,
                             fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier
                                 .padding(start = 60.dp)
-                                .offset(y = (-4).dp) // Adjust the offset value as needed
+                                .offset(y = (-6).dp) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
                         )
                     }
