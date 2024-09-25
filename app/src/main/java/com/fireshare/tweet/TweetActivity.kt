@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,12 +76,16 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
-                // Initialize the userViewModel, which is a singleton needed in many UI states.
+                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
                 userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
                     this@TweetActivity, key = appUser.mid
                 ) { factory ->
                     factory.create(appUser.mid)
                 }
+                // default no to update fans and followings list of user object.
+                // Do it only when opening its profile page.
+                if (appUser.mid != TW_CONST.GUEST_ID)
+                    userViewModel.updateFans()
 
                 TweetTheme {
                     // Global snackbar host
@@ -140,7 +145,7 @@ class TweetActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .padding(bottom = screenHeightDp.minus(60.dp)) // Adjust the padding as needed
+                .padding(bottom = screenHeightDp.minus(100.dp)) // Adjust the padding as needed
         ) {
             SnackbarHost(
                 hostState = hostState,

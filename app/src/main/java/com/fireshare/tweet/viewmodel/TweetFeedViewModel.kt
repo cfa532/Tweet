@@ -18,6 +18,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -49,8 +50,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var startTimestamp = System.currentTimeMillis()
     private var endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
 
-    private val limitedDispatcher = Executors.newFixedThreadPool(4).asCoroutineDispatcher()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
 
+    companion object {
+        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
+        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
+    }
     init {
         refresh()
     }
@@ -65,7 +71,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
 
             startTimestamp = System.currentTimeMillis()
-            endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
+            endTimestamp = startTimestamp - java.lang.Long.valueOf(THIRTY_DAYS_IN_MILLIS)
             getTweets(startTimestamp, endTimestamp)
             _isRefreshing.value = false
         }
@@ -83,7 +89,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         println("At bottom already")
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
-        endTimestamp = startTimestamp - java.lang.Long.valueOf(648_000_000)  // 7 days
+        endTimestamp = startTimestamp - java.lang.Long.valueOf(SEVEN_DAYS_IN_MILLIS)
         getTweets(startTimestamp, endTimestamp)
         _isRefreshingAtBottom.value = false
     }
@@ -92,10 +98,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         startTimestamp: Long = System.currentTimeMillis(),
         endTimestamp: Long? = null      // earlier in time
     ) {
-        viewModelScope.launch(limitedDispatcher) {
+        viewModelScope.launch(networkDispatcher) {
             coroutineScope {
                 followings.value.forEach { userId ->
-                    launch(limitedDispatcher) {
+                    launch {
                         val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
                         _tweets.update { currentTweets ->
                             val newTweets = tweetsList.filterNot { newTweet ->
