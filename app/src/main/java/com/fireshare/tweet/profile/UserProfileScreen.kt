@@ -72,9 +72,12 @@ fun UserProfileScreen(
 }
 
 @Composable
-fun ProfileDetail(viewModel: UserViewModel, navController: NavHostController, appUserViewModel: UserViewModel) {
+fun ProfileDetail(
+    viewModel: UserViewModel,
+    navController: NavHostController,
+    appUserViewModel: UserViewModel
+) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
-
     val user by viewModel.user.collectAsState()
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
