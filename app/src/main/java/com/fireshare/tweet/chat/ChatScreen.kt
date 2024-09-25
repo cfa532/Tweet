@@ -71,8 +71,10 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
 
     fun scrollToBottom() {
-        coroutineScope.launch {
-            listState.animateScrollToItem(chatMessages.size - 1)
+        if (chatMessages.isNotEmpty()) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(chatMessages.size - 1)
+            }
         }
     }
 
