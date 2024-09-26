@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,12 +53,14 @@ fun CommentItem(
     parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
+
+    // viewModel of current Comment, which is a Tweet object
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = comment.mid) { factory ->
         factory.create(comment)
     }
     val author = comment.author
+    val parentTweet by parentTweetViewModel.tweetState.collectAsState()
 
-    // this viewModel is a comment Item.
     Column(
         modifier = Modifier.clickable(onClick = {
             comment.mid?.let {navController.navigate(NavTweet.TweetDetail(it))}
@@ -74,12 +77,13 @@ fun CommentItem(
             ) {
                 IconButton(onClick = { navController.navigate(NavTweet.UserProfile(comment.authorId)) })
                 {
-                    UserAvatar(author, 40)
+                    UserAvatar(author, 32)
                 }
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+                Text(text = author?.name ?: "No One",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 2.dp, end = 2.dp))
+                Text(text = "@${author?.username}",
+                    style = MaterialTheme.typography.bodySmall)
             }
             CommentDropdownMenu(comment, parentTweetViewModel)
         }
@@ -98,21 +102,20 @@ fun CommentItem(
                     comment.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
                         ?.let { it2 -> MediaItem(it2) }
                 }
-                mediaItems?.let { MediaPreviewGrid(it) }
+                mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
             }
 
             // Actions Row
             Row(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
             ) {
                 // State hoist
                 LikeButton(viewModel)
-                Spacer(modifier = Modifier.width(8.dp))
                 BookmarkButton(viewModel)
-                Spacer(modifier = Modifier.width(8.dp))
                 CommentButton(viewModel)
-                Spacer(modifier = Modifier.width(8.dp))
                 RetweetButton(viewModel)
+                Spacer(modifier = Modifier.width(60.dp))
             }
         }
     }

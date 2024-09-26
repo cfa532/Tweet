@@ -51,6 +51,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -72,7 +73,7 @@ enum class MediaType {
 data class MediaItem( val url: String, var type: MediaType = MediaType.Unknown )
 
 @Composable
-fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {    // need to check container width later
+fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWidth: Dp = 400.dp) {    // need to check container width later
     val navController = LocalNavController.current
     val gridCells = if (mediaItems.size>1) 2 else 1
     val maxItems = when(mediaItems.size) {
@@ -95,7 +96,7 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, containerWidth: Dp = 400.dp) {
                     .clip(RoundedCornerShape(4.dp))
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
-                        val params = MediaViewerParams(mediaItems, index)
+                        val params = MediaViewerParams(mediaItems, index, tweetId)
                         navController.navigate( NavTweet.MediaViewer(params) )
                     },
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,

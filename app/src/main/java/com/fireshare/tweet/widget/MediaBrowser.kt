@@ -37,9 +37,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.NavTwee
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.tweet.BookmarkButton
+import com.fireshare.tweet.tweet.CommentButton
+import com.fireshare.tweet.tweet.LikeButton
+import com.fireshare.tweet.tweet.RetweetButton
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +56,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, startIndex: Int) {
+fun MediaBrowser(
+    parentEntry: NavBackStackEntry,
+    navController: NavController,
+    mediaItems: List<MediaItem>,
+    startIndex: Int,
+    tweetId: MimeiId
+) {
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweetId) { factory ->
+        factory.create( Tweet(authorId = "default", content = "nothing"))
+    }
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     val mediaType = remember { mutableStateOf(MediaType.Image) }
     var showControls by remember { mutableStateOf(false) } // State for showing/hiding controls
@@ -121,30 +139,17 @@ fun MediaBrowser(navController: NavController, mediaItems: List<MediaItem>, star
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(start = 16.dp, bottom = 32.dp),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
-                IconButton(onClick = { /* Handle like action */ }) {
-                    Icon(
-                        imageVector = Icons.Filled.Favorite,
-                        contentDescription = "Like",
-                        tint = Color.White
-                    )
-                }
-                IconButton(onClick = { /* Handle bookmark action */ }) {
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = "Bookmark",
-                        tint = Color.White
-                    )
-                }
-                IconButton(onClick = { /* Handle share action */ }) {
-                    Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = "Share",
-                        tint = Color.White
-                    )
-                }
+                // State hoist
+                LikeButton(viewModel, Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                BookmarkButton(viewModel, Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                CommentButton(viewModel, Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                RetweetButton(viewModel, Color.White)
             }
         }
     }

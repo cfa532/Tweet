@@ -67,7 +67,8 @@ sealed interface NavTweet {
 @Serializable
 data class MediaViewerParams(
     val mediaItems: List<MediaItem>,
-    val index: Int = 0
+    val index: Int = 0,
+    val tweetId: MimeiId
 )
 
 @Serializable

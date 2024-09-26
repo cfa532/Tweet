@@ -74,7 +74,7 @@ fun TweetItem(
                     Box {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_squarepath),
-                            contentDescription = "Forward",
+                            contentDescription = "Forward by ${tweet.author?.name}",
                             modifier = Modifier
                                 .size(40.dp)
                                 .padding(start = 50.dp)
@@ -102,7 +102,9 @@ fun TweetItem(
                         tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
                     })
                 ) {
+                    // Tweet header: Icon, name, timestamp, more actions
                     TweetItemHeader(tweet)
+
                     tweet.content?. let {
                         Text(
                             modifier = Modifier.padding(start = 16.dp),
@@ -124,16 +126,15 @@ fun TweetItem(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp)
+                            .padding(start = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         // State hoist
                         LikeButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
                         BookmarkButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
                         CommentButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
                         RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(60.dp))
                     }
                 }
             }
@@ -161,7 +162,7 @@ fun TweetItemHeader(tweet: Tweet) {
         ) {
             IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
             {
-                UserAvatar(author, 36)
+                UserAvatar(author, 32)
             }
             Spacer(modifier = Modifier.padding(horizontal = 2.dp))
             Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)

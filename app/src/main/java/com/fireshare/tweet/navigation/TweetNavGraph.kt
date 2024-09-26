@@ -116,8 +116,11 @@ fun TweetNavGraph(
             composable<NavTweet.MediaViewer>(
                 typeMap = mapOf(typeOf<MediaViewerParams>() to TweetNavType.MediaViewerType)
             ) {navBackStackEntry ->
+                val parentEntry = remember(navBackStackEntry) {
+                    navController.getBackStackEntry(NavTwee)
+                }
                 val md = navBackStackEntry.toRoute<NavTweet.MediaViewer>()
-                MediaBrowser(navController, md.params.mediaItems, md.params.index)
+                MediaBrowser(parentEntry, navController, md.params.mediaItems, md.params.index, md.params.tweetId)
             }
             composable<NavTweet.Login> {
                 LoginScreen()

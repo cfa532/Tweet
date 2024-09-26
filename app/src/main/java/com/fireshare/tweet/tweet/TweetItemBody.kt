@@ -1,6 +1,7 @@
 package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
 
 @Composable
 fun TweetBlock(
@@ -91,24 +93,22 @@ fun TweetBlock(
                             tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
                                 ?.let { it2 -> MediaItem(it2) }
                         }
-                        mediaItems?.let { MediaPreviewGrid(it) }
+                        mediaItems?.let { MediaPreviewGrid(it, tweet.mid!!) }
                     }
 
                     // Actions Row
                     if (!isQuoted) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 0.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             // State hoist
                             LikeButton(viewModel)
-                            Spacer(modifier = Modifier.width(8.dp))
                             BookmarkButton(viewModel)
-                            Spacer(modifier = Modifier.width(8.dp))
                             CommentButton(viewModel)
-                            Spacer(modifier = Modifier.width(8.dp))
                             RetweetButton(viewModel)
+                            Spacer(modifier = Modifier.width(60.dp))
                         }
                     }
                 }

@@ -120,7 +120,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
                                             val index = mediaItems.indexOf(mi)
-                                            val params = MediaViewerParams(mediaItems, index)
+                                            val params = MediaViewerParams(mediaItems, index, tweet.mid!!)
                                             navController.navigate(NavTweet.MediaViewer(
                                                 params
                                             ))
@@ -151,17 +151,15 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 
                     // Actions Row
                     Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(top = 0.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         // State hoist
-                        LikeButton( viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
                         CommentButton(viewModel)
-                        Spacer(modifier = Modifier.width(8.dp))
                         RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(60.dp))
                     }
                 }
             }
