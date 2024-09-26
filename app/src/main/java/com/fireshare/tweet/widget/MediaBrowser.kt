@@ -74,6 +74,14 @@ fun MediaBrowser(
     val mediaType = remember { mutableStateOf(MediaType.Image) }
     var showControls by remember { mutableStateOf(false) } // State for showing/hiding controls
     val animationScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        val previousRoute = navController.previousBackStackEntry?.destination?.route
+        if (previousRoute != null) {
+            viewModel.savePreviousRoute(previousRoute)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -141,7 +149,20 @@ fun MediaBrowser(
                 ) {
                     // Top control box content
                     IconButton(
-                        onClick = { navController.navigate(NavTweet.TweetFeed) },
+                        onClick = {
+                            val previousRoute = viewModel.getPreviousRoute()
+                            if (previousRoute != null) {
+                                navController.navigate(previousRoute) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = false
+                                }
+                            } else {
+                                navController.navigate(NavTweet.TweetFeed)
+                            }
+                        },
                         modifier = Modifier
                             .padding(16.dp)
                             .align(Alignment.Center)

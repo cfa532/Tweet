@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
@@ -31,6 +32,7 @@ import kotlinx.serialization.json.Json
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel()
 {
     @AssistedFactory
@@ -46,6 +48,14 @@ class TweetViewModel @AssistedInject constructor(
     val isCheckedToTweet = mutableStateOf(false)
     fun onCheckedChange(value: Boolean) {
         isCheckedToTweet.value = value
+    }
+
+    fun savePreviousRoute(route: String) {
+        savedStateHandle["previousRoute"] = route
+    }
+
+    fun getPreviousRoute(): String? {
+        return savedStateHandle["previousRoute"]
     }
 
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
