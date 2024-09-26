@@ -21,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -64,6 +65,7 @@ fun BottomNavigationBar(
     )
     NavigationBar {
         val scope = rememberCoroutineScope()
+        val context = LocalContext.current
 
         items.forEachIndexed { index, item ->
             NavigationBarItem(
@@ -73,7 +75,7 @@ fun BottomNavigationBar(
                     selectedItemIndex = index
                     if (appUser.mid == TW_CONST.GUEST_ID && index>0) {
                         scope.launch {
-                            guestWarning(navController)
+                            guestWarning(context, navController)
                         }
                         return@NavigationBarItem
                     }

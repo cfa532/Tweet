@@ -90,7 +90,7 @@ fun MediaBrowser(
                 detectTapGestures(
                     onTap = { showControls = !showControls }
                 )
-                detectHorizontalDragGestures { change, dragAmount ->
+                detectHorizontalDragGestures { _, dragAmount ->
                     if (dragAmount > 0) {
                         // Swipe right
                         animationScope.launch {

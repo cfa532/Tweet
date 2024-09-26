@@ -66,7 +66,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
         tonalElevation = 2.dp
     ) {
         Column( modifier = Modifier
-            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+            .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
         ) {
             // Tweet detail Header
             Row(
@@ -85,7 +85,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     }
                     Text(
                         text = author?.name ?: "No One",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 2.dp)
                     )
                     Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
@@ -98,12 +98,12 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 8.dp)
+                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 0.dp)
             ) {
                 Column {
                     if (tweet.content?.isNotEmpty() == true)
                     tweet.content?.let {
-                        Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                        Text(text = it, style = MaterialTheme.typography.bodyLarge)
                     }
 
                     val mediaItems = tweet.attachments?.mapNotNull {
@@ -139,10 +139,10 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     if (tweet.originalTweet != null) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.4.dp,
-                                color = MaterialTheme.colorScheme.surfaceTint),
-                            tonalElevation = 1.dp,
-                            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp)
+//                            border = BorderStroke(0.4.dp,
+//                                color = MaterialTheme.colorScheme.surfaceTint),
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
                         ) {
                             TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                 parentEntry, key = tweet.originalTweetId

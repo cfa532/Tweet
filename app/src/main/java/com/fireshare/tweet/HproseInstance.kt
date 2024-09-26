@@ -32,8 +32,7 @@ import java.util.regex.Pattern
 object HproseInstance {
     private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
     private var BASE_URL: String? = null    // in case no network
-    lateinit var tweetFeedViewModel: TweetFeedViewModel
-    lateinit var preferenceHelper: PreferenceHelper
+    private lateinit var preferenceHelper: PreferenceHelper
 
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
 

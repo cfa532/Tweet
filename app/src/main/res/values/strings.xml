@@ -1,7 +1,27 @@
 <resources>
     <string name="app_name">Tweet</string>
-    <string name="forward_by">Forward by</string>
+    <string name="forward_by">Forwarded by you</string>
     <string name="delete">Delete</string>
     <string name="login">Login</string>
     <string name="register">Register</string>
+    <string name="usename">Username</string>
+    <string name="password">Password</string>
+    <string name="no_account">Don\'t have an account?</string>
+    <string name="name">Alias</string>
+    <string name="profile">Profile</string>
+    <string name="key_phrase">Key phrase</string>
+    <string name="save">Save</string>
+    <string name="delete_account">Delete account</string>
+    <string name="edit_tweet">Edit tweet</string>
+    <string name="comment">Comment</string>
+    <string name="reply_to">Reply to</string>
+    <string name="comment_as_tweet">Post as Tweet</string>
+    <string name="guest_reminder">Please login or register</string>
+    <string name="update_available">Update Available</string>
+    <string name="updata_message">A new version of the app is available. Would you like to update?</string>
+    <string name="update">Update</string>
+    <string name="cancel">Cancel</string>
+    <string name="key_phrase_warning">The key phrase is the only immutable information for your account. You will need it to log in on a new machine or change your username. Keep it safe and secure, as the system will not store it for you. Choose its content wisely.</string>
+    <string name="forwarded">forwarded</string>
+    <string name="go">Go>></string>
 </resources>

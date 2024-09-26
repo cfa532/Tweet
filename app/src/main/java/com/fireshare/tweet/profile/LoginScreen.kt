@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
@@ -87,7 +89,7 @@ fun LoginScreen() {
         OutlinedTextField(
             value = username ?: "",
             onValueChange = { viewModel.onUsernameChange(it)},
-            label = { Text("Username") },
+            label = { Text(stringResource(R.string.usename)) },
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions.Default.copy(
@@ -103,7 +105,7 @@ fun LoginScreen() {
         OutlinedTextField(
             value = password,
             onValueChange = { viewModel.onPasswordChange(it) },
-            label = { Text("Password") },
+            label = { Text(stringResource(R.string.password)) },
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -128,7 +130,7 @@ fun LoginScreen() {
             OutlinedTextField(
                 value = keyPhrase ?: "",
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
-                label = { Text("Key phrase") },
+                label = { Text(stringResource(R.string.key_phrase)) },
                 singleLine = true,
                 textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(
@@ -157,7 +159,7 @@ fun LoginScreen() {
                     modifier = Modifier.size(24.dp)
                 )
             } else {
-                Text("     Login     ")
+                Text(text = stringResource(R.string.login))     // Login
             }
         }
 
@@ -169,10 +171,11 @@ fun LoginScreen() {
         Spacer(modifier = Modifier.height(32.dp))
 
         val annotatedText = buildAnnotatedString {
-            append("Don't have an account? ")
+            append(stringResource(R.string.no_account))
+            append(" ")
             pushStringAnnotation(tag = "REGISTER", annotation = "register")
             withStyle(style = SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
-                append("Register")
+                append(stringResource(R.string.register))
             }
             pop()
         }

@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -78,12 +79,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
         actions = {
             if (appUser.mid != TW_CONST.GUEST_ID) {
                 if (appUser.mid != user.mid) {
+                    val context = LocalContext.current
                     IconButton(onClick = {
                         if (appUser.mid != TW_CONST.GUEST_ID)
                             navController.navigate(NavTweet.ChatBox(user.mid))
                         else {
                             viewModel.viewModelScope.launch {
-                                guestWarning(navController)
+                                guestWarning(context, navController)
                             }
                         }
                     }) {

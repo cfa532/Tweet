@@ -21,28 +21,34 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
@@ -70,13 +76,11 @@ fun EditProfileScreen(
         }
     }
     val scrollState = rememberScrollState()
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    val showDialog = remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
+//        focusRequester.requestFocus()
         keyboardController?.show()
     }
 
@@ -104,7 +108,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value = username ?: "",
                 onValueChange = { viewModel.onUsernameChange(it) },
-                label = { Text("Username") },
+                label = { Text(stringResource(R.string.usename)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
@@ -114,7 +118,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { viewModel.onPasswordChange(it) },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.password)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
@@ -131,17 +135,22 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value = keyPhrase ?: "",
                 onValueChange = { viewModel.onKeyPhraseChange(it) },
-                label = { Text("Key phrase") },
+                label = { Text(stringResource(R.string.key_phrase)) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester),
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused && keyPhrase.isNullOrBlank()) {
+                            showDialog.value = true
+                        }
+                    },
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = name ?: "",
                 onValueChange = { viewModel.onNameChange(it) },
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.name)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
@@ -151,7 +160,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value = profile ?: "",
                 onValueChange = { viewModel.onProfileChange(it) },
-                label = { Text("Profile") },
+                label = { Text(stringResource(R.string.profile)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
@@ -170,8 +179,19 @@ fun EditProfileScreen(
                 .width(intrinsicSize = IntrinsicSize.Max)
                 .align(Alignment.CenterHorizontally)
         ) {
-            Text("     Save     ")
+            Text(stringResource(R.string.save))
         }
+    }
+    if (showDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showDialog.value = false },
+            confirmButton = {
+                TextButton(onClick = { showDialog.value = false }) {
+                    Text("OK")
+                }
+            },
+            text = { Text(stringResource(R.string.key_phrase_warning)) }
+        )
     }
 }
 

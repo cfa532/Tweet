@@ -32,7 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.getString
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -200,12 +202,12 @@ class ActivityViewModel: ViewModel() {
     private fun showUpdateDialog(context: Context, downloadUrl: String) {
         (context as Activity).runOnUiThread {
             AlertDialog.Builder(context)
-                .setTitle("Update Available")
-                .setMessage("A new version of the app is available. Would you like to update?")
-                .setPositiveButton("Update") { _, _ ->
+                .setTitle(getString(context, R.string.update_available))
+                .setMessage(getString(context, R.string.updata_message))
+                .setPositiveButton(getString(context, R.string.update)) { _, _ ->
                     downloadAndInstall(context, downloadUrl)
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(context, R.string.cancel), null)
                 .show()
         }
     }

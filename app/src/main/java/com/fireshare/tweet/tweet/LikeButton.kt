@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,8 +18,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.getString
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
@@ -38,12 +41,12 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 
-suspend fun guestWarning(navController: NavController) {
+suspend fun guestWarning(context: Context, navController: NavController) {
     SnackbarController.sendEvent(
         event = SnackbarEvent(
-            message = "Please login or register.",
+            message = getString(context, R.string.guest_reminder),
             action = SnackbarAction(
-                name = "Go!",
+                name = getString(context, R.string.go),
                 action = { navController.navigate(NavTweet.Login) }
             )
         )
@@ -58,11 +61,12 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
     }
     val navController = LocalNavController.current
     val viewModelProvider = LocalViewModelProvider.current
+    val context = LocalContext.current
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestWarning(navController)
+                guestWarning(context, navController)
             }
             return@IconButton
         }
@@ -97,11 +101,12 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val count = tweet.retweetCount
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
+    val context = LocalContext.current
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestWarning(navController)
+                guestWarning(context, navController)
             }
             return@IconButton
         }
@@ -133,11 +138,12 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val count = tweet.likeCount
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val navController = LocalNavController.current
+    val context = LocalContext.current
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestWarning(navController)
+                guestWarning(context, navController)
             }
         } else viewModel.likeTweet()
     })
@@ -165,11 +171,12 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
     val navController = LocalNavController.current
+    val context = LocalContext.current
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
-                guestWarning(navController)
+                guestWarning(context, navController)
             }
         } else viewModel.bookmarkTweet()
     })
