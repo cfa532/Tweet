@@ -66,7 +66,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
         tonalElevation = 2.dp
     ) {
         Column( modifier = Modifier
-            .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
         ) {
             // Tweet detail Header
             Row(
@@ -75,19 +75,19 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.padding(bottom = 4.dp)
                 ) {
                     val author = tweet.author
                     IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
                     {
                         UserAvatar(author, 40)
                     }
-                    Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                     Text(
                         text = author?.name ?: "No One",
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 2.dp)
                     )
-                    Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                     Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
                 }
                 // the 3 dots at the right end
@@ -101,7 +101,8 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 8.dp)
             ) {
                 Column {
-                    tweet.content?. let {
+                    if (tweet.content?.isNotEmpty() == true)
+                    tweet.content?.let {
                         Text(text = it, style = MaterialTheme.typography.bodyMedium)
                     }
 
