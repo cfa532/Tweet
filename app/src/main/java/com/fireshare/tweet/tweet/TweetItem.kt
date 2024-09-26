@@ -72,15 +72,6 @@ fun TweetItem(
 
                     // Label: Forward by user, on top of original tweet
                     Box {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_squarepath),
-                            contentDescription = "Forward by ${tweet.author?.name}",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .padding(start = 50.dp)
-                                .offset(y = (-4).dp) // Adjust the offset value as needed
-                                .zIndex(1f) // Ensure it appears above the tweet area
-                        )
                         val forwardBy = if (tweet.authorId==appUser.mid) "Forwarded by you"
                         else "Forwarded by @${tweet.author?.username}"
                         Text(
@@ -89,7 +80,7 @@ fun TweetItem(
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier
                                 .padding(start = 60.dp)
-                                .offset(y = (0).dp, x = (-8).dp) // Adjust the offset value as needed
+                                .offset(y = (-12).dp, x = (-8).dp) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
                         )
                     }
@@ -119,9 +110,11 @@ fun TweetItem(
                         tonalElevation = 3.dp,
                         modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                     ) {
+                        // quoted tweet
                         TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                             parentEntry, key = tweet.originalTweetId
-                        ) { factory -> factory.create(tweet.originalTweet!!) }, true)
+                        ) { factory ->
+                            factory.create(tweet.originalTweet!!) }, isQuoted = true)
                     }
                     Row(
                         modifier = Modifier

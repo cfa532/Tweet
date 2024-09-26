@@ -46,7 +46,7 @@ fun TweetBlock(
     ) {
         Column(
             modifier = Modifier
-                .padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 4.dp)
+                .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 8.dp)
         ) {
             // Tweet Header
             TweetItemHeader(tweet)
@@ -98,8 +98,7 @@ fun TweetBlock(
                     // Actions Row
                     if (!isQuoted) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             // State hoist

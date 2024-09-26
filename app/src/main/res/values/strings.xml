@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Tweet</string>
+    <string name="forward_by">Forward by</string>
+    <string name="delete">Delete</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
 </resources>

@@ -93,12 +93,12 @@ fun TweetFeedScreen(
                 state = listState
             ) {
                 items(tweets) { tweet ->
+                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                     HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 0.dp),
+                        modifier = Modifier.padding(bottom = 8.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
-                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
                 item {
                     if (refreshingAtBottom && tweets.isNotEmpty()) {
