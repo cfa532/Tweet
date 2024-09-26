@@ -114,10 +114,10 @@ fun TweetItem(
                     }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(0.4.dp,
-                            color = MaterialTheme.colorScheme.surfaceTint),
-                        tonalElevation = 1.dp,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp)
+//                        border = BorderStroke(0.4.dp,
+//                            color = MaterialTheme.colorScheme.surfaceTint),
+                        tonalElevation = 3.dp,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                     ) {
                         TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                             parentEntry, key = tweet.originalTweetId

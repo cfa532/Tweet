@@ -51,12 +51,11 @@ fun TweetBlock(
             // Tweet Header
             TweetItemHeader(tweet)
 
-            Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 tonalElevation = 0.dp,
                 modifier = Modifier
-                    .padding(start = 20.dp, top = 4.dp, bottom = 0.dp, end = 4.dp)
+                    .padding(start = 20.dp, top = 2.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
 
