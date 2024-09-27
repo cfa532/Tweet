@@ -2,6 +2,7 @@ package com.fireshare.tweet.tweet
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -60,8 +63,8 @@ fun TweetItem(
         if (tweet.originalTweet != null) {
             if (tweet.content == "") {
                 // this is a retweet of another tweet.
-                Spacer(modifier = Modifier.padding(8.dp))
-                Box {
+                Box(modifier = Modifier.padding(top = 8.dp)
+                ) {
                     // The tweet area
                     viewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
@@ -82,7 +85,10 @@ fun TweetItem(
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier
                                 .padding(start = 60.dp)
-                                .offset(y = (-12).dp, x = (-8).dp) // Adjust the offset value as needed
+                                .offset(
+                                    y = (-12).dp,
+                                    x = (-8).dp
+                                ) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
                         )
                     }
@@ -90,8 +96,9 @@ fun TweetItem(
             } else {
                 // retweet with comments
                 val navController = LocalNavController.current
-                Column(modifier = Modifier.padding(start = 8.dp)
-                    .clickable( onClick = {
+                Column(modifier = Modifier
+                    .padding(start = 8.dp)
+                    .clickable(onClick = {
                         tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
                     })
                 ) {
@@ -113,10 +120,13 @@ fun TweetItem(
                         modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                     ) {
                         // quoted tweet
-                        TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
-                        ) { factory ->
-                            factory.create(tweet.originalTweet!!) }, isQuoted = true)
+                        TweetBlock(
+                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                parentEntry, key = tweet.originalTweetId
+                            ) { factory ->
+                                factory.create(tweet.originalTweet!!)
+                            }, isQuoted = true
+                        )
                     }
                     Row(
                         modifier = Modifier
@@ -137,6 +147,24 @@ fun TweetItem(
             // original tweet by current user.
             TweetBlock(viewModel)
         }
+    }
+}
+
+@Composable
+fun UnavailableTweet() {
+    Box(
+        modifier = Modifier
+            .width(300.dp)
+            .height(48.dp) // Adjust height as needed
+            .background(Color.LightGray)
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Unavailable",
+            style = MaterialTheme.typography.headlineLarge,
+            color = Color.White
+        )
     }
 }
 

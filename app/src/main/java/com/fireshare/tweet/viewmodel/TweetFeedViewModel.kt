@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getUserBase
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -46,9 +47,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // current time, end time is earlier in time, therefore smaller timestamp
     private var startTimestamp = System.currentTimeMillis()
     private var endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
 
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
@@ -91,22 +89,33 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtBottom.value = false
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
         startTimestamp: Long = System.currentTimeMillis(),
-        endTimestamp: Long? = null      // earlier in time
+        sinceTimestamp: Long? = null
     ) {
         viewModelScope.launch(networkDispatcher) {
-            coroutineScope {
-                followings.value.forEach { userId ->
-                    launch {
-                        val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
-                        _tweets.update { currentTweets ->
-                            val newTweets = tweetsList.filterNot { newTweet ->
-                                currentTweets.any { existingTweet -> existingTweet.mid == newTweet.mid }
-                            }
-                            (currentTweets + newTweets).sortedByDescending { it.timestamp }
+            val batchSize = 20 // Adjust batch size as needed
+            val followingsList = followings.value
+
+            followingsList.chunked(batchSize).forEach { batch ->
+                try {
+                    val newTweets = batch.flatMap { userId ->
+                        val user = getUserBase(userId)
+                        if (user != null) {
+                            HproseInstance.getTweetList(user, startTimestamp, sinceTimestamp)
+                        } else {
+                            emptyList()
                         }
+                    }.toSet()
+
+                    _tweets.update { currentTweets ->
+                        (currentTweets + newTweets).sortedByDescending { it.timestamp }
                     }
+                } catch (e: Exception) {
+                    // Handle the exception, e.g., log the error or update the UI
+                    Log.e("GetTweets", "Error fetching tweets", e)
                 }
             }
         }

@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getUserBase
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -144,7 +145,8 @@ class UserViewModel @AssistedInject constructor(
     ) {
         if (userId == TW_CONST.GUEST_ID) return
         viewModelScope.launch(Dispatchers.IO) {
-            val tweetsList = HproseInstance.getTweetList(userId, startTimestamp, endTimestamp)
+            val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
+            val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }
     }

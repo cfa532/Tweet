@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,6 +70,7 @@ fun TweetFeedScreen(
      val listState = rememberLazyListState()
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
      val isAtBottom = layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
+
      LaunchedEffect(isAtBottom) {
          if (isAtBottom) {
              delay(300)
@@ -99,6 +102,19 @@ fun TweetFeedScreen(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
+                }
+                item {
+                    if (tweets.isEmpty()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 60.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .size(120.dp),
+                            color = Color.LightGray,
+                            strokeWidth = 10.dp
+                        )
+                    }
                 }
                 item {
                     if (refreshingAtBottom && tweets.isNotEmpty()) {
