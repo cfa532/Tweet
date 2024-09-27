@@ -48,7 +48,7 @@ fun TweetBlock(
             modifier = Modifier
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 8.dp)
         ) {
-            // Tweet Header
+            // Tweet Header. Icon, name, timestamp, more actions
             TweetItemHeader(tweet)
 
             Surface(

@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -96,25 +98,28 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         sinceTimestamp: Long? = null
     ) {
         viewModelScope.launch(networkDispatcher) {
-            val batchSize = 20 // Adjust batch size as needed
+            val batchSize = 1 // Adjust batch size as needed
             val followingsList = followings.value
 
             followingsList.chunked(batchSize).forEach { batch ->
                 try {
-                    val newTweets = batch.flatMap { userId ->
-                        val user = getUserBase(userId)
-                        if (user != null) {
-                            HproseInstance.getTweetList(user, startTimestamp, sinceTimestamp)
-                        } else {
-                            emptyList()
-                        }
-                    }.toSet()
+                    val newTweets = coroutineScope {
+                        batch.map { userId ->
+                            async {
+                                val user = getUserBase(userId)
+                                if (user != null) {
+                                    HproseInstance.getTweetList(user, startTimestamp, sinceTimestamp)
+                                } else {
+                                    emptyList<Tweet>()
+                                }
+                            }
+                        }.awaitAll().flatten().toSet()
+                    }
 
                     _tweets.update { currentTweets ->
                         (currentTweets + newTweets).sortedByDescending { it.timestamp }
                     }
                 } catch (e: Exception) {
-                    // Handle the exception, e.g., log the error or update the UI
                     Log.e("GetTweets", "Error fetching tweets", e)
                 }
             }

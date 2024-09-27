@@ -56,6 +56,7 @@ android {
 
 dependencies {
 
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
     kapt(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)

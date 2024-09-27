@@ -185,7 +185,7 @@ fun TweetItemHeader(tweet: Tweet) {
         ) {
             IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
             {
-                UserAvatar(author, 32)
+                UserAvatar(author, 36)
             }
             Spacer(modifier = Modifier.padding(horizontal = 2.dp))
             Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
