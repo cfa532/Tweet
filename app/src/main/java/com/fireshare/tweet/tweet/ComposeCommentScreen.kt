@@ -126,8 +126,11 @@ fun ComposeCommentScreen(
                 actions = {
                     val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton( onClick = {
-                        viewModel.uploadComment(localContext, tweetContent, selectedAttachments, tweetViewModel)
-
+                        viewModel.uploadComment(localContext,
+                            tweetContent.trim(),
+                            selectedAttachments,
+                            tweetViewModel
+                        )
                         // clear and return to previous screen
                         selectedAttachments.clear()
                         tweetContent = ""

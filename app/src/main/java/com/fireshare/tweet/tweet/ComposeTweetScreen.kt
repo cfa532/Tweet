@@ -115,7 +115,7 @@ fun ComposeTweetScreen(
                         onClick = {
                             viewModel.uploadTweet(
                                 localContext,
-                                tweetContent,
+                                tweetContent.trim(),
                                 selectedAttachments
                             )
                             navController.popBackStack()
