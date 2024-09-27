@@ -75,7 +75,15 @@ class ChatViewModel @AssistedInject constructor(
             }
             if (news.isNotEmpty()) {
                 repository.insertMessages(news)
-                _chatMessages.update { news.plus(it) }
+                /**
+                 * All outgoing and incoming messages are stored at user's mimei database.
+                 * When fetching new messages, all messages during the last waiting period
+                 * are read. Have to filter out messages sent by appUser, which have benn
+                 * inserted into local database when sending out.
+                 * */
+                _chatMessages.update { it.plus(news.filter { m ->
+                    m.authorId != appUser.mid
+                }) }
                 chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = true)
             }
         }
