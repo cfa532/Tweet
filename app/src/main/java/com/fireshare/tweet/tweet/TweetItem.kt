@@ -140,6 +140,7 @@ fun TweetItem(
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(60.dp))
+                        ShareButton(viewModel)
                     }
                 }
             }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -160,6 +162,30 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 text = "$count",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (hasLiked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+            )
+        }
+    }
+}
+
+@Composable
+fun ShareButton(viewModel: TweetViewModel) {
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+
+    IconButton(onClick = {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
+                guestWarning(context, navController)
+            }
+        } else viewModel.shareTweet(context)
+    })
+    {
+        Row(horizontalArrangement = Arrangement.Center) {
+            Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = "Share",
+                modifier = Modifier.size(ButtonDefaults.IconSize),
+                tint = MaterialTheme.colorScheme.outline
             )
         }
     }

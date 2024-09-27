@@ -1,5 +1,6 @@
 package com.fireshare.tweet.navigation
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -16,6 +17,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.FollowerScreen
@@ -44,15 +46,25 @@ class SharedTweetViewModel : ViewModel() {
 
 @Composable
 fun TweetNavGraph(
+    intent: Intent,
     appUserViewModel: UserViewModel,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+    var startDestination: NavTweet = NavTweet.TweetFeed
+    if (intent.action == Intent.ACTION_VIEW) {
+        val data = intent.data
+        if (data != null) {
+            val tweetId = data.lastPathSegment
+            tweetId?.let { startDestination = NavTweet.TweetDetail(tweetId) }
+            println("intent tweetId $tweetId")
+        }
+    }
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
             modifier = modifier,
             navController = navController,
-            startDestination = NavTweet.TweetFeed,
+            startDestination = startDestination,
             route = NavTwee::class
         ) {
             composable<NavTweet.TweetFeed> {

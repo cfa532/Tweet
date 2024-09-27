@@ -69,8 +69,8 @@ class TweetActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         lifecycleScope.launch {
-            (application as TweetApplication).initJob.await()
-//            scheduleNetworkCheck()
+            (application as TweetApplication).initJob.await()   // wait until network ready
+
             scheduleNetworkCheckJob()
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
@@ -123,7 +123,7 @@ class TweetActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(appUserViewModel)
+                            TweetNavGraph(intent, appUserViewModel)
                             Row(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(innerPadding))
@@ -164,24 +164,6 @@ class TweetActivity : ComponentActivity() {
         val jobScheduler = getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
         jobScheduler.schedule(jobInfo)
     }
-
-//    private fun scheduleNetworkCheck() {
-//        val networkCheckRequest = OneTimeWorkRequestBuilder<ChatWorker>()
-//            .build()
-//
-//        WorkManager.getInstance(this).enqueue(networkCheckRequest)
-//    }
-
-//    private fun scheduleNetworkCheck() {
-//        val networkCheckRequest = PeriodicWorkRequestBuilder<ChatWorker>(15, TimeUnit.MINUTES)
-//            .build()
-//
-//        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-//            "ChatWork",
-//            ExistingPeriodicWorkPolicy.KEEP,
-//            networkCheckRequest
-//        )
-//    }
 }
 
 class ActivityViewModel: ViewModel() {

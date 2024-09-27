@@ -1,9 +1,11 @@
 package com.fireshare.tweet.viewmodel
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -13,6 +15,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadCommentWorker
@@ -155,6 +158,26 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             }
+    }
+
+    fun shareTweet(context: Context) {
+        val baseUrl = TweetApplication.preferenceHelper.getAppUrl() ?: return
+        val segs = baseUrl.split(".")
+        val domain = if (segs.size >= 2) {
+            "${segs[segs.size - 2]}.${segs.last()}"
+        } else {
+            baseUrl // Or provide a default value
+        }
+        val fallback = "?fallback=http://twbe.$domain/entry=render&ver=last&tid=${tweet.mid}"
+        val deepLink = "http://$domain/tweet/${tweet.mid}$fallback"
+        val sendIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, deepLink)
+            type = "text/plain"
+        }
+
+        val shareIntent = Intent.createChooser(sendIntent, null)
+        context.startActivity(shareIntent, null)
     }
 
     fun likeTweet() {
