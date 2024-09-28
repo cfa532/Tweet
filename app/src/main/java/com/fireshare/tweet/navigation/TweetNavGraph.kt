@@ -188,14 +188,14 @@ fun TweetNavGraph(
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
                 println("authorId: $authorId, tweetId: $tweetId")
 
-                val vm = TweetViewModel(Tweet(authorId = authorId, content = "", mid = tweetId), SavedStateHandle())
+//                val vm = TweetViewModel(Tweet(authorId = authorId, content = "", mid = tweetId), SavedStateHandle())
                 val viewModel =
                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                         parentEntry, key = tweetId
                     ) { factory ->
-                        factory.create(Tweet(authorId = authorId, content = ""))
+                        factory.create(Tweet(authorId = authorId, content = "", mid = tweetId))
                     }
-                TweetDetailScreen(vm, parentEntry)
+                TweetDetailScreen(viewModel, parentEntry)
             }
         }
     }

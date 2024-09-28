@@ -35,7 +35,7 @@ fun TweetDetailScreen(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
 
-//    viewModel.loadComments( tweet )
+    viewModel.loadComments( tweet )
     val comments by viewModel.comments.collectAsState()
 
     Scaffold(

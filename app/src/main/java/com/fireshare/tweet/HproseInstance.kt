@@ -541,8 +541,11 @@ object HproseInstance {
      * @param pageNumber
      * @param pageSize
      * */
-    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
+    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
         try {
+            if (tweet.author == null)
+                tweet.author = getUserBase(tweet.authorId) ?: return null
+
             val pageSize = 50
             val method = "get_comments"
             val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last")
