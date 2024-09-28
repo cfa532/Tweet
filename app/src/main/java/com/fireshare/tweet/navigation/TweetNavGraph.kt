@@ -186,15 +186,8 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.toRoute<NavTweet.DeepLink>().tweetId
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
-//                val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                 println("authorId: $authorId, tweetId: $tweetId")
-                val scope = rememberCoroutineScope()
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        val tweet = HproseInstance.getTweet(tweetId, authorId)
-                        println(tweet)
-                    }
-                }
+
                 val vm = TweetViewModel(Tweet(authorId = authorId, content = "", mid = tweetId), SavedStateHandle())
                 val viewModel =
                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
