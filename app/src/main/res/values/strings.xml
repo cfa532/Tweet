@@ -28,4 +28,11 @@
     <string name="unfollow">Unfollow</string>
     <string name="edit">Edit</string>
     <string name="login_follow">Login to follow</string>
+    <string name="seconds_ago">%d seconds ago</string>
+    <string name="minutes_ago">%d minutes ago</string>
+    <string name="hours_ago">%d hours ago</string>
+    <string name="days_ago">%d days ago</string>
+    <string name="weeks_ago">%d weeks ago</string>
+    <string name="months_ago">%d months ago</string>
+    <string name="years_ago">%d years ago</string>
 </resources>

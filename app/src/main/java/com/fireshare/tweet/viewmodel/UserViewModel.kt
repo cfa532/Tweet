@@ -103,17 +103,13 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun toggleFollow(userId: MimeiId, updateFollowed: (MimeiId) -> Unit) {
+    fun toggleFollow(userId: MimeiId) {
         viewModelScope.launch(Dispatchers.IO) {
             // toggle the Following status on the given UserId
             HproseInstance.toggleFollowing(userId)?.let {
                 _followings.update { list ->
                     if (it && !list.contains(userId)) { list + userId }
                     else { list.filter { id -> id != userId }}
-                }
-                HproseInstance.toggleFollower(userId)?.let {
-                    // update account of the followed UserID
-                    updateFollowed(userId)
                 }
             }
         }

@@ -100,11 +100,11 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 0.dp)
             ) {
                 Column {
-                    if (tweet.content?.isNotEmpty() == true)
-                    tweet.content?.let {
-                        Text(text = it, style = MaterialTheme.typography.bodyLarge)
+                    if (tweet.content?.isNotEmpty() == true) {
+                        tweet.content?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
-
                     val mediaItems = tweet.attachments?.mapNotNull {
                         tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
                             ?.let { it2 -> MediaItem(it2) }

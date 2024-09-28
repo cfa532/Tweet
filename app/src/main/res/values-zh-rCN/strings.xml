@@ -29,4 +29,11 @@
     <string name="unfollow">取关</string>
     <string name="edit">编辑</string>
     <string name="login_follow">登录后关注</string>
+    <string name="seconds_ago">%d秒</string>
+    <string name="minutes_ago">%d分</string>
+    <string name="hours_ago">%d小时</string>
+    <string name="days_ago">%d天</string>
+    <string name="weeks_ago">%d周</string>
+    <string name="months_ago">%d月</string>
+    <string name="years_ago">%d年</string>
 </resources>

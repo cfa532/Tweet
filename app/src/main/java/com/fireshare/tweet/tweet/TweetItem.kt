@@ -150,32 +150,3 @@ fun TweetItem(
         }
     }
 }
-
-// Tweet header when displayed as an item in a list.
-@Composable
-fun TweetItemHeader(tweet: Tweet) {
-    // Use a Row to align author name and potential verification badge
-    val navController = LocalNavController.current
-    val author = tweet.author
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-            {
-                UserAvatar(author, 36)
-            }
-            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-            Text(text = author?.name ?: "No One", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-            Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
-        }
-
-        // the 3 dots at the right end
-        TweetDropdownMenu(tweet, navController)
-    }
-}

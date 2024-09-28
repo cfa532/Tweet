@@ -63,7 +63,7 @@ object Gadget {
                 null
             }
         } catch (e: IOException) {
-            e.printStackTrace()
+            Log.e("downloadFileHeader", "Failed to download file header: $url")
             null
         }
     }

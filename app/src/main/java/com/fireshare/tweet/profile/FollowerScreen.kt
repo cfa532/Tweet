@@ -185,9 +185,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId) {
-
-                    }
+                    appUserViewModel.toggleFollow(userId)
                 })
                 .border(
                     width = 1.dp,

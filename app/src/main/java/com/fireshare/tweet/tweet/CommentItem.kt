@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.appUser
@@ -80,10 +81,16 @@ fun CommentItem(
                     UserAvatar(author, 32)
                 }
                 Text(text = author?.name ?: "No One",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = 2.dp, end = 2.dp))
+                    modifier = Modifier.padding(horizontal = 0.dp),
+                    style = MaterialTheme.typography.labelMedium
+                )
                 Text(text = "@${author?.username}",
-                    style = MaterialTheme.typography.bodySmall)
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text( text = " • ", fontSize = 12.sp)
+                Text(text = localizedTimeDifference(comment.timestamp),
+                    style = MaterialTheme.typography.labelSmall)
             }
             CommentDropdownMenu(comment, parentTweetViewModel)
         }

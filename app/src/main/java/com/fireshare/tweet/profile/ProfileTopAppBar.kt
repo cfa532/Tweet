@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
@@ -14,12 +16,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -126,7 +131,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
                     }
                 }
             }
-        },
+        }
     )
 }
 
@@ -138,11 +143,14 @@ fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostControll
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val buttonText = remember { mutableStateOf("Follow") }
+    val context = LocalContext.current
 
     LaunchedEffect(followings) {
-        buttonText.value = if (user.mid == appUser.mid) "Edit"
-        else if (followings.contains(user.mid)) "Unfollow"
-        else "Follow"
+        buttonText.value = when {
+            user.mid == appUser.mid -> context.getString(R.string.edit)
+            followings.contains(user.mid) -> context.getString(R.string.unfollow)
+            else -> context.getString(R.string.follow)
+        }
     }
 
     Row(modifier = Modifier.padding(bottom = 4.dp)) {
@@ -150,17 +158,15 @@ fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostControll
         Button(
             onClick = {
                 when (buttonText.value) {
-                    "Edit" -> navController.navigate(ProfileEditor)
+                    context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                     else -> {
                         if (appUser.mid != TW_CONST.GUEST_ID)
-                            appUserViewModel.toggleFollow(user.mid) {
-
-                            }
+                            appUserViewModel.toggleFollow(user.mid)
                         else {
                             val event = SnackbarEvent(
-                                message = "Login to follow.",
+                                message = context.getString(R.string.login_follow),
                                 action = SnackbarAction(
-                                    name = "Go!",
+                                    name = context.getString(R.string.go),
                                     action = { navController.navigate(NavTweet.Login) }
                                 )
                             )
@@ -169,16 +175,14 @@ fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostControll
                     }
                 }
             },
-            modifier = Modifier.width(IntrinsicSize.Min)
+            colors = ButtonColors(containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                disabledContentColor = Color.Gray, disabledContainerColor = Color.White),
+            modifier = Modifier.size(width = 70.dp, height = 30.dp)
+                .padding(0.dp)
         ) {
-            Text(text = buttonText.value)
+            Text(text = buttonText.value,
+                style = MaterialTheme.typography.labelSmall)
         }
     }
-}
-
-// Define a sealed class for button actions
-sealed class ButtonAction {
-    object Edit : ButtonAction()
-    object Unfollow : ButtonAction()
-    object Follow : ButtonAction()
 }
