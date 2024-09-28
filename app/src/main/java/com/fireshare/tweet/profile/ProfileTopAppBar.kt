@@ -31,12 +31,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
@@ -59,7 +62,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
     LargeTopAppBar(
         title = {
             Row(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
                     .padding(end = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
@@ -170,4 +174,11 @@ fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostControll
             Text(text = buttonText.value)
         }
     }
+}
+
+// Define a sealed class for button actions
+sealed class ButtonAction {
+    object Edit : ButtonAction()
+    object Unfollow : ButtonAction()
+    object Follow : ButtonAction()
 }

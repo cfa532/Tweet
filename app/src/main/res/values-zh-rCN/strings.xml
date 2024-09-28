@@ -25,4 +25,8 @@
     <string name="key_phrase_warning">口令是账户中唯一不可变的信息。在新设备上登录或更改用户名时需要提供。请妥善保管，系统不会存储。请选择难忘的个性化内容。</string>
     <string name="forwarded">转发</string>
     <string name="go">前往>></string>
+    <string name="follow">关注</string>
+    <string name="unfollow">取关</string>
+    <string name="edit">编辑</string>
+    <string name="login_follow">登录后关注</string>
 </resources>

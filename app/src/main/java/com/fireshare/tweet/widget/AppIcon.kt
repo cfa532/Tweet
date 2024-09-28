@@ -24,7 +24,7 @@ import com.fireshare.tweet.datamodel.User
 @Composable
 fun AppIcon() {
     Image(
-        painter = rememberAsyncImagePainter(R.drawable.ic_app_icon),
+        painter = rememberAsyncImagePainter(R.drawable.ic_app_logo),
         contentDescription = "App Icon",
         modifier = Modifier
             .size(36.dp)

@@ -24,4 +24,8 @@
     <string name="key_phrase_warning">The key phrase is the only immutable information for your account. You will need it to log in on a new machine or change your username. Keep it safe and secure, as the system will not store it for you. Choose its content wisely.</string>
     <string name="forwarded">forwarded</string>
     <string name="go">Go>></string>
+    <string name="follow">Follow</string>
+    <string name="unfollow">Unfollow</string>
+    <string name="edit">Edit</string>
+    <string name="login_follow">Login to follow</string>
 </resources>

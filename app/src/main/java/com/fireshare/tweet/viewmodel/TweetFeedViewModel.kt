@@ -57,7 +57,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-        _tweets.value = emptyList()
+//        _tweets.value = emptyList()
         viewModelScope.launch(Dispatchers.IO) {
             _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
             _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
@@ -75,7 +75,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun loadNewerTweets() {
         println("At top already")
         _isRefreshing.value = true
-        val endTimestamp = startTimestamp
+//        val endTimestamp = startTimestamp
         startTimestamp = System.currentTimeMillis()
         Log.d("TweetFeedVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets(startTimestamp, endTimestamp)
@@ -97,23 +97,26 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         startTimestamp: Long = System.currentTimeMillis(),
         sinceTimestamp: Long? = null
     ) {
-        viewModelScope.launch(networkDispatcher) {
-            val batchSize = 1 // Adjust batch size as needed
-            followings.value.chunked(batchSize).forEach { batch ->
+        val batchSize = 10 // Adjust batch size as needed
+        followings.value.chunked(batchSize).forEach { batch ->
+            viewModelScope.launch(networkDispatcher) {
                 try {
-                    val newTweets = coroutineScope {
-                        batch.map { userId ->
-                            async {
+                    val newTweets = batch.flatMap { userId ->
+                        async {
+                            try {
                                 getUserBase(userId)?.let {
-                                    Log.d("TweetFeedVM.getTweets", "Fetching tweets for user: $userId")
                                     HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
                                 } ?: emptyList()
+                            } catch (e: Exception) {
+                                Log.e("GetTweets", "Error fetching tweets for user: $userId", e)
+                                emptyList()
                             }
-                        }.awaitAll().flatten().toSet()
+                        }.await()
                     }
-
                     _tweets.update { currentTweets ->
-                        (currentTweets + newTweets).sortedByDescending { it.timestamp }
+                        (currentTweets + newTweets)
+                            .distinctBy { it.mid }
+                            .sortedByDescending { it.timestamp }
                     }
                 } catch (e: Exception) {
                     Log.e("GetTweets", "Error fetching tweets", e)
