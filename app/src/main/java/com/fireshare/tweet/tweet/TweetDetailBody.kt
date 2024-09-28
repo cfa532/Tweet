@@ -57,7 +57,6 @@ import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
 fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
     Surface(
@@ -91,7 +90,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, tweetFeedViewModel, navController)
+                TweetDropdownMenu(tweet, navController)
             }
             // Tweet detail's content
             Spacer(modifier = Modifier.padding(2.dp))
@@ -169,7 +168,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 }
 
 @Composable
-fun TweetDropdownMenu(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, navController: NavController) {
+fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
@@ -190,7 +189,9 @@ fun TweetDropdownMenu(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, navC
                 .height(IntrinsicSize.Min)
         ) {
             if (tweet.author?.mid == appUser.mid) {
-                DropdownMenuItem( modifier = Modifier.alpha(0.7f),
+                val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+                DropdownMenuItem(
+                    modifier = Modifier.alpha(0.7f),
                     onClick = {
                         tweet.mid?.let {
                             tweetFeedViewModel.delTweet(it)

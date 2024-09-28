@@ -151,29 +151,10 @@ fun TweetItem(
     }
 }
 
-@Composable
-fun UnavailableTweet() {
-    Box(
-        modifier = Modifier
-            .width(300.dp)
-            .height(48.dp) // Adjust height as needed
-            .background(Color.LightGray)
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Unavailable",
-            style = MaterialTheme.typography.headlineLarge,
-            color = Color.White
-        )
-    }
-}
-
 // Tweet header when displayed as an item in a list.
 @Composable
 fun TweetItemHeader(tweet: Tweet) {
     // Use a Row to align author name and potential verification badge
-    val viewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
     val author = tweet.author
 
@@ -195,6 +176,6 @@ fun TweetItemHeader(tweet: Tweet) {
         }
 
         // the 3 dots at the right end
-        TweetDropdownMenu(tweet, viewModel, navController)
+        TweetDropdownMenu(tweet, navController)
     }
 }

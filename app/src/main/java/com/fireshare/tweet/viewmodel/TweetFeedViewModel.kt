@@ -54,9 +54,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
     }
-    init {
-        refresh()
-    }
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
@@ -69,6 +66,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
             startTimestamp = System.currentTimeMillis()
             endTimestamp = startTimestamp - java.lang.Long.valueOf(THIRTY_DAYS_IN_MILLIS)
+            Log.d("TweetFeedVM.refresh", "${followings.value}")
             getTweets(startTimestamp, endTimestamp)
             _isRefreshing.value = false
         }
@@ -79,6 +77,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshing.value = true
         val endTimestamp = startTimestamp
         startTimestamp = System.currentTimeMillis()
+        Log.d("TweetFeedVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets(startTimestamp, endTimestamp)
         _isRefreshing.value = false
     }
@@ -87,6 +86,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
         endTimestamp = startTimestamp - java.lang.Long.valueOf(SEVEN_DAYS_IN_MILLIS)
+        Log.d("TweetFeedVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets(startTimestamp, endTimestamp)
         _isRefreshingAtBottom.value = false
     }
@@ -99,14 +99,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     ) {
         viewModelScope.launch(networkDispatcher) {
             val batchSize = 1 // Adjust batch size as needed
-            val followingsList = followings.value
-
-            followingsList.chunked(batchSize).forEach { batch ->
+            followings.value.chunked(batchSize).forEach { batch ->
                 try {
                     val newTweets = coroutineScope {
                         batch.map { userId ->
                             async {
                                 getUserBase(userId)?.let {
+                                    Log.d("TweetFeedVM.getTweets", "Fetching tweets for user: $userId")
                                     HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
                                 } ?: emptyList()
                             }

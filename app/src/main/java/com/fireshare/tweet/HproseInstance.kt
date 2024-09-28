@@ -232,6 +232,7 @@ object HproseInstance {
                 val providers = response.body?.string() ?: return null
                 val providerList = Json.parseToJsonElement(providers).jsonArray
                 if (providerList.isNotEmpty()) {
+                    Log.d("getUserBase()", "UserId=$userId")
                     Log.d("getUserBase()", providerList.toString())
                     val ipAddresses = providerList[0] as JsonArray
                     getFirstReachableUri(
@@ -703,7 +704,7 @@ object HproseInstance {
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
                 user.baseUrl = "http://$ip"
-                Log.d("isReachable()", "user=$user")
+                Log.d("isReachable()", "TRUE: user=$user")
                 return user
             }
         } catch (e: Exception) {

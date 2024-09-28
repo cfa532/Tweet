@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -140,9 +141,11 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun getTweets() {
-        if (userId == TW_CONST.GUEST_ID) return
+        if (userId == TW_CONST.GUEST_ID)
+            return
         viewModelScope.launch(Dispatchers.IO) {
             val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
+            Log.d("UserViewModel.getTweets()", "user=$user")
             val tweetsList = HproseInstance.getTweetList(user, startTimestamp.longValue, endTimestamp.longValue)
             _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }

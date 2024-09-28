@@ -105,6 +105,7 @@ fun TweetFeedScreen(
                 }
                 item {
                     if (tweets.isEmpty()) {
+                        viewModel.refresh()
                         CircularProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
