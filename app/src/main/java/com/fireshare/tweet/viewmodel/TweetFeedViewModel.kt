@@ -106,12 +106,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     val newTweets = coroutineScope {
                         batch.map { userId ->
                             async {
-                                val user = getUserBase(userId)
-                                if (user != null) {
-                                    HproseInstance.getTweetList(user, startTimestamp, sinceTimestamp)
-                                } else {
-                                    emptyList<Tweet>()
-                                }
+                                getUserBase(userId)?.let {
+                                    HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
+                                } ?: emptyList()
                             }
                         }.awaitAll().flatten().toSet()
                     }

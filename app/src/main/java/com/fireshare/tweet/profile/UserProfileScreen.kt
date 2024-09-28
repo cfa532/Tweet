@@ -41,6 +41,9 @@ fun UserProfileScreen(
         factory.create(userId)
     }
     val tweets by userViewModel.tweets.collectAsState()
+    LaunchedEffect(Unit) {
+        userViewModel.getTweets()
+    }
 
     Scaffold(
         topBar = { ProfileTopAppBar(userViewModel, navController, parentEntry) },

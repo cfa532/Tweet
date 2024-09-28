@@ -1,4 +1,4 @@
-package com.fireshare.tweet
+package com.fireshare.tweet.navigation
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,8 +42,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.navigation.LocalViewModelProvider
-import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
@@ -57,6 +54,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.R
+import com.fireshare.tweet.TweetApplication
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {

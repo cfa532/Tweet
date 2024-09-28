@@ -48,15 +48,35 @@ class TweetViewModel @AssistedInject constructor(
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
+    init {
+        /**
+         * Usually a tweet object has been well populated in the tweet feed list.
+         * However if invoked by Deeplink, the tweet object has to be initiated.
+         * */
+        if (tweetState.value.author == null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                tweet.mid?.let {
+                    HproseInstance.getTweet(it, tweet.authorId)?.let { tweet ->
+                        _tweetState.value = tweet
+                    }
+                }
+            }
+        }
+    }
+
+    // when composing a comment, also post is as a tweet or not.
     val isCheckedToTweet = mutableStateOf(false)
     fun onCheckedChange(value: Boolean) {
         isCheckedToTweet.value = value
     }
 
+    /**
+     * When browsing attachments in MediaBrowser, track route stack,
+     * in order to go back to the correct Tweet in the feed list directly.
+     * */
     fun savePreviousRoute(route: String) {
         savedStateHandle["previousRoute"] = route
     }
-
     fun getPreviousRoute(): String? {
         return savedStateHandle["previousRoute"]
     }
@@ -169,7 +189,7 @@ class TweetViewModel @AssistedInject constructor(
             baseUrl // Or provide a default value
         }
         val fallback = "?fallback=http://twbe.$domain/entry=render&ver=last&tid=${tweet.mid}"
-        val deepLink = "http://$domain/tweet/${tweet.mid}$fallback"
+        val deepLink = "http://$domain/tweet/${tweet.authorId}/${tweet.mid}$fallback"
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, deepLink)

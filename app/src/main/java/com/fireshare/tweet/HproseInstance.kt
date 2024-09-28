@@ -50,7 +50,7 @@ object HproseInstance {
         level = HttpLoggingInterceptor.Level.BODY
     }
     val httpClient = OkHttpClient.Builder()
-        .addInterceptor(loggingInterceptor)
+//        .addInterceptor(loggingInterceptor)
         .build()
 
     fun init(context: Context, preferenceHelper: PreferenceHelper) {
@@ -60,6 +60,7 @@ object HproseInstance {
             val pair = initAppEntry(preferenceHelper)       // load default url: twbe.fireshare.us
             appId = pair.first
             BASE_URL = pair.second
+            Log.d("HproseInstance.init()", "AppID=$appId, BaseURL=$BASE_URL")
             preferenceHelper.setAppId(appId)
         } catch (e: Exception) {
             appId = preferenceHelper.getAppId().toString()
@@ -88,8 +89,8 @@ object HproseInstance {
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
     private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String?> {
-        var baseUrl = preferenceHelper.getAppUrl().toString()
-        val request = Request.Builder().url("http://$baseUrl").build()
+        val baseUrl = preferenceHelper.getAppUrl().toString()
+        val request = Request.Builder().url("https://$baseUrl").build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             // retrieve window.Param from page source code of http://base_url
@@ -264,9 +265,8 @@ object HproseInstance {
             // update existing account
             val method = "set_author_core_data"
             val tmp = User(mid = appUser.mid, name = appUser.name,
-                followingCount = appUser.followingCount,
                 username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
-                timestamp = appUser.timestamp, fansCount = appUser.fansCount
+                timestamp = appUser.timestamp
             )
             url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
                 Json.encodeToString(tmp)
@@ -385,7 +385,7 @@ object HproseInstance {
         emptyList()
     }
 
-    private suspend fun getTweet(
+    suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {

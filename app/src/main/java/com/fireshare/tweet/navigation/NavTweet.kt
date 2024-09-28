@@ -20,15 +20,6 @@ object ProfileEditor
 
 @Serializable
 sealed interface NavTweet {
-    val route: String
-        get() = "nav_tweet/${this::class.simpleName}" +
-                if (this is TweetDetail) "/${this.tweetId}"
-                else if (this is ChatBox) "/${this.receiptId}"
-                else if (this is UserProfile) "/${this.userId}"
-                else if (this is Following) "/${this.userId}"
-                else if (this is Follower) "/${this.userId}"
-                else if (this is MediaViewer) "/${this.params}"
-                else ""
 
     @Serializable
     data object TweetFeed : NavTweet
@@ -62,6 +53,9 @@ sealed interface NavTweet {
 
     @Serializable
     data class MediaViewer(val params: MediaViewerParams) : NavTweet
+
+    @Serializable
+    data class DeepLink(val tweetId: MimeiId, val authorId: MimeiId) : NavTweet
 }
 
 @Serializable

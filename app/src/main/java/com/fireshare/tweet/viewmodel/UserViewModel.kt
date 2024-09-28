@@ -133,20 +133,17 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value = HproseInstance.getUserBase(userId) ?: return@launch
-                getTweets(startTimestamp.longValue, endTimestamp.longValue)
+                _user.value = getUserBase(userId) ?: return@launch
+//                getTweets(startTimestamp.longValue, endTimestamp.longValue)
             }
         }
     }
 
-    private fun getTweets(
-        startTimestamp: Long = System.currentTimeMillis(),
-        endTimestamp: Long? = null
-    ) {
+    fun getTweets() {
         if (userId == TW_CONST.GUEST_ID) return
         viewModelScope.launch(Dispatchers.IO) {
             val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
-            val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
+            val tweetsList = HproseInstance.getTweetList(user, startTimestamp.longValue, endTimestamp.longValue)
             _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }
     }
