@@ -104,15 +104,6 @@ object Gadget {
         ips.awaitAll().firstOrNull { it != null }
     }
 
-    fun removeParentheses(jsonElement: JsonElement): String {
-        return when (jsonElement) {
-            is JsonPrimitive -> jsonElement.content
-            is JsonObject -> jsonElement.toString() // For objects, you might want to handle specific properties
-            is JsonArray -> jsonElement.joinToString(", ") { removeParentheses(it) } // Recursively handle array elements
-            else -> "" // Handle other types as needed
-        }
-    }
-
     suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {
         return attachments.map { uri ->
             withContext(IO) {

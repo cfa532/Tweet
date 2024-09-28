@@ -90,8 +90,8 @@ object HproseInstance {
     // Given entry URL, initiate appId, and BASE_URL.
     private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String?> {
         val baseUrl = preferenceHelper.getAppUrl().toString()
-        val request = Request.Builder().url("https://$baseUrl").build()
-        val response = httpClient.newCall(request).execute()
+        var request = Request.Builder().url("https://$baseUrl").build()
+        var response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             // retrieve window.Param from page source code of http://base_url
             val htmlContent = response.body?.string()?.trimIndent()
@@ -107,9 +107,15 @@ object HproseInstance {
                 // Step 2: Parse the extracted string into a Kotlin map
                 val gson = Gson()
                 val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
-                val ips = ((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>).map { (it as ArrayList<*>)[0] as String }
 
-                return Pair(paramMap["mid"] as MimeiId, "http://${ips[1]}")     // should have been 0, but 1 is safe.
+                request =
+                    Request.Builder().url("http://$baseUrl/getvar?name=domainaddr&arg0=$baseUrl")
+                        .build()
+                response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val addrs = response.body?.string()?.trim()?.removeSurrounding("\"")
+                    return Pair(paramMap["mid"] as MimeiId, "http://$addrs")
+                }
             } else {
                 Log.e("initAppEntry", "No data found within window.setParam()")
             }
@@ -237,7 +243,7 @@ object HproseInstance {
                     val ipAddresses = providerList[0] as JsonArray
                     getFirstReachableUri(
                         ipAddresses.map {
-                            Gadget.removeParentheses((it as JsonArray)[0])
+                            (it as JsonArray)[0].toString().trim().removeSurrounding("\"")
                         }, userId
                     )?.let { u ->
                         cachedUsers.add(u)
