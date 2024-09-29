@@ -19,8 +19,10 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
@@ -61,26 +63,22 @@ fun TweetBlock(
                     .padding(start = 20.dp, top = 2.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
-
                     // Text content of the tweet
                     if (tweet.content?.isNotEmpty() == true) {
                         tweet.content?.let { txt ->
-                            val isExpanded by remember { mutableStateOf(false) }
-                            val maxLines = if (isExpanded) Int.MAX_VALUE else 11
+                            var isExpanded by remember { mutableStateOf(false) }
+                            val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                             Text(
                                 text = txt,
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = maxLines,
-//                                overflow = TextOverflow.Ellipsis
                             )
-
-                            if (!isExpanded && txt.lines().size > 10) {
+                            if (!isExpanded) {
                                 Text(
                                     text = stringResource(R.string.show_more),
                                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
                                     modifier = Modifier.clickable {
-//                                        isExpanded = true
-                                        tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
+                                        isExpanded = true
                                     }
                                 )
                             }

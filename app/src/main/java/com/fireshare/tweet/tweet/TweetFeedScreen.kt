@@ -89,7 +89,7 @@ fun TweetFeedScreen(
              modifier = Modifier
                  .pullRefresh(pullRefreshState)
                  .fillMaxSize()
-                 .nestedScroll(scrollBehavior.nestedScrollConnection)
+//                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                  .padding(innerPadding),
          ) {
              LazyColumn(
@@ -98,6 +98,7 @@ fun TweetFeedScreen(
              ) {
                  items(tweets) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+
                      HorizontalDivider(
                          modifier = Modifier.padding(bottom = 8.dp),
                          thickness = 0.5.dp,
