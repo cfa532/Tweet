@@ -74,8 +74,7 @@ fun TweetFeedScreen(
      val isAtBottom =
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
      LaunchedEffect(isAtBottom) {
-         if (isAtBottom) {
-             delay(300)
+         if (isAtBottom && tweets.isNotEmpty()) {
              viewModel.loadOlderTweets()
          }
      }

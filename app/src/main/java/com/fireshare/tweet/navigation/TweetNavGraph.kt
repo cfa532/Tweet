@@ -178,7 +178,8 @@ fun TweetNavGraph(
                 FollowerScreen(userViewModel, appUserViewModel)
             }
             /**
-             * Deeplink carries the tweetId only. Need to attract tweet data, then authorId.
+             * Deeplink carries the tweetId and authorId only.
+             * Need to extract tweet data from Mimei DB.
              * */
             composable<NavTweet.DeepLink> {
                 val parentEntry = remember(it) {

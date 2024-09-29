@@ -158,8 +158,6 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun getTweets() {
-        if (userId == TW_CONST.GUEST_ID)
-            return
         viewModelScope.launch(Dispatchers.IO) {
             val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
             Log.d("UserViewModel.getTweets()", "user=$user")

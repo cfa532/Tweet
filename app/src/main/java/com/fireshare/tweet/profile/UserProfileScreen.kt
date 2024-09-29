@@ -77,8 +77,7 @@ fun UserProfileScreen(
         layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom) {
-            delay(300)
+        if (isAtBottom && tweets.isNotEmpty()) {
             viewModel.loadOlderTweets()
         }
     }
@@ -89,7 +88,7 @@ fun UserProfileScreen(
 
     Scaffold(
         topBar = { ProfileTopAppBar(viewModel, navController, parentEntry, scrollBehavior) },
-        bottomBar = { BottomNavigationBar(navController, 1) }
+        bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
         Box(
             modifier = Modifier
