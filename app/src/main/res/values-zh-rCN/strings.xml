@@ -36,4 +36,7 @@
     <string name="weeks_ago">%d周</string>
     <string name="months_ago">%d月</string>
     <string name="years_ago">%d年</string>
+    <string name="fans">粉丝</string>
+    <string name="posts">帖子</string>
+    <string name="show_more">更多。。。</string>
 </resources>

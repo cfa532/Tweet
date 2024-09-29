@@ -36,10 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
@@ -107,7 +109,7 @@ fun UserProfileScreen(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
-
+                    // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
                 }
                 items(tweets) { tweet ->
@@ -119,25 +121,26 @@ fun UserProfileScreen(
                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
                 item {
-                    if (tweets.isEmpty()) {
+                    if (refreshingAtTop) {
                         CircularProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 60.dp)
                                 .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(120.dp),
+                                .size(80.dp),
                             color = Color.LightGray,
-                            strokeWidth = 10.dp
+                            strokeWidth = 8.dp
                         )
                     }
                 }
                 item {
-                    if (refreshingAtBottom && tweets.isNotEmpty()) {
+                    if (refreshingAtBottom) {
                         CircularProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(16.dp)
                                 .wrapContentWidth(Alignment.CenterHorizontally)
+                                .align(Alignment.BottomCenter)
                         )
                     }
                 }
@@ -170,7 +173,7 @@ fun ProfileDetail(
     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
         Text(
             text = user.name ?: "No one",
-            style = MaterialTheme.typography.titleLarge
+            style = MaterialTheme.typography.titleMedium
         )
         Text(
             text = "@" + (user.username ?: "NoOne"),
@@ -184,20 +187,23 @@ fun ProfileDetail(
         )
         Row {
             Text(
-                text = "${fansList.count()} Followers",
-                style = MaterialTheme.typography.titleSmall,
+                text = "${fansList.count()} ${stringResource(R.string.fans)}",
+                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.clickable(onClick = {
                     navController.navigate((NavTweet.Follower(user.mid)))
                 })
             )
-            Spacer(modifier = Modifier.padding(horizontal = 20.dp))
-
             Text(
-                text = "${followingsList.count()} Following",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.clickable(onClick = {
+                text = "${followingsList.count()} ${stringResource(R.string.follow)}",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 20.dp)
+                    .clickable(onClick = {
                     navController.navigate(NavTweet.Following(user.mid))
                 }),
+            )
+            Text(
+                text = "${user.tweetCount} ${stringResource(R.string.posts)}",
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }

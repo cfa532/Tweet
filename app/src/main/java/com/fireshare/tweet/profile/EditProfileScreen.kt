@@ -52,6 +52,7 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.delay
 
 @Composable
 fun EditProfileScreen(
@@ -68,6 +69,7 @@ fun EditProfileScreen(
     val profile by viewModel.profile
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
+
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -81,6 +83,9 @@ fun EditProfileScreen(
 
     LaunchedEffect(Unit) {
 //        focusRequester.requestFocus()
+        delay(300)
+        if (!viewModel.isLoggedIn())
+            viewModel.hidePhrase()
         keyboardController?.show()
     }
 
@@ -206,7 +211,7 @@ fun AvatarSection(user: User, launcher: ManagedActivityResultLauncher<String, Ur
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(user, 150)
+            UserAvatar(user, 120)
         }
     }
 }

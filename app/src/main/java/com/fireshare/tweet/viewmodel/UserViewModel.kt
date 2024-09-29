@@ -89,6 +89,16 @@ class UserViewModel @AssistedInject constructor(
         getTweets()
         _isRefreshingAtBottom.value = false
     }
+    fun isLoggedIn(): Boolean {
+        // check if the current user is guest user.
+        val log = preferencesHelper.getUserId()
+        return log.isEmpty() || log != TW_CONST.GUEST_ID
+    }
+    fun hidePhrase() {
+        // Even after user logout, its key phrase may still on the device,
+        // for future convenience. Hide it in case someone else tries to register a new account.
+        keyPhrase.value = ""
+    }
 
     fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -202,7 +212,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun logout() {
-        appUser = User(mid = TW_CONST.GUEST_ID)
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = HproseInstance.BASE_URL)
         appUser.followingList = HproseInstance.getAlphaIds()
         preferencesHelper.setUserId(null)
     }
@@ -227,7 +237,9 @@ class UserViewModel @AssistedInject constructor(
                             message = "Registration succeeded."
                         )
                         showSnackbar(event)
-                        popBack()
+                        viewModelScope.launch(Dispatchers.Main) {
+                            popBack()
+                        }
                     } else {
                         val event = SnackbarEvent(
                             message = "User profile updated successfully"

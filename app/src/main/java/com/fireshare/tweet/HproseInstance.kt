@@ -31,7 +31,7 @@ import java.util.regex.Pattern
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
-    private var BASE_URL: String? = null    // in case no network
+    var BASE_URL: String? = null    // in case no network
     private lateinit var preferenceHelper: PreferenceHelper
 
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
@@ -69,13 +69,15 @@ object HproseInstance {
         } finally {
             val userId = preferenceHelper.getUserId()
 
-            if (userId != TW_CONST.GUEST_ID) {
-                // There is a registered user. Initiate account data.
+            if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
+
+                // There is a logon user if preference has valid userId. Initiate current account.
                 initCurrentUser(userId)?.let {
                     appUser = it
                     cachedUsers.add(it) // the list shall be empty now.
                 }
             } else {
+                appUser.mid = TW_CONST.GUEST_ID
                 appUser.baseUrl = BASE_URL
             }
             database = Room.databaseBuilder(
@@ -119,15 +121,17 @@ object HproseInstance {
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
                 }
+                return Pair(preferenceHelper.getAppId().toString(), null)
             }
         } catch (e: Exception) {
             Log.e("initAppEntry", e.toString())
+            return Pair(preferenceHelper.getAppId().toString(), null)
         }
         Log.e("initAppEntry", "Failed to get AppId, using default ones.")
         return Pair(preferenceHelper.getAppId().toString(), null)
     }
 
-    // only used for registered user, that has userId in preference.
+    // only used for registered user, whose preferenceHelper has userId in preference.
     // if preferenceHelper has current User'd ID, the user is in logon status.
     private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
         if (userId == null && keyPhrase.isEmpty()) return null
@@ -175,6 +179,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Log.e("sendMessage", e.toString())
+            return
         }
     }
 
@@ -272,8 +277,8 @@ object HproseInstance {
                 val providers = response.body?.string() ?: return null
                 val providerList = Json.parseToJsonElement(providers).jsonArray
                 if (providerList.isNotEmpty()) {
-                    Log.d("getUserBase()", "UserId=$userId")
-                    Log.d("getUserBase()", providerList.toString())
+                    Log.d("getUserBase", "UserId=$userId")
+                    Log.d("getUserBase", providerList.toString())
                     val ipAddresses = providerList[0] as JsonArray
                     getFirstReachableUri(
                         ipAddresses.map {
@@ -287,7 +292,7 @@ object HproseInstance {
             }
             return null
         } catch (e: Exception) {
-            Log.e("getUserBase()", e.toString())
+            Log.e("getUserBase()", "$BASE_URL $userId $e")
             return null
         }
     }
@@ -632,6 +637,10 @@ object HproseInstance {
         } catch (e: ProtocolException) {
             // handle network failure (e.g., show an error message)
             Log.e("getComments()", "Network failure: Unexpected status line", e)
+            return null
+        } catch (e: Exception) {
+            Log.e("getComments()", "Error: ${e.message}", e)
+            return null
         }
         return null
     }
@@ -789,11 +798,12 @@ object HproseInstance {
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
                 user.baseUrl = "http://$ip"
-                Log.d("isReachable()", "TRUE: user=$user")
+                Log.d("isReachable", "TRUE: user=$user")
                 return user
             }
         } catch (e: Exception) {
-            Log.e("Gadget.isReachable", e.toString())
+            Log.e("isReachable", "No reachable. $ip $e")
+            return null
         }
         return null
     }

@@ -35,4 +35,7 @@
     <string name="weeks_ago">%d weeks ago</string>
     <string name="months_ago">%d months ago</string>
     <string name="years_ago">%d years ago</string>
+    <string name="fans">Followers</string>
+    <string name="posts">Tweet</string>
+    <string name="show_more">Show more....</string>
 </resources>

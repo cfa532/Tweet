@@ -20,8 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.HproseInstance.getMediaUrl
+import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -67,14 +69,14 @@ fun TweetBlock(
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 11
                             Text(
                                 text = txt,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.labelLarge,
                                 maxLines = maxLines,
 //                                overflow = TextOverflow.Ellipsis
                             )
 
                             if (!isExpanded && txt.lines().size > 10) {
                                 Text(
-                                    text = "Show more...",
+                                    text = stringResource(R.string.show_more),
                                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
                                     modifier = Modifier.clickable {
 //                                        isExpanded = true
@@ -89,13 +91,11 @@ fun TweetBlock(
                         modifier = Modifier.fillMaxWidth()
                             .heightIn(max = 800.dp) // Set a specific height for the grid
                     ) {
-                        val mediaItems = remember(tweet.mid) { // Remember based on tweet ID
-                            attachments?.mapNotNull {
-                                tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                                    ?.let { it2 -> MediaItem(it2) }
-                            }
+                        val mediaItems = tweet.attachments?.mapNotNull {
+                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
+                                ?.let { it2 -> MediaItem(it2) }
                         }
-                        if (mediaItems != null) {
+                        if (tweet.mid != null && mediaItems != null) {
                             MediaPreviewGrid(mediaItems, tweet.mid!!)
                         }
                     }

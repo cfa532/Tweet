@@ -76,7 +76,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                UserAvatar(user, 90)
+                UserAvatar(user, 80)
                 ProfileTopBarButton(viewModel, navController, parentEntry)
             }
         },

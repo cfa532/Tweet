@@ -86,20 +86,26 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWid
     LazyVerticalGrid(
         columns = GridCells.Fixed(gridCells),
         modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.Black)
             .padding(bottom = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
+        val modifier = if (gridCells == 1) Modifier.fillMaxWidth().aspectRatio(16f/9f)
+                        else Modifier.size(containerWidth/gridCells)
         items(limitedMediaList) { mediaItem ->
             MediaItemPreview(mediaItem,
-                Modifier.size(containerWidth/gridCells)
-                    .clip(RoundedCornerShape(4.dp))
+                modifier = modifier
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
                         val params = MediaViewerParams(mediaItems, index, tweetId)
                         navController.navigate( NavTweet.MediaViewer(params) )
                     },
+                // if the last item previewed is not the last of the attachments, show a plus sign
+                // to indicate there are more.
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
+
+                // autoplay first video item, index 0
                 index = if (mediaItems.indexOf(mediaItem) == 0) 0 else -1,
             )
         }
