@@ -197,7 +197,8 @@ fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
                     onClick = {
                         tweet.mid?.let {
                             tweetFeedViewModel.delTweet(it)
-                            navController.popBackStack()
+                            expanded = false
+//                            navController.popBackStack()
                         } },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -20,7 +20,6 @@ import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +28,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -172,9 +170,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         WorkInfo.State.SUCCEEDED -> {
                             val outputData = workInfo.outputData
                             val json = outputData.getString("tweet")
-                            Log.d("UploadTweet", "Tweet uploaded successfully: $json")
                             // Handle the success and update UI
                             val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
+                            Log.d("UploadTweet", "Tweet uploaded successfully: $tweet")
                             if (tweet != null) {
                                 tweet.author = appUser
                                 addTweet(tweet)

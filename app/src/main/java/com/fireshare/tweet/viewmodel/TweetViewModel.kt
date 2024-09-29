@@ -45,6 +45,9 @@ class TweetViewModel @AssistedInject constructor(
     private val _tweetState = MutableStateFlow(tweet)
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
 
+    private val _attachments = MutableStateFlow(tweet.attachments)
+    val attachments: StateFlow<List<MimeiId>?> get() = _attachments.asStateFlow()
+
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
@@ -111,9 +114,6 @@ class TweetViewModel @AssistedInject constructor(
         attachments: List<Uri>? = null,
         tweetFeedViewModel: TweetFeedViewModel
     ) {
-        val originTweet = if (isCheckedToTweet.value && tweetState.value.originalTweet != null) {
-            tweetState.value.originalTweet
-        } else tweetState.value
         val gson = Gson()
         val data = workDataOf(
             "tweet" to gson.toJson(tweetState.value),

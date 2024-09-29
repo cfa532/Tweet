@@ -58,19 +58,21 @@ fun TweetFeedScreen(
     parentEntry: NavBackStackEntry,
     selectedBottomBarItemIndex: Int,
 ) {
-    val viewModel = hiltViewModel<TweetFeedViewModel>()
-    val tweets by viewModel.tweets.collectAsState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+     val viewModel = hiltViewModel<TweetFeedViewModel>()
+     val tweets by viewModel.tweets.collectAsState()
+     val scrollBehavior =
+         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
      val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, { viewModel.loadNewerTweets() })
+     val pullRefreshState =
+         rememberPullRefreshState(refreshingAtTop, { viewModel.loadNewerTweets() })
 
      // for pulling up at the bottom of the list
      val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
      val listState = rememberLazyListState()
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
-     val isAtBottom = layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
-
+     val isAtBottom =
+         layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
      LaunchedEffect(isAtBottom) {
          if (isAtBottom) {
              delay(300)
@@ -78,60 +80,64 @@ fun TweetFeedScreen(
          }
      }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize(),
-        topBar = { MainTopAppBar(navController, scrollBehavior) },
-        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .pullRefresh(pullRefreshState)
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(innerPadding),
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState
-            ) {
-                items(tweets) { tweet ->
-                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-                    HorizontalDivider(
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.surfaceTint
-                    )
-                }
-                item {
-                    if (tweets.isEmpty()) {
-                        viewModel.refresh()
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 60.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(120.dp),
-                            color = Color.LightGray,
-                            strokeWidth = 10.dp
-                        )
-                    }
-                }
-                item {
-                    if (refreshingAtBottom && tweets.isNotEmpty()) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                        )
-                    }
-                }
-            }
-            PullRefreshIndicator(refreshingAtTop, state = pullRefreshState, Modifier.align(Alignment.TopCenter))
-        }
-    }
-}
+     Scaffold(
+         modifier = Modifier
+             .fillMaxSize(),
+         topBar = { MainTopAppBar(navController, scrollBehavior) },
+         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+     ) { innerPadding ->
+         Box(
+             modifier = Modifier
+                 .pullRefresh(pullRefreshState)
+                 .fillMaxSize()
+                 .nestedScroll(scrollBehavior.nestedScrollConnection)
+                 .padding(innerPadding),
+         ) {
+             LazyColumn(
+                 modifier = Modifier.fillMaxSize(),
+                 state = listState
+             ) {
+                 items(tweets) { tweet ->
+                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                     HorizontalDivider(
+                         modifier = Modifier.padding(bottom = 8.dp),
+                         thickness = 0.5.dp,
+                         color = MaterialTheme.colorScheme.surfaceTint
+                     )
+                 }
+                 item {
+                     if (tweets.isEmpty()) {
+                         viewModel.refresh()
+                         CircularProgressIndicator(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(top = 60.dp)
+                                 .wrapContentWidth(Alignment.CenterHorizontally)
+                                 .size(120.dp),
+                             color = Color.LightGray,
+                             strokeWidth = 10.dp
+                         )
+                     }
+                 }
+                 item {
+                     if (refreshingAtBottom && tweets.isNotEmpty()) {
+                         CircularProgressIndicator(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(16.dp)
+                                 .wrapContentWidth(Alignment.CenterHorizontally)
+                         )
+                     }
+                 }
+             }
+             PullRefreshIndicator(
+                 refreshingAtTop,
+                 state = pullRefreshState,
+                 Modifier.align(Alignment.TopCenter)
+             )
+         }
+     }
+ }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

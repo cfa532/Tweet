@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,8 +59,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
-                     parentEntry: NavBackStackEntry
+fun ProfileTopAppBar(viewModel: UserViewModel,
+                     navController: NavHostController,
+                     parentEntry: NavBackStackEntry,
+                     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
@@ -131,7 +134,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel, navController: NavHostController,
                     }
                 }
             }
-        }
+        },
+        scrollBehavior = scrollBehavior
     )
 }
 

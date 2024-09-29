@@ -19,6 +19,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel.Companion
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -38,23 +39,25 @@ class UserViewModel @AssistedInject constructor(
 ): ViewModel() {
     private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
-
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
     private var _fans = MutableStateFlow(emptyList<MimeiId>())
     val fans: StateFlow<List<MimeiId>> get() = _fans.asStateFlow()
-
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
+    private val _isRefreshingAtBottom = MutableStateFlow(false)
+    val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
     }
-    private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())     // current time
-    private var endTimestamp =
-        mutableLongStateOf(startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS)     // previous time
+    private var startTimestamp = System.currentTimeMillis()    // current time
+    private var endTimestamp = startTimestamp - THIRTY_DAYS_IN_MILLIS   // previous time
 
     // variable for login management
     private val preferencesHelper = TweetApplication.preferenceHelper
@@ -65,9 +68,27 @@ class UserViewModel @AssistedInject constructor(
     var preferencePhrase = preferencesHelper.getKeyPhrase()
     var keyPhrase = mutableStateOf(preferencePhrase)
     var isPasswordVisible = mutableStateOf(false)
-
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
+
+    fun loadNewerTweets() {
+        println("UserVM at top already")
+        _isRefreshing.value = true
+        startTimestamp = System.currentTimeMillis()
+        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        Log.d("UserVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+        getTweets()
+        _isRefreshing.value = false
+    }
+    fun loadOlderTweets() {
+        println("UserVM at bottom already")
+        _isRefreshingAtBottom.value = true
+        startTimestamp = endTimestamp
+        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        Log.d("UserVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+        getTweets()
+        _isRefreshingAtBottom.value = false
+    }
 
     fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -142,7 +163,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
             Log.d("UserViewModel.getTweets()", "user=$user")
-            val tweetsList = HproseInstance.getTweetList(user, startTimestamp.longValue, endTimestamp.longValue)
+            val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
             _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
         }
     }

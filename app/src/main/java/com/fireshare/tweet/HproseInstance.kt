@@ -50,7 +50,7 @@ object HproseInstance {
         level = HttpLoggingInterceptor.Level.BODY
     }
     val httpClient = OkHttpClient.Builder()
-//        .addInterceptor(loggingInterceptor)
+        .addInterceptor(loggingInterceptor)
         .build()
 
     fun init(context: Context, preferenceHelper: PreferenceHelper) {
@@ -456,7 +456,7 @@ object HproseInstance {
             }
             return null
         } catch (e: Exception) {
-            Log.e("getTweet()", e.toString())
+            Log.e("getTweet()", "$tweetId $authorId $e")
             return null
         }
     }

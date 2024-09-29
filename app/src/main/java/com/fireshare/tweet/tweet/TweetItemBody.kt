@@ -15,6 +15,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +27,6 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
 
 @Composable
 fun TweetBlock(
@@ -35,6 +35,7 @@ fun TweetBlock(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
+    val attachments by viewModel.attachments.collectAsState()
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -88,11 +89,15 @@ fun TweetBlock(
                         modifier = Modifier.fillMaxWidth()
                             .heightIn(max = 800.dp) // Set a specific height for the grid
                     ) {
-                        val mediaItems = tweet.attachments?.mapNotNull {
-                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                                ?.let { it2 -> MediaItem(it2) }
+                        val mediaItems = remember(tweet.mid) { // Remember based on tweet ID
+                            attachments?.mapNotNull {
+                                tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
+                                    ?.let { it2 -> MediaItem(it2) }
+                            }
                         }
-                        mediaItems?.let { MediaPreviewGrid(it, tweet.mid!!) }
+                        if (mediaItems != null) {
+                            MediaPreviewGrid(mediaItems, tweet.mid!!)
+                        }
                     }
 
                     // Actions Row
