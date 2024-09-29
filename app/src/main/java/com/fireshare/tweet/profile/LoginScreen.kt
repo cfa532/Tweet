@@ -165,7 +165,7 @@ fun LoginScreen() {
 
         if (loginError.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = loginError, color = Color.Red)
+            Text(text = stringResource(R.string.login_failed), color = Color.Red)
         }
 
         Spacer(modifier = Modifier.height(32.dp))

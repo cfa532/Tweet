@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUserBase
+import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -100,7 +101,7 @@ class UserViewModel @AssistedInject constructor(
         keyPhrase.value = ""
     }
 
-    fun updateAvatar(context: Context, userId: MimeiId, uri: Uri) {
+    fun updateAvatar(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             context.contentResolver.openInputStream(uri)?.let { stream ->
                 isLoading.value = true
@@ -127,7 +128,7 @@ class UserViewModel @AssistedInject constructor(
                     // Otherwise, wait for user to submit.
                     HproseInstance.setUserAvatar(userId, mimeiId)   // Update database value
                     appUser.avatar = mimeiId
-                    _user.value = appUser.copy()
+                    _user.value = user.value.copy(avatar = mimeiId)
                 }
                 isLoading.value = false
             }
@@ -169,10 +170,16 @@ class UserViewModel @AssistedInject constructor(
 
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
-            val user = getUserBase(userId) ?: return@launch    // author of the list of tweet
+            val user = getUserBase(userId) ?: return@launch
             Log.d("UserViewModel.getTweets()", "user=$user")
             val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
-            _tweets.update { currentTweets -> currentTweets + tweetsList.sortedByDescending { it.timestamp } }
+
+            // Remove duplicates and sort by descending timestamp
+            val uniqueSortedTweets = tweetsList
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+
+            _tweets.update { currentTweets -> currentTweets + uniqueSortedTweets }
         }
     }
 
@@ -218,7 +225,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     // handle both register and update of user profile
-    fun register(popBack: () -> Unit) {
+    fun register(context: Context, popBack: () -> Unit) {
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
             && keyPhrase.value?.isNotEmpty() == true
@@ -234,7 +241,7 @@ class UserViewModel @AssistedInject constructor(
                     if (appUser.mid == TW_CONST.GUEST_ID) {
                         appUser = it1
                         val event = SnackbarEvent(
-                            message = "Registration succeeded."
+                            message = context.getString(R.string.registration_ok)
                         )
                         showSnackbar(event)
                         viewModelScope.launch(Dispatchers.Main) {
@@ -242,7 +249,7 @@ class UserViewModel @AssistedInject constructor(
                         }
                     } else {
                         val event = SnackbarEvent(
-                            message = "User profile updated successfully"
+                            message = context.getString(R.string.profile_update_ok)
                         )
                         showSnackbar(event)
                     }
@@ -252,11 +259,11 @@ class UserViewModel @AssistedInject constructor(
         } else {
             var message = ""
             if (username.value?.isEmpty() == true) {
-                message = "Username is required to register and login."
+                message = context.getString(R.string.username_required)
             } else if (password.value.isEmpty()) {
-                message = "Password is required to register and login."
+                message = context.getString(R.string.password_required)
             } else if (keyPhrase.value?.isEmpty() == true) {
-                message = "Key phrase is required to register and login."
+                message = context.getString(R.string.keyphrase_required)
             }
             val event = SnackbarEvent(
                 message = message

@@ -54,11 +54,8 @@ fun AppIcon() {
 //}
 
 fun UserAvatar(user: User?, size: Int = 40) {
-    var avatarUrl by remember { mutableStateOf<String?>(null) }
+    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
 
-    LaunchedEffect(user) {
-        avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
-    }
     if (avatarUrl == null) {
         Image(
             painter = painterResource(id = R.drawable.ic_user_avatar),
@@ -72,7 +69,7 @@ fun UserAvatar(user: User?, size: Int = 40) {
     } else {
         // Display the actual avatar image
         ImageViewer(
-            avatarUrl!!,
+            avatarUrl,
             modifier = Modifier
                 .size(size.dp)
                 .clip(CircleShape)

@@ -39,4 +39,10 @@
     <string name="posts">Tweet</string>
     <string name="show_more">Show more....</string>
     <string name="logout">Logout</string>
+    <string name="login_failed">Login failed</string>
+    <string name="profile_update_ok">User profile updated successfully</string>
+    <string name="registration_ok">Registration is successful</string>
+    <string name="username_required">Username is required</string>
+    <string name="password_required">Password is required</string>
+    <string name="keyphrase_required">Key phrase is required</string>
 </resources>

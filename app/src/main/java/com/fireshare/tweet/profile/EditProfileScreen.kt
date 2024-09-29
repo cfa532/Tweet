@@ -59,7 +59,6 @@ fun EditProfileScreen(
     navController: NavHostController,
     viewModel: UserViewModel
 ) {
-    val user by viewModel.user.collectAsState()
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val username by viewModel.username
@@ -74,7 +73,7 @@ fun EditProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            viewModel.updateAvatar(context, appUser.mid, uri)
+            viewModel.updateAvatar(context, uri)
         }
     }
     val scrollState = rememberScrollState()
@@ -83,7 +82,6 @@ fun EditProfileScreen(
 
     LaunchedEffect(Unit) {
 //        focusRequester.requestFocus()
-        delay(300)
         if (!viewModel.isLoggedIn())
             viewModel.hidePhrase()
         keyboardController?.show()
@@ -106,7 +104,7 @@ fun EditProfileScreen(
             )
         }
         // show and edit user avatar
-        AvatarSection(user, launcher)
+        AvatarSection(launcher)
 
         Spacer(modifier = Modifier.height(16.dp))
         Column {
@@ -175,7 +173,7 @@ fun EditProfileScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
-                viewModel.register {
+                viewModel.register(context) {
                     navController.popBackStack()
                 }
             },
@@ -201,7 +199,8 @@ fun EditProfileScreen(
 }
 
 @Composable
-fun AvatarSection(user: User, launcher: ManagedActivityResultLauncher<String, Uri?>) {
+fun AvatarSection( launcher: ManagedActivityResultLauncher<String, Uri?>
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -211,7 +210,7 @@ fun AvatarSection(user: User, launcher: ManagedActivityResultLauncher<String, Ur
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(user, 120)
+            UserAvatar(appUser, 120)
         }
     }
 }
