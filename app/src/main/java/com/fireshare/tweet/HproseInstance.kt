@@ -91,34 +91,37 @@ object HproseInstance {
     private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String?> {
         val baseUrl = preferenceHelper.getAppUrl().toString()
         var request = Request.Builder().url("https://$baseUrl").build()
-        var response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            // retrieve window.Param from page source code of http://base_url
-            val htmlContent = response.body?.string()?.trimIndent()
-            val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-            val matcher = pattern.matcher(htmlContent as CharSequence)
-            var jsonString: String? = null
+        try {
+            var response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                // retrieve window.Param from page source code of http://base_url
+                val htmlContent = response.body?.string()?.trimIndent()
+                val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
+                val matcher = pattern.matcher(htmlContent as CharSequence)
+                var jsonString: String? = null
 
-            if (matcher.find()) {
-                jsonString = matcher.group(1)
-            }
-
-            if (jsonString != null) {
-                // Step 2: Parse the extracted string into a Kotlin map
-                val gson = Gson()
-                val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
-
-                request =
-                    Request.Builder().url("http://$baseUrl/getvar?name=domainaddr&arg0=$baseUrl")
-                        .build()
-                response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val addrs = response.body?.string()?.trim()?.removeSurrounding("\"")
-                    return Pair(paramMap["mid"] as MimeiId, "http://$addrs")
+                if (matcher.find()) {
+                    jsonString = matcher.group(1)
                 }
-            } else {
-                Log.e("initAppEntry", "No data found within window.setParam()")
+
+                if (jsonString != null) {
+                    val gson = Gson()
+                    val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
+
+                    request =
+                        Request.Builder().url("http://$baseUrl/getvar?name=domainaddr&arg0=$baseUrl")
+                            .build()
+                    response = httpClient.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        val addrs = response.body?.string()?.trim()?.removeSurrounding("\"")
+                        return Pair(paramMap["mid"] as MimeiId, "http://$addrs")
+                    }
+                } else {
+                    Log.e("initAppEntry", "No data found within window.setParam()")
+                }
             }
+        } catch (e: Exception) {
+            Log.e("initAppEntry", e.toString())
         }
         Log.e("initAppEntry", "Failed to get AppId, using default ones.")
         return Pair(preferenceHelper.getAppId().toString(), null)
@@ -131,15 +134,20 @@ object HproseInstance {
         val method = "init_user_mid"
         val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val json = response.body?.string()
-            val gson = Gson()
-            val user = gson.fromJson(json, User::class.java)
-            user.baseUrl = BASE_URL
-            return user
+        return try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                val user = gson.fromJson(json, User::class.java)
+                user.baseUrl = BASE_URL
+                return user
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("initCurrentUser", e.toString())
+            null
         }
-        return null
     }
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
@@ -149,20 +157,24 @@ object HproseInstance {
                     "&receiptid=$receiptId&msg=${Json.encodeToString(msg)}"
         // write outgoing message to user's Mimei db
         var request = Request.Builder().url(url).build()
-        var response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            // write message to receipt's Mimei db on the receipt's node
-            val receipt = getUserBase(receiptId)
-            entry = "message_incoming"
-            url =
-                "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
-                        "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
-                    Json.encodeToString(msg)}"
-            request = Request.Builder().url(url).build()
-            response = httpClient.newCall(request).execute()
+        try {
+            var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                return
+                // write message to receipt's Mimei db on the receipt's node
+                val receipt = getUserBase(receiptId)
+                entry = "message_incoming"
+                url =
+                    "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                            "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
+                                Json.encodeToString(msg)}"
+                request = Request.Builder().url(url).build()
+                response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    return
+                }
             }
+        } catch (e: Exception) {
+            Log.e("sendMessage", e.toString())
         }
     }
 
@@ -174,11 +186,18 @@ object HproseInstance {
             {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "senderid":${senderId}}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-        // write outgoing message to user's Mimei db
-        return client.runMApp(entry, request)  as List<ChatMessage>?
+        return try {
+            // write outgoing message to user's Mimei db
+            client.runMApp(entry, request)  as List<ChatMessage>?
+        } catch (e: Exception) {
+            Log.e("fetchMessages", e.toString())
+            null
+        }
     }
 
+
     // get a list of unread incoming messages from other users
+// get a list of unread incoming messages from other users
     fun checkNewMessages(): List<ChatMessage>? {
         val gson = Gson()
         val entry = "message_check"
@@ -186,8 +205,13 @@ object HproseInstance {
             {"aid": $appId, "ver":"last", "userid":${appUser.mid}}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-        // write outgoing message to user's Mimei db
-        return client.runMApp(entry, request) as List<ChatMessage>?
+        return try {
+            // write outgoing message to user's Mimei db
+            client.runMApp(entry, request) as List<ChatMessage>?
+        } catch (e: Exception) {
+            Log.e("checkNewMessages", e.toString())
+            null
+        }
     }
 
     fun checkUpdates(): Map<String, String>? {
@@ -197,7 +221,12 @@ object HproseInstance {
              {"aid": $appId, "ver":"last"}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-        return client.runMApp(entry,request)
+        return try {
+            client.runMApp(entry,request)
+        } catch (e: Exception) {
+            Log.e("checkUpdates", e.toString())
+            null
+        }
     }
 
     fun login(username: String, password: String, keyPhrase: String): User? {
@@ -208,13 +237,18 @@ object HproseInstance {
             "aid": "$appId", "ver": "last"}
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-        val ret = client.runMApp(entry, request) as String?
-        ret?.let {
-            val user = Json.decodeFromString<User>(ret)
-            user.baseUrl = BASE_URL
-            return user
+        return try {
+            val ret = client.runMApp(entry, request) as String?
+            ret?.let {
+                val user = Json.decodeFromString<User>(ret)
+                user.baseUrl = BASE_URL
+                return user
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("login", e.toString())
+            null
         }
-        return null
     }
 
     // get the first user account, or a list of accounts.
@@ -271,28 +305,32 @@ object HproseInstance {
         } else {
             // update existing account
             val method = "set_author_core_data"
-            val tmp = User(mid = appUser.mid, name = appUser.name,
+            val tmp = User(mid = appUser.mid, name = appUser.name, timestamp = appUser.timestamp,
                 username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
-                timestamp = appUser.timestamp
             )
             url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
                 Json.encodeToString(tmp)
             }"
         }
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val json = response.body?.string()
-            val gson = Gson()
-            val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
-            ret.baseUrl = BASE_URL
+        return try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
+                ret.baseUrl = BASE_URL
 
-            ret.name?.let { preferenceHelper.saveName(it) }
-            ret.profile?.let { preferenceHelper.saveProfile(it) }
-            return ret
+                ret.name?.let { preferenceHelper.saveName(it) }
+                ret.profile?.let { preferenceHelper.saveProfile(it) }
+                return ret
+            }
+            Log.d("HproseInstance.setUserData", "Set user data error")
+            null
+        } catch (e: Exception) {
+            Log.e("setUserData", e.toString())
+            null
         }
-        Log.d("HproseInstance.setUserData", "Set user data error")
-        return null
     }
 
     fun setUserAvatar(userId: MimeiId, avatar: MimeiId) {
@@ -302,7 +340,11 @@ object HproseInstance {
         """.trimIndent()
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
-        client.runMApp(entry, request) as Unit?
+        try {
+            client.runMApp(entry, request) as Unit?
+        } catch (e: Exception) {
+            Log.e("setUserAvatar", e.toString())
+        }
     }
 
     // get Ids of users who the current user is following
@@ -361,7 +403,6 @@ object HproseInstance {
         if (response.isSuccessful) {
             val responseBody = response.body?.string()
             val gson = Gson()
-//            val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
             val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
                 Log.d("getTweetList","fetchTweet=$it")
                 // assign every tweet its author object.
@@ -424,70 +465,89 @@ object HproseInstance {
     fun uploadTweet(tweet: Tweet): Tweet? {
         val method = "upload_tweet"
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
-        val url =
-            "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweet=$json"
+        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            tweet.mid = response.body?.string() ?: return null
-            tweet.author = appUser
-            return tweet
+        return try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                tweet.mid = response.body?.string() ?: return null
+                tweet.author = appUser
+                return tweet
+            }
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        return null
     }
 
     fun delTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
         val method = "delete_tweet"
-        val url =
-            "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
+        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            delTweet(tweetId)
+        try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                delTweet(tweetId)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) {
         val method = "delete_comment"
-        val url =
-            "${parentTweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
+        val url = "${parentTweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            delComment(commentId)
+        try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                delComment(commentId)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     fun toggleFollowing(userId: MimeiId): Boolean? {
         val method = "toggle_following"
-        val url =
-            "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
+        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val json = response.body?.string()
-            val gson = Gson()
-            return gson.fromJson(json, Boolean::class.java)
+        return try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                gson.fromJson(json, Boolean::class.java)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        return null
     }
 
     suspend fun toggleFollower(userId: MimeiId): Boolean? {
         val user = getUserBase(userId)
         val method = "toggle_follower"
-        val url =
-            "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
+        val url = "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
         val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val json = response.body?.string()
-            val gson = Gson()
-            return gson.fromJson(json, Boolean::class.java)
+        return try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                gson.fromJson(json, Boolean::class.java)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        return null
     }
 
-    // retweet or cancel retweet
     fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
@@ -495,51 +555,55 @@ object HproseInstance {
             .append("&tweetid=${tweet.mid}")
             .append("&userid=${appUser.mid}")
 
-        if (hasRetweeted) {
-            // remove the retweet. Get retweetId first
-            val request = Request.Builder().url(url.toString()).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return
-                val gson = Gson()
-                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
+        try {
+            if (hasRetweeted) {
+                // remove the retweet. Get retweetId first
+                val request = Request.Builder().url(url.toString()).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string() ?: return
+                    val gson = Gson()
+                    val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
 
-                tweet.favorites!![UserFavorites.RETWEET] = false
-                val count = (res["count"] as? Double)?.toInt() ?: 0
-                val retweetId = res["retweetId"] as? MimeiId
+                    tweet.favorites!![UserFavorites.RETWEET] = false
+                    val count = (res["count"] as? Double)?.toInt() ?: 0
+                    val retweetId = res["retweetId"] as? MimeiId
 
-                updateTweetViewModel(tweet.copy(retweetCount = count))
+                    updateTweetViewModel(tweet.copy(retweetCount = count))
 
-                if (retweetId != null) {
-                    delTweet(retweetId) {
-                        tweetFeedViewModel.delTweet(retweetId)
+                    if (retweetId != null) {
+                        delTweet(retweetId) {
+                            tweetFeedViewModel.delTweet(retweetId)
+                        }
                     }
                 }
-            }
-        } else {
-            var retweet = Tweet(
-                content = "",
-                authorId = appUser.mid,
-                originalTweetId = tweet.mid,
-                originalAuthorId = tweet.authorId
-            )
-            retweet = uploadTweet(retweet) ?: return
-            url.append("&retweetid=${retweet.mid}")
+            } else {
+                var retweet = Tweet(
+                    content = "",
+                    authorId = appUser.mid,
+                    originalTweetId = tweet.mid,
+                    originalAuthorId = tweet.authorId
+                )
+                retweet = uploadTweet(retweet) ?: return
+                url.append("&retweetid=${retweet.mid}")
 
-            val request = Request.Builder().url(url.toString()).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return
-                val gson = Gson()
-                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
-                tweet.favorites!![UserFavorites.RETWEET] = true
-                tweet.retweetCount = (res["count"] as Double).toInt()
-                updateTweetViewModel( tweet.copy() )
+                val request = Request.Builder().url(url.toString()).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string() ?: return
+                    val gson = Gson()
+                    val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
+                    tweet.favorites!![UserFavorites.RETWEET] = true
+                    tweet.retweetCount = (res["count"] as Double).toInt()
+                    updateTweetViewModel(tweet.copy())
 
-                retweet.author = appUser
-                retweet.originalTweet = tweet
-                tweetFeedViewModel.addTweet(retweet)
+                    retweet.author = appUser
+                    retweet.originalTweet = tweet
+                    tweetFeedViewModel.addTweet(retweet)
+                }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -567,102 +631,117 @@ object HproseInstance {
             }
         } catch (e: ProtocolException) {
             // handle network failure (e.g., show an error message)
-            Log.e("OkHttp", "Network failure: Unexpected status line", e)
+            Log.e("getComments()", "Network failure: Unexpected status line", e)
         }
         return null
     }
 
     // update input parameter "comment" with new mid, and return update parent Tweet
     fun uploadComment(tweet: Tweet, comment: Tweet): Tweet {
-        // add the comment to tweetId
-        val method = "add_comment"
-        val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
-        val url = "${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
-        val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val responseBody = response.body?.string() ?: return tweet
-            val gson = Gson()
-            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
-            comment.mid = res["commentId"] as MimeiId
-            return tweet.copy(
-                commentCount = (res["count"] as Double).toInt()
-            )
+        return try {
+            // add the comment to tweetId
+            val method = "add_comment"
+            val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
+            val url = "${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return tweet
+                val gson = Gson()
+                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
+                comment.mid = res["commentId"] as MimeiId
+                tweet.copy(
+                    commentCount = (res["count"] as Double).toInt()
+                )
+            } else {
+                tweet
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            tweet
         }
-        return tweet
     }
 
     fun likeTweet(tweet: Tweet): Tweet {
-        val author = tweet.author ?: return tweet
-        val method = "liked_count"
-        val url =
-            "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
-        val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val responseBody = response.body?.string() ?: return tweet
-            val gson = Gson()
-            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
-
-            tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
-            return tweet.copy(
-                // return a new object for recomposition to work.
-                likeCount = (res["count"] as Double).toInt()
-            )
+        return try {
+            val author = tweet.author ?: return tweet
+            val method = "liked_count"
+            val url = "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return tweet
+                val gson = Gson()
+                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
+                tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
+                tweet.copy(
+                    likeCount = (res["count"] as Double).toInt()
+                )
+            } else {
+                tweet
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            tweet
         }
-        return tweet
     }
 
     fun bookmarkTweet(tweet: Tweet): Tweet {
-        val author = tweet.author ?: return tweet
-        val method = "bookmark"
-        val url =
-            "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
-        val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val responseBody = response.body?.string() ?: return tweet
-            val gson = Gson()
-            val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
-            tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
-            return tweet.copy(
-                bookmarkCount = (res["count"] as Double).toInt()
-            )
+        return try {
+            val author = tweet.author ?: return tweet
+            val method = "bookmark"
+            val url = "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return tweet
+                val gson = Gson()
+                val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
+                tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
+                tweet.copy(
+                    bookmarkCount = (res["count"] as Double).toInt()
+                )
+            } else {
+                tweet
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            tweet
         }
-        return tweet
     }
 
-    // Upload data from an InputStream to IPFS and return the resulting MimeiId.
     fun uploadToIPFS(inputStream: InputStream): MimeiId? {
-        val method = "open_temp_file"
-        val url =
-            "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method"
-        val request = Request.Builder().url(url).build()
-        val response = httpClient.newCall(request).execute()
-        if (response.isSuccessful) {
-            val fsid = response.body?.string()
-            var offset = 0
-            inputStream.use { stream ->
-                val buffer = ByteArray(CHUNK_SIZE)
-                var bytesRead: Int
-                while (stream.read(buffer).also { bytesRead = it } != -1) {
-                    if (fsid != null) {
-                        client.mfSetData(fsid, buffer, offset)
+        return try {
+            val method = "open_temp_file"
+            val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val fsid = response.body?.string()
+                var offset = 0
+                inputStream.use { stream ->
+                    val buffer = ByteArray(CHUNK_SIZE)
+                    var bytesRead: Int
+                    while (stream.read(buffer).also { bytesRead = it } != -1) {
+                        if (fsid != null) {
+                            client.mfSetData(fsid, buffer, offset)
+                        }
+                        offset += bytesRead
                     }
-                    offset += bytesRead
                 }
+                val cid = fsid?.let {
+                    client.mfTemp2Ipfs(it, appUser.mid)
+                }
+                inputStream.close()
+                println("cid=$cid")
+                cid
+            } else {
+                null
             }
-            val cid = fsid?.let {
-                client.mfTemp2Ipfs(
-                    it,
-                    appUser.mid
-                )
-            }    // Associate the uploaded data with the app's main Mimei
-            inputStream.close()
-            println("cid=$cid")
-            return cid
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        return null
     }
 
 //    fun uploadToIPFS(inputStream: InputStream): MimeiId {
