@@ -57,12 +57,15 @@ import java.util.concurrent.TimeUnit
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.widget.RequestCameraPermission
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
 
     private val activityViewModel: ActivityViewModel by viewModels()
     private lateinit var appUserViewModel: UserViewModel
+    private lateinit var tweetFeedViewModel: TweetFeedViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,16 +78,22 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
+
                 // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
                 appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
                     this@TweetActivity, key = appUser.mid
                 ) { factory ->
                     factory.create(appUser.mid)
                 }
-                // default no to update fans and followings list of user object.
-                // Do it only when opening its profile page.
+                // By default NOT to update fans and followings list of an user object.
+                // Do it only when opening the user's profile page.
                 if (appUser.mid != TW_CONST.GUEST_ID)
+                    // Only get current user's fans list when opening the app.
                     appUserViewModel.updateFans()
+
+                // init the TweetFeedViewModel which is the main object of the app.
+                // But do NOT loaded its content until the screen is opened.
+                tweetFeedViewModel = hiltViewModel()
 
                 TweetTheme {
                     // Global snackbar host

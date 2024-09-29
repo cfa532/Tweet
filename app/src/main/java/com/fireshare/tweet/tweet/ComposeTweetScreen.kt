@@ -7,12 +7,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.decodeBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -67,7 +67,6 @@ import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.widget.RequestCameraPermission
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 import java.io.File
@@ -75,6 +74,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.graphics.ImageDecoder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,7 +84,7 @@ fun ComposeTweetScreen(
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
-    val localContext = LocalContext.current
+    val context = LocalContext.current
 
 // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -102,8 +102,28 @@ fun ComposeTweetScreen(
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
             imageUri?.let {
-                bitmap = MediaStore.Images.Media.getBitmap(localContext.contentResolver, it)
+                val source = ImageDecoder.createSource(context.contentResolver, it)
+                bitmap = ImageDecoder.decodeBitmap(source)
             }
+        }
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        if (it) {
+            Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
+            val photoFile = createImageFile(context)
+            photoFile?.also {
+                val photoURI: Uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    it
+                )
+                imageUri = photoURI
+                cameraLauncher.launch(photoURI)
+            }
+        } else {
+            Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -142,7 +162,7 @@ fun ComposeTweetScreen(
                     IconButton(
                         onClick = {
                             viewModel.uploadTweet(
-                                localContext,
+                                context,
                                 tweetContent.trim(),
                                 selectedAttachments
                             )
@@ -205,18 +225,19 @@ fun ComposeTweetScreen(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = {
-                        if (ContextCompat.checkSelfPermission(localContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                            val photoFile = createImageFile(localContext)
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            val photoFile = createImageFile(context)
                             photoFile?.also {
                                 val photoURI: Uri = FileProvider.getUriForFile(
-                                    localContext,
-                                    "${localContext.packageName}.fileprovider",
+                                    context,
+                                    "${context.packageName}.provider",
                                     it
                                 )
                                 imageUri = photoURI
                                 cameraLauncher.launch(photoURI)
                             }
                         } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     }) {
                         Icon(

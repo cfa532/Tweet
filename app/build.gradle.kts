@@ -43,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -58,6 +59,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
+    implementation(libs.firebase.crashlytics.buildtools)
     kapt(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)
