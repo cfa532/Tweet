@@ -86,7 +86,6 @@ fun ComposeTweetScreen(
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
 
-// Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -104,24 +103,30 @@ fun ComposeTweetScreen(
             imageUri?.let {
                 val source = ImageDecoder.createSource(context.contentResolver, it)
                 bitmap = ImageDecoder.decodeBitmap(source)
+                selectedAttachments.add(it)
             }
         }
     }
+
+    val takeAShot = {
+        val photoFile = createImageFile(context)
+        photoFile?.also {
+            val photoURI: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                it
+            )
+            imageUri = photoURI
+            cameraLauncher.launch(photoURI)
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
         if (it) {
             Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
-            val photoFile = createImageFile(context)
-            photoFile?.also {
-                val photoURI: Uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    it
-                )
-                imageUri = photoURI
-                cameraLauncher.launch(photoURI)
-            }
+            takeAShot()
         } else {
             Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
         }
@@ -225,17 +230,12 @@ fun ComposeTweetScreen(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                            val photoFile = createImageFile(context)
-                            photoFile?.also {
-                                val photoURI: Uri = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.provider",
-                                    it
-                                )
-                                imageUri = photoURI
-                                cameraLauncher.launch(photoURI)
-                            }
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.CAMERA
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            takeAShot()
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
                         }

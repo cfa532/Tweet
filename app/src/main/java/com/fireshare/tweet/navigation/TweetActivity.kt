@@ -58,7 +58,6 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.widget.RequestCameraPermission
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
