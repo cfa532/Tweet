@@ -1,6 +1,5 @@
 package com.fireshare.tweet.profile
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
@@ -141,9 +138,15 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
 }
 
 @Composable
-fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostController, parentEntry: NavBackStackEntry ) {
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = appUser.mid) {
-            factory -> factory.create(appUser.mid)
+fun ProfileTopBarButton(viewModel: UserViewModel,
+                        navController: NavHostController,
+                        parentEntry: NavBackStackEntry
+) {
+    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry,
+        key = appUser.mid
+    ) { factory ->
+        factory.create(appUser.mid)
     }
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
@@ -180,14 +183,18 @@ fun ProfileTopBarButton(viewModel: UserViewModel, navController: NavHostControll
                     }
                 }
             },
-            colors = ButtonColors(containerColor = MaterialTheme.colorScheme.primary,
+            colors = ButtonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                disabledContentColor = Color.Gray, disabledContainerColor = Color.White),
+                disabledContentColor = Color.Gray, disabledContainerColor = Color.White
+            ),
             modifier = Modifier.size(width = 70.dp, height = 30.dp)
                 .padding(0.dp)
         ) {
-            Text(text = buttonText.value,
-                style = MaterialTheme.typography.labelSmall)
+            Text(
+                text = buttonText.value,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }

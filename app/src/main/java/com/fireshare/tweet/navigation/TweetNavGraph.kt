@@ -18,8 +18,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.FollowerScreen
@@ -53,11 +55,11 @@ class SharedTweetViewModel : ViewModel() {
 @Composable
 fun TweetNavGraph(
     appLinkIntent: Intent,
-    appUserViewModel: UserViewModel,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
+    lateinit var appUserViewModel: UserViewModel
 
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
         val appLinkData = appLinkIntent.data
@@ -81,6 +83,18 @@ fun TweetNavGraph(
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
+                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
+                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                    parentEntry, key = appUser.mid
+                ) { factory ->
+                    factory.create(appUser.mid)
+                }
+                // By default NOT to update fans and followings list of an user object.
+                // Do it only when opening the user's profile page.
+                if (appUser.mid != TW_CONST.GUEST_ID)
+                    // Only get current user's fans list when opening the app.
+                    appUserViewModel.updateFans()
+
                 TweetFeedScreen(navController, parentEntry, 0)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
