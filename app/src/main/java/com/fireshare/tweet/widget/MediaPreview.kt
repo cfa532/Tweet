@@ -87,8 +87,7 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWid
         columns = GridCells.Fixed(gridCells),
         modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.Black)
-            .padding(bottom = 2.dp),
+            .background(Color.Black),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         val modifier = if (gridCells == 1) Modifier.fillMaxWidth().aspectRatio(16f/9f)

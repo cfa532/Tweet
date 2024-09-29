@@ -128,7 +128,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 tweetFeedViewModel.refresh()
                                 navController.navigate(NavTweet.TweetFeed)
                             },
-                                text = { Text("Logout") }
+                                text = { Text(text = stringResource(id = R.string.logout),
+                                    color = MaterialTheme.colorScheme.primary) }
                             )
                         }
                     }

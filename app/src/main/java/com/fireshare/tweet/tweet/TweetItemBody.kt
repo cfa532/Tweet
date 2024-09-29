@@ -68,12 +68,15 @@ fun TweetBlock(
                         tweet.content?.let { txt ->
                             var isExpanded by remember { mutableStateOf(false) }
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 9
+                            var lineCount by remember { mutableStateOf(0) }
                             Text(
                                 text = txt,
+                                onTextLayout = { textLayoutResult ->
+                                    lineCount = textLayoutResult.lineCount },
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = maxLines,
                             )
-                            if (!isExpanded) {
+                            if (!isExpanded && lineCount > 8) {
                                 Text(
                                     text = stringResource(R.string.show_more),
                                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),

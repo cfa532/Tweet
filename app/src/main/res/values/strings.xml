@@ -38,4 +38,5 @@
     <string name="fans">Followers</string>
     <string name="posts">Tweet</string>
     <string name="show_more">Show more....</string>
+    <string name="logout">Logout</string>
 </resources>

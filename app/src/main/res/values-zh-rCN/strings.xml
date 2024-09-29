@@ -39,4 +39,5 @@
     <string name="fans">粉丝</string>
     <string name="posts">帖子</string>
     <string name="show_more">更多>></string>
+    <string name="logout">登出</string>
 </resources>
