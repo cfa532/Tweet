@@ -90,19 +90,21 @@ class ChatSessionRepository(
         }
 
         // Create a list of ChatSession from the merged messages
-        return messageMap.values.map { lastMessage ->
-            val receiptId = if (lastMessage.authorId == appUser.mid) {
-                lastMessage.receiptId
-            } else lastMessage.authorId
+        return existingSessions.map { existingSession ->
+            val key = normalizedKey(existingSession.lastMessage)
+            val updatedLastMessage = messageMap[key] ?: existingSession.lastMessage // Use existing if not in messageMap
+            val receiptId = if (updatedLastMessage.authorId == appUser.mid) {
+                updatedLastMessage.receiptId
+            } else updatedLastMessage.authorId
 
             // if the session receipt is author of any new message
             val hasNews = hasNews(newMessages, receiptId)
             ChatSession(
-                timestamp = lastMessage.timestamp,
+                timestamp = updatedLastMessage.timestamp,
                 userId = appUser.mid,
                 receiptId = receiptId,
                 hasNews = hasNews,
-                lastMessage = lastMessage
+                lastMessage = updatedLastMessage
             )
         }
     }

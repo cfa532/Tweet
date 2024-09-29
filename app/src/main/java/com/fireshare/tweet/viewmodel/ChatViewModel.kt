@@ -74,7 +74,7 @@ class ChatViewModel @AssistedInject constructor(
                 news.add(gson.fromJson(str, ChatMessage::class.java))
             }
             if (news.isNotEmpty()) {
-                repository.insertMessages(news)
+                repository.insertMessages(news.filter { it.authorId != appUser.mid })
                 /**
                  * All outgoing and incoming messages are stored at user's mimei database.
                  * When fetching new messages, all messages during the last waiting period

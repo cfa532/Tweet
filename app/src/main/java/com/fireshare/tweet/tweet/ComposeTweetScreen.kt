@@ -1,8 +1,15 @@
 package com.fireshare.tweet.tweet
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -21,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -48,6 +57,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -56,8 +67,14 @@ import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.widget.RequestCameraPermission
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +96,17 @@ fun ComposeTweetScreen(
             }
         }
     }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            imageUri?.let {
+                bitmap = MediaStore.Images.Media.getBitmap(localContext.contentResolver, it)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -121,12 +149,13 @@ fun ComposeTweetScreen(
                             navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
-                            .width(intrinsicSize = IntrinsicSize.Min) // Adjust width to fit content
-                            .alpha(0.8f) // Set opacity to 80%
+                            .alpha(1f) // Set opacity to 80%
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send"
+                            contentDescription = "Send",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.rotate(180f)
                         )
                     }
                 }
@@ -175,6 +204,28 @@ fun ComposeTweetScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = {
+                        if (ContextCompat.checkSelfPermission(localContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            val photoFile = createImageFile(localContext)
+                            photoFile?.also {
+                                val photoURI: Uri = FileProvider.getUriForFile(
+                                    localContext,
+                                    "${localContext.packageName}.fileprovider",
+                                    it
+                                )
+                                imageUri = photoURI
+                                cameraLauncher.launch(photoURI)
+                            }
+                        } else {
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.MailOutline, // Replace with your camera icon
+                            contentDescription = "Open camera",
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.surfaceTint
+                        )
+                    }
                 }
 
                 // Display icons for attached files
@@ -199,4 +250,15 @@ fun ComposeTweetScreen(
             }
         }
     }
+}
+
+@Throws(IOException::class)
+fun createImageFile(context: Context): File? {
+    val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val storageDir: File? = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    return File.createTempFile(
+        "JPEG_${timeStamp}_",
+        ".jpg",
+        storageDir
+    )
 }
