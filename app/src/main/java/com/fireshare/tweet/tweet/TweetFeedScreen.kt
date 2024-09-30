@@ -80,8 +80,9 @@ fun TweetFeedScreen(
              viewModel.loadOlderTweets()
          }
      }
-     if (tweets.isEmpty())
+     if (tweets.isEmpty()) {
          viewModel.refresh()
+     }
      else {
          LaunchedEffect(tweets) {
              listState.animateScrollToItem(0)

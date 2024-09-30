@@ -154,7 +154,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun updateFans() {
+    fun updateFollowingsAndFans() {
         viewModelScope.launch(Dispatchers.IO) {
             _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
             _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()

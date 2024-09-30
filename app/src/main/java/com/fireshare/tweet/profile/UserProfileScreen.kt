@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -93,11 +94,11 @@ fun UserProfileScreen(
             modifier = Modifier
                 .pullRefresh(pullRefreshState)
                 .fillMaxSize()
-//                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(innerPadding),
         ) {
             LazyColumn(
-//                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                modifier = Modifier.fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
                 state = listState
             ) {
                 item {
@@ -106,8 +107,10 @@ fun UserProfileScreen(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
+
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
+
                 }
                 items(tweets, key = {it.mid.toString()}) { tweet ->
                     HorizontalDivider(
@@ -163,21 +166,21 @@ fun ProfileDetail(
     val followingsList by viewModel.followings.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
-        viewModel.updateFans()
+        viewModel.updateFollowingsAndFans()
     }
 
     // go to list of followings of the user
-    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
-        Text(
-            text = user.name ?: "No one",
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = "@" + (user.username ?: "NoOne"),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.tertiary,
-            modifier = Modifier.padding(start = 0.dp)
-        )
+    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+//        Text(
+//            text = user.name ?: "No one",
+//            style = MaterialTheme.typography.titleMedium
+//        )
+//        Text(
+//            text = "@" + (user.username ?: "NoOne"),
+//            style = MaterialTheme.typography.labelSmall,
+//            color = MaterialTheme.colorScheme.tertiary,
+//            modifier = Modifier.padding(start = 0.dp)
+//        )
         Text(
             text = user.profile ?: "Profile",
             style = MaterialTheme.typography.titleSmall

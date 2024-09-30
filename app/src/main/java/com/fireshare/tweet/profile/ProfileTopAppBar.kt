@@ -2,6 +2,7 @@ package com.fireshare.tweet.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -49,7 +51,6 @@ import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -63,6 +64,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
+    val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
 
     LargeTopAppBar(
         title = {
@@ -73,7 +75,22 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                UserAvatar(user, 80)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    UserAvatar(user, size = (80 - (scrollFraction * 20)).toInt() )
+                    Column(modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(
+                            text = user.name ?: "No one",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "@" + (user.username ?: "NoOne"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(start = 0.dp)
+                        )
+                    }
+                }
                 ProfileTopBarButton(viewModel, navController, parentEntry)
             }
         },

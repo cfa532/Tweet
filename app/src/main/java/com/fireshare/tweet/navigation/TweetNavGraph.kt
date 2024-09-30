@@ -86,7 +86,7 @@ fun TweetNavGraph(
                 // Do it only when opening the user's profile page.
                 if (appUser.mid != TW_CONST.GUEST_ID)
                     // Only get current user's fans list when opening the app.
-                    appUserViewModel.updateFans()
+                    appUserViewModel.updateFollowingsAndFans()
 
                 TweetFeedScreen(navController, parentEntry, 0)
             }

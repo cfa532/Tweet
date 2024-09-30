@@ -64,11 +64,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun refresh() {
         _isRefreshing.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-                _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
-
+            updateFollowings()
             startTimestamp.value = System.currentTimeMillis()
             endTimestamp.value = startTimestamp.value - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
@@ -77,9 +73,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    private fun updateFollowings() {
+        _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+        _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+        if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+            _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
+
+    }
+
     fun loadNewerTweets() {
         println("At top already")
         _isRefreshing.value = true
+        updateFollowings()
         startTimestamp.value = System.currentTimeMillis()
         val endTimestamp = startTimestamp.value - ONE_DAY_IN_MILLIS
         Log.d("loadNewerTweets", "startTimestamp=${startTimestamp.value}, endTimestamp=$endTimestamp")
@@ -89,6 +94,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     suspend fun loadOlderTweets() {
         println("At bottom already")
         _isRefreshingAtBottom.value = true
+        updateFollowings()
         val startTimestamp = endTimestamp.value
         endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Log.d("loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}")
