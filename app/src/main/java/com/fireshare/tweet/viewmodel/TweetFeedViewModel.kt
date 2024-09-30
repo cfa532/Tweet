@@ -146,15 +146,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun addTweet(tweet: Tweet) {
+        appUser.tweetCount += 1
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
     }
 
     fun delTweet(tweetId: MimeiId) {
-        // remove it from Mimei database
         viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.delTweet(tweetId) { tid ->
-                // remove it from the stateFlow
                 _tweets.update { currentTweets ->
+                    appUser.tweetCount -= 1
                     currentTweets.filterNot { it.mid == tid }
                 }
             }

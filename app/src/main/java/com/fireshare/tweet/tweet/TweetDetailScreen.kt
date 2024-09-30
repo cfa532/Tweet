@@ -81,7 +81,8 @@ fun TweetDetailScreen(
                     color = Color.LightGray
                 )
             }
-            items(comments) { comment ->
+            items(comments, key = {it.mid.toString()})
+            { comment ->
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),
                     thickness = 0.5.dp,
