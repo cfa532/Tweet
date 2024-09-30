@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,9 +14,14 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUserBase
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.service.SnackbarAction
+import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -51,6 +58,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
+        private const val ONE_DAY_IN_MILLIS = 86_400_000L
     }
 
     // called after login or logout(). Update current user's following list within both calls.
@@ -63,7 +71,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
 
             startTimestamp = System.currentTimeMillis()
-            endTimestamp = startTimestamp - java.lang.Long.valueOf(THIRTY_DAYS_IN_MILLIS)
+            endTimestamp = startTimestamp - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
             getTweets(startTimestamp, endTimestamp)
             _isRefreshing.value = false
@@ -75,25 +83,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshing.value = true
 //        val endTimestamp = startTimestamp
         startTimestamp = System.currentTimeMillis()
+        val endTimestamp = startTimestamp - ONE_DAY_IN_MILLIS
         Log.d("TweetFeedVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets(startTimestamp, endTimestamp)
         _isRefreshing.value = false
     }
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         println("At bottom already")
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
-        endTimestamp = startTimestamp - java.lang.Long.valueOf(SEVEN_DAYS_IN_MILLIS)
+        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Log.d("TweetFeedVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets(startTimestamp, endTimestamp)
+        delay(500)
         _isRefreshingAtBottom.value = false
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
-        startTimestamp: Long = System.currentTimeMillis(),
-        sinceTimestamp: Long? = null
+        startTimestamp: Long,
+        sinceTimestamp: Long        // earlier in time, therefore smaller timestamp
     ) {
         val batchSize = 10 // Adjust batch size as needed
         followings.value.chunked(batchSize).forEach { batch ->
@@ -111,10 +121,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                             }
                         }.await()
                     }
+
                     _tweets.update { currentTweets ->
-                        (currentTweets + newTweets)
-                            .distinctBy { it.mid }
-                            .sortedByDescending { it.timestamp }
+                        val updatedTweets = currentTweets.toMutableList()
+                        newTweets.forEach { newTweet ->
+                            val existingTweetIndex = updatedTweets.indexOfFirst { it.mid == newTweet.mid }
+                            if (existingTweetIndex != -1) {
+                                updatedTweets[existingTweetIndex] = newTweet // Replace existing tweet
+                            } else {
+                                updatedTweets.add(newTweet) // Add new tweet
+                            }
+                        }
+                        updatedTweets.distinctBy { it.mid }.sortedByDescending { it.timestamp }
                     }
                 } catch (e: Exception) {
                     Log.e("GetTweets", "Error fetching tweets", e)
@@ -150,6 +168,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    /**
+     * Use WorkManager to update tweet. When the upload succeeds, a message will be sent back.
+     * Show a snackbar to inform user of the result.
+     * */
     fun uploadTweet(context: Context, content: String, attachments: List<Uri>?) {
         val data = workDataOf(
             "tweetContent" to content,
@@ -175,13 +197,34 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                             Log.d("UploadTweet", "Tweet uploaded successfully: $tweet")
                             if (tweet != null) {
                                 tweet.author = appUser
-                                addTweet(tweet)
+                                // to add tweet in background involves problem with viewModel
+                                // in tweet list. Do NOT update tweet list, just inform user.
+//                                addTweet(tweet)
+                                viewModelScope.launch(Dispatchers.Main) {
+                                    SnackbarController.sendEvent(
+                                        event = SnackbarEvent(
+                                            message = getString(
+                                                context,
+                                                R.string.tweet_uploaded
+                                            )
+                                        )
+                                    )
+                                }
                             }
                         }
-
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
                             Log.e("UploadTweet", "Tweet upload failed")
+                            viewModelScope.launch(Dispatchers.Main) {
+                                SnackbarController.sendEvent(
+                                    event = SnackbarEvent(
+                                        message = getString(
+                                            context,
+                                            R.string.tweet_failed
+                                        )
+                                    )
+                                )
+                            }
                         }
 
                         WorkInfo.State.RUNNING -> {

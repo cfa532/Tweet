@@ -46,4 +46,6 @@
     <string name="username_required">用户名必填</string>
     <string name="password_required">密码必填</string>
     <string name="keyphrase_required">口令必填</string>
+    <string name="tweet_uploaded">发帖成功</string>
+    <string name="tweet_failed">发帖失败</string>
 </resources>

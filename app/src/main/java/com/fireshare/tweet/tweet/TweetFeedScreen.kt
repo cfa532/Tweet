@@ -1,5 +1,6 @@
  package com.fireshare.tweet.tweet
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,10 +74,15 @@ fun TweetFeedScreen(
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
      val isAtBottom =
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
+
      LaunchedEffect(isAtBottom) {
          if (isAtBottom && tweets.isNotEmpty()) {
              viewModel.loadOlderTweets()
          }
+     }
+     LaunchedEffect(Unit) {
+         Log.d("TweetFeedVM", "Call getTweets()")
+         viewModel.refresh()
      }
 
      Scaffold(
@@ -106,26 +112,26 @@ fun TweetFeedScreen(
                      )
                  }
                  item {
-                     if (tweets.isEmpty()) {
-                         viewModel.refresh()
+                     if (refreshingAtTop) {
                          CircularProgressIndicator(
                              modifier = Modifier
                                  .fillMaxWidth()
                                  .padding(top = 60.dp)
                                  .wrapContentWidth(Alignment.CenterHorizontally)
-                                 .size(120.dp),
+                                 .size(80.dp),
                              color = Color.LightGray,
-                             strokeWidth = 10.dp
+                             strokeWidth = 8.dp
                          )
                      }
                  }
                  item {
-                     if (refreshingAtBottom && tweets.isNotEmpty()) {
+                     if (refreshingAtBottom) {
                          CircularProgressIndicator(
                              modifier = Modifier
                                  .fillMaxWidth()
                                  .padding(16.dp)
                                  .wrapContentWidth(Alignment.CenterHorizontally)
+                                 .align(Alignment.BottomCenter)
                          )
                      }
                  }

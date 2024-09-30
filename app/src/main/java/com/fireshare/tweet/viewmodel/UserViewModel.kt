@@ -26,6 +26,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,17 +77,18 @@ class UserViewModel @AssistedInject constructor(
         println("UserVM at top already")
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
-        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        val endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Log.d("UserVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets()
         _isRefreshing.value = false
     }
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         println("UserVM at bottom already")
         _isRefreshingAtBottom.value = true
-        startTimestamp = endTimestamp
+        val startTimestamp = endTimestamp
         endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Log.d("UserVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+        delay(500)
         getTweets()
         _isRefreshingAtBottom.value = false
     }
@@ -178,7 +180,7 @@ class UserViewModel @AssistedInject constructor(
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
             val user = getUserBase(userId) ?: return@launch
-            Log.d("UserViewModel.getTweets()", "user=$user")
+            Log.d("UserViewModel.getTweets", "user=$user")
             val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
 
             // Update _tweets with tweetList, replacing duplicates and ensuring no duplicates

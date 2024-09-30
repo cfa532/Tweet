@@ -45,4 +45,6 @@
     <string name="username_required">Username is required</string>
     <string name="password_required">Password is required</string>
     <string name="keyphrase_required">Key phrase is required</string>
+    <string name="tweet_uploaded">Tweet uploaded successfully</string>
+    <string name="tweet_failed">Tweet upload failed.</string>
 </resources>
