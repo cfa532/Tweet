@@ -2,12 +2,9 @@ package com.fireshare.tweet.service
 
 import android.app.job.JobParameters
 import android.app.job.JobService
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
 

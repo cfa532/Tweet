@@ -18,7 +18,6 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.UserAvatar
-import java.util.*
 import java.util.concurrent.TimeUnit
 
 // Tweet header when displayed as an item in a list.
