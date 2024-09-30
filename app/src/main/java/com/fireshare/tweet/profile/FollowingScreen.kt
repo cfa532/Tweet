@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,12 +34,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
@@ -62,26 +64,22 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
                     val userOfProfile by viewModel.user.collectAsState()
-
-                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Column {
-                            UserAvatar(userOfProfile, 40)
-                            Text(
-                                text = userOfProfile.name ?: "No One",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
+                    Column {
+                        UserAvatar(userOfProfile, 36)
+                        Text(
+                            text = userOfProfile.name ?: "No One",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
+
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() })
@@ -102,10 +100,21 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
         Surface(modifier = Modifier.padding(innerPadding))
         {
             LazyColumn(
-                modifier = Modifier
-
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(followingsOfProfile) { userId ->
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center // Center align content horizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.follow),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
+                items(followingsOfProfile, key = {it}) { userId ->
                     FollowingItem(userId, navController, appUserViewModel, parentEntry)
                 }
             }
@@ -123,6 +132,11 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
         }
     }
 
+    HorizontalDivider(
+        modifier = Modifier.padding(vertical = 1.dp),
+        thickness = 1.dp,
+        color = Color.LightGray
+    )
     Row(modifier = Modifier
         .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
         .heightIn(max = 200.dp)
@@ -165,11 +179,6 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
             )
         }
     }
-    HorizontalDivider(
-        modifier = Modifier.padding(vertical = 1.dp),
-        thickness = 1.dp,
-        color = Color.LightGray
-    )
 }
 
 @Composable
@@ -186,9 +195,6 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel, pare
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
-        val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
-                factory -> factory.create(userId)
-        }
         Text(
             text = if (followState.value) "Unfollow" else "  Follow  ",
             color = MaterialTheme.colorScheme.primary,

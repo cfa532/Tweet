@@ -189,8 +189,8 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 disabledContentColor = Color.Gray, disabledContainerColor = Color.White
             ),
-            modifier = Modifier.width(intrinsicSize = IntrinsicSize.Min)
-                .height(intrinsicSize = IntrinsicSize.Min)
+            modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max)
+                .height(30.dp)
                 .padding(0.dp)
         ) {
             Text(

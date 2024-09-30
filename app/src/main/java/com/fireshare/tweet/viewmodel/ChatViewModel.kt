@@ -37,7 +37,6 @@ class ChatViewModel @AssistedInject constructor(
     var textState = mutableStateOf("")
 
     init {
-
         viewModelScope.launch(Dispatchers.IO) {
             _receipt.value = HproseInstance.getUserBase(receiptId)
 
@@ -78,8 +77,8 @@ class ChatViewModel @AssistedInject constructor(
                 /**
                  * All outgoing and incoming messages are stored at user's mimei database.
                  * When fetching new messages, all messages during the last waiting period
-                 * are read. Have to filter out messages sent by appUser, which have benn
-                 * inserted into local database when sending out.
+                 * are read. Have to filter out messages sent by appUser, which have been
+                 * inserted into Room database when sending out.
                  * */
                 _chatMessages.update { it.plus(news.filter { m ->
                     m.authorId != appUser.mid
@@ -91,6 +90,8 @@ class ChatViewModel @AssistedInject constructor(
 
     private suspend fun loadChatMessages(receiptId: MimeiId): List<ChatMessage> {
         val messages = repository.loadMessages(appUser.mid, receiptId, 50)
+        // update session flag to false, means it is read.
+        chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
         return messages.map { it.toChatMessage() }
     }
 

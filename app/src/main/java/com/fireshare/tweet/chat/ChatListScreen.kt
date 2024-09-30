@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -24,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,26 +49,21 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatListScreen(
-    viewModel: ChatListViewModel)
+fun ChatListScreen(viewModel: ChatListViewModel)
 {
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
-
     viewModel.previewMessages()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    Text(
-                        text = "Chat Messages",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    UserAvatar(appUser, 40)
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() })
@@ -94,7 +89,7 @@ fun ChatListScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Top
             ) {
-                items(chatSessions) { chatSession ->
+                items(chatSessions, key = {it.receiptId}) { chatSession ->
                     ChatSession(viewModel, chatSession, navController)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
@@ -113,7 +108,7 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
     val userMap by viewModel.userMap.collectAsState()
     val user = userMap[chatSession.receiptId]
 
-    LaunchedEffect(chatSession.receiptId) {
+    LaunchedEffect(Unit) {
         viewModel.getSender(chatSession.receiptId)
     }
 

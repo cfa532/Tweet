@@ -17,7 +17,7 @@ class ChatSessionRepository(
 ) {
 
     suspend fun getAllSessions(): List<ChatSession> {
-        val sessionEntities = chatSessionDao.getAllSessions()
+        val sessionEntities = chatSessionDao.getAllSessions(appUser.mid)
         return sessionEntities.mapNotNull { sessionEntity ->
             val lastMessageEntity = chatMessageDao.getMessageById(sessionEntity.lastMessageId)
             lastMessageEntity?.let { sessionEntity.toChatSession(it.toChatMessage()) }
@@ -26,6 +26,7 @@ class ChatSessionRepository(
 
     suspend fun updateChatSession(userId: String, receiptId: String, hasNews: Boolean) {
         val sessionEntity = chatSessionDao.getSession(userId, receiptId)
+
         val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
         lastMessageEntity?.let { messageEntity ->
             if (sessionEntity != null) {
