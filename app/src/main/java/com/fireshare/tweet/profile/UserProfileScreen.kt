@@ -31,7 +31,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -112,7 +114,7 @@ fun UserProfileScreen(
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
                 }
-                items(tweets) { tweet ->
+                items(tweets, key = {it.mid.toString()}) { tweet ->
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 1.dp),
                         thickness = 0.5.dp,
@@ -196,10 +198,11 @@ fun ProfileDetail(
             Text(
                 text = "${followingsList.count()} ${stringResource(R.string.follow)}",
                 style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
                     .clickable(onClick = {
-                    navController.navigate(NavTweet.Following(user.mid))
-                }),
+                        navController.navigate(NavTweet.Following(user.mid))
+                    }),
             )
             Text(
                 text = "${user.tweetCount} ${stringResource(R.string.posts)}",

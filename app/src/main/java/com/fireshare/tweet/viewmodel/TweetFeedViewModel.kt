@@ -3,6 +3,8 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -199,17 +201,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 tweet.author = appUser
                                 // to add tweet in background involves problem with viewModel
                                 // in tweet list. Do NOT update tweet list, just inform user.
-//                                addTweet(tweet)
-                                viewModelScope.launch(Dispatchers.Main) {
-                                    SnackbarController.sendEvent(
-                                        event = SnackbarEvent(
-                                            message = getString(
-                                                context,
-                                                R.string.tweet_uploaded
-                                            )
-                                        )
-                                    )
-                                }
+                                addTweet(tweet)
+//                                viewModelScope.launch(Dispatchers.Main) {
+//                                    SnackbarController.sendEvent(
+//                                        event = SnackbarEvent(
+//                                            message = getString(
+//                                                context,
+//                                                R.string.tweet_uploaded
+//                                            )
+//                                        )
+//                                    )
+//                                }
                             }
                         }
                         WorkInfo.State.FAILED -> {

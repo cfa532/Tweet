@@ -33,7 +33,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,7 +104,7 @@ fun TweetFeedScreen(
                  modifier = Modifier.fillMaxSize(),
                  state = listState
              ) {
-                 items(tweets) { tweet ->
+                 items(tweets, key = { it.mid.toString() }) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
 
                      HorizontalDivider(
