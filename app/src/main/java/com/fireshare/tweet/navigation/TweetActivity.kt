@@ -75,8 +75,6 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
-
-
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
@@ -99,9 +97,8 @@ class TweetActivity : ComponentActivity() {
                         }
                     }
 
-                    val localContext = LocalContext.current
                     val viewModelStoreOwner =
-                        LocalViewModelStoreOwner.current ?: (localContext as TweetActivity)
+                        LocalViewModelStoreOwner.current ?: (this@TweetActivity)
                     val viewModelProvider: ViewModelProvider =
                         remember { ViewModelProvider(viewModelStoreOwner) }
 

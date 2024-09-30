@@ -181,12 +181,17 @@ class UserViewModel @AssistedInject constructor(
             Log.d("UserViewModel.getTweets()", "user=$user")
             val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
 
-            // Remove duplicates and sort by descending timestamp
-            val uniqueSortedTweets = tweetsList
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
-
-            _tweets.update { currentTweets -> currentTweets + uniqueSortedTweets }
+            // Update _tweets with tweetList, replacing duplicates and ensuring no duplicates
+            val updatedTweets = _tweets.value.toMutableList() // Get current tweets from _tweets
+            tweetsList.forEach { newTweet ->
+                val existingTweetIndex = updatedTweets.indexOfFirst { it.mid == newTweet.mid }
+                if (existingTweetIndex != -1) {
+                    updatedTweets[existingTweetIndex] = newTweet // Replace existing tweet
+                } else {
+                    updatedTweets.add(newTweet) // Add new tweet
+                }
+            }
+            _tweets.value = updatedTweets.distinctBy { it.mid }.sortedByDescending { it.timestamp } // Update _tweets with the final result
         }
     }
 
