@@ -97,11 +97,11 @@ fun TweetFeedScreen(
              modifier = Modifier
                  .pullRefresh(pullRefreshState)
                  .fillMaxSize()
-//                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                  .padding(innerPadding),
          ) {
              LazyColumn(
-                 modifier = Modifier.fillMaxSize(),
+                 modifier = Modifier.fillMaxSize()
+                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                  state = listState
              ) {
                  items(tweets, key = { it.mid.toString() }) { tweet ->

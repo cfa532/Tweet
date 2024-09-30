@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -188,7 +189,8 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 disabledContentColor = Color.Gray, disabledContainerColor = Color.White
             ),
-            modifier = Modifier.size(width = 70.dp, height = 30.dp)
+            modifier = Modifier.width(intrinsicSize = IntrinsicSize.Min)
+                .height(intrinsicSize = IntrinsicSize.Min)
                 .padding(0.dp)
         ) {
             Text(
