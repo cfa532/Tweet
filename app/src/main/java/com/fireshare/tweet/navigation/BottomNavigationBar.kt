@@ -38,7 +38,6 @@ fun BottomNavigationBar(
 ) {
     var selectedItemIndex by rememberSaveable { mutableIntStateOf(0) }
     val badgeCount by bottomBarViewModel.badgeCount.collectAsState()
-    bottomBarViewModel.updateBadgeCount()
 
     val items = listOf(
         BottomNavigationItem(
