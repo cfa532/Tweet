@@ -3,11 +3,13 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.material3.Snackbar
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
@@ -202,28 +204,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 // to add tweet in background involves problem with viewModel
                                 // in tweet list. Do NOT update tweet list, just inform user.
                                 addTweet(tweet)
-//                                viewModelScope.launch(Dispatchers.Main) {
-//                                    SnackbarController.sendEvent(
-//                                        event = SnackbarEvent(
-//                                            message = getString(
-//                                                context,
-//                                                R.string.tweet_uploaded
-//                                            )
-//                                        )
-//                                    )
-//                                }
+                                (context as? LifecycleOwner)?.lifecycleScope?.launch {
+                                    SnackbarController.sendEvent(
+                                        event = SnackbarEvent(
+                                            message = context.getString(R.string.tweet_uploaded)
+                                        )
+                                    )
+                                }
                             }
                         }
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
                             Log.e("UploadTweet", "Tweet upload failed")
-                            viewModelScope.launch(Dispatchers.Main) {
+                            (context as? LifecycleOwner)?.lifecycleScope?.launch {
                                 SnackbarController.sendEvent(
                                     event = SnackbarEvent(
-                                        message = getString(
-                                            context,
-                                            R.string.tweet_failed
-                                        )
+                                        message = context.getString(R.string.tweet_failed)
                                     )
                                 )
                             }
