@@ -55,7 +55,6 @@ fun LoginScreen() {
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = TW_CONST.GUEST_ID) {
             factory -> factory.create(TW_CONST.GUEST_ID)
     }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
     val focusManager = LocalFocusManager.current
     val username by viewModel.username
@@ -147,7 +146,6 @@ fun LoginScreen() {
         Button(
             onClick = { if (viewModel.login() != null) {
                 // refresh tweet feed view
-                tweetFeedViewModel.refresh()
                 navController.popBackStack()
             } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),

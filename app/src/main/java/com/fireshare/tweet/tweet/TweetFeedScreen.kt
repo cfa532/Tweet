@@ -80,9 +80,12 @@ fun TweetFeedScreen(
              viewModel.loadOlderTweets()
          }
      }
-     LaunchedEffect(Unit) {
-         Log.d("TweetFeedVM", "Call getTweets()")
+     if (tweets.isEmpty())
          viewModel.refresh()
+     else {
+         LaunchedEffect(tweets) {
+             listState.animateScrollToItem(0)
+         }
      }
 
      Scaffold(

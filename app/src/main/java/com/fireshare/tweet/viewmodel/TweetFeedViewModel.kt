@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
@@ -37,6 +38,11 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
+    companion object {
+        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
+        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
+        private const val ONE_DAY_IN_MILLIS = 86_400_000L
+    }
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
@@ -50,28 +56,23 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
     // current time, end time is earlier in time, therefore smaller timestamp
-    private var startTimestamp = System.currentTimeMillis()
-    private var endTimestamp = startTimestamp - java.lang.Long.valueOf(2_592_000_000)  // 30 days
+    private var startTimestamp = mutableStateOf(System.currentTimeMillis())
+    private var endTimestamp = mutableStateOf(System.currentTimeMillis()- SEVEN_DAYS_IN_MILLIS)  // 30 days
 
-    companion object {
-        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
-        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
-        private const val ONE_DAY_IN_MILLIS = 86_400_000L
-    }
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-//        _tweets.value = emptyList()
+        _isRefreshing.value = true
         viewModelScope.launch(Dispatchers.IO) {
             _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
             _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
             if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
                 _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
 
-            startTimestamp = System.currentTimeMillis()
-            endTimestamp = startTimestamp - THIRTY_DAYS_IN_MILLIS
+            startTimestamp.value = System.currentTimeMillis()
+            endTimestamp.value = startTimestamp.value - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
-            getTweets(startTimestamp, endTimestamp)
+            getTweets(startTimestamp.value, endTimestamp.value)
             _isRefreshing.value = false
         }
     }
@@ -79,20 +80,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun loadNewerTweets() {
         println("At top already")
         _isRefreshing.value = true
-//        val endTimestamp = startTimestamp
-        startTimestamp = System.currentTimeMillis()
-        val endTimestamp = startTimestamp - ONE_DAY_IN_MILLIS
-        Log.d("TweetFeedVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
-        getTweets(startTimestamp, endTimestamp)
+        startTimestamp.value = System.currentTimeMillis()
+        val endTimestamp = startTimestamp.value - ONE_DAY_IN_MILLIS
+        Log.d("loadNewerTweets", "startTimestamp=${startTimestamp.value}, endTimestamp=$endTimestamp")
+        getTweets(startTimestamp.value, endTimestamp)
         _isRefreshing.value = false
     }
     suspend fun loadOlderTweets() {
         println("At bottom already")
         _isRefreshingAtBottom.value = true
-        val startTimestamp = endTimestamp
-        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Log.d("TweetFeedVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
-        getTweets(startTimestamp, endTimestamp)
+        val startTimestamp = endTimestamp.value
+        endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        Log.d("loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}")
+        getTweets(startTimestamp, endTimestamp.value)
         delay(500)
         _isRefreshingAtBottom.value = false
     }
