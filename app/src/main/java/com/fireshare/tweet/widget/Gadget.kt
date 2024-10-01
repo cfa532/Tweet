@@ -4,9 +4,11 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
+import androidx.compose.ui.graphics.colorspace.connect
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,6 +17,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Socket
 
 object Gadget {
 
@@ -90,7 +94,7 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getFirstReachableUri(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
+    suspend fun getFirstReachableUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
         val ips = ipList.map { ip ->
             Log.d("GetFirstURL","trying $ip")
             async {
@@ -98,6 +102,22 @@ object Gadget {
             }
         }
         ips.awaitAll().firstOrNull { it != null }
+    }
+
+    suspend fun findFirstReachableAddress(hostIps: List<String>): String? {
+        return withContext(IO) {
+            hostIps.firstOrNull { hostIp ->
+                try {
+                    val socket = Socket()
+                    val pair = hostIp.split(":")
+                    socket.connect(InetSocketAddress(pair[0], pair[1].toInt()), 1000) // Timeout of 5 seconds
+                    socket.close()
+                    true // Reachable
+                } catch (e: Exception) {
+                    false // Not reachable
+                }
+            }
+        }
     }
 
     suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {

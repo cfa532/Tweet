@@ -70,6 +70,7 @@ class UserViewModel @AssistedInject constructor(
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
+    var hasLogon = mutableStateOf(false)
 
     fun loadNewerTweets() {
         println("UserVM at top already")
@@ -90,11 +91,7 @@ class UserViewModel @AssistedInject constructor(
         getTweets()
         _isRefreshingAtBottom.value = false
     }
-    fun isLoggedIn(): Boolean {
-        // check if the current user is guest user.
-        val log = preferencesHelper.getUserId()
-        return log.isEmpty() || log != TW_CONST.GUEST_ID
-    }
+
     fun hidePhrase() {
         // Even after user logout, its key phrase may still on the device,
         // for future convenience. Hide it in case someone else tries to register a new account.
@@ -199,40 +196,41 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    suspend fun login(): User? {
-        isLoading.value = true
-        if (username.value?.isNotEmpty() == true
-            && password.value.isNotEmpty()
-            && keyPhrase.value?.isNotEmpty() == true) {
-            val user =
-                HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
-            isLoading.value = false
-            if (user == null) {
+    fun login() {
+        viewModelScope.launch(Dispatchers.IO) {
+            isLoading.value = true
+            if (username.value?.isNotEmpty() == true
+                && password.value.isNotEmpty()
+                && keyPhrase.value?.isNotEmpty() == true
+            ) {
+                val user =
+                    HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
+                isLoading.value = false
+                if (user == null) {
+                    loginError.value = "Login failed"
+                    preferencesHelper.saveKeyPhrase("")
+                    preferencePhrase = ""
+                    keyPhrase.value = null
+                } else {
+                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
+                    preferencesHelper.setUserId(user.mid)
+                    appUser = user
+                    _user.value = user
+                    hasLogon.value = true
+                }
+            } else {
                 loginError.value = "Login failed"
                 preferencesHelper.saveKeyPhrase("")
                 preferencePhrase = ""
                 keyPhrase.value = null
-                return null
-            } else {
-                preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
-                preferencesHelper.setUserId(user.mid)
-                appUser = user
-                _user.value = user
-                return user
+                isLoading.value = false
             }
-        } else {
-            loginError.value = "Login failed"
-            preferencesHelper.saveKeyPhrase("")
-            preferencePhrase = ""
-            keyPhrase.value = null
-            isLoading.value = false
-            return null
         }
     }
 
     fun logout() {
-        appUser = appUser.copy(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-        appUser.followingList = HproseInstance.getAlphaIds()
+        hasLogon.value = false
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
     }
 

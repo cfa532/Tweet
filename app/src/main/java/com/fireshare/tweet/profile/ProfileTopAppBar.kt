@@ -51,6 +51,7 @@ import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -122,6 +123,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     }
                 }
                 Box {
+                    val tweetFeedviewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
@@ -138,7 +140,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         if (user.mid == appUser.mid) {
                             DropdownMenuItem(onClick = {
                                 viewModel.logout()
-                                navController.navigate(NavTweet.TweetFeed)
+                                tweetFeedviewModel.clearTweets()
+                                navController.navigate(NavTweet.Login)
                             },
                                 text = {
                                     Text(

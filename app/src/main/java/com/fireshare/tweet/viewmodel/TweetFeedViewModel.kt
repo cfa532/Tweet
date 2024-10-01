@@ -73,6 +73,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    fun clearTweets() {
+        _tweets.value = emptyList()
+    }
+
     private fun updateFollowings() {
         viewModelScope.launch(Dispatchers.IO) {
             _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()

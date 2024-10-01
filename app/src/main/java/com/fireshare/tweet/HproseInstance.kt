@@ -11,7 +11,8 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.widget.Gadget.getFirstReachableUri
+import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
+import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
@@ -92,16 +93,20 @@ object HproseInstance {
                 if (windowParams != null) {
                     val paramMap = Gson().fromJson(windowParams, Map::class.java) as Map<*, *>
                     appId = paramMap["mid"].toString()
-                    val hostIp = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
+                    val hostIps = ((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>).map {
+                        (it as ArrayList<*>)[0] as String
+                    }
                     val userId = preferenceHelper.getUserId()
                     appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                         /**
                          * This is a login user if preference has valid userId. Initiate current account.
                          * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
                          * */
-                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$hostIp")
-                    } else
-                        User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$hostIp")
+                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIps[0]}")
+                    } else {
+                        val firstIp = findFirstReachableAddress(hostIps)
+                        User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                    }
                     Log.d("initAppEntry", "Succeed. $appId, $appUser")
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
@@ -208,11 +213,12 @@ object HproseInstance {
                     "aid": "$appId", "ver": "last"}
                     """.trimIndent()
                 request = gson.fromJson(json, Map::class.java) as Map<*, *>
-                val ret = client.runMApp("login", request) as User?
+                val ret = client.runMApp("login", request) as Map<*, *>?
                 return if (ret != null) user else null
             }
             null
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("login", e.toString())
             null
         }
@@ -240,7 +246,7 @@ object HproseInstance {
                 val regex = "\"(.*?)\"".toRegex()
                 val ipAddresses = regex.findAll(modifiedString).map { it.value.trim('"') }.toList()
                 if (ipAddresses.isNotEmpty()) {
-                    getFirstReachableUri(ipAddresses, userId)?.let { u ->
+                    getFirstReachableUser(ipAddresses, userId)?.let { u ->
                         // Now user object has the best ip address
                         cachedUsers.add(u)
                         return u
@@ -745,6 +751,27 @@ object HproseInstance {
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
         try {
             val method = "get_user_core_data"
+            val url =
+                "http://$ip/entry?&aid=$appId&ver=last&entry=$method&userid=$mid"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return null
+                val gson = Gson()
+                val user = gson.fromJson(responseBody, User::class.java)
+                user.baseUrl = "http://$ip"
+                Log.d("isReachable", "TRUE: user=$user")
+                return user
+            }
+        } catch (e: Exception) {
+            Log.e("isReachable", "No reachable. $ip $e")
+            return null
+        }
+        return null
+    }
+    fun isReachableApp(mid: MimeiId, ip: String): User? {
+        try {
+            val method = "main"
             val url =
                 "http://$ip/entry?&aid=$appId&ver=last&entry=$method&userid=$mid"
             val request = Request.Builder().url(url).build()

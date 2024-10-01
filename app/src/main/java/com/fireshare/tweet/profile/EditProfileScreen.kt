@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 
@@ -79,8 +80,10 @@ fun EditProfileScreen(
 
     LaunchedEffect(Unit) {
 //        focusRequester.requestFocus()
-        if (!viewModel.isLoggedIn())
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            // a guest user cannot see phrase that may be stored on device.
             viewModel.hidePhrase()
+        }
         keyboardController?.show()
     }
 

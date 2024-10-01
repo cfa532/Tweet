@@ -27,7 +27,7 @@ class BottomBarViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             while (true) {
                 updateBadgeCount()
-                delay(60 * 1000) // Delay for 1 minute
+                delay(600 * 1000) // Delay for 1 minute
             }
         }
     }
