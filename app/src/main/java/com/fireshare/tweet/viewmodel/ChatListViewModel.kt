@@ -9,6 +9,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +30,14 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _chatSessions.update { loadChatSessions() }
+            loadChatSessions().forEach { chatSession ->
+                launch { // Launch a separate coroutine for each chat session
+                    val user = HproseInstance.getUserBase(chatSession.receiptId)
+                    _userMap.value =
+                        _userMap.value.toMutableMap().apply { put(chatSession.receiptId, user) }
+                    _chatSessions.update { it + chatSession } // Update chatSessions with the new session
+                }
+            }
         }
     }
 
@@ -45,13 +53,6 @@ class ChatListViewModel @Inject constructor(
             // Do not update session database, only show new sessions on UI
             // Update session database only when user opens chat screen.
             _chatSessions.update { updatedSessions }
-        }
-    }
-
-    fun getSender(userId: MimeiId) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val user = HproseInstance.getUserBase(userId)
-            _userMap.value = _userMap.value.toMutableMap().apply { put(userId, user) }
         }
     }
 }
