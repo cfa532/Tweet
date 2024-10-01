@@ -196,7 +196,7 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel, pare
         horizontalArrangement = Arrangement.End
     ) {
         Text(
-            text = if (followState.value) "Unfollow" else "  Follow  ",
+            text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier

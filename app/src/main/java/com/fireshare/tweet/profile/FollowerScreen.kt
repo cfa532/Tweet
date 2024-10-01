@@ -92,9 +92,7 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
 
         Surface(modifier = Modifier.padding(innerPadding))
         {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth()
-
+            LazyColumn( modifier = Modifier.fillMaxWidth()
             ) {
                 item {
                     Row(
@@ -190,7 +188,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
         horizontalArrangement = Arrangement.End
     ) {
         Text(
-            text = if (followState.value) "Unfollow" else "  Follow  ",
+            text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier

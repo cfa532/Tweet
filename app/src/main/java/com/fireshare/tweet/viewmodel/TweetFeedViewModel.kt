@@ -57,7 +57,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // current time, end time is earlier in time, therefore smaller timestamp
     private var startTimestamp = mutableStateOf(System.currentTimeMillis())
-    private var endTimestamp = mutableStateOf(System.currentTimeMillis()- SEVEN_DAYS_IN_MILLIS)  // 30 days
+    private var endTimestamp = mutableStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
 
 
     // called after login or logout(). Update current user's following list within both calls.
