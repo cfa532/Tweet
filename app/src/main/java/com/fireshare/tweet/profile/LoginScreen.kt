@@ -26,7 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -43,12 +45,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen() {
@@ -64,6 +68,11 @@ fun LoginScreen() {
     val isLoading by viewModel.isLoading
     val loginError by viewModel.loginError
 
+    LaunchedEffect(appUser.mid) {
+        if (viewModel.isLoggedIn()) {
+            navController.popBackStack()
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -143,13 +152,17 @@ fun LoginScreen() {
         }
         Spacer(modifier = Modifier.height(8.dp))
 
+        val scope = rememberCoroutineScope()
         Button(
-            onClick = { if (viewModel.login() != null) {
-                // refresh tweet feed view
-                navController.popBackStack()
-            } },
+            onClick = {
+                scope.launch {
+                    if (viewModel.login() != null) {
+                        navController.popBackStack()
+                    }
+                }
+            },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
-            enabled = !isLoading
+            enabled = !isLoading    // disable Login button during uploading.
         ) {
             if (isLoading) {
                 CircularProgressIndicator(

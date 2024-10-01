@@ -199,7 +199,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    fun login(): User? {
+    suspend fun login(): User? {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
@@ -231,7 +231,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun logout() {
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = HproseInstance.BASE_URL)
+        appUser = appUser.copy(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         appUser.followingList = HproseInstance.getAlphaIds()
         preferencesHelper.setUserId(null)
     }

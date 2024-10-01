@@ -17,8 +17,6 @@ import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.jsonArray
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
@@ -30,7 +28,7 @@ import java.util.regex.Pattern
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
-    var BASE_URL: String? = null    // in case no network
+//    var BASE_URL: String? = null    // in case no network
     private lateinit var preferenceHelper: PreferenceHelper
 
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
@@ -43,7 +41,7 @@ object HproseInstance {
     private const val CHUNK_SIZE = 5 * 1024 * 1024 // 5MB in bytes
 
     private val client: HproseService by lazy {
-        HproseClient.create("$BASE_URL/webapi/").useService(HproseService::class.java)
+        HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
     }
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -52,104 +50,65 @@ object HproseInstance {
 //        .addInterceptor(loggingInterceptor)
         .build()
 
-    fun init(context: Context, preferenceHelper: PreferenceHelper) {
+    suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
         this.preferenceHelper = preferenceHelper
-        try {
-            // Use default AppUrl to enter App network, update with IP of the fastest node.
-            val pair = initAppEntry(preferenceHelper)       // load default url: twbe.fireshare.us
-            appId = pair.first
-            BASE_URL = pair.second
-            Log.d("HproseInstance.init()", "AppID=$appId, BaseURL=$BASE_URL")
-            preferenceHelper.setAppId(appId)
-        } catch (e: Exception) {
-            appId = preferenceHelper.getAppId().toString()
-            BASE_URL = preferenceHelper.getAppUrl().toString()
-            Log.e("HproseInstance.init()", e.toString())
-        } finally {
-            val userId = preferenceHelper.getUserId()
+        initAppEntry(preferenceHelper)
 
-            if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
-
-                // There is a logon user if preference has valid userId. Initiate current account.
-                initCurrentUser(userId)?.let {
-                    appUser = it
-                    cachedUsers.add(it) // the list shall be empty now.
-                }
-            } else {
-                appUser.mid = TW_CONST.GUEST_ID
-                appUser.baseUrl = BASE_URL
-            }
-            database = Room.databaseBuilder(
-                context.applicationContext,
-                ChatDatabase::class.java,
-                "chat_database"
-            ).build()
-        }
+        database = Room.databaseBuilder(
+            context.applicationContext,
+            ChatDatabase::class.java,
+            "chat_database"
+        ).build()
     }
 
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
-    private fun initAppEntry(preferenceHelper: PreferenceHelper): Pair<MimeiId, String?> {
-        val baseUrl = preferenceHelper.getAppUrl().toString()
-        var request = Request.Builder().url("https://$baseUrl").build()
+    private suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
+        val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
+        val request = Request.Builder().url(baseUrl).build()
         try {
-            var response = httpClient.newCall(request).execute()
+            val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                // retrieve window.Param from page source code of http://base_url
                 val htmlContent = response.body?.string()?.trimIndent()
                 val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
                 val matcher = pattern.matcher(htmlContent as CharSequence)
-                var jsonString: String? = null
-
+                var windowParams: String? = null
                 if (matcher.find()) {
-                    jsonString = matcher.group(1)
+                    /**
+                     * retrieve window.Param from page source code of http://base_url
+                     * window.setParam({
+                     *         CurNode:0,
+                     *         log: true,
+                     *         ver:"last",
+                     *         addrs: [[["183.159.17.7:8081", 3080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 39642842857833],["192.168.0.94:8081", 281478208946270]]],
+                     *         aid: "",
+                     *         remote:"::1",
+                     *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
+                     * })
+                     * */
+                    windowParams = matcher.group(1)
                 }
-
-                if (jsonString != null) {
-                    val gson = Gson()
-                    val paramMap = gson.fromJson(jsonString, Map::class.java) as Map<*, *>
-
-                    request =
-                        Request.Builder().url("http://$baseUrl/getvar?name=domainaddr&arg0=$baseUrl")
-                            .build()
-                    response = httpClient.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        val addrs = response.body?.string()?.trim()?.removeSurrounding("\"")
-                        return Pair(paramMap["mid"] as MimeiId, "http://$addrs")
-                    }
+                if (windowParams != null) {
+                    val paramMap = Gson().fromJson(windowParams, Map::class.java) as Map<*, *>
+                    appId = paramMap["mid"].toString()
+                    val hostIp = (((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>)[0] as ArrayList<*>)[0] as String
+                    val userId = preferenceHelper.getUserId()
+                    appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
+                        /**
+                         * This is a login user if preference has valid userId. Initiate current account.
+                         * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
+                         * */
+                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$hostIp")
+                    } else
+                        User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$hostIp")
+                    Log.d("initAppEntry", "Succeed. $appId, $appUser")
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
                 }
-                return Pair(preferenceHelper.getAppId().toString(), null)
             }
         } catch (e: Exception) {
             Log.e("initAppEntry", e.toString())
-            return Pair(preferenceHelper.getAppId().toString(), null)
-        }
-        Log.e("initAppEntry", "Failed to get AppId, using default ones.")
-        return Pair(preferenceHelper.getAppId().toString(), null)
-    }
-
-    // only used for registered user, whose preferenceHelper has userId in preference.
-    // if preferenceHelper has current User'd ID, the user is in logon status.
-    private fun initCurrentUser(userId: MimeiId? = null, keyPhrase: String = ""): User? {
-        if (userId == null && keyPhrase.isEmpty()) return null
-        val method = "init_user_mid"
-        val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId&phrase=$keyPhrase"
-        val request = Request.Builder().url(url).build()
-        return try {
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = response.body?.string()
-                val gson = Gson()
-                val user = gson.fromJson(json, User::class.java)
-                user.baseUrl = BASE_URL
-                return user
-            }
-            null
-        } catch (e: Exception) {
-            Log.e("initCurrentUser", e.toString())
-            null
         }
     }
 
@@ -233,20 +192,24 @@ object HproseInstance {
         }
     }
 
-    fun login(username: String, password: String, keyPhrase: String): User? {
+    suspend fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
-        val entry = "login"
-        val json = """
-            {"phrase": "$keyPhrase", "username": "$username", "password": "$password", 
-            "aid": "$appId", "ver": "last"}
-        """.trimIndent()
-        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        val entry = "get_userid"
+        var json = """
+            {"phrase": "$keyPhrase", "aid": "$appId", "ver": "last"}
+            """.trimIndent()
+        var request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            val ret = client.runMApp(entry, request) as String?
-            ret?.let {
-                val user = Json.decodeFromString<User>(ret)
-                user.baseUrl = BASE_URL
-                return user
+            val userId = client.runMApp(entry, request) as String?
+            userId?.let {
+                val user = getUserBase(it)
+                json = """
+                    {"phrase": "$keyPhrase", "username": "$username", "password": "$password", 
+                    "aid": "$appId", "ver": "last"}
+                    """.trimIndent()
+                request = gson.fromJson(json, Map::class.java) as Map<*, *>
+                val ret = client.runMApp("login", request) as User?
+                return if (ret != null) user else null
             }
             null
         } catch (e: Exception) {
@@ -264,26 +227,21 @@ object HproseInstance {
      * Get base url where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
      * */
-    suspend fun getUserBase( userId: MimeiId ): User? {
+    suspend fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
         // check if user data has been read
         cachedUsers.firstOrNull { it.mid == userId }?.let { return it }
         try {
-            val method = "get_providers"
-            val url = "$BASE_URL/entry?&aid=$appId&ver=last&entry=$method&userid=$userId"
+            val url = "$baseUrl/getvar?name=mmprovsips&arg0=$userId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val providers = response.body?.string() ?: return null
-                val providerList = Json.parseToJsonElement(providers).jsonArray
-                if (providerList.isNotEmpty()) {
-                    Log.d("getUserBase", "UserId=$userId")
-                    Log.d("getUserBase", providerList.toString())
-                    val ipAddresses = providerList[0] as JsonArray
-                    getFirstReachableUri(
-                        ipAddresses.map {
-                            (it as JsonArray)[0].toString().trim().removeSurrounding("\"")
-                        }, userId
-                    )?.let { u ->
+                val string = response.body?.string()?.trim()?.removeSurrounding("\"") ?: return null
+                val modifiedString = string.replace("\\", "")
+                val regex = "\"(.*?)\"".toRegex()
+                val ipAddresses = regex.findAll(modifiedString).map { it.value.trim('"') }.toList()
+                if (ipAddresses.isNotEmpty()) {
+                    getFirstReachableUri(ipAddresses, userId)?.let { u ->
+                        // Now user object has the best ip address
                         cachedUsers.add(u)
                         return u
                     }
@@ -291,7 +249,7 @@ object HproseInstance {
             }
             return null
         } catch (e: Exception) {
-            Log.e("getUserBase()", "$BASE_URL $userId $e")
+            Log.e("getUserBase()", "${appUser.baseUrl} $userId $e")
             return null
         }
     }
@@ -323,7 +281,6 @@ object HproseInstance {
                 val json = response.body?.string()
                 val gson = Gson()
                 val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
-                ret.baseUrl = BASE_URL
 
                 ret.name?.let { preferenceHelper.saveName(it) }
                 ret.profile?.let { preferenceHelper.saveProfile(it) }

@@ -74,11 +74,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     private fun updateFollowings() {
-        _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-        _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-        if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-            _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
-
+        viewModelScope.launch(Dispatchers.IO) {
+            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+                _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
+        }
     }
 
     fun loadNewerTweets() {
