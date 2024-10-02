@@ -40,10 +40,8 @@ object HproseInstance {
 
     // Keys within the mimei of the user's database
     private const val CHUNK_SIZE = 5 * 1024 * 1024 // 5MB in bytes
+    private var client: HproseService? = null
 
-    private val client: HproseService by lazy {
-        HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
-    }
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -111,6 +109,7 @@ object HproseInstance {
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
                 }
+                client = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
             }
         } catch (e: Exception) {
             Log.e("initAppEntry", e.toString())
@@ -156,7 +155,7 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
             // write outgoing message to user's Mimei db
-            client.runMApp(entry, request)  as List<ChatMessage>?
+            client?.runMApp(entry, request)  as List<ChatMessage>?
         } catch (e: Exception) {
             Log.e("fetchMessages", e.toString())
             null
@@ -165,7 +164,6 @@ object HproseInstance {
 
 
     // get a list of unread incoming messages from other users
-// get a list of unread incoming messages from other users
     fun checkNewMessages(): List<ChatMessage>? {
         val gson = Gson()
         val entry = "message_check"
@@ -175,7 +173,7 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
             // write outgoing message to user's Mimei db
-            client.runMApp(entry, request) as List<ChatMessage>?
+            client?.runMApp(entry, request) as List<ChatMessage>?
         } catch (e: Exception) {
             Log.e("checkNewMessages", e.toString())
             null
@@ -190,31 +188,42 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            client.runMApp(entry,request)
+            client?.runMApp(entry,request)
         } catch (e: Exception) {
             Log.e("checkUpdates", e.toString())
             null
         }
     }
 
+    /**
+     * There are two steps for a guest user to login.
+     * First, find the true UserID given its key phrase, using the IP address of the node.
+     * Second, find the node which has this user's data, and use it to login.
+     * Finally update the baseUrl of the current user with the new ip of the user node.
+     * */
     suspend fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
         val entry = "get_userid"
         var json = """
             {"phrase": "$keyPhrase", "aid": "$appId", "ver": "last"}
             """.trimIndent()
-        var request = gson.fromJson(json, Map::class.java) as Map<*, *>
+        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            val userId = client.runMApp(entry, request) as String?
-            userId?.let {
-                val user = getUserBase(it)
-                json = """
-                    {"phrase": "$keyPhrase", "username": "$username", "password": "$password", 
-                    "aid": "$appId", "ver": "last"}
-                    """.trimIndent()
-                request = gson.fromJson(json, Map::class.java) as Map<*, *>
-                val ret = client.runMApp("login", request) as Map<*, *>?
-                return if (ret != null) user else null
+            val userId: String = client?.runMApp(entry, request) ?: return null
+            val user = getUserBase(userId)?: return null
+            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password&phrase=$keyPhrase"
+            val request2 = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request2).execute()
+            if (response.isSuccessful) {
+                json = response.body?.string() ?: return null
+                // only to verify the login succeed.
+                gson.fromJson(json, User::class.java) ?: return null
+                /**
+                 * Now user object has a new baseUrl of the node which hold user data.
+                 * If login succeed, httpClient need to use the new IP from now on.
+                 * */
+                client = HproseClient.create(user.baseUrl).useService(HproseService::class.java)
+                return user
             }
             null
         } catch (e: Exception) {
@@ -308,7 +317,7 @@ object HproseInstance {
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
         try {
-            client.runMApp(entry, request) as Unit?
+            client?.runMApp(entry, request) as Unit?
         } catch (e: Exception) {
             Log.e("setUserAvatar", e.toString())
         }
@@ -695,13 +704,13 @@ object HproseInstance {
                     var bytesRead: Int
                     while (stream.read(buffer).also { bytesRead = it } != -1) {
                         if (fsid != null) {
-                            client.mfSetData(fsid, buffer, offset)
+                            client?.mfSetData(fsid, buffer, offset)
                         }
                         offset += bytesRead
                     }
                 }
                 val cid = fsid?.let {
-                    client.mfTemp2Ipfs(it, appUser.mid)
+                    client?.mfTemp2Ipfs(it, appUser.mid)
                 }
                 inputStream.close()
                 println("cid=$cid")
