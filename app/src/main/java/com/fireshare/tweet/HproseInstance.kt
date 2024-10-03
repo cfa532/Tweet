@@ -13,6 +13,7 @@ import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
+import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
@@ -80,7 +81,7 @@ object HproseInstance {
                      *         CurNode:0,
                      *         log: true,
                      *         ver:"last",
-                     *         addrs: [[["183.159.17.7:8081", 3080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 39642842857833],["192.168.0.94:8081", 281478208946270]]],
+                     *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
                      *         aid: "",
                      *         remote:"::1",
                      *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
@@ -91,18 +92,24 @@ object HproseInstance {
                 if (windowParams != null) {
                     val paramMap = Gson().fromJson(windowParams, Map::class.java) as Map<*, *>
                     appId = paramMap["mid"].toString()
-                    val hostIps = ((paramMap["addrs"] as ArrayList<*>)[0] as ArrayList<*>).map {
-                        (it as ArrayList<*>)[0] as String
-                    }
+
+                    /**
+                     * addrs is an ArrayList of ArrayList of node's IP address pairs.
+                     * Each pair is an ArrayList of two elements. The first is the IP address,
+                     * and the second is the time spent to get response from the IP.
+                     *
+                     * hostIPs is a list of node's IP that is an App Mimei provider.
+                     */
+                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                     val userId = preferenceHelper.getUserId()
                     appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                         /**
                          * This is a login user if preference has valid userId. Initiate current account.
                          * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
                          * */
-                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIps[0]}")
+                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
                     } else {
-                        val firstIp = findFirstReachableAddress(hostIps)
+                        val firstIp = findFirstReachableAddress(hostIPs)
                         User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                     }
                     Log.d("initAppEntry", "Succeed. $appId, $appUser")
@@ -162,7 +169,6 @@ object HproseInstance {
         }
     }
 
-
     // get a list of unread incoming messages from other users
     fun checkNewMessages(): List<ChatMessage>? {
         val gson = Gson()
@@ -175,6 +181,7 @@ object HproseInstance {
             // write outgoing message to user's Mimei db
             client?.runMApp(entry, request) as List<ChatMessage>?
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("checkNewMessages", e.toString())
             null
         }
@@ -759,9 +766,9 @@ object HproseInstance {
 
     fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
         try {
-            val method = "get_user_core_data"
+            val entry = "get_user_core_data"
             val url =
-                "http://$ip/entry?&aid=$appId&ver=last&entry=$method&userid=$mid"
+                "http://$ip/entry?&aid=$appId&ver=last&entry=$entry&userid=$mid"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {

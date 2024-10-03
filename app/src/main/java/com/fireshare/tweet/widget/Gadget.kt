@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.compose.ui.graphics.colorspace.connect
+import androidx.compose.ui.input.key.key
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -17,10 +18,31 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 
 object Gadget {
+    fun getIpAddresses(nodeList: ArrayList<*>): List<String> {
+        val ipAddresses = mutableListOf<String>()
+        for (i in 0 until nodeList.size) {
+            val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
+            val ipAddress = getPreferredIpAddress(nodeIps)
+            ipAddresses.add(ipAddress)
+        }
+        return ipAddresses
+    }
+
+    private fun getPreferredIpAddress(ipList: ArrayList<*>): String {
+        // Turn the IP list into a map if {IP: Response} and get the one with smallest response time.
+        // ["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833]
+        val ipMap = ipList.associate {
+            val pair = it as ArrayList<*>;
+            pair[0] to pair[1]
+        }
+        val ip = ipMap.minByOrNull { it.value as Double }?.key
+        return ip.toString()
+    }
 
     suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
         return withContext(IO) {
@@ -115,21 +137,6 @@ object Gadget {
                     true // Reachable
                 } catch (e: Exception) {
                     false // Not reachable
-                }
-            }
-        }
-    }
-
-    suspend fun uploadAttachments(context: Context, attachments: List<Uri>): List<MimeiId> {
-        return attachments.map { uri ->
-            withContext(IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        HproseInstance.uploadToIPFS(inputStream)
-                    } ?: throw FileNotFoundException("File not found for URI: $uri")
-                }.getOrElse { e ->
-                    Log.e("uploadAttachments", "Failed to upload file: $uri", e)
-                    throw IOException("Upload failed.")
                 }
             }
         }
