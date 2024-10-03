@@ -165,6 +165,7 @@ object HproseInstance {
             // write outgoing message to user's Mimei db
             client?.runMApp(entry, request)  as List<ChatMessage>?
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("fetchMessages", e.toString())
             null
         }
@@ -173,18 +174,21 @@ object HproseInstance {
     // get a list of unread incoming messages from other users
     fun checkNewMessages(): List<ChatMessage>? {
         if (appUser.mid == TW_CONST.GUEST_ID) return null
-        val gson = Gson()
-        val entry = "message_check"
-        val json = """
-            {"aid": $appId, "ver":"last", "userid":${appUser.mid}}
-        """.trimIndent()
-        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            // write outgoing message to user's Mimei db
-            client?.runMApp(entry, request) as List<ChatMessage>?
+            val gson = Gson()
+            val url =
+                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=message_check&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val list = gson.fromJson(json, object : TypeToken<List<ChatMessage>>() {}.type) as List<ChatMessage>
+                return list
+            }
+            null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("checkNewMessages", e.toString())
+            Log.e("checkNewMessages", appUser.toString())
             null
         }
     }

@@ -82,7 +82,8 @@ fun TweetFeedScreen(
          }
      }
      LaunchedEffect(Unit) {
-         viewModel.refresh()
+         if (initState)
+             viewModel.refresh()
      }
      LaunchedEffect(tweets) {
          if (!initState)

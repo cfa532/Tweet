@@ -20,7 +20,7 @@ class BottomBarViewModel : ViewModel() {
     }
 
     init {
-        startPeriodicUpdate()
+//        startPeriodicUpdate()
     }
 
     private fun startPeriodicUpdate() {
