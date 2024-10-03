@@ -12,16 +12,19 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
+import com.fireshare.tweet.widget.Gadget.getBestIPAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
+import org.json.JSONArray
 import java.io.InputStream
 import java.net.ProtocolException
 import java.net.URLEncoder
@@ -36,7 +39,7 @@ object HproseInstance {
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
 
     // all loaded User objects will be inserted in the list, for better performance.
-    private var cachedUsers: MutableList<User> = emptyList<User>().toMutableList()
+    private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var database: ChatDatabase
 
     // Keys within the mimei of the user's database
@@ -70,49 +73,50 @@ object HproseInstance {
         try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
+                /**
+                 * retrieve window.Param from page source code of http://base_url
+                 * window.setParam({
+                 *         CurNode:0,
+                 *         log: true,
+                 *         ver:"last",
+                 *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
+                 *         aid: "",
+                 *         remote:"::1",
+                 *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
+                 * })]
+                 * */
                 val htmlContent = response.body?.string()?.trimIndent()
                 val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
                 val matcher = pattern.matcher(htmlContent as CharSequence)
-                var windowParams: String? = null
                 if (matcher.find()) {
-                    /**
-                     * retrieve window.Param from page source code of http://base_url
-                     * window.setParam({
-                     *         CurNode:0,
-                     *         log: true,
-                     *         ver:"last",
-                     *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
-                     *         aid: "",
-                     *         remote:"::1",
-                     *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
-                     * })
-                     * */
-                    windowParams = matcher.group(1)
-                }
-                if (windowParams != null) {
-                    val paramMap = Gson().fromJson(windowParams, Map::class.java) as Map<*, *>
-                    appId = paramMap["mid"].toString()
+                    matcher.group(1)?.let {
+                        val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
+                        appId = paramMap["mid"].toString()
 
-                    /**
-                     * addrs is an ArrayList of ArrayList of node's IP address pairs.
-                     * Each pair is an ArrayList of two elements. The first is the IP address,
-                     * and the second is the time spent to get response from the IP.
-                     *
-                     * hostIPs is a list of node's IP that is an App Mimei provider.
-                     */
-                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                    val userId = preferenceHelper.getUserId()
-                    appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                         /**
-                         * This is a login user if preference has valid userId. Initiate current account.
-                         * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
-                         * */
-                        getUserBase(userId, baseUrl) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
-                    } else {
-                        val firstIp = findFirstReachableAddress(hostIPs)
-                        User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                         * addrs is an ArrayList of ArrayList of node's IP address pairs.
+                         * Each pair is an ArrayList of two elements. The first is the IP address,
+                         * and the second is the time spent to get response from the IP.
+                         *
+                         * hostIPs is a list of node's IP that is an App Mimei provider.
+                         */
+                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        val userId = preferenceHelper.getUserId()
+                        appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
+                            /**
+                             * This is a login user if preference has valid userId. Initiate current account.
+                             * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
+                             * */
+                            getUserBase(userId, baseUrl) ?: User(
+                                mid = TW_CONST.GUEST_ID,
+                                baseUrl = "http://${hostIPs[0]}"
+                            )
+                        } else {
+                            val firstIp = findFirstReachableAddress(hostIPs)
+                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                        }
+                        Log.d("initAppEntry", "Succeed. $appId, $appUser")
                     }
-                    Log.d("initAppEntry", "Succeed. $appId, $appUser")
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
                 }
@@ -257,15 +261,21 @@ object HproseInstance {
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val string = response.body?.string()?.trim()?.removeSurrounding("\"") ?: return null
-                val modifiedString = string.replace("\\", "")
-                val regex = "\"(.*?)\"".toRegex()
-                val ipAddresses = regex.findAll(modifiedString).map { it.value.trim('"') }.toList()
-                if (ipAddresses.isNotEmpty()) {
-                    getFirstReachableUser(ipAddresses, userId)?.let { u ->
-                        // Now user object has the best ip address
-                        cachedUsers.add(u)
-                        return u
+                var string = response.body?.string()?.trim()?.removeSurrounding("\"")
+                    ?.replace("\\", "") ?: return null
+                val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
+                string = """
+                    window.setParam({
+                        addrs: $string,
+                        aid: ""
+                    })]
+                """.trimIndent()
+                val matcher = pattern.matcher(string as CharSequence)
+                if (matcher.find()) {
+                    matcher.group(1)?.let {
+                        val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
+                        val bestIp = getBestIPAddress(paramMap["addrs"] as ArrayList<*>)
+                        return isReachable(userId, bestIp)
                     }
                 }
             }

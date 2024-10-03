@@ -23,6 +23,24 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 object Gadget {
+
+    /**
+     * NodeList format:
+     * [
+     *      [["183.159.17.7:8081", 3.080655111],["192.168.0.94:8081", 281478208946270]],    // node 1
+     *      [["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833]],     // node 2
+     * ]
+     * */
+    fun getBestIPAddress(nodeList: ArrayList<*>) =
+         nodeList.map {
+            (it as ArrayList<*>).associate { it1 ->
+                val pair = it1 as ArrayList<*>;
+                pair[0] to pair[1]
+            }.minByOrNull { it2 -> it2.value as Double }
+        }.associate {
+            it?.key to it?.value
+        }.minByOrNull { it2 -> it2.value as Double }?.key as String
+
     fun getIpAddresses(nodeList: ArrayList<*>): List<String> {
         val ipAddresses = mutableListOf<String>()
         for (i in 0 until nodeList.size) {
