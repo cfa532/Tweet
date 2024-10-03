@@ -73,13 +73,14 @@ fun BottomNavigationBar(
 //                label = { Text(text = item.title) },
                 onClick = {
                     selectedItemIndex = index
-                    if (appUser.mid == TW_CONST.GUEST_ID && index>0) {
+                    if (appUser.mid == TW_CONST.GUEST_ID && index > 0) {
                         scope.launch {
                             guestWarning(context, navController)
                         }
                         return@NavigationBarItem
                     }
-                    navController.navigate(item.route) },
+                    navController.navigate(item.route)
+                },
                 icon = {
                     BadgedBox(
                         badge = {
@@ -87,7 +88,7 @@ fun BottomNavigationBar(
                                 Badge {
                                     Text(text = item.badgeCount.toString())
                                 }
-                            } else if(item.hasNews) {
+                            } else if (item.hasNews) {
                                 Badge()
                             }
                         }
