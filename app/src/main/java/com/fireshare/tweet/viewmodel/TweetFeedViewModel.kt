@@ -87,7 +87,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun loadNewerTweets() {
-        if (initState.value) return
+//        if (initState.value) return
         viewModelScope.launch(Dispatchers.IO) {
             println("At top already")
             _isRefreshingAtTop.value = true
@@ -102,7 +102,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             _isRefreshingAtTop.value = false
         }
     }
-    suspend fun loadOlderTweets() {
+    fun loadOlderTweets() {
         if (initState.value) return
         viewModelScope.launch(Dispatchers.IO) {
             println("At bottom already")

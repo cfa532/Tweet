@@ -196,7 +196,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch { SnackbarController.sendEvent(event) }
     }
 
-    fun login() {
+    fun login(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             isLoading.value = true
             if (username.value?.isNotEmpty() == true
@@ -207,7 +207,7 @@ class UserViewModel @AssistedInject constructor(
                     HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
                 isLoading.value = false
                 if (user == null) {
-                    loginError.value = "Login failed"
+                    loginError.value = context.getString(R.string.login_failed)
                     preferencesHelper.saveKeyPhrase("")
                     preferencePhrase = ""
                     keyPhrase.value = null
@@ -219,7 +219,7 @@ class UserViewModel @AssistedInject constructor(
                     hasLogon.value = true
                 }
             } else {
-                loginError.value = "Login failed"
+                loginError.value = context.getString(R.string.login_failed)
                 preferencesHelper.saveKeyPhrase("")
                 preferencePhrase = ""
                 keyPhrase.value = null

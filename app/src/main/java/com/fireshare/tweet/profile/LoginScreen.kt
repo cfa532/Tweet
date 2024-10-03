@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -149,8 +150,9 @@ fun LoginScreen() {
         }
         Spacer(modifier = Modifier.height(8.dp))
 
+        val context = LocalContext.current
         Button(
-            onClick = { viewModel.login() },
+            onClick = { viewModel.login(context) },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading    // disable Login button during uploading.
         ) {
@@ -164,10 +166,10 @@ fun LoginScreen() {
             }
         }
 
-        if (loginError.isNotEmpty()) {
+//        if (loginError.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = stringResource(R.string.login_failed), color = Color.Red)
-        }
+            Text(text = loginError, color = Color.Red)
+//        }
 
         Spacer(modifier = Modifier.height(32.dp))
 

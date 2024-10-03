@@ -84,6 +84,9 @@ fun TweetFeedScreen(
          if (initState)
              viewModel.refresh()
      }
+     LaunchedEffect(appUser.mid) {
+         viewModel.refresh()
+     }
      LaunchedEffect(tweets) {
          if (!initState)
              listState.animateScrollToItem(0)

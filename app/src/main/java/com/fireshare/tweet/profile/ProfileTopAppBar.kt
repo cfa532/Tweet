@@ -140,7 +140,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             DropdownMenuItem(onClick = {
                                 viewModel.logout()
                                 tweetFeedviewModel.clearTweets()
-                                navController.navigate(NavTweet.Login)
+                                navController.navigate(NavTweet.TweetFeed)
                             },
                                 text = {
                                     Text(

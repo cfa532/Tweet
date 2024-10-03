@@ -1,6 +1,6 @@
 [versions]
 accompanistPager = "0.24.13-rc"
-agp = "8.6.1"
+agp = "8.7.0"
 assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
 core = "3.4.1"
