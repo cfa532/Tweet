@@ -3,6 +3,7 @@ accompanistPager = "0.24.13-rc"
 agp = "8.6.1"
 assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
+core = "3.4.1"
 hiltAndroid = "2.52"
 hiltNavigationCompose = "1.2.0"
 kotlin = "2.0.0"
@@ -49,6 +50,7 @@ androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
 assisted-inject-annotations-dagger2 = { module = "com.squareup.inject:assisted-inject-annotations-dagger2", version.ref = "assistedInjectAnnotationsDagger2" }
 assisted-inject-processor-dagger2 = { module = "com.squareup.inject:assisted-inject-processor-dagger2", version.ref = "assistedInjectProcessorDagger2" }
+core = { module = "com.google.zxing:core", version.ref = "core" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hiltAndroid" }
 androidx-media3-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer"}
