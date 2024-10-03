@@ -65,8 +65,9 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 2.dp
     ) {
-        Column( modifier = Modifier
-            .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+        Column(
+            modifier = Modifier
+                .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
         ) {
             // Tweet detail Header
             Row(
@@ -116,16 +117,21 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                                 .heightIn(max = 800.dp) // Set a specific height for the grid
                         ) {
                             items(it as List<MediaItem>) { mi ->
-                                MediaItemPreview(mi,
+                                MediaItemPreview(
+                                    mi,
                                     Modifier.fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
                                             val index = mediaItems.indexOf(mi)
-                                            val params = MediaViewerParams(mediaItems, index, tweet.mid!!)
-                                            navController.navigate(NavTweet.MediaViewer(
-                                                params
-                                            ))
-                                        }, false, it.indexOf(mi), false)
+                                            val params =
+                                                MediaViewerParams(mediaItems, index, tweet.mid!!)
+                                            navController.navigate(
+                                                NavTweet.MediaViewer(
+                                                    params
+                                                )
+                                            )
+                                        }, false, it.indexOf(mi), false
+                                )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 1.dp),
                                     thickness = 0.8.dp,
@@ -144,9 +150,11 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             tonalElevation = 2.dp,
                             modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
                         ) {
-                            TweetBlock(hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                parentEntry, key = tweet.originalTweetId
-                            ) { factory -> factory.create(tweet.originalTweet!!) }, true)
+                            TweetBlock(
+                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                    parentEntry, key = tweet.originalTweetId
+                                ) { factory -> factory.create(tweet.originalTweet!!) }, true
+                            )
                         }
                     }
 
