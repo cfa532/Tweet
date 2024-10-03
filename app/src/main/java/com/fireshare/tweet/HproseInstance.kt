@@ -13,18 +13,15 @@ import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getBestIPAddress
-import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
-import org.json.JSONArray
 import java.io.InputStream
 import java.net.ProtocolException
 import java.net.URLEncoder
@@ -175,6 +172,7 @@ object HproseInstance {
 
     // get a list of unread incoming messages from other users
     fun checkNewMessages(): List<ChatMessage>? {
+        if (appUser.mid == TW_CONST.GUEST_ID) return null
         val gson = Gson()
         val entry = "message_check"
         val json = """
@@ -253,7 +251,7 @@ object HproseInstance {
      * Get base url where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
      * */
-    suspend fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
+    fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
         // check if user data has been read
         cachedUsers.firstOrNull { it.mid == userId }?.let { return it }
         try {
@@ -275,7 +273,9 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val bestIp = getBestIPAddress(paramMap["addrs"] as ArrayList<*>)
-                        return isReachable(userId, bestIp)
+                        val user = getUserData(userId, bestIp) ?: return null
+                        cachedUsers.add(user)
+                        return user
                     }
                 }
             }
@@ -774,7 +774,7 @@ object HproseInstance {
         return null
     }
 
-    fun isReachable(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
+    fun getUserData(mid: MimeiId, ip: String, timeout: Int = 1000): User? {
         try {
             val entry = "get_user_core_data"
             val url =
@@ -786,11 +786,11 @@ object HproseInstance {
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
                 user.baseUrl = "http://$ip"
-                Log.d("isReachable", "TRUE: user=$user")
+                Log.d("getUserData", "TRUE: user=$user")
                 return user
             }
         } catch (e: Exception) {
-            Log.e("isReachable", "No reachable. $ip $e")
+            Log.e("getUserData", "No reachable. $ip $e")
             return null
         }
         return null

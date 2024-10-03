@@ -1,24 +1,17 @@
 package com.fireshare.tweet.widget
 
-import android.content.Context
 import android.media.MediaMetadataRetriever
-import android.net.Uri
 import android.util.Log
-import androidx.compose.ui.graphics.colorspace.connect
-import androidx.compose.ui.input.key.key
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-import java.io.FileNotFoundException
 import java.io.IOException
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -27,8 +20,8 @@ object Gadget {
     /**
      * NodeList format:
      * [
-     *      [["183.159.17.7:8081", 3.080655111],["192.168.0.94:8081", 281478208946270]],    // node 1
-     *      [["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833]],     // node 2
+     *   [["183.159.17.7:8081", 3080655111],["[240e:391:e00:169:a04c:d387:95d:a689]:8081", 39642842857833],["192.168.0.94:8081", 281478208946270]],    // node 1
+     *   [["183.159.17.7:8082", 3080655111],["[240e:391:e00:169:2e0:1dff:feed:3d1]:8082", 39642842857833]]     // node 2
      * ]
      * */
     fun getBestIPAddress(nodeList: ArrayList<*>) =
@@ -138,7 +131,7 @@ object Gadget {
         val ips = ipList.map { ip ->
             Log.d("GetFirstURL","trying $ip")
             async {
-                HproseInstance.isReachable(mid, ip)
+                HproseInstance.getUserData(mid, ip)
             }
         }
         ips.awaitAll().firstOrNull { it != null }
