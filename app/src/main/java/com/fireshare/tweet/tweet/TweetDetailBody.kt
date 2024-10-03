@@ -173,13 +173,13 @@ fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
-            modifier = Modifier.width(36.dp).alpha(0.8f).rotate(-90f)
+            modifier = Modifier.width(32.dp).alpha(0.8f).rotate(-90f)
                 .padding(end = 12.dp),
             onClick = { expanded = !expanded }) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "More",
-                tint = Color.Gray
+                tint = MaterialTheme.colorScheme.primary
             )
         }
         DropdownMenu(
