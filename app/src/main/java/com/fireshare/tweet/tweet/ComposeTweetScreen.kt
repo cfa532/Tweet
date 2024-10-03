@@ -218,15 +218,6 @@ fun ComposeTweetScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_photo_plus),
-                            contentDescription = "upload file",
-                            modifier = Modifier.size(60.dp),
-                            tint = MaterialTheme.colorScheme.surfaceTint
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = {
                         if (ContextCompat.checkSelfPermission(
                                 context,
@@ -236,13 +227,24 @@ fun ComposeTweetScreen(
                             takeAShot()
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    }) {
+                        } },
+                        modifier = Modifier.size(40.dp)
+                            .padding(top = 10.dp, end = 8.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.MailOutline, // Replace with your camera icon
+                            painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
                             contentDescription = "Open camera",
-                            modifier = Modifier.size(40.dp),
-                            tint = MaterialTheme.colorScheme.surfaceTint
+                            tint = MaterialTheme.colorScheme.surfaceTint,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") },
+                        modifier = Modifier.size(48.dp)
+                        ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_photo_plus),
+                            contentDescription = "upload file",
+                            tint = MaterialTheme.colorScheme.surfaceTint,
                         )
                     }
                 }

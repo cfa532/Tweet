@@ -1,6 +1,11 @@
 package com.fireshare.tweet.tweet
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +56,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -72,7 +79,7 @@ fun ComposeCommentScreen(
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
-    val localContext = LocalContext.current
+    val context = LocalContext.current
 
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
@@ -90,6 +97,40 @@ fun ComposeCommentScreen(
             if (selectedAttachments.find { u -> u == it } == null) {
                 selectedAttachments.add(it)
             }
+        }
+    }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            imageUri?.let {
+                val source = ImageDecoder.createSource(context.contentResolver, it)
+                bitmap = ImageDecoder.decodeBitmap(source)
+                selectedAttachments.add(it)
+            }
+        }
+    }
+    val takeAShot = {
+        val photoFile = createImageFile(context)
+        photoFile?.also {
+            val photoURI: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                it
+            )
+            imageUri = photoURI
+            cameraLauncher.launch(photoURI)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        if (it) {
+            Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
+            takeAShot()
+        } else {
+            Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -126,7 +167,7 @@ fun ComposeCommentScreen(
                 actions = {
                     val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton( onClick = {
-                        viewModel.uploadComment(localContext,
+                        viewModel.uploadComment(context,
                             tweetContent.trim(),
                             selectedAttachments,
                             tweetViewModel
@@ -218,15 +259,36 @@ fun ComposeCommentScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                    IconButton(onClick = {
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.CAMERA
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            takeAShot()
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        } },
+                        modifier = Modifier.size(40.dp)
+                            .padding(top = 10.dp, end = 8.dp)
+                    ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_photo_plus),
-                            contentDescription = "upload file",
-                            modifier = Modifier.size(60.dp),
-                            tint = MaterialTheme.colorScheme.surfaceTint
+                            painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
+                            contentDescription = "Open camera",
+                            tint = MaterialTheme.colorScheme.surfaceTint,
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_photo_plus),
+                            contentDescription = "upload file",
+                            tint = MaterialTheme.colorScheme.surfaceTint,
+                        )
+                    }
                 }
                 // Display icons for attached files
                 LazyColumn(

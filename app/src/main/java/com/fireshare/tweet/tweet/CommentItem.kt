@@ -105,6 +105,7 @@ fun CommentItem(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(start = 8.dp, top = 4.dp, end = 8.dp)
                     .heightIn(max = 800.dp) // Set a specific height for the grid
             ) {
                 val mediaItems = comment.attachments?.mapNotNull {

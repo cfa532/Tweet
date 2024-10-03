@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -23,11 +24,14 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.widget.MediaPreviewGrid
 
 @Composable
 fun TweetItem(
@@ -100,6 +104,19 @@ fun TweetItem(
                             text = it,
                             style = MaterialTheme.typography.bodyLarge
                         )
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                            .heightIn(max = 800.dp) // Set a specific height for the grid
+                    ) {
+                        val mediaItems = tweet.attachments?.mapNotNull {
+                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
+                                ?.let { it2 -> MediaItem(it2) }
+                        }
+                        if (tweet.mid != null && mediaItems != null) {
+                            MediaPreviewGrid(mediaItems, tweet.mid!!)
+                        }
                     }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
