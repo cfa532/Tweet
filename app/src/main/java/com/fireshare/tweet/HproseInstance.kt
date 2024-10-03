@@ -124,7 +124,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+    fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         var entry = "message_outgoing"
         var url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
@@ -389,7 +389,7 @@ object HproseInstance {
 
     // get tweets of a given author in a given span of time
     // if end is null, get all tweets
-    suspend fun getTweetList(user: User,
+    fun getTweetList(user: User,
                              startTimestamp: Long,
                              endTimestamp: Long?
     ) = try {
@@ -431,7 +431,7 @@ object HproseInstance {
         emptyList()
     }
 
-    suspend fun getTweet(
+    fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {
@@ -526,7 +526,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun toggleFollower(userId: MimeiId): Boolean? {
+    fun toggleFollower(userId: MimeiId): Boolean? {
         val user = getUserBase(userId)
         val method = "toggle_follower"
         val url = "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
@@ -610,7 +610,7 @@ object HproseInstance {
      * @param pageNumber
      * @param pageSize
      * */
-    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
+    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
         try {
             if (tweet.author == null)
                 tweet.author = getUserBase(tweet.authorId) ?: return null
@@ -800,6 +800,7 @@ object HproseInstance {
         }
         return null
     }
+
     fun isReachableApp(mid: MimeiId, ip: String): User? {
         try {
             val method = "main"

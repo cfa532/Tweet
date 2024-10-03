@@ -7,8 +7,6 @@ import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
 class NetworkCheckJobService : JobService() {
