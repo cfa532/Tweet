@@ -361,7 +361,8 @@ object HproseInstance {
             }
             user.followingList
         } catch (e: Exception) {
-            Log.e("HproseInstance.getFollowings", e.toString())
+            e.printStackTrace()
+            Log.e("Hprose.getFollowings", e.toString())
             null   // get default following for testing
         }
 
