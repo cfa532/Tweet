@@ -210,7 +210,7 @@ object HproseInstance {
      * Second, find the node which has this user's data, and use it to login.
      * Finally update the baseUrl of the current user with the new ip of the user node.
      * */
-    suspend fun login(username: String, password: String, keyPhrase: String): User? {
+    fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
         val entry = "get_userid"
         var json = """

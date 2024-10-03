@@ -60,6 +60,7 @@ fun TweetFeedScreen(
 ) {
      val viewModel = hiltViewModel<TweetFeedViewModel>()
      val tweets by viewModel.tweets.collectAsState()
+     val initState by viewModel.initState.collectAsState()
 
      val scrollBehavior =
          TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -76,17 +77,16 @@ fun TweetFeedScreen(
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
      LaunchedEffect(isAtBottom) {
-         if (isAtBottom && tweets.isNotEmpty()) {
+         if (isAtBottom) {
              viewModel.loadOlderTweets()
          }
      }
-     if (tweets.isEmpty()) {
+     LaunchedEffect(Unit) {
          viewModel.refresh()
      }
-     else {
-         LaunchedEffect(tweets) {
+     LaunchedEffect(tweets) {
+         if (!initState)
              listState.animateScrollToItem(0)
-         }
      }
 
      Scaffold(

@@ -50,8 +50,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
+    var initState = MutableStateFlow(true)
+    private val _isRefreshingAtTop = MutableStateFlow(false)
+    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
@@ -62,14 +63,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-        _isRefreshing.value = true
+        _isRefreshingAtTop.value = true
         viewModelScope.launch(Dispatchers.IO) {
             updateFollowings()
             startTimestamp.value = System.currentTimeMillis()
             endTimestamp.value = startTimestamp.value - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
             getTweets(startTimestamp.value, endTimestamp.value)
-            _isRefreshing.value = false
+            _isRefreshingAtTop.value = false
+            initState.value = false
         }
     }
 
@@ -78,34 +80,44 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     private fun updateFollowings() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-                _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
-        }
+        _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+        _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+        if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+            _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
     }
 
     fun loadNewerTweets() {
-        println("At top already")
-        _isRefreshing.value = true
-        updateFollowings()
-        startTimestamp.value = System.currentTimeMillis()
-        val endTimestamp = startTimestamp.value - ONE_DAY_IN_MILLIS
-        Log.d("loadNewerTweets", "startTimestamp=${startTimestamp.value}, endTimestamp=$endTimestamp")
-        getTweets(startTimestamp.value, endTimestamp)
-        _isRefreshing.value = false
+        if (initState.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            println("At top already")
+            _isRefreshingAtTop.value = true
+            updateFollowings()
+            startTimestamp.value = System.currentTimeMillis()
+            val endTimestamp = startTimestamp.value - ONE_DAY_IN_MILLIS
+            Log.d(
+                "loadNewerTweets",
+                "startTimestamp=${startTimestamp.value}, endTimestamp=$endTimestamp"
+            )
+            getTweets(startTimestamp.value, endTimestamp)
+            _isRefreshingAtTop.value = false
+        }
     }
     suspend fun loadOlderTweets() {
-        println("At bottom already")
-        _isRefreshingAtBottom.value = true
-        updateFollowings()
-        val startTimestamp = endTimestamp.value
-        endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Log.d("loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}")
-        getTweets(startTimestamp, endTimestamp.value)
-        delay(500)
-        _isRefreshingAtBottom.value = false
+        if (initState.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            println("At bottom already")
+            _isRefreshingAtBottom.value = true
+            updateFollowings()
+            val startTimestamp = endTimestamp.value
+            endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
+            Log.d(
+                "loadOlderTweets",
+                "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}"
+            )
+            getTweets(startTimestamp, endTimestamp.value)
+            delay(500)
+            _isRefreshingAtBottom.value = false
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
