@@ -22,12 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.share.ShareScreenshot
+import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -113,7 +112,7 @@ fun TweetBlock(
                             RetweetButton(viewModel)
                             Spacer(modifier = Modifier.width(20.dp))
 //                            ShareButton(viewModel)
-                            ShareScreenshot(viewModel)
+                            ShareScreenshotButton(viewModel)
                         }
                     }
                 }

@@ -4,38 +4,40 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import android.view.View
 import android.view.Window
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.material.ModalBottomSheetLayout
+import androidx.compose.material.ModalBottomSheetValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,14 +46,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.collapse
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewModelScope
-import androidx.test.core.app.ActivityScenario.launch
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
@@ -66,18 +65,17 @@ import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShareScreenshot(viewModel: TweetViewModel) {
+fun ShareScreenshotButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     var showBottomSheet by remember { mutableStateOf(false) }
 
     if (showBottomSheet) {
-        BottomSheet(
+        ShareBottomSheet(
             onDismiss = { showBottomSheet = false },
             viewModel = viewModel
         )
     }
-
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
             viewModel.viewModelScope.launch {
@@ -100,33 +98,14 @@ fun ShareScreenshot(viewModel: TweetViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BottomSheet(onDismiss: () -> Unit, viewModel: TweetViewModel) {
-    val scaffoldState = rememberBottomSheetScaffoldState()
+fun ShareBottomSheet(onDismiss: () -> Unit, viewModel: TweetViewModel) {
+    val bottomSheetState =  rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = 128.dp,
-        sheetContent = {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth().height(128.dp), contentAlignment = Alignment.Center) {
-                    Text("Swipe up to expand sheet")
-                }
-                Text("Sheet content")
-                Button(
-                    modifier = Modifier.padding(bottom = 64.dp),
-                    onClick = { scope.launch { scaffoldState.bottomSheetState.partialExpand() } }
-                ) {
-                    Text("Click to collapse sheet")
-                }
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Scaffold Content")
-        }
+    ModalBottomSheet(
+        sheetState = bottomSheetState,
+        onDismissRequest = {},
+    ) {
+        Text(text = "Content here")
     }
 }
 
@@ -139,7 +118,7 @@ fun captureScreenshot(activity: Activity, callback: (Bitmap?) -> Unit) {
     try {
         PixelCopy.request(
             window,
-            android.graphics.Rect(
+            Rect(
                 location[0],
                 location[1],
                 location[0] + view.width,
@@ -197,7 +176,7 @@ fun getScreenshotFromView(view: View): Bitmap? {
         return null
     }
     val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
+    val canvas = Canvas(bitmap)
     view.draw(canvas)
     return bitmap
 }
