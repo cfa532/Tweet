@@ -216,19 +216,27 @@ object HproseInstance {
      * */
     fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
-        val entry = "get_userid"
-        var json = """
-            {"phrase": "$keyPhrase", "aid": "$appId", "ver": "last"}
-            """.trimIndent()
-        val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            val userId: String = client?.runMApp(entry, request) ?: return null
-            val user = getUserBase(userId)?: return null
+            val userId = try {
+                val entry = "get_userid"
+                val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&phrase=$keyPhrase"
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    response.body?.string() ?: return null
+                } else {
+                    return null
+                }
+            } catch (e: Exception) {
+                Log.e("GetUserId", "Login failed. ${e.message}")
+                return null
+            }
+            val user = getUserBase(userId) ?: return null
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password&phrase=$keyPhrase"
-            val request2 = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request2).execute()
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                json = response.body?.string() ?: return null
+                val json = response.body?.string() ?: return null
                 // only to verify the login succeed.
                 gson.fromJson(json, User::class.java) ?: return null
                 /**
@@ -241,7 +249,7 @@ object HproseInstance {
             null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("login", e.toString())
+            Log.e("Hprose.Login", "${e.message}")
             null
         }
     }
@@ -252,7 +260,7 @@ object HproseInstance {
     }
 
     /**
-     * Get base url where user data can be accessed. Each user may has a different node.
+     * Get baseUrl where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
      * */
     fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
@@ -350,7 +358,7 @@ object HproseInstance {
             if (user.mid != TW_CONST.GUEST_ID) {
                 val method = "get_followings"
                 val url =
-                    "${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${user.mid}"
+                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
@@ -363,7 +371,7 @@ object HproseInstance {
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e("Hprose.getFollowings", e.toString())
-            null   // get default following for testing
+            emptyList<MimeiId>()   // get default following for testing
         }
 
     // get fans list of the user

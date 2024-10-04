@@ -91,7 +91,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         )
                     }
                 }
-                ProfileTopBarButton(viewModel, navController, parentEntry)
+                ProfileTopBarButton(viewModel, navController, parentEntry, scrollBehavior)
             }
         },
         navigationIcon = {
@@ -158,10 +158,12 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileTopBarButton(viewModel: UserViewModel,
                         navController: NavHostController,
-                        parentEntry: NavBackStackEntry
+                        parentEntry: NavBackStackEntry,
+                        scrollBehavior: TopAppBarScrollBehavior?
 ) {
     val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
         parentEntry,
@@ -184,6 +186,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
 
     Row(modifier = Modifier.padding(bottom = 4.dp)) {
         // Follow button
+        if (scrollBehavior?.state?.collapsedFraction == 1f) return  // hide follow button when collapsed.
         Button(
             onClick = {
                 when (buttonText.value) {
@@ -210,8 +213,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                 disabledContentColor = Color.Gray, disabledContainerColor = Color.White
             ),
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max)
-                .height(30.dp)
-                .padding(0.dp)
+                .height(32.dp)
         ) {
             Text(
                 text = buttonText.value,

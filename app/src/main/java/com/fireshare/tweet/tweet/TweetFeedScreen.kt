@@ -80,10 +80,10 @@ fun TweetFeedScreen(
              viewModel.loadOlderTweets()
          }
      }
-     LaunchedEffect(Unit) {
-         if (initState)
-             viewModel.refresh()
-     }
+//     LaunchedEffect(Unit) {
+//         if (initState)
+//             viewModel.refresh()
+//     }
      LaunchedEffect(appUser.mid) {
          viewModel.refresh()
      }
