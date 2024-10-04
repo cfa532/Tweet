@@ -51,6 +51,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
     var initState = MutableStateFlow(true)
+
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
@@ -63,14 +64,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-        _isRefreshingAtTop.value = true
         viewModelScope.launch(Dispatchers.IO) {
+            _isRefreshingAtTop.value = true
             updateFollowings()
             startTimestamp.value = System.currentTimeMillis()
             endTimestamp.value = startTimestamp.value - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
             getTweets(startTimestamp.value, endTimestamp.value)
             _isRefreshingAtTop.value = false
+
             initState.value = false
         }
     }
