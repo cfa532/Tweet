@@ -39,15 +39,15 @@ fun TweetItemHeader(tweet: Tweet) {
                 UserAvatar(author, 36)
             }
             Text(text = author?.name ?: "No One",
+                modifier = Modifier.padding(start = 2.dp),
+                style = MaterialTheme.typography.labelLarge)
+            Text(text = "@${author?.username}",
                 modifier = Modifier.padding(horizontal = 0.dp),
                 style = MaterialTheme.typography.labelMedium)
-            Text(text = "@${author?.username}",
-                modifier = Modifier.padding(horizontal = 2.dp),
-                style = MaterialTheme.typography.labelSmall)
             Text( text = " • ", fontSize = 12.sp
             )
             Text(text = localizedTimeDifference(tweet.timestamp),
-                style = MaterialTheme.typography.labelSmall)
+                style = MaterialTheme.typography.labelMedium)
         }
 
         // the 3 dots at the right end

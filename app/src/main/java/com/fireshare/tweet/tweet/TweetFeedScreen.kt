@@ -80,17 +80,13 @@ fun TweetFeedScreen(
              viewModel.loadOlderTweets()
          }
      }
-//     LaunchedEffect(Unit) {
-//         if (initState)
-//             viewModel.refresh()
-//     }
      LaunchedEffect(appUser.mid) {
          viewModel.refresh()
      }
-     LaunchedEffect(tweets) {
-         if (!initState)
-             listState.animateScrollToItem(0)
-     }
+//     LaunchedEffect(tweets) {
+//         if (!initState)
+//             listState.animateScrollToItem(0)
+//     }
 
      Scaffold(
          modifier = Modifier
@@ -109,7 +105,7 @@ fun TweetFeedScreen(
                      .nestedScroll(scrollBehavior.nestedScrollConnection),
                  state = listState
              ) {
-                 items(tweets, key = { it.mid.toString() }) { tweet ->
+                 items(tweets, key = { it.mid.toString() } ) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
 
                      HorizontalDivider(

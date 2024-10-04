@@ -50,6 +50,7 @@ fun TweetItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = 800.dp)
             .padding(0.dp)
     ) {
         // Content body

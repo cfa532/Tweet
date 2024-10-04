@@ -22,10 +22,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.share.ShareScreenshot
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -37,7 +39,6 @@ fun TweetBlock(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
-    val attachments by viewModel.attachments.collectAsState()
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -111,7 +112,8 @@ fun TweetBlock(
                             CommentButton(viewModel)
                             RetweetButton(viewModel)
                             Spacer(modifier = Modifier.width(20.dp))
-                            ShareButton(viewModel)
+//                            ShareButton(viewModel)
+                            ShareScreenshot(viewModel)
                         }
                     }
                 }
