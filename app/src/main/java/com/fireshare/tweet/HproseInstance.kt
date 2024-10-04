@@ -210,9 +210,9 @@ object HproseInstance {
 
     /**
      * There are two steps for a guest user to login.
-     * First, find the true UserID given its key phrase, using the IP address of the node.
+     * First, find the true UserID given its key phrase, using the IP address of the serving node.
      * Second, find the node which has this user's data, and use it to login.
-     * Finally update the baseUrl of the current user with the new ip of the user node.
+     * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
     fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
