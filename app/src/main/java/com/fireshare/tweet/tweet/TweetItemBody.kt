@@ -111,8 +111,8 @@ fun TweetBlock(
                             CommentButton(viewModel)
                             RetweetButton(viewModel)
                             Spacer(modifier = Modifier.width(20.dp))
-//                            ShareButton(viewModel)
-                            ShareScreenshotButton(viewModel)
+                            ShareButton(viewModel)
+//                            ShareScreenshotButton(viewModel)
                         }
                     }
                 }
