@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,7 +67,7 @@ fun TweetBlock(
                         tweet.content?.let { txt ->
                             var isExpanded by remember { mutableStateOf(false) }
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 9
-                            var lineCount by remember { mutableStateOf(0) }
+                            var lineCount by remember { mutableIntStateOf(0) }
                             Text(
                                 text = txt,
                                 onTextLayout = { textLayoutResult ->

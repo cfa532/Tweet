@@ -50,6 +50,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
@@ -169,6 +170,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(60.dp))
+                        ShareScreenshotButton(viewModel)
                     }
                 }
             }

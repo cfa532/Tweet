@@ -71,7 +71,9 @@ fun TweetDetailScreen(
                 .padding(innerPadding)
         ) {
             item {
-                // main body of the parent Tweet.
+                /**
+                 * Tweet content and attachments. This is the main body.
+                 * */
                 TweetDetailBody(tweet, viewModel, parentEntry)
 
                 // divider between tweet and its comment list
@@ -81,6 +83,9 @@ fun TweetDetailScreen(
                     color = Color.LightGray
                 )
             }
+            /**
+             * Comment list of this tweet. Need to add pagination later.
+             * */
             items(comments, key = {it.mid.toString()})
             { comment ->
                 HorizontalDivider(

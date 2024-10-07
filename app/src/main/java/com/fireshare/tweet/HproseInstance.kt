@@ -195,7 +195,7 @@ object HproseInstance {
 
     fun checkUpdates(): Map<String, String>? {
         val gson = Gson()
-        val entry = "upgrade"
+        val entry = "check_upgrade"
         val json = """
              {"aid": $appId, "ver":"last"}
         """.trimIndent()
