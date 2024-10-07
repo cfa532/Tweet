@@ -19,7 +19,6 @@ import com.google.zxing.common.BitMatrix
 import java.io.File
 import java.io.FileOutputStream
 
-
 fun captureScreenshot(activity: Activity, callback: (Bitmap?) -> Unit) {
     val window: Window = activity.window
     val view: View = window.decorView.rootView
