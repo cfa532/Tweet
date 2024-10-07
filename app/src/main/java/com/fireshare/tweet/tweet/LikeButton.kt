@@ -43,13 +43,13 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 
-suspend fun guestWarning(context: Context, navController: NavController) {
+suspend fun guestWarning(context: Context, navController: NavController? = null) {
     SnackbarController.sendEvent(
         event = SnackbarEvent(
             message = getString(context, R.string.guest_reminder),
             action = SnackbarAction(
                 name = getString(context, R.string.go),
-                action = { navController.navigate(NavTweet.Login) }
+                action = { navController?.navigate(NavTweet.Login) }
             )
         )
     )

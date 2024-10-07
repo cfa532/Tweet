@@ -1,6 +1,9 @@
 package com.fireshare.tweet.share
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,7 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,14 +48,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import kotlinx.coroutines.launch
 
 @Composable
@@ -103,7 +112,7 @@ fun ShareBottomSheet(
     val context = LocalContext.current
     var selectedApplication by remember { mutableStateOf<String?>(null) } // Store selected application
     val bottomSheetState = rememberModalBottomSheetState()
-    val showIntentOption by remember { mutableStateOf(false) }
+    val shareText = remember { mutableStateOf(contentToShare) }
 
     val shareIntent = Intent().apply {
         action = Intent.ACTION_SEND
@@ -111,17 +120,12 @@ fun ShareBottomSheet(
         type = "text/plain" // Adjust the MIME type based on the content
     }
     val chooserIntent = Intent.createChooser(shareIntent, "Share via")
-    val packageManager = LocalContext.current.packageManager
-    val shareableApps =
-        packageManager.queryIntentActivities(shareIntent, PackageManager.MATCH_DEFAULT_ONLY)
 
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             selectedApplication = if (result.resultCode == Activity.RESULT_OK) {
                 // Handle the selected application (optional)
-                val app = result.data?.component?.packageName
-                println("selected application: $app")
-                app
+                result.data?.component?.packageName
             } else {
                 // Handle the case where the user canceled the share
                 null
@@ -129,7 +133,7 @@ fun ShareBottomSheet(
         }
 
     val shareOptions = listOf(
-        ShareOption("Share screenshot", Icons.Default.MailOutline) {
+        ShareOption(getString(context, R.string.screenshot), Icons.Default.MailOutline) {
             captureScreenshot(context as Activity) {
                 if (it != null) {
                     val file = saveBitmapToFile(context, it, "screenshot.png")
@@ -137,9 +141,21 @@ fun ShareBottomSheet(
                 }
             }
         },
-        ShareOption("Share link", Icons.Default.Email) {
+        ShareOption(getString(context, R.string.share_link), Icons.Default.Email) {
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Shared Text", shareText.value)
+            clipboardManager.setPrimaryClip(clip)
+            scope.launch {
+                SnackbarController.sendEvent(
+                    event = SnackbarEvent(
+                        message = getString(context, R.string.clipboard_copy)
+                    )
+                )
+                onDismiss()
+            }
         },
-        ShareOption("Share via Social Media", Icons.Default.AccountCircle) {
+        ShareOption(getString(context, R.string.social_media), Icons.Default.AccountCircle) {
+            launcher.launch(chooserIntent)
         },
     )
 
@@ -147,15 +163,37 @@ fun ShareBottomSheet(
         sheetState = bottomSheetState,
         onDismissRequest = onDismiss,
     ) {
-        // Custom options
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal =16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "Content to Share",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                OutlinedTextField(
+                    value = shareText.value,
+                    onValueChange = { shareText.value = it },
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(top = 8.dp),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             shareOptions.forEach { option ->
                 Column(
-                    modifier = Modifier.clickable { option.action() }
+                    modifier = Modifier
+                        .clickable { option.action() }
                         .padding(8.dp), // Removed redundant clickable
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -163,54 +201,13 @@ fun ShareBottomSheet(
                     Icon(
                         imageVector = option.imageVector,
                         contentDescription = option.title,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.surfaceTint
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = option.title, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            items(shareableApps) { appInfo ->
-                Column(
-                    modifier = Modifier.clickable {
-                        // Set the component of the intent to the selected application
-//                        val componentName = ComponentName(appInfo.activityInfo.packageName, appInfo.activityInfo.name)
-//                        sendIntent.component = componentName
-
-                        // Launch the intent directly to the selected application
-                        launcher.launch(chooserIntent)
-                    }.padding(8.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    val drawable = remember { appInfo.loadIcon(packageManager) }
-                    Image(
-                        painter = rememberDrawablePainter(drawable),
-                        contentDescription = appInfo.loadLabel(packageManager).toString(),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = appInfo.loadLabel(packageManager).toString(), style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-
-//        if (selectedApplication != null) {
-//            Text(
-//                text = "Selected application: $selectedApplication",
-//                modifier = Modifier.padding(16.dp),
-//                style = MaterialTheme.typography.bodyLarge
-//            )
-//        } else if (showIntentOption) {
-//            Text(
-//                text = "Share canceled",
-//                modifier = Modifier.padding(16.dp),
-//                style = MaterialTheme.typography.bodyLarge
-//            )
-//        }
     }
 }

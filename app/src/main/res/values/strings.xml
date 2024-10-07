@@ -47,4 +47,8 @@
     <string name="keyphrase_required">Key phrase is required</string>
     <string name="tweet_uploaded">Tweet uploaded successfully</string>
     <string name="tweet_failed">Tweet upload failed.</string>
+    <string name="clipboard_copy">Content copied to clipboard</string>
+    <string name="share_link">Share link</string>
+    <string name="screenshot">Screenshot</string>
+    <string name="social_media">Social media</string>
 </resources>

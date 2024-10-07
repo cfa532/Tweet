@@ -48,4 +48,8 @@
     <string name="keyphrase_required">口令必填</string>
     <string name="tweet_uploaded">发帖成功</string>
     <string name="tweet_failed">发帖失败</string>
+    <string name="clipboard_copy">内容已黏贴到剪切板</string>
+    <string name="share_link">分享链接</string>
+    <string name="screenshot">截屏</string>
+    <string name="social_media">其他App</string>
 </resources>
