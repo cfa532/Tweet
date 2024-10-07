@@ -193,7 +193,7 @@ object HproseInstance {
         }
     }
 
-    fun checkUpdates(): Map<String, String>? {
+    fun checkUpgrade(): Map<String, String>? {
         val gson = Gson()
         val entry = "check_upgrade"
         val json = """
@@ -203,7 +203,8 @@ object HproseInstance {
         return try {
             client?.runMApp(entry,request)
         } catch (e: Exception) {
-            Log.e("checkUpdates", e.toString())
+            e.printStackTrace()
+            Log.e("checkUpgrade", e.toString())
             null
         }
     }

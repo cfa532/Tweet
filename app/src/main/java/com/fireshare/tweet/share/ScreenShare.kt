@@ -1,19 +1,11 @@
 package com.fireshare.tweet.share
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Rect
-import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.view.PixelCopy
-import android.view.View
-import android.view.Window
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,19 +15,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -45,37 +35,35 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat.startActivityForResult
-import androidx.core.content.FileProvider
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.MultiFormatWriter
-import com.google.zxing.common.BitMatrix
+import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileOutputStream
 
 @Composable
 fun ShareScreenshotButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     var showBottomSheet by remember { mutableStateOf(false) }
+    var contentToShare by rememberSaveable { mutableStateOf("") }
 
     if (showBottomSheet) {
         ShareBottomSheet(
             onDismiss = { showBottomSheet = false },
-            viewModel = viewModel
+            viewModel = viewModel,
+            contentToShare = contentToShare
         )
     }
     IconButton(onClick = {
@@ -84,7 +72,11 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
                 guestWarning(context, navController)
             }
         } else {
-            showBottomSheet = true
+            viewModel.viewModelScope.launch {
+                val map = HproseInstance.checkUpgrade() ?: return@launch
+                contentToShare = "http://${map["domain"]}/tweet/${viewModel.tweetState.value.mid}"
+                showBottomSheet = true
+            }
         }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -102,12 +94,39 @@ class ShareOption(val title: String, val imageVector: ImageVector, val action: (
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShareBottomSheet(onDismiss: () -> Unit, viewModel: TweetViewModel) {
+fun ShareBottomSheet(
+    onDismiss: () -> Unit,
+    viewModel: TweetViewModel,
+    contentToShare: String
+) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
+    var selectedApplication by remember { mutableStateOf<String?>(null) } // Store selected application
     val bottomSheetState = rememberModalBottomSheetState()
-    var showIntentOption by remember { mutableStateOf(false) }
+    val showIntentOption by remember { mutableStateOf(false) }
+
+    val shareIntent = Intent().apply {
+        action = Intent.ACTION_SEND
+        putExtra(Intent.EXTRA_TEXT, contentToShare)
+        type = "text/plain" // Adjust the MIME type based on the content
+    }
+    val chooserIntent = Intent.createChooser(shareIntent, "Share via")
+    val packageManager = LocalContext.current.packageManager
+    val shareableApps =
+        packageManager.queryIntentActivities(shareIntent, PackageManager.MATCH_DEFAULT_ONLY)
+
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            selectedApplication = if (result.resultCode == Activity.RESULT_OK) {
+                // Handle the selected application (optional)
+                val app = result.data?.component?.packageName
+                println("selected application: $app")
+                app
+            } else {
+                // Handle the case where the user canceled the share
+                null
+            }
+        }
 
     val shareOptions = listOf(
         ShareOption("Share screenshot", Icons.Default.MailOutline) {
@@ -123,27 +142,6 @@ fun ShareBottomSheet(onDismiss: () -> Unit, viewModel: TweetViewModel) {
         ShareOption("Share via Social Media", Icons.Default.AccountCircle) {
         },
     )
-
-    val sendIntent = Intent().apply {
-        action = Intent.ACTION_SEND
-        putExtra(Intent.EXTRA_TEXT, "This is the content to share")
-        type = "text/plain" // Adjust the MIME type based on the content
-    }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            // Handle the selected application (optional)
-            val selectedApplication = result.data?.getStringExtra(Intent.EXTRA_PACKAGE_NAME)
-            // You can display a toast or update a separate UI element here
-            println(selectedApplication.toString())
-        } else {
-            // Handle the case where the user canceled the share
-        }
-    }
-
-    val intentOption = ShareOption("Share via Apps", Icons.Default.Info) {
-        launcher.launch(sendIntent)
-    }
 
     ModalBottomSheet(
         sheetState = bottomSheetState,
@@ -165,37 +163,54 @@ fun ShareBottomSheet(onDismiss: () -> Unit, viewModel: TweetViewModel) {
                     Icon(
                         imageVector = option.imageVector,
                         contentDescription = option.title,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = option.title, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
-        Row(
+        LazyRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column( // "Share via Apps" option in the same row
-                modifier = Modifier.clickable { showIntentOption = true }
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = intentOption.imageVector,
-                    contentDescription = intentOption.title,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(text = intentOption.title, style = MaterialTheme.typography.labelLarge)
+            items(shareableApps) { appInfo ->
+                Column(
+                    modifier = Modifier.clickable {
+                        // Set the component of the intent to the selected application
+//                        val componentName = ComponentName(appInfo.activityInfo.packageName, appInfo.activityInfo.name)
+//                        sendIntent.component = componentName
+
+                        // Launch the intent directly to the selected application
+                        launcher.launch(chooserIntent)
+                    }.padding(8.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val drawable = remember { appInfo.loadIcon(packageManager) }
+                    Image(
+                        painter = rememberDrawablePainter(drawable),
+                        contentDescription = appInfo.loadLabel(packageManager).toString(),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = appInfo.loadLabel(packageManager).toString(), style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
-    }
 
-    if (showIntentOption) {
-        intentOption.action()
-        showIntentOption = false // Reset the state after invoking the action
+//        if (selectedApplication != null) {
+//            Text(
+//                text = "Selected application: $selectedApplication",
+//                modifier = Modifier.padding(16.dp),
+//                style = MaterialTheme.typography.bodyLarge
+//            )
+//        } else if (showIntentOption) {
+//            Text(
+//                text = "Share canceled",
+//                modifier = Modifier.padding(16.dp),
+//                style = MaterialTheme.typography.bodyLarge
+//            )
+//        }
     }
 }

@@ -57,6 +57,7 @@ android {
 
 dependencies {
 
+    implementation(libs.accompanist.drawablepainter)
     implementation(libs.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)

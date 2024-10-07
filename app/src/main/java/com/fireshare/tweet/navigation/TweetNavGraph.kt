@@ -59,8 +59,8 @@ fun TweetNavGraph(
         if (appLinkData != null) {
             val pathSegments = appLinkData.pathSegments
             if (pathSegments.size >= 3) { // Check if enough segments are present
-                val authorId = pathSegments[1] // Get the second segment (authorId)
-                val tweetId = pathSegments[2] // Get the third segment (tweetId)
+                val tweetId = pathSegments[1] // Get the 2nd segment (tweetId)
+                val authorId = pathSegments[2] // Get the 3rd segment (authorId)
                 tweetId?.let { startDestination = NavTweet.DeepLink(tweetId, authorId) }
             }
         }

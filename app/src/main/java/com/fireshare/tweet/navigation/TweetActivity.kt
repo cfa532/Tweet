@@ -155,7 +155,7 @@ class ActivityViewModel: ViewModel() {
 
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
-            val versionInfo = HproseInstance.checkUpdates() ?: return@launch
+            val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
             val currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: return@launch
             if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
                 val downloadUrl = "${appUser.baseUrl}/mm/${versionInfo["packageId"]}"

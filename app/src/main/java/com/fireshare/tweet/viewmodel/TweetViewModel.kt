@@ -187,8 +187,7 @@ class TweetViewModel @AssistedInject constructor(
         } else {
             baseUrl // Or provide a default value
         }
-        val fallback = "?fallback=http://twbe.$domain/entry=render&ver=last&tid=${tweet.mid}"
-        val deepLink = "http://$domain/tweet/${tweet.authorId}/${tweet.mid}$fallback"
+        val deepLink = "http://$domain/tweet/${tweet.mid}/${tweet.authorId}"
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, deepLink)
@@ -198,6 +197,7 @@ class TweetViewModel @AssistedInject constructor(
         val shareIntent = Intent.createChooser(sendIntent, null)
         context.startActivity(shareIntent, null)
     }
+
 
     fun likeTweet() {
         viewModelScope.launch(Dispatchers.IO) {
