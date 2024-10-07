@@ -134,10 +134,11 @@ fun ShareBottomSheet(
 
     val shareOptions = listOf(
         ShareOption(getString(context, R.string.screenshot), Icons.Default.MailOutline) {
-            captureScreenshot(context as Activity) {
+            captureScreenshotWithQRCode(context as Activity, shareText.value) {
                 if (it != null) {
-                    val file = saveBitmapToFile(context, it, "screenshot.png")
+                    val file = saveBitmapToFile(context, it, "screenshot${System.currentTimeMillis()}.png")
                     shareImage(context, file)
+                    onDismiss()
                 }
             }
         },

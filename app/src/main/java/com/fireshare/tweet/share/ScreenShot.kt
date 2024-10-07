@@ -19,6 +19,35 @@ import com.google.zxing.common.BitMatrix
 import java.io.File
 import java.io.FileOutputStream
 
+fun captureScreenshotWithQRCode(activity: Activity, qrText: String, callback: (Bitmap?) -> Unit) {
+    captureScreenshot(activity) { screenshot ->
+        if (screenshot != null && screenshot.config != null)  {
+            // Generate the QR code
+            val qrCodeSize = 300 // Define the size of the QR code
+            val qrCodeBitmap = generateQRCode(qrText, qrCodeSize)
+
+            // Create a new bitmap with the same dimensions as the screenshot
+            val combinedBitmap = Bitmap.createBitmap(screenshot.width, screenshot.height, screenshot.config!!)
+            val canvas = Canvas(combinedBitmap)
+
+            // Draw the screenshot onto the canvas
+            canvas.drawBitmap(screenshot, 0f, 0f, null)
+
+            // Calculate the position for the QR code at the lower right corner
+            val left = (screenshot.width - qrCodeSize).toFloat()
+            val top = (screenshot.height - qrCodeSize).toFloat()
+
+            // Draw the QR code onto the canvas
+            canvas.drawBitmap(qrCodeBitmap, left, top, null)
+
+            // Return the combined bitmap with the QR code
+            callback(combinedBitmap)
+        } else {
+            callback(null)
+        }
+    }
+}
+
 fun captureScreenshot(activity: Activity, callback: (Bitmap?) -> Unit) {
     val window: Window = activity.window
     val view: View = window.decorView.rootView
