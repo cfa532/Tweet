@@ -45,8 +45,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
@@ -90,7 +93,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                imageVector = Icons.Default.Share,
+                painter = painterResource(R.drawable.ic_share),
                 contentDescription = "Share",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = MaterialTheme.colorScheme.outline
@@ -99,7 +102,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
     }
 }
 
-class ShareOption(val title: String, val imageVector: ImageVector, val action: () -> Unit)
+class ShareOption(val title: String, val painter: Painter, val action: () -> Unit)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,7 +136,7 @@ fun ShareBottomSheet(
         }
 
     val shareOptions = listOf(
-        ShareOption(getString(context, R.string.screenshot), Icons.Default.MailOutline) {
+        ShareOption(getString(context, R.string.screenshot), painterResource(R.drawable.ic_camera_2)) {
             captureScreenshotWithQRCode(context as Activity, shareText.value) {
                 if (it != null) {
                     val file = saveBitmapToFile(context, it, "screenshot${System.currentTimeMillis()}.png")
@@ -142,7 +145,7 @@ fun ShareBottomSheet(
                 }
             }
         },
-        ShareOption(getString(context, R.string.share_link), Icons.Default.Email) {
+        ShareOption(getString(context, R.string.share_link), painterResource(R.drawable.ic_link)) {
             val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Shared Text", shareText.value)
             clipboardManager.setPrimaryClip(clip)
@@ -155,7 +158,7 @@ fun ShareBottomSheet(
                 onDismiss()
             }
         },
-        ShareOption(getString(context, R.string.social_media), Icons.Default.AccountCircle) {
+        ShareOption(getString(context, R.string.social_media), painterResource(R.drawable.ic_apps)) {
             launcher.launch(chooserIntent)
         },
     )
@@ -200,13 +203,13 @@ fun ShareBottomSheet(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
-                        imageVector = option.imageVector,
+                        painter = option.painter,
                         contentDescription = option.title,
                         modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.surfaceTint
+                        tint = Color.Unspecified
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = option.title, style = MaterialTheme.typography.labelLarge)
+                    Text(text = option.title, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

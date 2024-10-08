@@ -180,24 +180,18 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun shareTweet(context: Context) {
-        val baseUrl = TweetApplication.preferenceHelper.getAppUrl() ?: return
-        val segs = baseUrl.split(".")
-        val domain = if (segs.size >= 2) {
-            "${segs[segs.size - 2]}.${segs.last()}"
-        } else {
-            baseUrl // Or provide a default value
+        viewModelScope.launch(Dispatchers.IO) {
+            val map = HproseInstance.checkUpgrade() ?: return@launch
+            val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+            val sendIntent: Intent = Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_TEXT, deepLink)
+                type = "text/plain"
+            }
+            val shareIntent = Intent.createChooser(sendIntent, null)
+            context.startActivity(shareIntent, null)
         }
-        val deepLink = "http://$domain/tweet/${tweet.mid}/${tweet.authorId}"
-        val sendIntent: Intent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, deepLink)
-            type = "text/plain"
-        }
-
-        val shareIntent = Intent.createChooser(sendIntent, null)
-        context.startActivity(shareIntent, null)
     }
-
 
     fun likeTweet() {
         viewModelScope.launch(Dispatchers.IO) {

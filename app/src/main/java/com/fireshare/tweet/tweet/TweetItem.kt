@@ -107,7 +107,8 @@ fun TweetItem(
                         )
                     }
                     Box(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
                             .padding(start = 16.dp, end = 8.dp, top = 4.dp)
                             .heightIn(max = 800.dp) // Set a specific height for the grid
                     ) {
@@ -138,7 +139,7 @@ fun TweetItem(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp),
+                            .padding(start = 16.dp, end = 8.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         // State hoist
@@ -146,7 +147,7 @@ fun TweetItem(
                         BookmarkButton(viewModel)
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
-                        Spacer(modifier = Modifier.width(60.dp))
+                        Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)
                     }
                 }

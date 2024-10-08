@@ -27,7 +27,6 @@ import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
@@ -39,14 +38,17 @@ fun TweetBlock(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
+    // fold text content up to 9 lines. Open it upon user click.
+    var isExpanded by remember { mutableStateOf(false) }
 
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 1.dp,
-        modifier = Modifier.clickable( onClick = {
-            tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
-        })
+        modifier = Modifier.clickable(
+            onClick = {
+                navController.navigate(NavTweet.TweetDetail(tweet.mid ?: return@clickable))
+            })
     ) {
         Column(
             modifier = Modifier
@@ -65,13 +67,13 @@ fun TweetBlock(
                     // Text content of the tweet
                     if (tweet.content?.isNotEmpty() == true) {
                         tweet.content?.let { txt ->
-                            var isExpanded by remember { mutableStateOf(false) }
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                             var lineCount by remember { mutableIntStateOf(0) }
                             Text(
                                 text = txt,
                                 onTextLayout = { textLayoutResult ->
-                                    lineCount = textLayoutResult.lineCount },
+                                    lineCount = textLayoutResult.lineCount
+                                },
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = maxLines,
                             )
@@ -87,26 +89,25 @@ fun TweetBlock(
                         }
                     }
                     // attached media files
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
-                            .heightIn(max = 800.dp) // Set a specific height for the grid
-                    ) {
-                        val mediaItems = tweet.attachments?.mapNotNull {
-                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                                ?.let { it2 -> MediaItem(it2) }
-                        }
-                        if (tweet.mid != null && mediaItems != null) {
-                            MediaPreviewGrid(mediaItems, tweet.mid!!)
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp))
+                    {
+                        val mediaItems = tweet.attachments?.map {
+                            MediaItem(getMediaUrl(it, tweet.author?.baseUrl.orEmpty()).toString())
+                        } ?: emptyList()
+
+                        tweet.mid?.let {
+                            MediaPreviewGrid(mediaItems, it)
                         }
                     }
 
-                    // Actions Row
+                    /**
+                     * If the tweet being displayed is quoted by other tweet, do not show buttons
+                     * */
                     if (!isQuoted) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            // State hoist
                             LikeButton(viewModel)
                             BookmarkButton(viewModel)
                             CommentButton(viewModel)

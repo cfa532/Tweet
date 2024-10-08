@@ -169,7 +169,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                         BookmarkButton(viewModel)
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
-                        Spacer(modifier = Modifier.width(60.dp))
+                        Spacer(modifier = Modifier.width(20.dp))
                         ShareScreenshotButton(viewModel)
                     }
                 }
