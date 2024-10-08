@@ -64,17 +64,20 @@ class TweetActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
+//        setTheme(R.style.Theme_Tweet)
         installSplashScreen().apply {
             setKeepOnScreenCondition {
                 !activityViewModel.isAppReady.value
             }
         }
 
+//        enableEdgeToEdge()
+
         lifecycleScope.launch {
             (application as TweetApplication).initJob.await()   // wait until network ready
-            activityViewModel.isAppReady.value = true
+
+            activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+
             scheduleNetworkCheckJob()
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
@@ -82,12 +85,12 @@ class TweetActivity : ComponentActivity() {
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
-                    val scope = rememberCoroutineScope()
+
                     ObserveAsEvents(
                         flow = SnackbarController.events,
                         snackbarHostState
                     ) { event ->
-                        scope.launch {
+                         activityViewModel.viewModelScope.launch {
                             snackbarHostState.currentSnackbarData?.dismiss()    // dismiss old message
                             // show new snackbar
                             val result = snackbarHostState.showSnackbar(
