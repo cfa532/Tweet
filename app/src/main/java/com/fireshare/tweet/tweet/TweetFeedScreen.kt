@@ -1,5 +1,6 @@
  package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -89,15 +90,14 @@ fun TweetFeedScreen(
 //     }
 
      Scaffold(
-         modifier = Modifier
-             .fillMaxSize(),
+         modifier = Modifier.fillMaxSize(),
          topBar = { MainTopAppBar(navController, scrollBehavior) },
          bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
      ) { innerPadding ->
          Box(
-             modifier = Modifier
+             modifier = Modifier.fillMaxSize()
+                 .background(color = Color.Gray)
                  .pullRefresh(pullRefreshState)
-                 .fillMaxSize()
                  .padding(innerPadding),
          ) {
              LazyColumn(
@@ -108,11 +108,7 @@ fun TweetFeedScreen(
                  items(tweets, key = { it.mid.toString() } ) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
 
-                     HorizontalDivider(
-                         modifier = Modifier.padding(bottom = 8.dp),
-                         thickness = 0.5.dp,
-                         color = MaterialTheme.colorScheme.surfaceTint
-                     )
+//                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.surfaceTint)
                  }
                  item {
                      if (refreshingAtTop) {

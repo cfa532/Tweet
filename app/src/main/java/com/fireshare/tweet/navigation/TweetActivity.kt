@@ -7,6 +7,7 @@ import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -197,7 +198,18 @@ class ActivityViewModel: ViewModel() {
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
                         finishDownload = true
                         _isDownloading.value = false
-                        // Optionally, start the installation process here
+
+                        // Get the downloaded APK file URI
+                        val downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
+
+                        // Create an intent to install the APK
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(downloadedApkUri, "application/vnd.android.package-archive")
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        }
+                        // Start the installation activity
+                        context.startActivity(installIntent)
+
                     } else if (status == DownloadManager.STATUS_FAILED) {
                         finishDownload = true
                         _isDownloading.value = false

@@ -47,11 +47,12 @@ fun TweetItem(
     // Log the tweet ID to see if the component is being recomposed
     Log.d("TweetItem", "Displaying tweet with ID: ${tweet.mid}")
 
-    Box(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 800.dp)
-            .padding(0.dp)
+            .padding(bottom = 1.dp),
+        tonalElevation = 0.dp
     ) {
         // Content body
         if (tweet.originalTweet != null) {
@@ -90,65 +91,73 @@ fun TweetItem(
             } else {
                 // retweet with comments
                 val navController = LocalNavController.current
-                Column(modifier = Modifier
-                    .padding(start = 8.dp)
-                    .clickable(onClick = {
-                        tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
-                    })
-                ) {
-                    // Tweet header: Icon, name, timestamp, more actions
-                    TweetItemHeader(tweet)
-
-                    tweet.content?. let {
-                        Text(
-                            modifier = Modifier.padding(start = 16.dp),
-                            text = it,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                    Box(
+                Surface() {
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 8.dp, top = 4.dp)
-                            .heightIn(max = 800.dp) // Set a specific height for the grid
+                            .padding(start = 8.dp)
+                            .clickable(onClick = {
+                                tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
+                            })
                     ) {
-                        val mediaItems = tweet.attachments?.mapNotNull {
-                            tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                                ?.let { it2 -> MediaItem(it2) }
+                        // Tweet header: Icon, name, timestamp, more actions
+                        TweetItemHeader(tweet)
+
+                        tweet.content?.let {
+                            Text(
+                                modifier = Modifier.padding(start = 16.dp),
+                                text = it,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
                         }
-                        if (tweet.mid != null && mediaItems != null) {
-                            MediaPreviewGrid(mediaItems, tweet.mid!!)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                                .heightIn(max = 800.dp) // Set a specific height for the grid
+                        ) {
+                            val mediaItems = tweet.attachments?.mapNotNull {
+                                tweet.author?.baseUrl?.let { it1 ->
+                                    getMediaUrl(
+                                        it,
+                                        it1
+                                    ).toString()
+                                }
+                                    ?.let { it2 -> MediaItem(it2) }
+                            }
+                            if (tweet.mid != null && mediaItems != null) {
+                                MediaPreviewGrid(mediaItems, tweet.mid!!)
+                            }
                         }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
 //                        border = BorderStroke(0.4.dp,
 //                            color = MaterialTheme.colorScheme.surfaceTint),
-                        tonalElevation = 3.dp,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
-                    ) {
-                        // quoted tweet
-                        TweetBlock(
-                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                parentEntry, key = tweet.originalTweetId
-                            ) { factory ->
-                                factory.create(tweet.originalTweet!!)
-                            }, isQuoted = true
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        // State hoist
-                        LikeButton(viewModel)
-                        BookmarkButton(viewModel)
-                        CommentButton(viewModel)
-                        RetweetButton(viewModel)
-                        Spacer(modifier = Modifier.width(20.dp))
-                        ShareButton(viewModel)
+                            tonalElevation = 3.dp,
+                            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                        ) {
+                            // quoted tweet
+                            TweetBlock(
+                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                    parentEntry, key = tweet.originalTweetId
+                                ) { factory ->
+                                    factory.create(tweet.originalTweet!!)
+                                }, isQuoted = true
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            // State hoist
+                            LikeButton(viewModel)
+                            BookmarkButton(viewModel)
+                            CommentButton(viewModel)
+                            RetweetButton(viewModel)
+                            Spacer(modifier = Modifier.width(20.dp))
+                            ShareButton(viewModel)
+                        }
                     }
                 }
             }
