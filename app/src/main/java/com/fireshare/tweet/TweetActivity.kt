@@ -63,15 +63,15 @@ class TweetActivity : ComponentActivity() {
     private val activityViewModel: ActivityViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+//        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
 //        setTheme(R.style.Theme_Tweet)
         installSplashScreen().apply {
             setKeepOnScreenCondition {
                 !activityViewModel.isAppReady.value
             }
         }
-
-//        enableEdgeToEdge()
 
         lifecycleScope.launch {
             (application as TweetApplication).initJob.await()   // wait until network ready
