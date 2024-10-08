@@ -4,6 +4,7 @@ agp = "8.7.0"
 assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
 core = "3.4.1"
+coreSplashscreen = "1.2.0-alpha02"
 hiltAndroid = "2.52"
 hiltNavigationCompose = "1.2.0"
 kotlin = "2.0.0"
@@ -40,6 +41,7 @@ firebaseCrashlyticsBuildtools = "3.0.2"
 [libraries]
 accompanist-pager = { module = "com.google.accompanist:accompanist-pager", version.ref = "accompanistPager" }
 accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version.ref = "accompanistPager" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltNavigationCompose" }
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-material = { module = "androidx.compose.material:material", version.ref = "materialIconsCore" }

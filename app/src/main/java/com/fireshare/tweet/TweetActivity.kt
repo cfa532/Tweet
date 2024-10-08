@@ -1,4 +1,4 @@
-package com.fireshare.tweet.navigation
+package com.fireshare.tweet
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -27,6 +27,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -34,15 +35,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import com.fireshare.tweet.HproseInstance
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetApplication
+import com.fireshare.tweet.navigation.LocalViewModelProvider
+import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
@@ -64,9 +66,15 @@ class TweetActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        installSplashScreen().apply {
+            setKeepOnScreenCondition {
+                !activityViewModel.isAppReady.value
+            }
+        }
+
         lifecycleScope.launch {
             (application as TweetApplication).initJob.await()   // wait until network ready
-
+            activityViewModel.isAppReady.value = true
             scheduleNetworkCheckJob()
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
@@ -151,7 +159,8 @@ class TweetActivity : ComponentActivity() {
 }
 
 class ActivityViewModel: ViewModel() {
-    private val _isDownloading = MutableStateFlow<Boolean>(false)
+    val isAppReady = mutableStateOf(false)
+    private val _isDownloading = MutableStateFlow(false)
     val isDownloading = _isDownloading.asStateFlow()
 
     fun checkForUpgrade(context: Context) {

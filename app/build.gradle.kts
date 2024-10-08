@@ -17,7 +17,7 @@ android {
         minSdk = 29
         targetSdk = 35
         versionCode = 1
-        versionName = "8"   // compared with App Mimei version to check for upgrade.
+        versionName = "10"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -57,6 +57,7 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
