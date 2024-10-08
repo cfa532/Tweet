@@ -44,15 +44,16 @@ fun TweetBlock(
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
-        tonalElevation = 1.dp,
+        tonalElevation = 0.dp,
         modifier = Modifier.clickable(
             onClick = {
                 navController.navigate(NavTweet.TweetDetail(tweet.mid ?: return@clickable))
             })
+            .padding(top = 8.dp)
     ) {
         Column(
             modifier = Modifier
-                .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 8.dp)
+                .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
             TweetItemHeader(tweet)
@@ -89,8 +90,9 @@ fun TweetBlock(
                         }
                     }
                     // attached media files
-                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp))
-                    {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp)
+                    ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it, tweet.author?.baseUrl.orEmpty()).toString())
                         } ?: emptyList()

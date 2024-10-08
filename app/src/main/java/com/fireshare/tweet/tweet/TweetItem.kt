@@ -57,8 +57,10 @@ fun TweetItem(
         // Content body
         if (tweet.originalTweet != null) {
             if (tweet.content == "") {
+
                 // this is a retweet of another tweet.
-                Box(modifier = Modifier.padding(top = 8.dp)
+                Surface (
+                    modifier = Modifier.padding(top = 0.dp)
                 ) {
                     // The tweet area
                     viewModel =
@@ -81,7 +83,7 @@ fun TweetItem(
                             modifier = Modifier
                                 .padding(start = 60.dp)
                                 .offset(
-                                    y = (-12).dp,
+                                    y = (-4).dp,
                                     x = (-8).dp
                                 ) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
@@ -91,7 +93,9 @@ fun TweetItem(
             } else {
                 // retweet with comments
                 val navController = LocalNavController.current
-                Surface() {
+                Surface(
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
                     Column(
                         modifier = Modifier
                             .padding(start = 8.dp)
