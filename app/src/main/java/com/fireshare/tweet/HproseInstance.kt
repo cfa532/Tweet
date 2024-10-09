@@ -12,7 +12,7 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
-import com.fireshare.tweet.widget.Gadget.getBestIPAddress
+import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -41,7 +41,7 @@ object HproseInstance {
 
     // Keys within the mimei of the user's database
     private const val CHUNK_SIZE = 5 * 1024 * 1024 // 5MB in bytes
-    private var client: HproseService? = null
+    private var hproseClient: HproseService? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -64,7 +64,7 @@ object HproseInstance {
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
     private suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
-        val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
+        var baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
         val request = Request.Builder().url(baseUrl).build()
         try {
@@ -89,6 +89,7 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         appId = paramMap["mid"].toString()
+                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
 
                         /**
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
@@ -97,32 +98,31 @@ object HproseInstance {
                          *
                          * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
-                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         val userId = preferenceHelper.getUserId()
                         appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                             /**
                              * This is a login user if preference has valid userId. Initiate current account.
                              * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
                              * */
-                            getUserBase(userId, baseUrl) ?:
-                                User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
+                            getFirstReachableUser(hostIPs, userId) ?:
+                                User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
                         } else {
                             val firstIp = findFirstReachableAddress(hostIPs)
-                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://36.24.161.228:8082")
+                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         }
                         Log.d("initAppEntry", "Succeed. $appId, $appUser")
                     }
                 } else {
                     Log.e("initAppEntry", "No data found within window.setParam()")
                 }
-                client = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
+                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
             }
         } catch (e: Exception) {
             Log.e("initAppEntry", e.toString())
         }
     }
 
-    fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         var entry = "message_outgoing"
         var url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
@@ -161,7 +161,7 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
             // write outgoing message to user's Mimei db
-            client?.runMApp(entry, request)  as List<ChatMessage>?
+            hproseClient?.runMApp(entry, request)  as List<ChatMessage>?
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e("fetchMessages", e.toString())
@@ -199,7 +199,7 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            client?.runMApp(entry,request)
+            hproseClient?.runMApp(entry,request)
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e("checkUpgrade", e.toString())
@@ -213,7 +213,7 @@ object HproseInstance {
      * Second, find the node which has this user's data, and use it to login.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    fun login(username: String, password: String, keyPhrase: String): User? {
+    suspend fun login(username: String, password: String, keyPhrase: String): User? {
         val gson = Gson()
         return try {
             val userId = try {
@@ -242,7 +242,7 @@ object HproseInstance {
                  * Now user object has a new baseUrl of the node which hold user data.
                  * If login succeed, httpClient need to use the new IP from now on.
                  * */
-                client = HproseClient.create(user.baseUrl).useService(HproseService::class.java)
+                hproseClient = HproseClient.create(user.baseUrl).useService(HproseService::class.java)
                 return user
             }
             null
@@ -262,7 +262,7 @@ object HproseInstance {
      * Get baseUrl where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
      * */
-    fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
+    suspend fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
         // check if user data has been read
         cachedUsers.firstOrNull { it.mid == userId }?.let { return it }
         try {
@@ -283,10 +283,11 @@ object HproseInstance {
                 if (matcher.find()) {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                        val bestIp = getBestIPAddress(paramMap["addrs"] as ArrayList<*>)
-                        val user = getUserData(userId, bestIp) ?: return null
-                        cachedUsers.add(user)
-                        return user
+                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        getFirstReachableUser(hostIPs, userId)?.let { user: User ->
+                                cachedUsers.add(user)
+                                return user
+                        }
                     }
                 }
             }
@@ -347,7 +348,7 @@ object HproseInstance {
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
         try {
-            client?.runMApp(entry, request) as Unit?
+            hproseClient?.runMApp(entry, request) as Unit?
         } catch (e: Exception) {
             Log.e("setUserAvatar", e.toString())
         }
@@ -398,7 +399,7 @@ object HproseInstance {
 
     // get tweets of a given author in a given span of time
     // if end is null, get all tweets
-    fun getTweetList(user: User,
+    suspend fun getTweetList(user: User,
                              startTimestamp: Long,
                              endTimestamp: Long?
     ) = try {
@@ -440,7 +441,7 @@ object HproseInstance {
         emptyList()
     }
 
-    fun getTweet(
+    suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {
@@ -535,7 +536,7 @@ object HproseInstance {
         }
     }
 
-    fun toggleFollower(userId: MimeiId): Boolean? {
+    suspend fun toggleFollower(userId: MimeiId): Boolean? {
         val user = getUserBase(userId)
         val method = "toggle_follower"
         val url = "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
@@ -619,7 +620,7 @@ object HproseInstance {
      * @param pageNumber
      * @param pageSize
      * */
-    fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
+    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
         try {
             if (tweet.author == null)
                 tweet.author = getUserBase(tweet.authorId) ?: return null
@@ -735,13 +736,13 @@ object HproseInstance {
                     var bytesRead: Int
                     while (stream.read(buffer).also { bytesRead = it } != -1) {
                         if (fsid != null) {
-                            client?.mfSetData(fsid, buffer, offset)
+                            hproseClient?.mfSetData(fsid, buffer, offset)
                         }
                         offset += bytesRead
                     }
                 }
                 val cid = fsid?.let {
-                    client?.mfTemp2Ipfs(it, appUser.mid)
+                    hproseClient?.mfTemp2Ipfs(it, appUser.mid)
                 }
                 inputStream.close()
                 println("cid=$cid")
@@ -811,20 +812,18 @@ object HproseInstance {
         return null
     }
 
-    fun isReachableApp(mid: MimeiId, ip: String): User? {
+    fun isReachable(ip: String): String? {
         try {
-            val method = "main"
+            val method = "get_userid"
             val url =
-                "http://$ip/entry?&aid=$appId&ver=last&entry=$method&userid=$mid"
+                "http://$ip/entry?&aid=$appId&ver=last&entry=$method&phrase=hello"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
                 val gson = Gson()
-                val user = gson.fromJson(responseBody, User::class.java)
-                user.baseUrl = "http://$ip"
-                Log.d("isReachable", "TRUE: user=$user")
-                return user
+                val str = gson.fromJson(responseBody, String::class.java)
+                return str
             }
         } catch (e: Exception) {
             Log.e("isReachable", "No reachable. $ip $e")
