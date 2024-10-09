@@ -249,7 +249,6 @@ class UserViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
                     if (appUser.mid == TW_CONST.GUEST_ID) {
-                        appUser = it1
                         val event = SnackbarEvent(
                             message = context.getString(R.string.registration_ok)
                         )
@@ -258,6 +257,7 @@ class UserViewModel @AssistedInject constructor(
                             popBack()
                         }
                     } else {
+                        appUser = it1.copy(baseUrl = "http://${it1.baseUrl}")
                         val event = SnackbarEvent(
                             message = context.getString(R.string.profile_update_ok)
                         )

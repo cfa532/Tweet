@@ -95,7 +95,7 @@ object HproseInstance {
                          * Each pair is an ArrayList of two elements. The first is the IP address,
                          * and the second is the time spent to get response from the IP.
                          *
-                         * hostIPs is a list of node's IP that is an App Mimei provider.
+                         * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         val userId = preferenceHelper.getUserId()
@@ -104,13 +104,11 @@ object HproseInstance {
                              * This is a login user if preference has valid userId. Initiate current account.
                              * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
                              * */
-                            getUserBase(userId, baseUrl) ?: User(
-                                mid = TW_CONST.GUEST_ID,
-                                baseUrl = "http://${hostIPs[0]}"
-                            )
+                            getUserBase(userId, baseUrl) ?:
+                                User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
                         } else {
                             val firstIp = findFirstReachableAddress(hostIPs)
-                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://36.24.161.228:8082")
                         }
                         Log.d("initAppEntry", "Succeed. $appId, $appUser")
                     }
@@ -294,6 +292,7 @@ object HproseInstance {
             }
             return null
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("getUserBase()", "${appUser.baseUrl} $userId $e")
             return null
         }
@@ -325,15 +324,16 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val json = response.body?.string()
                 val gson = Gson()
-                val ret = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
+                val updatedUser = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
 
-                ret.name?.let { preferenceHelper.saveName(it) }
-                ret.profile?.let { preferenceHelper.saveProfile(it) }
-                return ret
+                updatedUser.name?.let { preferenceHelper.saveName(it) }
+                updatedUser.profile?.let { preferenceHelper.saveProfile(it) }
+                return updatedUser
             }
-            Log.d("HproseInstance.setUserData", "Set user data error")
+            Log.e("HproseInstance.setUserData", "Set user data error. $user")
             null
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("setUserData", e.toString())
             null
         }
@@ -804,6 +804,7 @@ object HproseInstance {
                 return user
             }
         } catch (e: Exception) {
+            e.printStackTrace()
             Log.e("getUserData", "No reachable. $ip $e")
             return null
         }

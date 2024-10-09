@@ -45,7 +45,7 @@ object Gadget {
     }
 
     private fun getPreferredIpAddress(ipList: ArrayList<*>): String {
-        // Turn the IP list into a map if {IP: Response} and get the one with smallest response time.
+        // Turn the IP list into a map of {IP: ResponseTime} and get the one with smallest response time.
         // ["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833]
         val ipMap = ipList.associate {
             val pair = it as ArrayList<*>;
@@ -143,7 +143,7 @@ object Gadget {
                 try {
                     val socket = Socket()
                     val pair = hostIp.split(":")
-                    socket.connect(InetSocketAddress(pair[0], pair[1].toInt()), 1000) // Timeout of 5 seconds
+                    socket.connect(InetSocketAddress(pair[0], pair[1].toInt()), 5000) // Timeout of 5 seconds
                     socket.close()
                     true // Reachable
                 } catch (e: Exception) {
