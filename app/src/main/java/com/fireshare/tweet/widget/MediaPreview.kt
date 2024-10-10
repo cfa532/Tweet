@@ -71,13 +71,17 @@ enum class MediaType {
 
 @Serializable
 // url is in the format of http://ip/mm/mimei_id
-data class MediaItem( val url: String, var type: MediaType = MediaType.Unknown )
+data class MediaItem(val url: String, var type: MediaType = MediaType.Unknown)
 
 @Composable
-fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWidth: Dp = 400.dp) {    // need to check container width later
+fun MediaPreviewGrid(
+    mediaItems: List<MediaItem>,
+    tweetId: MimeiId,
+    containerWidth: Dp = 400.dp
+) {    // need to check container width later
     val navController = LocalNavController.current
-    val gridCells = if (mediaItems.size>1) 2 else 1
-    val maxItems = when(mediaItems.size) {
+    val gridCells = if (mediaItems.size > 1) 2 else 1
+    val maxItems = when (mediaItems.size) {
         1 -> 1
         in 2..3 -> 2
         else -> 4
@@ -86,20 +90,24 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWid
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(gridCells),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Color.Black),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        val modifier = if (gridCells == 1) Modifier.fillMaxWidth().aspectRatio(16f/9f)
-                        else Modifier.size(containerWidth/gridCells)
+        val modifier = if (gridCells == 1) Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+        else Modifier.size(containerWidth / gridCells)
         items(limitedMediaList) { mediaItem ->
-            MediaItemPreview(mediaItem,
+            MediaItemPreview(
+                mediaItem,
                 modifier = modifier
                     .clickable {
                         val index = mediaItems.indexOf(mediaItem)
                         val params = MediaViewerParams(mediaItems, index, tweetId)
-                        navController.navigate( NavTweet.MediaViewer(params) )
+                        navController.navigate(NavTweet.MediaViewer(params))
                     },
                 // if the last item previewed is not the last of the attachments, show a plus sign
                 // to indicate there are more.
@@ -113,11 +121,12 @@ fun MediaPreviewGrid(mediaItems: List<MediaItem>, tweetId: MimeiId, containerWid
 }
 
 @Composable
-fun MediaItemPreview(mediaItem: MediaItem,
-                     modifier: Modifier = Modifier,
-                     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
-                     index: Int = -1,               // autoplay first video item, index 0
-                     inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
+fun MediaItemPreview(
+    mediaItem: MediaItem,
+    modifier: Modifier = Modifier,
+    isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
+    index: Int = -1,               // autoplay first video item, index 0
+    inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
 ) {
     val coroutineScope = rememberCoroutineScope()
     val mediaType = remember { mutableStateOf(MediaType.Image) }
@@ -146,12 +155,15 @@ fun MediaItemPreview(mediaItem: MediaItem,
             MediaType.Image -> {
                 ImageViewer(mediaItem.url, modifier)
             }
+
             MediaType.Video -> {
                 VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid)
             }
-            MediaType.Audio ->  {
+
+            MediaType.Audio -> {
                 VideoPreview(url = mediaItem.url, modifier)
             }
+
             else -> {       // Handle unknown file type
                 Log.e("MediaItemPreview", "unknown file type ${mediaItem.url}")
             }
@@ -167,7 +179,8 @@ fun MediaItemPreview(mediaItem: MediaItem,
                     imageVector = Icons.Outlined.Add,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(100.dp)
+                    modifier = Modifier
+                        .size(100.dp)
                         .alpha(0.7f)
                 )
             }
@@ -201,7 +214,8 @@ fun ImageViewer(
     var downloadError by remember { mutableStateOf(false) }
 
     // Check if image is already cached and use it directly
-    val cachedImage = remember(imageUrl) { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
+    val cachedImage =
+        remember(imageUrl) { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
 
     val adjustedModifier = if (isPreview) {
         modifier.fillMaxSize()      // image is viewed within a parent composable
@@ -280,9 +294,10 @@ fun VideoPreview(
             prepare()
         }
     }
+
     var aspectRatio by remember { mutableFloatStateOf(1f) }
     if (!inPreviewGrid) {
-        LaunchedEffect(url.substringAfterLast("/")) {
+        LaunchedEffect(url.substringAfterLast('/')) {
             val pair = getVideoDimensions(url) ?: Pair(400, 400)
             aspectRatio = pair.first.toFloat() / pair.second.toFloat()
         }
@@ -303,7 +318,7 @@ fun VideoPreview(
         }
     }
 
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     Box(
         modifier = modifier
             .onGloballyPositioned { layoutCoordinates ->
@@ -313,9 +328,9 @@ fun VideoPreview(
                 detectTapGestures(
                     onTap = {
                         areControlsVisible = true
-                        // Start a coroutine to hide controls after 3 seconds
-                        coroutineScope.launch {
-                            delay(3000)
+                        // Start a coroutine to hide controls after 2 seconds
+                        scope.launch {
+                            delay(2000)
                             areControlsVisible = false
                         }
                     }
@@ -327,22 +342,21 @@ fun VideoPreview(
             modifier = modifier
                 .aspectRatio(aspectRatio)
         )
-        if (areControlsVisible) {
-            // Fullscreen button
-            IconButton(
-                onClick = {
-                    println("click to open full screen")    // full view will open
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_full_screen),
-                    contentDescription = "Full screen",
-                    tint = Color.White,
-                    modifier = modifier.size(ButtonDefaults.IconSize)
-                        .alpha(0.7f)
-                )
-            }
+        // Fullscreen button
+        IconButton(
+            onClick = {
+                println("click to open full screen") // full view will open
+            },
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_full_screen),
+                contentDescription = "Full screen",
+                tint = Color.White,
+                modifier = modifier
+                    .size(ButtonDefaults.IconSize)
+                    .alpha(0.7f)
+            )
         }
     }
 }
