@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -104,7 +105,7 @@ fun EditProfileScreen(
             )
         }
         // show and edit user avatar
-        AvatarSection(launcher)
+        AvatarSection(launcher, viewModel)
 
         Spacer(modifier = Modifier.height(16.dp))
         Column {
@@ -199,8 +200,12 @@ fun EditProfileScreen(
 }
 
 @Composable
-fun AvatarSection( launcher: ManagedActivityResultLauncher<String, Uri?>
+fun AvatarSection(
+    launcher: ManagedActivityResultLauncher<String, Uri?>,
+    viewModel: UserViewModel
 ) {
+    val user by  viewModel.user.collectAsState()
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -210,7 +215,7 @@ fun AvatarSection( launcher: ManagedActivityResultLauncher<String, Uri?>
                 .clip(CircleShape)
                 .clickable(onClick = { launcher.launch("image/*") })
         ) {
-            UserAvatar(appUser, 120)
+            UserAvatar(user, 120)
         }
     }
 }

@@ -185,7 +185,7 @@ fun ImageViewer(
     imageUrl: String,
     modifier: Modifier = Modifier,
     isPreview: Boolean = true,
-    imageSize: Int = 200
+    imageSize: Int = 200    // Cache size in KB
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -199,7 +199,8 @@ fun ImageViewer(
     var downloadError by remember { mutableStateOf(false) }
 
     // Check if image is already cached and use it directly
-    val cachedImage = remember { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
+    val cachedImage = remember(imageUrl) { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
+
     val adjustedModifier = if (isPreview) {
         modifier.fillMaxSize()      // image is viewed within a parent composable
     } else {

@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -47,11 +50,14 @@ fun AppIcon() {
 //        contentScale = ContentScale.Crop
 //    )
 //}
-
 fun UserAvatar(user: User?, size: Int = 40) {
-    val avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
+    val avatarUrl = remember { mutableStateOf<String?>(getMediaUrl(user?.avatar, user?.baseUrl)) }
 
-    if (avatarUrl == null) {
+    LaunchedEffect(user?.avatar) {
+        avatarUrl.value = getMediaUrl(user?.avatar, user?.baseUrl)
+    }
+
+    if (avatarUrl.value == null) {
         Image(
             painter = painterResource(id = R.drawable.ic_user_avatar),
             contentDescription = "Placeholder Avatar",
@@ -64,7 +70,7 @@ fun UserAvatar(user: User?, size: Int = 40) {
     } else {
         // Display the actual avatar image
         ImageViewer(
-            avatarUrl,
+            avatarUrl.value!!,
             modifier = Modifier
                 .size(size.dp)
                 .clip(CircleShape)

@@ -9,11 +9,17 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.uploadToIPFS
 import com.fireshare.tweet.datamodel.Tweet
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(
@@ -29,22 +35,25 @@ class UploadCommentWorker @AssistedInject constructor(
             val commentContent = inputData.getString("content")
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
-            val attachments = attachmentUris.map { uri ->
-                val inputStream = applicationContext.contentResolver.openInputStream(Uri.parse(uri.toString()))
-                if (inputStream == null) {
-                    Log.e("UploadCommentWorker", "Failed to open input stream for URI: $uri")
-                    return@map Result.failure()
-                }
-                inputStream.use { HproseInstance.uploadToIPFS(it) }
+            val attachments = withContext(Dispatchers.IO) {
+                supervisorScope {
+                    attachmentUris.map { uri ->
+                        async {
+                            uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
+                        }
+                    }.awaitAll()
+                }.mapNotNull { it.toString() }
             }
             val comment = Tweet(
                 authorId = appUser.mid,
                 content = commentContent,
-                attachments = attachments.mapNotNull { it.toString() }
+                attachments = attachments,
+                timestamp = System.currentTimeMillis()
             )
+
             HproseInstance.uploadComment(parentTweet, comment).let { newTweet: Tweet ->
-                // newTweet is the parent Tweet with new comment
-                // after uploading, comment.mid is updated.
+                // newTweet is the parent Tweet with new comment after uploading
+                // comment.mid is updated inside uploadComment with newly created id.
                 val gson = Gson()
                 val retweet = if (isChecked) {
                     // retweet is the comment posted as a tweet
@@ -77,18 +86,19 @@ class UploadTweetWorker @AssistedInject constructor(
             val tweetContent = inputData.getString("tweetContent")
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
-            val attachments = attachmentUris.map { uri ->
-                val inputStream = applicationContext.contentResolver.openInputStream(Uri.parse(uri.toString()))
-                if (inputStream == null) {
-                    Log.e("UploadTweetWorker", "Failed to open input stream for URI: $uri")
-                    return@map Result.failure()
-                }
-                inputStream.use { HproseInstance.uploadToIPFS(it) }
+            val attachments = withContext(Dispatchers.IO) {
+                supervisorScope {
+                    attachmentUris.map { uri ->
+                        async {
+                            uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
+                        }
+                    }.awaitAll()
+                }.mapNotNull { it.toString() } // Use getOrNull() without an index
             }
             val tweet = Tweet(
                 authorId = appUser.mid,
                 content = tweetContent ?: " ",
-                attachments = attachments.mapNotNull { it.toString() }
+                attachments = attachments
             )
             HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                 Log.d("UploadTweetWorker", tweet.toString())

@@ -14,6 +14,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
@@ -134,7 +135,7 @@ class TweetViewModel @AssistedInject constructor(
                         WorkInfo.State.SUCCEEDED -> {
                             val outputData = workInfo.outputData
                             val json = outputData.getString("comment") ?: return@observe
-//                            Log.d("UploadComment", "Tweet uploaded successfully: $json")
+                            Log.d("UploadComment", "Tweet uploaded successfully: $json")
                             // Handle the success and update UI
                             val map = Json.decodeFromString<Map<String, String?>>(json)
 
@@ -143,9 +144,8 @@ class TweetViewModel @AssistedInject constructor(
                                 map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
                             } else null
 
-                            Log.d("UploadComment", "ReTweet: $retweet")
-                            val comment = Json.decodeFromString<Tweet>(map["comment"]!!)
-
+                            var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
+                            comment = comment.copy(author = appUser)
                             Log.d("UploadComment", "Comment: $comment")
                             _comments.update { list -> listOf(comment) + list }
 

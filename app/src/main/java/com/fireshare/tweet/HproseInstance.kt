@@ -1,6 +1,7 @@
 package com.fireshare.tweet
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.room.Room
 import com.fireshare.tweet.datamodel.ChatDatabase
@@ -17,6 +18,8 @@ import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -312,7 +315,8 @@ object HproseInstance {
         } else {
             // update existing account
             val method = "set_author_core_data"
-            val tmp = User(mid = appUser.mid, name = appUser.name, timestamp = appUser.timestamp,
+            val tmp = User(
+                mid = appUser.mid, name = appUser.name, timestamp = appUser.timestamp,
                 username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
             )
             url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
@@ -722,37 +726,40 @@ object HproseInstance {
         }
     }
 
-    fun uploadToIPFS(inputStream: InputStream): MimeiId? {
-        return try {
-            val method = "open_temp_file"
-            val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val fsid = response.body?.string()
-                var offset = 0
-                inputStream.use { stream ->
-                    val buffer = ByteArray(CHUNK_SIZE)
-                    var bytesRead: Int
-                    while (stream.read(buffer).also { bytesRead = it } != -1) {
-                        if (fsid != null) {
-                            hproseClient?.mfSetData(fsid, buffer, offset)
+     suspend fun uploadToIPFS(context: Context, uri: Uri): MimeiId? {
+        return withContext(Dispatchers.IO) { // Execute in IO dispatcher
+            try {
+                val method = "open_temp_file"
+                val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method"
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val fsid = response.body?.string()
+                    context.contentResolver.openInputStream(uri)?.use { inputStream -> // Open input stream here
+                        var offset = 0
+                        inputStream.use { stream ->
+                            val buffer = ByteArray(CHUNK_SIZE)
+                            var bytesRead: Int
+                            while (stream.read(buffer).also { bytesRead = it } != -1) {
+                                if (fsid != null) {
+                                    hproseClient?.mfSetData(fsid, buffer, offset)
+                                }
+                                offset += bytesRead
+                            }
                         }
-                        offset += bytesRead
                     }
+                    val cid = fsid?.let {
+                        hproseClient?.mfTemp2Ipfs(it, appUser.mid)
+                    }
+                    Log.d("uploadToIPFS()", "cid=$cid")
+                    cid
+                } else {
+                    null
                 }
-                val cid = fsid?.let {
-                    hproseClient?.mfTemp2Ipfs(it, appUser.mid)
-                }
-                inputStream.close()
-                println("cid=$cid")
-                cid
-            } else {
+            } catch (e: Exception) {
+                e.printStackTrace()
                 null
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
         }
     }
 

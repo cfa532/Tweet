@@ -100,35 +100,16 @@ class UserViewModel @AssistedInject constructor(
 
     fun updateAvatar(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
-            context.contentResolver.openInputStream(uri)?.let { stream ->
-                isLoading.value = true
-
-                // Decode the image from the input stream
-                val originalBitmap = BitmapFactory.decodeStream(stream)
-                var compressedBitmap: Bitmap? = null
-                var quality = 80
-                val outputStream = ByteArrayOutputStream()
-
-                // Compress the image to be less than 1MB
-                do {
-                    outputStream.reset()
-                    originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
-                    quality -= 5
-                } while (outputStream.size() > 500_000 && quality > 0)
-
-                // Convert the compressed image to an input stream
-                val compressedStream = ByteArrayInputStream(outputStream.toByteArray())
-
-                val mimeiId = HproseInstance.uploadToIPFS(compressedStream)
-                if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
-                    // Update avatar for logged-in user right away
-                    // Otherwise, wait for user to submit.
-                    HproseInstance.setUserAvatar(userId, mimeiId)   // Update database value
-                    appUser.avatar = mimeiId
-                    _user.value = user.value.copy(avatar = mimeiId)
-                }
-                isLoading.value = false
+            isLoading.value = true
+            val mimeiId = HproseInstance.uploadToIPFS(context, uri)
+            if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
+                // Update avatar for logged-in user right away.
+                // Otherwise, wait for user to submit.
+                HproseInstance.setUserAvatar(userId, mimeiId)   // Update database value
+                _user.value = user.value.copy(avatar = mimeiId)
+                appUser = appUser.copy(avatar = mimeiId)
             }
+            isLoading.value = false
         }
     }
 

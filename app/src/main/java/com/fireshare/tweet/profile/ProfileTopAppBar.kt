@@ -76,7 +76,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 verticalAlignment = Alignment.Bottom,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+
                     UserAvatar(user, size = (80 - (scrollFraction * 20)).toInt() )
+
                     Column(modifier = Modifier.padding(start = 8.dp)
                     ) {
                         Text(
