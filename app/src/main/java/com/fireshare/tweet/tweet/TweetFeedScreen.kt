@@ -60,7 +60,6 @@ fun TweetFeedScreen(
 ) {
      val viewModel = hiltViewModel<TweetFeedViewModel>()
      val tweets by viewModel.tweets.collectAsState()
-     val initState by viewModel.initState.collectAsState()
 
      val scrollBehavior =
          TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())

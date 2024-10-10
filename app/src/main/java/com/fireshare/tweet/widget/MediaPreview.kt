@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -260,11 +262,17 @@ fun ImageViewer(
  *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
  * **/
 @Composable
-fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, inPreviewGrid: Boolean = true) {
+fun VideoPreview(
+    url: String,
+    modifier: Modifier = Modifier,
+    index: Int = -1,
+    inPreviewGrid: Boolean = true
+) {
     val context = LocalContext.current
     val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
 
     var isVideoVisible by remember { mutableStateOf(false) }
+    var areControlsVisible by remember { mutableStateOf(false) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -295,30 +303,46 @@ fun VideoPreview(url: String, modifier: Modifier = Modifier, index: Int = -1, in
         }
     }
 
-    Box(modifier = modifier
-        .onGloballyPositioned { layoutCoordinates ->
-            isVideoVisible = isElementVisible(layoutCoordinates)
-        }
+    val coroutineScope = rememberCoroutineScope()
+    Box(
+        modifier = modifier
+            .onGloballyPositioned { layoutCoordinates ->
+                isVideoVisible = isElementVisible(layoutCoordinates)
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        areControlsVisible = true
+                        // Start a coroutine to hide controls after 3 seconds
+                        coroutineScope.launch {
+                            delay(3000)
+                            areControlsVisible = false
+                        }
+                    }
+                )
+            }
     ) {
         AndroidView(
             factory = { PlayerView(context).apply { player = exoPlayer } },
             modifier = modifier
                 .aspectRatio(aspectRatio)
         )
-        // Fullscreen button
-        IconButton(
-            onClick = {
-                println("click to open full screen")    // full view will open
-            },
-            modifier = Modifier.align(Alignment.TopEnd)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_full_screen),
-                contentDescription = "Full screen",
-                tint = Color.White,
-                modifier = modifier.size(ButtonDefaults.IconSize)
-                    .alpha(0.7f)
-            )
+        if (areControlsVisible) {
+            // Fullscreen button
+            IconButton(
+                onClick = {
+                    println("click to open full screen")    // full view will open
+                },
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_full_screen),
+                    contentDescription = "Full screen",
+                    tint = Color.White,
+                    modifier = modifier.size(ButtonDefaults.IconSize)
+                        .alpha(0.7f)
+                )
+            }
         }
     }
 }
