@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -287,6 +288,7 @@ fun VideoPreview(
 
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(false) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -312,6 +314,10 @@ fun VideoPreview(
         }
     }
 
+    LaunchedEffect(isMuted) {
+        exoPlayer.volume = if (isMuted) 0f else 1f
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
@@ -328,7 +334,6 @@ fun VideoPreview(
                 detectTapGestures(
                     onTap = {
                         areControlsVisible = true
-                        // Start a coroutine to hide controls after 2 seconds
                         scope.launch {
                             delay(2000)
                             areControlsVisible = false
@@ -342,21 +347,40 @@ fun VideoPreview(
             modifier = modifier
                 .aspectRatio(aspectRatio)
         )
-        // Fullscreen button
-        IconButton(
-            onClick = {
-                println("click to open full screen") // full view will open
-            },
-            modifier = Modifier.align(Alignment.TopEnd)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_full_screen),
-                contentDescription = "Full screen",
-                tint = Color.White,
-                modifier = modifier
-                    .size(ButtonDefaults.IconSize)
-                    .alpha(0.7f)
-            )
+        if (areControlsVisible) { // Ensure this condition is correct
+            // Fullscreen button
+            IconButton(
+                onClick = {
+                    println("click to open full screen")
+                },
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_full_screen),
+                    contentDescription = "Full screen",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(ButtonDefaults.IconSize)
+                        .alpha(0.7f)
+                )
+            }
+            // Mute button
+            IconButton(
+                onClick = {
+                    Log.d("VideoPreview", "Mute button clicked")
+                    isMuted = !isMuted
+                },
+                modifier = Modifier.align(Alignment.BottomStart)
+            ) {
+                Icon(
+                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
+                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(ButtonDefaults.IconSize)
+                        .alpha(0.7f)
+                )
+            }
         }
     }
 }
