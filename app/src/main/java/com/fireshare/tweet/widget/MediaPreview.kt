@@ -342,9 +342,11 @@ fun VideoPreview(
                 PlayerView(context).apply {
                     player = exoPlayer
                     useController = true
+
                     setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                         areControlsVisible = visibility == View.VISIBLE
                     })
+                    hideController()
                 }
             },
             modifier = modifier.aspectRatio(aspectRatio)
