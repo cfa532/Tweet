@@ -1,5 +1,6 @@
 package com.fireshare.tweet.widget
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.View
@@ -51,7 +52,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.Cache
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
@@ -67,6 +76,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import java.io.File
 
 enum class MediaType {
     Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
@@ -281,8 +291,18 @@ fun VideoPreview(
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
 
     val exoPlayer = remember {
+        val cache = VideoCacheManager.getCache(context)
+        val dataSourceFactory = DefaultDataSource.Factory(context)
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(dataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+            .createMediaSource(item)
+
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(item)
+            setMediaSource(mediaSource)
             prepare()
         }
     }
@@ -383,6 +403,21 @@ fun VideoPreview(
                 )
             }
         }
+    }
+}
+
+object VideoCacheManager {
+    private var simpleCache: SimpleCache? = null
+
+    fun getCache(context: Context): Cache {
+        if (simpleCache == null) {
+            val cacheSize: Long = 100 * 1024 * 1024 // 100 MB
+            val cacheDir = File(context.cacheDir, "video_cache")
+            val evictor = LeastRecentlyUsedCacheEvictor(cacheSize)
+            val databaseProvider = StandaloneDatabaseProvider(context)
+            simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
+        }
+        return simpleCache!!
     }
 }
 
