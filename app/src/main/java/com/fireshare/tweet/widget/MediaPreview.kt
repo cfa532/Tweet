@@ -2,6 +2,7 @@ package com.fireshare.tweet.widget
 
 import android.net.Uri
 import android.util.Log
+import android.view.View
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -289,6 +290,7 @@ fun VideoPreview(
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
+    val playerView = remember { PlayerView(context) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -333,7 +335,8 @@ fun VideoPreview(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
-                        areControlsVisible = true
+                        areControlsVisible = !areControlsVisible
+                        // Start a coroutine to hide controls after 2 seconds
                         scope.launch {
                             delay(2000)
                             areControlsVisible = false
@@ -343,11 +346,18 @@ fun VideoPreview(
             }
     ) {
         AndroidView(
-            factory = { PlayerView(context).apply { player = exoPlayer } },
+            factory = { PlayerView(context).apply {
+                player = exoPlayer
+                useController = true
+
+                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                    areControlsVisible = visibility == View.VISIBLE
+                })
+            } },
             modifier = modifier
                 .aspectRatio(aspectRatio)
         )
-        if (areControlsVisible) { // Ensure this condition is correct
+        if (areControlsVisible) {
             // Fullscreen button
             IconButton(
                 onClick = {
