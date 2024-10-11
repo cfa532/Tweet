@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -70,13 +69,9 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
-import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import com.fireshare.tweet.widget.Gadget.getVideoDimensions
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
 
@@ -286,7 +281,6 @@ fun VideoPreview(
     goto: (Int) -> Unit
 ) {
     val context = LocalContext.current
-    val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
     val preferenceHelper = TweetApplication.preferenceHelper
 
     var isVideoVisible by remember { mutableStateOf(false) }
@@ -342,9 +336,11 @@ fun VideoPreview(
                 PlayerView(context).apply {
                     player = exoPlayer
                     useController = true
+
                     setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                         areControlsVisible = visibility == View.VISIBLE
                     })
+                    hideController()
                 }
             },
             modifier = modifier.aspectRatio(aspectRatio)

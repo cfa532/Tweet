@@ -12,8 +12,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
 
 object Gadget {
 

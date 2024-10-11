@@ -3,7 +3,6 @@ package com.fireshare.tweet
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.compose.foundation.content.MediaType
 import androidx.room.Room
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -27,7 +26,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
-import java.io.InputStream
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern

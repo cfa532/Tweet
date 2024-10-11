@@ -15,11 +15,11 @@ import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.supervisorScope
-import kotlinx.serialization.json.Json
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(

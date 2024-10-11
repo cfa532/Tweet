@@ -1,12 +1,9 @@
 package com.fireshare.tweet.widget
 
-import android.media.MediaPlayer
-import android.net.Uri
-import android.widget.MediaController
-import android.widget.VideoView
+import android.view.View
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +37,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.datamodel.MimeiId
@@ -49,13 +49,9 @@ import com.fireshare.tweet.tweet.CommentButton
 import com.fireshare.tweet.tweet.LikeButton
 import com.fireshare.tweet.tweet.RetweetButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
-import com.fireshare.tweet.widget.Gadget.downloadFileHeader
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
+@OptIn(UnstableApi::class)
 @Composable
 fun MediaBrowser(
     parentEntry: NavBackStackEntry,
@@ -70,6 +66,7 @@ fun MediaBrowser(
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }
     val animationScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         val previousRoute = navController.previousBackStackEntry?.destination?.route
@@ -83,15 +80,6 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = {
-                        showControls = true
-                        animationScope.launch {
-                            delay(2000) // Hide controls after 2 seconds
-                            showControls = false
-                        }
-                    }
-                )
                 detectHorizontalDragGestures { _, dragAmount ->
                     if (dragAmount > 0) {
                         animationScope.launch {
@@ -112,7 +100,28 @@ fun MediaBrowser(
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-                    VideoPlayer(uri = Uri.parse(mediaItem.url))
+                    val exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
+                    exoPlayer.playWhenReady = true
+                    exoPlayer.volume = 1f
+
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            exoPlayer.release()
+                        }
+                    }
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = true // Disable default controls
+                                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                                    showControls = visibility == View.VISIBLE
+                                })
+                                hideController()
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
                 else -> {
                     ImageViewer(mediaItem.url, isPreview = false)
@@ -180,24 +189,4 @@ fun MediaBrowser(
             }
         }
     }
-}
-
-@Composable
-fun VideoPlayer(uri: Uri) {
-    val context = LocalContext.current
-    AndroidView(
-        factory = {
-            VideoView(context).apply {
-                setVideoURI(uri)
-                val mediaController = MediaController(context)
-                mediaController.setAnchorView(this)
-                setMediaController(mediaController)
-                setOnPreparedListener { mediaPlayer: MediaPlayer ->
-                    mediaPlayer.isLooping = false
-                    start()
-                }
-            }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
 }
