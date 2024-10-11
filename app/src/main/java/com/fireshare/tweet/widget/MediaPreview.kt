@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.View
+import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -52,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.Cache
@@ -274,6 +276,7 @@ fun ImageViewer(
  * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
  *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
  * **/
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPreview(
     url: String,
@@ -289,44 +292,18 @@ fun VideoPreview(
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-
-    val exoPlayer = remember {
-        val cache = VideoCacheManager.getCache(context)
-        val dataSourceFactory = DefaultDataSource.Factory(context)
-        val cacheDataSourceFactory = CacheDataSource.Factory()
-            .setCache(cache)
-            .setUpstreamDataSourceFactory(dataSourceFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-        val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-            .createMediaSource(item)
-
-        ExoPlayer.Builder(context).build().apply {
-            setMediaSource(mediaSource)
-            prepare()
-        }
-    }
-
+    val exoPlayer = remember { createExoPlayer(context, url) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
-    if (!inPreviewGrid) {
-        LaunchedEffect(url.substringAfterLast('/')) {
-            val pair = getVideoDimensions(url) ?: Pair(400, 400)
-            aspectRatio = pair.first.toFloat() / pair.second.toFloat()
-        }
-    } else {
-        LaunchedEffect(url.substringAfterLast('/')) {
-            val pair = Pair(400, 400)
-            aspectRatio = pair.first.toFloat() / pair.second.toFloat()
-        }
+
+    LaunchedEffect(url.substringAfterLast('/')) {
+        if (!inPreviewGrid) {
+            val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+            aspectRatio = width.toFloat() / height.toFloat()
+        } // No need for an 'else' block as aspectRatio is initialized to 1f
     }
 
-    LaunchedEffect(isVideoVisible) {
-        if (isVideoVisible && index == 0) {
-            delay(500) // Wait for 0.5 seconds
-            exoPlayer.playWhenReady = true
-        } else {
-            exoPlayer.playWhenReady = false
-        }
+    LaunchedEffect(isVideoVisible, index) {
+        exoPlayer.playWhenReady = isVideoVisible && index == 0
     }
 
     LaunchedEffect(isMuted) {
@@ -349,28 +326,32 @@ fun VideoPreview(
                 detectTapGestures(
                     onTap = {
                         areControlsVisible = !areControlsVisible
-                        // Start a coroutine to hide controls after 2 seconds
-                        scope.launch {
-                            delay(1000)
-                            areControlsVisible = false
+                        if (areControlsVisible) {
+                            // Start a coroutine to hide controls after 2 seconds
+                            scope.launch {
+                                delay(2000)
+                                areControlsVisible = false
+                            }
                         }
                     }
                 )
             }
     ) {
         AndroidView(
-            factory = { PlayerView(context).apply {
-                player = exoPlayer
-                useController = true
-
-                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                    areControlsVisible = visibility == View.VISIBLE
-                })
-            } },
-            modifier = modifier
-                .aspectRatio(aspectRatio)
+            factory = {
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = true
+                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                        areControlsVisible = visibility == View.VISIBLE
+                    })
+                }
+            },
+            modifier = modifier.aspectRatio(aspectRatio)
         )
+
         if (areControlsVisible) {
+            // Show controls and buttons
             IconButton(
                 onClick = { goto(index) },
                 modifier = Modifier.align(Alignment.TopEnd)
@@ -387,7 +368,6 @@ fun VideoPreview(
             // Mute button
             IconButton(
                 onClick = {
-                    Log.d("VideoPreview", "Mute button clicked")
                     isMuted = !isMuted!!
                     preferenceHelper.setSpeakerMute(isMuted!!)
                 },
@@ -406,6 +386,25 @@ fun VideoPreview(
     }
 }
 
+@OptIn(UnstableApi::class)
+fun createExoPlayer(context: Context, url: String): ExoPlayer {
+    val cache = VideoCacheManager.getCache(context)
+    val dataSourceFactory = DefaultDataSource.Factory(context)
+    val cacheDataSourceFactory = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(dataSourceFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+        .createMediaSource(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+
+    return ExoPlayer.Builder(context).build().apply {
+        setMediaSource(mediaSource)
+        prepare()
+    }
+}
+
+@UnstableApi
 object VideoCacheManager {
     private var simpleCache: SimpleCache? = null
 
