@@ -4,6 +4,7 @@ import android.view.View
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,6 +81,9 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { showControls = !showControls }
+                )
                 detectHorizontalDragGestures { _, dragAmount ->
                     if (dragAmount > 0) {
                         animationScope.launch {
