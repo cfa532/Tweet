@@ -54,6 +54,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
@@ -286,11 +287,11 @@ fun VideoPreview(
 ) {
     val context = LocalContext.current
     val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
+    val preferenceHelper = TweetApplication.preferenceHelper
 
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
-    var isMuted by remember { mutableStateOf(false) }
-    val playerView = remember { PlayerView(context) }
+    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -317,7 +318,7 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
+        exoPlayer.volume = if (isMuted == true) 0f else 1f
     }
 
     DisposableEffect(Unit) {
@@ -378,13 +379,14 @@ fun VideoPreview(
             IconButton(
                 onClick = {
                     Log.d("VideoPreview", "Mute button clicked")
-                    isMuted = !isMuted
+                    isMuted = !isMuted!!
+                    preferenceHelper.setSpeakerMute(isMuted!!)
                 },
                 modifier = Modifier.align(Alignment.BottomStart)
             ) {
                 Icon(
-                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
-                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    painter = painterResource(if (isMuted == true) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
+                    contentDescription = if (isMuted == true) "Unmute" else "Mute",
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)

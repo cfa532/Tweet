@@ -46,11 +46,11 @@ class PreferenceHelper(context: Context) {
         return sharedPreferences.getString("keyPhrase", null)
     }
 
-    fun setAppId(id: String) {
-        sharedPreferences.edit().putString("appId", id).apply()
+    fun setSpeakerMute(isMuted: Boolean) {
+        sharedPreferences.edit().putBoolean("speakerMuted", isMuted).apply()
     }
-    fun getAppId(): String? {
-        return sharedPreferences.getString("appId", null)
+    fun getSpeakerMute(): Boolean? {
+        return sharedPreferences.getBoolean("speakerMuted", true)
     }
 
     fun getUserId(): String {
