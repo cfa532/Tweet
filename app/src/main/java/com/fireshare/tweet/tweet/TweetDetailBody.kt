@@ -130,7 +130,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                                                 NavTweet.MediaViewer(params)
                                             )
                                         },
-                                    false, index, false
+                                    false, index, false, tweet.mid
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 1.dp),

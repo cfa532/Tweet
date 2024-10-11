@@ -66,7 +66,6 @@ fun MediaBrowser(
         factory.create(Tweet(authorId = "default", content = "nothing"))
     }
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
-    val mediaType = remember { mutableStateOf(MediaType.Image) }
     var showControls by remember { mutableStateOf(false) } // State for showing/hiding controls
     val animationScope = rememberCoroutineScope()
 
@@ -105,25 +104,7 @@ fun MediaBrowser(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val mediaItem = mediaItems[page]
-            if (mediaItem.type == MediaType.Unknown) {
-                val coroutineScope = rememberCoroutineScope()
-                LaunchedEffect(mediaItem.url.substringAfterLast('/')) {
-                    coroutineScope.launch {
-                        val header = withContext(Dispatchers.IO) { downloadFileHeader(mediaItem.url) }
-                        detectMimeTypeFromHeader(header)?.let {
-                            mediaItem.type = when (it.substringBefore('/')) {
-                                "image" -> MediaType.Image
-                                "audio" -> MediaType.Audio
-                                "video" -> MediaType.Video
-                                else -> MediaType.Unknown
-                            }
-                            mediaType.value = mediaItem.type
-                        }
-                    }
-                }
-            }
-            // Display the media item based on its type and recompose when mediaType.value changes
-            when (mediaType.value) {
+            when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
                     // Consider caching for larger videos
                     VideoPlayer(uri = Uri.parse(mediaItem.url))
@@ -160,7 +141,7 @@ fun MediaBrowser(
                         },
                         modifier = Modifier
                             .padding(16.dp)
-                            .align(Alignment.Center)
+                            .align(Alignment.TopStart)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,

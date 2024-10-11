@@ -117,6 +117,7 @@ fun MediaPreviewGrid(
                  * */
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
                 index = index,      // autoplay first video item, index 0
+                tweetId = tweetId
             )
         }
     }
@@ -145,19 +146,16 @@ fun MediaItemPreview(
             MediaType.Image -> {
                 ImageViewer(mediaItem.url, modifier)
             }
-
             MediaType.Video -> {
                 VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid) {
                     goto(index)
                 }
             }
-
             MediaType.Audio -> {
                 VideoPreview(url = mediaItem.url, modifier) {
                     goto(index)
                 }
             }
-
             else -> {       // Handle unknown file type
                 Log.e("MediaItemPreview", "unknown file type ${mediaItem.url}")
             }

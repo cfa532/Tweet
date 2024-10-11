@@ -112,10 +112,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             updateFollowings()
             val startTimestamp = endTimestamp.value
             endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
-            Log.d(
-                "loadOlderTweets",
-                "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}"
-            )
+            Log.d("loadOlderTweets",
+                "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}")
             getTweets(startTimestamp, endTimestamp.value)
             delay(500)
             _isRefreshingAtBottom.value = false

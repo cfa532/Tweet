@@ -833,7 +833,6 @@ object HproseInstance {
                 return user
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Log.e("getUserData", "No reachable. $ip $e")
             return null
         }
