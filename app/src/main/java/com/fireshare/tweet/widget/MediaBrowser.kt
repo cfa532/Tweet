@@ -2,6 +2,7 @@ package com.fireshare.tweet.widget
 
 import android.media.MediaPlayer
 import android.net.Uri
+import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -51,6 +52,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.detectMimeTypeFromHeader
 import com.fireshare.tweet.widget.Gadget.downloadFileHeader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -66,7 +68,7 @@ fun MediaBrowser(
         factory.create(Tweet(authorId = "default", content = "nothing"))
     }
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
-    var showControls by remember { mutableStateOf(false) } // State for showing/hiding controls
+    var showControls by remember { mutableStateOf(false) }
     val animationScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -82,16 +84,20 @@ fun MediaBrowser(
             .background(Color.Black)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { showControls = !showControls }
+                    onTap = {
+                        showControls = true
+                        animationScope.launch {
+                            delay(2000) // Hide controls after 2 seconds
+                            showControls = false
+                        }
+                    }
                 )
                 detectHorizontalDragGestures { _, dragAmount ->
                     if (dragAmount > 0) {
-                        // Swipe right
                         animationScope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage - 1)
                         }
                     } else {
-                        // Swipe left
                         animationScope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
@@ -106,7 +112,6 @@ fun MediaBrowser(
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-                    // Consider caching for larger videos
                     VideoPlayer(uri = Uri.parse(mediaItem.url))
                 }
                 else -> {
@@ -123,7 +128,6 @@ fun MediaBrowser(
                         .height(100.dp)
                         .background(Color.Black)
                 ) {
-                    // Top control box content
                     IconButton(
                         onClick = {
                             val previousRoute = viewModel.getPreviousRoute()
@@ -151,21 +155,19 @@ fun MediaBrowser(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.weight(1f)) // Push bottom box to the bottom
+                Spacer(modifier = Modifier.weight(1f))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(100.dp)
                         .background(Color.Black)
                 ) {
-                    // Bottom control box content
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 16.dp, bottom = 32.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        // State hoist
                         LikeButton(viewModel, Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         BookmarkButton(viewModel, Color.White)
@@ -187,6 +189,9 @@ fun VideoPlayer(uri: Uri) {
         factory = {
             VideoView(context).apply {
                 setVideoURI(uri)
+                val mediaController = MediaController(context)
+                mediaController.setAnchorView(this)
+                setMediaController(mediaController)
                 setOnPreparedListener { mediaPlayer: MediaPlayer ->
                     mediaPlayer.isLooping = false
                     start()
