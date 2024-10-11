@@ -108,9 +108,11 @@ fun CommentItem(
                     .padding(start = 8.dp, top = 4.dp, end = 8.dp)
                     .heightIn(max = 800.dp) // Set a specific height for the grid
             ) {
-                val mediaItems = comment.attachments?.mapNotNull {
-                    comment.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                        ?.let { it2 -> MediaItem(it2) }
+                val mediaItems = comment.attachments?.mapNotNull { attachment ->
+                    comment.author?.baseUrl?.let { baseUrl ->
+                        val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
+                        MediaItem(mediaUrl, attachment.type)
+                    }
                 }
                 mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
             }

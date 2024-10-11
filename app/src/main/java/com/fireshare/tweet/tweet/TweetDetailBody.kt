@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -109,29 +110,27 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                         }
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
-                        tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it, it1).toString() }
-                            ?.let { it2 -> MediaItem(it2) }
+                        tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
+                            ?.let { it2 -> MediaItem(it2, it.type) }
                     }
                     mediaItems?.let {
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth()
                                 .heightIn(max = 800.dp) // Set a specific height for the grid
                         ) {
-                            items(it as List<MediaItem>) { mi ->
+                            itemsIndexed(it as List<MediaItem>) { index, mi ->
                                 MediaItemPreview(
-                                    mi,
+                                    it,
                                     Modifier.fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
-                                            val index = mediaItems.indexOf(mi)
                                             val params =
                                                 MediaViewerParams(mediaItems, index, tweet.mid!!)
                                             navController.navigate(
-                                                NavTweet.MediaViewer(
-                                                    params
-                                                )
+                                                NavTweet.MediaViewer(params)
                                             )
-                                        }, false, it.indexOf(mi), false
+                                        },
+                                    false, index, false
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 1.dp),

@@ -1,5 +1,6 @@
 package com.fireshare.tweet.datamodel
 
+import com.fireshare.tweet.widget.MediaType
 import kotlinx.serialization.Serializable
 
 typealias MimeiId = String      // 27 or 64 character long string
@@ -12,6 +13,12 @@ object UserFavorites {
     const val BOOKMARK = 1
     const val RETWEET = 2
 }
+
+@Serializable
+data class MimeiFileType(
+    val mid: MimeiId,
+    val type: MediaType,
+)
 
 @Serializable
 data class Tweet(
@@ -49,7 +56,7 @@ data class Tweet(
     var commentCount: Int = 0,  // Number of comments
 
     // List of media IDs attached to the tweet. Max 4 items for now.
-    var attachments: List<MimeiId>? = emptyList(),
+    var attachments: List<MimeiFileType>? = emptyList(),
 
     var isPrivate: Boolean = false,     // Viewable by the author only if true.
 )

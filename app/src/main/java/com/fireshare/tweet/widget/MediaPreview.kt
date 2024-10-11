@@ -7,7 +7,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -69,7 +69,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 enum class MediaType {
-    Image, Video, Audio, Unknown
+    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
 }
 
 @Serializable
@@ -101,23 +101,22 @@ fun MediaPreviewGrid(
     ) {
         val modifier = if (gridCells == 1) Modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f)
+//            .aspectRatio(16f / 16f)
         else Modifier.size(containerWidth / gridCells)
-        items(limitedMediaList) { mediaItem ->
+        itemsIndexed(limitedMediaList) { index, mediaItem ->
             MediaItemPreview(
-                mediaItem,
+                limitedMediaList,
                 modifier = modifier
                     .clickable {
-                        val index = mediaItems.indexOf(mediaItem)
                         val params = MediaViewerParams(mediaItems, index, tweetId)
                         navController.navigate(NavTweet.MediaViewer(params))
                     },
-                // if the last item previewed is not the last of the attachments, show a plus sign
-                // to indicate there are more.
+                /**
+                 * If the last item previewed is not the last of the attachments, show a plus sign
+                 * to indicate there are more items hidden.
+                 * */
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
-
-                // autoplay first video item, index 0
-                index = if (mediaItems.indexOf(mediaItem) == 0) 0 else -1,
+                index = index,      // autoplay first video item, index 0
             )
         }
     }
@@ -125,46 +124,38 @@ fun MediaPreviewGrid(
 
 @Composable
 fun MediaItemPreview(
-    mediaItem: MediaItem,
+    mediaItems: List<MediaItem>,
     modifier: Modifier = Modifier,
     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
     index: Int = -1,               // autoplay first video item, index 0
-    inPreviewGrid: Boolean = true  // real aspectRatio when not displaying in preview grid.
+    inPreviewGrid: Boolean = true,  // real aspectRatio when not displaying in preview grid.
+    tweetId: MimeiId? = null
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val mediaType = remember { mutableStateOf(MediaType.Image) }
-
-    LaunchedEffect(mediaItem.url.substringAfterLast("/")) {
-        coroutineScope.launch {
-            val header = withContext(Dispatchers.IO) {
-                downloadFileHeader(mediaItem.url)
-            }
-            detectMimeTypeFromHeader(header)?.let {
-                mediaItem.type = when (it.substringBefore("/")) {
-                    "image" -> MediaType.Image
-                    "audio" -> MediaType.Audio
-                    "video" -> MediaType.Video
-                    else -> MediaType.Unknown
-                }
-                mediaType.value = mediaItem.type
-            }
-        }
+    val mediaItem = mediaItems[index]
+    val navController = LocalNavController.current
+    val goto: (Int) -> Unit = { idx: Int ->
+        tweetId?.let { navController.navigate(
+            NavTweet.MediaViewer(MediaViewerParams(mediaItems, idx, it))) }
     }
 
     Box(
         contentAlignment = Alignment.Center
     ) {
-        when (mediaType.value) {
+        when (mediaItem.type) {
             MediaType.Image -> {
                 ImageViewer(mediaItem.url, modifier)
             }
 
             MediaType.Video -> {
-                VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid)
+                VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid) {
+                    goto(index)
+                }
             }
 
             MediaType.Audio -> {
-                VideoPreview(url = mediaItem.url, modifier)
+                VideoPreview(url = mediaItem.url, modifier) {
+                    goto(index)
+                }
             }
 
             else -> {       // Handle unknown file type
@@ -210,10 +201,7 @@ fun ImageViewer(
     val cacheManager = remember { CacheManager(context) }
     val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, isPreview))
 
-    // State to track if the image is being downloaded
     var isDownloading by remember { mutableStateOf(false) }
-
-    // State to track if there was an error during download
     var downloadError by remember { mutableStateOf(false) }
 
     // Check if image is already cached and use it directly
@@ -283,7 +271,8 @@ fun VideoPreview(
     url: String,
     modifier: Modifier = Modifier,
     index: Int = -1,
-    inPreviewGrid: Boolean = true
+    inPreviewGrid: Boolean = true,
+    goto: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val item = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
@@ -304,6 +293,11 @@ fun VideoPreview(
     if (!inPreviewGrid) {
         LaunchedEffect(url.substringAfterLast('/')) {
             val pair = getVideoDimensions(url) ?: Pair(400, 400)
+            aspectRatio = pair.first.toFloat() / pair.second.toFloat()
+        }
+    } else {
+        LaunchedEffect(url.substringAfterLast('/')) {
+            val pair = Pair(400, 400)
             aspectRatio = pair.first.toFloat() / pair.second.toFloat()
         }
     }
@@ -339,7 +333,7 @@ fun VideoPreview(
                         areControlsVisible = !areControlsVisible
                         // Start a coroutine to hide controls after 2 seconds
                         scope.launch {
-                            delay(2000)
+                            delay(1000)
                             areControlsVisible = false
                         }
                     }
@@ -359,11 +353,8 @@ fun VideoPreview(
                 .aspectRatio(aspectRatio)
         )
         if (areControlsVisible) {
-            // Fullscreen button
             IconButton(
-                onClick = {
-                    println("click to open full screen")
-                },
+                onClick = { goto(index) },
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
                 Icon(
@@ -372,7 +363,7 @@ fun VideoPreview(
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)
-                        .alpha(0.7f)
+                        .alpha(0.8f)
                 )
             }
             // Mute button
@@ -382,7 +373,7 @@ fun VideoPreview(
                     isMuted = !isMuted!!
                     preferenceHelper.setSpeakerMute(isMuted!!)
                 },
-                modifier = Modifier.align(Alignment.BottomStart)
+                modifier = Modifier.align(Alignment.TopStart)
             ) {
                 Icon(
                     painter = painterResource(if (isMuted == true) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
@@ -390,7 +381,7 @@ fun VideoPreview(
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)
-                        .alpha(0.7f)
+                        .alpha(0.8f)
                 )
             }
         }

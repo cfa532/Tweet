@@ -42,7 +42,7 @@ class UploadCommentWorker @AssistedInject constructor(
                             uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
                         }
                     }.awaitAll()
-                }.mapNotNull { it.toString() }
+                }.mapNotNull { it }
             }
             val comment = Tweet(
                 authorId = appUser.mid,
@@ -93,7 +93,7 @@ class UploadTweetWorker @AssistedInject constructor(
                             uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
                         }
                     }.awaitAll()
-                }.mapNotNull { it.toString() } // Use getOrNull() without an index
+                }.mapNotNull { it } // Use getOrNull() without an index
             }
             val tweet = Tweet(
                 authorId = appUser.mid,

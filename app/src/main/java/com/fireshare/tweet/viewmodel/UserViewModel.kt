@@ -101,7 +101,8 @@ class UserViewModel @AssistedInject constructor(
     fun updateAvatar(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             isLoading.value = true
-            val mimeiId = HproseInstance.uploadToIPFS(context, uri)
+            // For now, user avatar can only be image.
+            val mimeiId = HproseInstance.uploadToIPFS(context, uri)?.mid
             if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
                 // Update avatar for logged-in user right away.
                 // Otherwise, wait for user to submit.

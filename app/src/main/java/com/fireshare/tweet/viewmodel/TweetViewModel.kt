@@ -16,6 +16,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.TweetApplication
+import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadCommentWorker
@@ -46,7 +47,7 @@ class TweetViewModel @AssistedInject constructor(
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
 
     private val _attachments = MutableStateFlow(tweet.attachments)
-    val attachments: StateFlow<List<MimeiId>?> get() = _attachments.asStateFlow()
+    val attachments: StateFlow<List<MimeiFileType>?> get() = _attachments.asStateFlow()
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()

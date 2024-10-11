@@ -3,9 +3,11 @@ package com.fireshare.tweet
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.foundation.content.MediaType
 import androidx.room.Room
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
+import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -726,7 +728,7 @@ object HproseInstance {
         }
     }
 
-     suspend fun uploadToIPFS(context: Context, uri: Uri): MimeiId? {
+     suspend fun uploadToIPFS(context: Context, uri: Uri): MimeiFileType? {
         return withContext(Dispatchers.IO) { // Execute in IO dispatcher
             try {
                 val method = "open_temp_file"
@@ -751,8 +753,27 @@ object HproseInstance {
                     val cid = fsid?.let {
                         hproseClient?.mfTemp2Ipfs(it, appUser.mid)
                     }
-                    Log.d("uploadToIPFS()", "cid=$cid")
-                    cid
+
+                    // Determine MediaType based on MIME type
+                    val mimeType = context.contentResolver.getType(uri)
+                    Log.d("uploadToIPFS()", "cid=$cid $mimeType")
+                    val mediaType = when {
+                        mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
+                        mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
+                        mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
+                        mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
+                        mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
+                        mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
+                        // ... add more mappings for other MediaType values ...
+                        else -> com.fireshare.tweet.widget.MediaType.Unknown
+                    }
+
+                    // Return MimeiFileType
+                    if (cid != null) {
+                        MimeiFileType(cid, mediaType)
+                    } else {
+                        null
+                    }
                 } else {
                     null
                 }

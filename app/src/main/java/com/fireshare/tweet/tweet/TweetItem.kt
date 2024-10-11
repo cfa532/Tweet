@@ -121,12 +121,8 @@ fun TweetItem(
                         ) {
                             val mediaItems = tweet.attachments?.mapNotNull {
                                 tweet.author?.baseUrl?.let { it1 ->
-                                    getMediaUrl(
-                                        it,
-                                        it1
-                                    ).toString()
-                                }
-                                    ?.let { it2 -> MediaItem(it2) }
+                                    getMediaUrl(it.mid, it1).toString()
+                                }?.let { it2 -> MediaItem(it2, it.type) }
                             }
                             if (tweet.mid != null && mediaItems != null) {
                                 MediaPreviewGrid(mediaItems, tweet.mid!!)

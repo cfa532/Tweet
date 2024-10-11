@@ -94,7 +94,8 @@ fun TweetBlock(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp)
                     ) {
                         val mediaItems = tweet.attachments?.map {
-                            MediaItem(getMediaUrl(it, tweet.author?.baseUrl.orEmpty()).toString())
+                            MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                it.type)
                         } ?: emptyList()
 
                         tweet.mid?.let {
