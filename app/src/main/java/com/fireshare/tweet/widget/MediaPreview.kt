@@ -297,11 +297,12 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isVideoVisible, index) {
+        delay(500)
         exoPlayer.playWhenReady = isVideoVisible && index == 0
     }
 
     LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted == true) 0f else 1f
+        exoPlayer.volume = if (isMuted) 0f else 1f
     }
 
     DisposableEffect(Unit) {
@@ -364,14 +365,14 @@ fun VideoPreview(
             // Mute button
             IconButton(
                 onClick = {
-                    isMuted = !isMuted!!
-                    preferenceHelper.setSpeakerMute(isMuted!!)
+                    isMuted = !isMuted
+                    preferenceHelper.setSpeakerMute(isMuted)
                 },
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
                 Icon(
-                    painter = painterResource(if (isMuted == true) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
-                    contentDescription = if (isMuted == true) "Unmute" else "Mute",
+                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
+                    contentDescription = if (isMuted) "Unmute" else "Mute",
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)

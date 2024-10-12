@@ -67,7 +67,7 @@ object HproseInstance {
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
     private suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
-        var baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
+        val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
         val request = Request.Builder().url(baseUrl).build()
         try {
@@ -831,7 +831,7 @@ object HproseInstance {
                 return user
             }
         } catch (e: Exception) {
-            Log.e("getUserData", "No reachable. $ip $e")
+            Log.e("getUserData", "No reachable. $ip $mid $e")
             return null
         }
         return null

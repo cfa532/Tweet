@@ -49,6 +49,7 @@ import com.fireshare.tweet.tweet.BookmarkButton
 import com.fireshare.tweet.tweet.CommentButton
 import com.fireshare.tweet.tweet.LikeButton
 import com.fireshare.tweet.tweet.RetweetButton
+import com.fireshare.tweet.tweet.ShareButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 
@@ -181,13 +182,12 @@ fun MediaBrowser(
                             .padding(start = 16.dp, bottom = 32.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        LikeButton(viewModel, Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        BookmarkButton(viewModel, Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        CommentButton(viewModel, Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RetweetButton(viewModel, Color.White)
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
+                        CommentButton(viewModel)
+                        RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(20.dp))
+                        ShareButton(viewModel)
                     }
                 }
             }

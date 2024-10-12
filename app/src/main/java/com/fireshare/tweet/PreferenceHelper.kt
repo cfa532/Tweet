@@ -49,10 +49,15 @@ class PreferenceHelper(context: Context) {
     fun setSpeakerMute(isMuted: Boolean) {
         sharedPreferences.edit().putBoolean("speakerMuted", isMuted).apply()
     }
-    fun getSpeakerMute(): Boolean? {
+    fun getSpeakerMute(): Boolean {
         return sharedPreferences.getBoolean("speakerMuted", true)
     }
-
+    fun setAutoplay(autoplayVideo: Boolean) {
+        sharedPreferences.edit().putBoolean("autoplayVideo", autoplayVideo).apply()
+    }
+    fun getAutoplay(): Boolean {
+        return sharedPreferences.getBoolean("autoplayVideo", true)
+    }
     fun getUserId(): String {
         var uid = sharedPreferences.getString("userId", null)
         if (uid == null) uid = TW_CONST.GUEST_ID
