@@ -194,16 +194,6 @@ fun ProfileDetail(
 
     // go to list of followings of the user
     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
-//        Text(
-//            text = user.name ?: "No one",
-//            style = MaterialTheme.typography.titleMedium
-//        )
-//        Text(
-//            text = "@" + (user.username ?: "NoOne"),
-//            style = MaterialTheme.typography.labelSmall,
-//            color = MaterialTheme.colorScheme.tertiary,
-//            modifier = Modifier.padding(start = 0.dp)
-//        )
         Text(
             text = profile ?: "Profile",
             style = MaterialTheme.typography.titleSmall

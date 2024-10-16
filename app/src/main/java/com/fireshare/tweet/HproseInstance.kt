@@ -399,7 +399,7 @@ object HproseInstance {
     suspend fun getTweetList(user: User,
                              startTimestamp: Long,
                              endTimestamp: Long?
-    ) = try {
+    ): List<Tweet> = try {
         val method = "get_tweets"
         val url = StringBuilder("${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
             .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()

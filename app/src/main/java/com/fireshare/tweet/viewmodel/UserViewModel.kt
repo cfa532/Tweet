@@ -259,6 +259,8 @@ class UserViewModel @AssistedInject constructor(
                         // update user profile
                         appUser = appUser.copy(name = it.name, profile = it.profile,
                             username = it.username, password = it.password)
+                        _user.value = appUser.copy(name = it.name, profile = it.profile,
+                            username = it.username, password = it.password)
                         val event = SnackbarEvent(
                             message = context.getString(R.string.profile_update_ok)
                         )
