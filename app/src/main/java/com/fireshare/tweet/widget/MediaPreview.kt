@@ -108,7 +108,7 @@ fun MediaPreviewGrid(
     ) {
         val modifier = if (gridCells == 1) Modifier
             .fillMaxWidth()
-//            .aspectRatio(16f / 16f)
+            .aspectRatio(16f / 16f)
         else Modifier.size(containerWidth / gridCells)
         itemsIndexed(limitedMediaList) { index, mediaItem ->
             MediaItemPreview(

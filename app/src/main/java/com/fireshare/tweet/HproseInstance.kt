@@ -221,7 +221,6 @@ object HproseInstance {
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
     suspend fun login(username: String, password: String, keyPhrase: String): User? {
-        val gson = Gson()
         return try {
             val userId = try {
                 val entry = "get_userid"
@@ -244,6 +243,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val json = response.body?.string() ?: return null
                 // only to verify the login succeed.
+                val gson = Gson()
                 gson.fromJson(json, User::class.java) ?: return null
                 /**
                  * Now user object has a new baseUrl of the node which hold user data.
