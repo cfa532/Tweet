@@ -302,8 +302,6 @@ object HproseInstance {
     }
 
     fun setUserData(user: User, phrase: String): User? {
-        // use Json here, so that null attributes in User are ignored. On the server-side, only set attributes
-        // that have value in incoming data.
         val url: String
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account
@@ -314,12 +312,8 @@ object HproseInstance {
         } else {
             // update existing account
             val method = "set_author_core_data"
-            val tmp = User(
-                mid = appUser.mid, name = appUser.name, timestamp = appUser.timestamp,
-                username = appUser.username, avatar = appUser.avatar, profile = appUser.profile,
-            )
             url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
-                Json.encodeToString(tmp)
+                Json.encodeToString(user)
             }"
         }
         val request = Request.Builder().url(url).build()

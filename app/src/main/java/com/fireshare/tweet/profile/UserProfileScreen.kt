@@ -184,6 +184,7 @@ fun ProfileDetail(
 ) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
+    val profile by remember { derivedStateOf {user.profile} }
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
 
@@ -204,7 +205,7 @@ fun ProfileDetail(
 //            modifier = Modifier.padding(start = 0.dp)
 //        )
         Text(
-            text = user.profile ?: "Profile",
+            text = profile ?: "Profile",
             style = MaterialTheme.typography.titleSmall
         )
         Row {

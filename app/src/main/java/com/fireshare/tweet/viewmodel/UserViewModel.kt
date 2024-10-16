@@ -229,21 +229,25 @@ class UserViewModel @AssistedInject constructor(
         preferencesHelper.setUserId(null)
     }
 
-    // handle both register and update of user profile
+    /**
+     * Handle both register and update of user profile. Username, password
+     * and key phrase are all required.
+     * */
     fun register(context: Context, popBack: () -> Unit) {
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
             && keyPhrase.value?.isNotEmpty() == true
         ) {
             isLoading.value = true
-            val user = User(
-                mid = TW_CONST.GUEST_ID, name = name.value,
+            val user = User( mid = appUser.mid, name = name.value,
                 username = username.value, password = password.value,
                 profile = profile.value, avatar = appUser.avatar
             )
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.setUserData(user, keyPhrase.value!!)?.let { it1 ->
+                HproseInstance.setUserData(user, keyPhrase.value!!)?.let {
                     if (appUser.mid == TW_CONST.GUEST_ID) {
+                        // register new user. Do not update appUser, wait for
+                        // new user to login.
                         val event = SnackbarEvent(
                             message = context.getString(R.string.registration_ok)
                         )
@@ -252,7 +256,9 @@ class UserViewModel @AssistedInject constructor(
                             popBack()
                         }
                     } else {
-                        appUser = it1.copy(baseUrl = "http://${it1.baseUrl}")
+                        // update user profile
+                        appUser = appUser.copy(name = it.name, profile = it.profile,
+                            username = it.username, password = it.password)
                         val event = SnackbarEvent(
                             message = context.getString(R.string.profile_update_ok)
                         )

@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -50,7 +51,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    var initState = MutableStateFlow(true)
+    private var initState = MutableStateFlow(true)
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
@@ -58,8 +59,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
     // current time, end time is earlier in time, therefore smaller timestamp
-    private var startTimestamp = mutableStateOf(System.currentTimeMillis())
-    private var endTimestamp = mutableStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
+    private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
+    private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
 
 
     // called after login or logout(). Update current user's following list within both calls.
@@ -67,10 +68,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingAtTop.value = true
             updateFollowings()
-            startTimestamp.value = System.currentTimeMillis()
-            endTimestamp.value = startTimestamp.value - THIRTY_DAYS_IN_MILLIS
+            startTimestamp.longValue = System.currentTimeMillis()
+            endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
             Log.d("TweetFeedVM.refresh", "${followings.value}")
-            getTweets(startTimestamp.value, endTimestamp.value)
+            getTweets(startTimestamp.longValue, endTimestamp.longValue)
             _isRefreshingAtTop.value = false
 
             initState.value = false
@@ -94,13 +95,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             println("At top already")
             _isRefreshingAtTop.value = true
             updateFollowings()
-            startTimestamp.value = System.currentTimeMillis()
-            val endTimestamp = startTimestamp.value - ONE_DAY_IN_MILLIS
+            startTimestamp.longValue = System.currentTimeMillis()
+            val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
             Log.d(
                 "loadNewerTweets",
-                "startTimestamp=${startTimestamp.value}, endTimestamp=$endTimestamp"
+                "startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp"
             )
-            getTweets(startTimestamp.value, endTimestamp)
+            getTweets(startTimestamp.longValue, endTimestamp)
             _isRefreshingAtTop.value = false
         }
     }
@@ -110,11 +111,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             println("At bottom already")
             _isRefreshingAtBottom.value = true
             updateFollowings()
-            val startTimestamp = endTimestamp.value
-            endTimestamp.value = startTimestamp - SEVEN_DAYS_IN_MILLIS
+            val startTimestamp = endTimestamp.longValue
+            endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
             Log.d("loadOlderTweets",
-                "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.value}")
-            getTweets(startTimestamp, endTimestamp.value)
+                "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
+            getTweets(startTimestamp, endTimestamp.longValue)
             delay(500)
             _isRefreshingAtBottom.value = false
         }
