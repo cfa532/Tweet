@@ -74,16 +74,14 @@ fun TweetFeedScreen(
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
      val isAtBottom =
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
-     val shouldRefresh by viewModel.shouldRefresh.collectAsState()
 
-     LaunchedEffect(isAtBottom, appUser.mid) {
-         if (shouldRefresh) {
-             if (isAtBottom) {
-                 viewModel.loadOlderTweets()
-             } else {
-                 viewModel.refresh()
-             }
-             viewModel.shouldRefresh.value = false // Reset the flag
+//     viewModel.initState.value = true
+     LaunchedEffect(appUser.mid) {
+         viewModel.refresh()
+     }
+     LaunchedEffect(isAtBottom) {
+         if (isAtBottom) {
+             viewModel.loadOlderTweets()
          }
      }
 

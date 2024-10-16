@@ -865,7 +865,7 @@ object HproseInstance {
         return null
     }
 
-    fun getToTopList(user: User): List<MimeiId>? {
+    fun getTopList(user: User): List<MimeiId>? {
         val entry = "get_top_tweets"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}}
@@ -876,7 +876,8 @@ object HproseInstance {
             val list  = hproseClient?.runMApp(entry, request) as List<MimeiId>?
             return list
         } catch (e: Exception) {
-            Log.e("getToTopList", "$e")
+            e.printStackTrace()
+            Log.e("getTopList", "$e")
         }
         return null
     }

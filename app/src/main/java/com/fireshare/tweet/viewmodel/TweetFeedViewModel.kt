@@ -50,7 +50,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
     var initState = MutableStateFlow(true)
-    var  shouldRefresh = MutableStateFlow(true)
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
@@ -70,7 +69,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         Log.d("TweetFeedVM.refresh", "${followings.value}")
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
         _isRefreshingAtTop.value = false
-        shouldRefresh.value = true
         initState.value = false
     }
 
@@ -79,6 +77,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun loadNewerTweets() {
+        if (initState.value) return
         println("At top already")
         _isRefreshingAtTop.value = true
         startTimestamp.longValue = System.currentTimeMillis()
@@ -104,7 +103,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         )
         getTweets(startTimestamp, endTimestamp.longValue)
         _isRefreshingAtBottom.value = false
-        shouldRefresh.value = true
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

@@ -22,7 +22,6 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -158,7 +157,7 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getToppedTweets() {
         val user = getUserBase(userId) ?: return
-        HproseInstance.getToTopList(user)?.forEach { mid ->
+        HproseInstance.getTopList(user)?.forEach { mid ->
             HproseInstance.getTweet(mid, user.mid)?.let {
                 _topTweets.update { list-> list + it }
             }
