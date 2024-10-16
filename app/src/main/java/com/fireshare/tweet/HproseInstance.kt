@@ -306,13 +306,13 @@ object HproseInstance {
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account
             val method = "register"
-            url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&phrase=$phrase&user=${
+            url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&phrase=$phrase&user=${
                 Json.encodeToString(user)
             }"
         } else {
             // update existing account
             val method = "set_author_core_data"
-            url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&user=${
+            url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
                 Json.encodeToString(user)
             }"
         }
@@ -379,7 +379,7 @@ object HproseInstance {
             if (user.mid != TW_CONST.GUEST_ID) {
                 val method = "get_followers"
                 val url =
-                    "${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${user.mid}"
+                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
@@ -401,7 +401,7 @@ object HproseInstance {
                              endTimestamp: Long?
     ): List<Tweet> = try {
         val method = "get_tweets"
-        val url = StringBuilder("${user.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
+        val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
             .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
@@ -445,7 +445,7 @@ object HproseInstance {
     ): Tweet? {
         val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
         val method = "get_tweet"
-        val url = StringBuilder("${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
+        val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
             .append("&tweetid=$tweetId")
             // appUser is passed to sever, to check if the current user has liked or bookmarked.
             .append("&userid=${appUser.mid}").toString()
@@ -471,7 +471,7 @@ object HproseInstance {
     fun uploadTweet(tweet: Tweet): Tweet? {
         val method = "upload_tweet"
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
-        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweet=$json"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
         return try {
             val response = httpClient.newCall(request).execute()
@@ -489,7 +489,7 @@ object HproseInstance {
 
     fun delTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
         val method = "delete_tweet"
-        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
@@ -503,7 +503,7 @@ object HproseInstance {
 
     fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) {
         val method = "delete_comment"
-        val url = "${parentTweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
+        val url = "${parentTweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
@@ -517,7 +517,7 @@ object HproseInstance {
 
     fun toggleFollowing(userId: MimeiId): Boolean? {
         val method = "toggle_following"
-        val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
         val request = Request.Builder().url(url).build()
         return try {
             val response = httpClient.newCall(request).execute()
@@ -537,7 +537,7 @@ object HproseInstance {
     suspend fun toggleFollower(userId: MimeiId): Boolean? {
         val user = getUserBase(userId)
         val method = "toggle_follower"
-        val url = "${user?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
+        val url = "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
         val request = Request.Builder().url(url).build()
         return try {
             val response = httpClient.newCall(request).execute()
@@ -557,7 +557,7 @@ object HproseInstance {
     fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
-        val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method")
+        val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}")
             .append("&userid=${appUser.mid}")
 
@@ -625,7 +625,7 @@ object HproseInstance {
 
             val pageSize = 50
             val method = "get_comments"
-            val url = StringBuilder("${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last")
+            val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last")
                 .append("&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}")
                 .append("&pn=$pageNumber&ps=$pageSize").toString()
             val request = Request.Builder().url(url).build()
@@ -652,7 +652,7 @@ object HproseInstance {
             // add the comment to tweetId
             val method = "add_comment"
             val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
-            val url = "${tweet.author?.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
+            val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -676,7 +676,7 @@ object HproseInstance {
         return try {
             val author = tweet.author ?: return tweet
             val method = "liked_count"
-            val url = "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -700,7 +700,7 @@ object HproseInstance {
         return try {
             val author = tweet.author ?: return tweet
             val method = "bookmark"
-            val url = "${author.baseUrl}/entry?&aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -724,12 +724,12 @@ object HproseInstance {
         return withContext(Dispatchers.IO) { // Execute in IO dispatcher
             try {
                 val method = "open_temp_file"
-                val url = "${appUser.baseUrl}/entry?&aid=$appId&ver=last&entry=$method"
+                val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     val fsid = response.body?.string()
-                    context.contentResolver.openInputStream(uri)?.use { inputStream -> // Open input stream here
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
                         var offset = 0
                         inputStream.use { stream ->
                             val buffer = ByteArray(CHUNK_SIZE)
@@ -813,7 +813,7 @@ object HproseInstance {
         try {
             val entry = "get_user_core_data"
             val url =
-                "http://$ip/entry?&aid=$appId&ver=last&entry=$entry&userid=$mid"
+                "http://$ip/entry?aid=$appId&ver=last&entry=$entry&userid=$mid"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -834,7 +834,7 @@ object HproseInstance {
     fun isReachable(ip: String): String? {
         return try {
             val method = "get_userid"
-            val url = "http://$ip/entry?&aid=$appId&ver=last&entry=$method&phrase=hello"
+            val url = "http://$ip/entry?aid=$appId&ver=last&entry=$method&phrase=hello"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -867,14 +867,16 @@ object HproseInstance {
 
     fun getTopList(user: User): List<MimeiId>? {
         val entry = "get_top_tweets"
-        val json = """
-            {"aid": $appId, "ver": "last", "userid": ${user.mid}}
-        """.trimIndent()
-        val gson = Gson()
-        val request = gson.fromJson(json, Map::class.java)
+        val url =
+            "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
+        val request = Request.Builder().url(url).build()
         try {
-            val list  = hproseClient?.runMApp(entry, request) as List<MimeiId>?
-            return list
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return null
+                val gson = Gson()
+                return gson.fromJson(responseBody, object : TypeToken<List<MimeiId>>() {}.type)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e("getTopList", "$e")

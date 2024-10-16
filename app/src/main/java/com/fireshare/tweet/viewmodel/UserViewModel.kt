@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -89,6 +90,23 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshingAtBottom.value = false
     }
 
+    fun pinToTop(tweet: Tweet) {
+        viewModelScope.launch {
+            HproseInstance.addToTopList(tweet.mid!!)
+            // if the tweet is already on the top list, remove it
+            if (_topTweets.value.indexOf(tweet) > -1) {
+                _topTweets.update { currentTopTweets ->
+                    currentTopTweets.filterNot { it.mid == tweet.mid }
+                }
+                _tweets.update { list -> (list + tweet).sortedByDescending { it.timestamp } }
+            } else {
+                _tweets.update { currentTopTweets ->
+                    currentTopTweets.filterNot { it.mid == tweet.mid }
+                }
+                _topTweets.update { list -> (list + tweet).sortedByDescending { it.timestamp } }
+            }
+        }
+    }
     fun hidePhrase() {
         // Even after user logout, its key phrase may still on the device,
         // for future convenience. Hide it in case someone else tries to register a new account.

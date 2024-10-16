@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
@@ -58,6 +59,8 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
@@ -237,10 +240,9 @@ fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
                 DropdownMenuItem(
                     modifier = Modifier.alpha(1f),
                     onClick = {
-                        tweet.mid?.let {
-                            HproseInstance.addToTopList(it)
-                            expanded = false
-                        } },
+                        appUserViewModel.pinToTop(tweet)
+                        expanded = false
+                    },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
