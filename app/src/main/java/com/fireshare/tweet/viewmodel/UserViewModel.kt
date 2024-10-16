@@ -148,7 +148,6 @@ class UserViewModel @AssistedInject constructor(
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = getUserBase(userId) ?: return@launch
-//                getTweets(startTimestamp.longValue, endTimestamp.longValue)
             }
         }
     }
