@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +26,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,7 +64,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
         _isRefreshingAtTop.value = true
-        updateFollowings()
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
         Log.d("TweetFeedVM.refresh", "${followings.value}")
@@ -80,19 +77,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.value = emptyList()
     }
 
-    private fun updateFollowings() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-                _followings.update { list -> list + appUser.mid }   // remember to watch oneself.
-        }
-    }
-
     fun loadNewerTweets() {
         println("At top already")
         _isRefreshingAtTop.value = true
-        updateFollowings()
         startTimestamp.longValue = System.currentTimeMillis()
         val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
         Log.d(
@@ -105,9 +92,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     fun loadOlderTweets() {
         if (initState.value) return
+
         println("At bottom already")
         _isRefreshingAtBottom.value = true
-        updateFollowings()
         val startTimestamp = endTimestamp.longValue
         endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Log.d(
@@ -125,44 +112,66 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         sinceTimestamp: Long        // earlier in time, therefore smaller timestamp
     ) {
         val batchSize = 10 // Adjust batch size as needed
-        followings.value.chunked(batchSize).forEach { batch ->
-            viewModelScope.launch(networkDispatcher) {
-                try {
-                    val newTweets = batch.flatMap { userId ->
-                        async {
-                            try {
-                                getUserBase(userId)?.let {
-                                    HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
-                                } ?: emptyList()
-                            } catch (e: Exception) {
-                                Log.e("GetTweets in TweetFeedVM", "Error fetching tweets for user: $userId", e)
-                                emptyList()
-                            }
-                        }.await()
-                    }
 
-                    _tweets.update { currentTweets ->
-                        val updatedTweets = currentTweets.toMutableList()
-                        newTweets.forEach { newTweet ->
-                            val existingTweetIndex = updatedTweets.indexOfFirst { it.mid == newTweet.mid }
-                            if (existingTweetIndex != -1) {
-                                updatedTweets[existingTweetIndex] = newTweet // Replace existing tweet
-                            } else {
-                                updatedTweets.add(newTweet) // Add new tweet
-                            }
+        viewModelScope.launch(Dispatchers.IO) {
+            // get current user's following list
+            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+            // add default public tweets
+            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+            // remember to watch oneself.
+            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+                _followings.update { list -> list + appUser.mid }
+            Log.d("UpdateFollowings", followings.value.toString())
+
+            followings.value.chunked(batchSize).forEach { batch ->
+                viewModelScope.launch(networkDispatcher) {
+                    try {
+                        val newTweets = batch.flatMap { userId ->
+                            async {
+                                try {
+                                    getUserBase(userId)?.let {
+                                        HproseInstance.getTweetList(
+                                            it,
+                                            startTimestamp,
+                                            sinceTimestamp
+                                        )
+                                    } ?: emptyList()
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        "GetTweets in TweetFeedVM",
+                                        "Error fetching tweets for user: $userId",
+                                        e
+                                    )
+                                    emptyList()
+                                }
+                            }.await()
                         }
-                        updatedTweets.distinctBy { it.mid }.sortedByDescending { it.timestamp }
+
+                        _tweets.update { currentTweets ->
+                            val updatedTweets = currentTweets.toMutableList()
+                            newTweets.forEach { newTweet ->
+                                val existingTweetIndex =
+                                    updatedTweets.indexOfFirst { it.mid == newTweet.mid }
+                                if (existingTweetIndex != -1) {
+                                    updatedTweets[existingTweetIndex] =
+                                        newTweet // Replace existing tweet
+                                } else {
+                                    updatedTweets.add(newTweet) // Add new tweet
+                                }
+                            }
+                            updatedTweets.distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("GetTweets", "Error fetching tweets", e)
                     }
-                } catch (e: Exception) {
-                    Log.e("GetTweets", "Error fetching tweets", e)
                 }
             }
         }
     }
 
-    fun addTweet(tweet: Tweet) {
+    fun addTweet(newTweet: Tweet) {
         appUser.tweetCount += 1
-        _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
+        _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
     }
 
     fun delTweet(tweetId: MimeiId) {
