@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,8 +43,6 @@ fun TweetItem(
     ) { factory ->
         factory.create(tweet)
     }
-    // Log the tweet ID to see if the component is being recomposed
-    Log.d("TweetItem", "Displaying tweet with ID: ${tweet.mid}")
 
     Surface(
         modifier = Modifier
