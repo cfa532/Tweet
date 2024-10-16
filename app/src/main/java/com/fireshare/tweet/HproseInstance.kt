@@ -35,8 +35,12 @@ object HproseInstance {
     private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
 //    var BASE_URL: String? = null    // in case no network
     private lateinit var preferenceHelper: PreferenceHelper
-
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
+
+    // get the first user account, or a list of accounts.
+    fun getAlphaIds(): List<MimeiId> {
+        return listOf("uTE6yhCWGLlkK6KGI9iMkOFZGGv")
+    }
 
     // all loaded User objects will be inserted in the list, for better performance.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
@@ -256,11 +260,6 @@ object HproseInstance {
         }
     }
 
-    // get the first user account, or a list of accounts.
-    fun getAlphaIds(): List<MimeiId> {
-        return listOf("yifT_a-gWN9-JXsJ6P7gqizKMDM")
-    }
-
     /**
      * Get baseUrl where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
@@ -441,6 +440,7 @@ object HproseInstance {
         } else
             emptyList()
     } catch (e: Exception) {
+        e.printStackTrace()
         Log.e("getTweetList()", e.toString())
         emptyList()
     }
@@ -831,28 +831,57 @@ object HproseInstance {
                 return user
             }
         } catch (e: Exception) {
-            Log.e("getUserData", "No reachable. $ip $mid $e")
+            Log.e("getUserData", "No found. $ip $mid $e")
             return null
         }
         return null
     }
 
     fun isReachable(ip: String): String? {
-        try {
+        return try {
             val method = "get_userid"
-            val url =
-                "http://$ip/entry?&aid=$appId&ver=last&entry=$method&phrase=hello"
+            val url = "http://$ip/entry?&aid=$appId&ver=last&entry=$method&phrase=hello"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return null
                 val gson = Gson()
-                val str = gson.fromJson(responseBody, String::class.java)
-                return str
-            }
+                gson.fromJson(responseBody, String::class.java)
+            } else null
         } catch (e: Exception) {
             Log.e("isReachable", "No reachable. $ip $e")
-            return null
+            null
+        }
+    }
+
+    fun addToTopList(tweetId: MimeiId): List<MimeiId>? {
+        val entry = "toggle_top_tweets"
+        val json = """
+            {"aid": $appId, "ver": "last", "userid": ${appUser.mid}, "tweetid": $tweetId}
+        """.trimIndent()
+        val gson = Gson()
+        val request = gson.fromJson(json, Map::class.java)
+        try {
+            val list  = hproseClient?.runMApp(entry, request) as List<MimeiId>?
+            return list
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e("addToTopList", "$e")
+        }
+        return null
+    }
+    fun getToTopList(user: User): List<MimeiId>? {
+        val entry = "get_top_tweets"
+        val json = """
+            {"aid": $appId, "ver": "last", "userid": ${user.mid}}
+        """.trimIndent()
+        val gson = Gson()
+        val request = gson.fromJson(json, Map::class.java)
+        try {
+            val list  = hproseClient?.runMApp(entry, request) as List<MimeiId>?
+            return list
+        } catch (e: Exception) {
+            Log.e("getToTopList", "$e")
         }
         return null
     }

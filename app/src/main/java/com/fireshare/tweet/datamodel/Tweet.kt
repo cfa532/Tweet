@@ -84,4 +84,7 @@ data class User(
     var bookmarkedTweets: List<MimeiId>? = emptyList(),
     var likedTweets: List<MimeiId>? = emptyList(),
     var repliedTweets: List<MimeiId>? = emptyList(),
+
+    // List of top tweets liked by the user
+    var topTweets: List<MimeiId>? = emptyList(),
 )

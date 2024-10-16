@@ -69,7 +69,7 @@ fun TweetItem(
                             key = tweet.originalTweetId
                         )
                         { factory -> factory.create(tweet.originalTweet!!) }
-                    TweetBlock(viewModel)
+                    TweetBlock(viewModel, parentEntry)
 
                     // Label: Forward by user, on top of original tweet
                     Box {
@@ -104,7 +104,7 @@ fun TweetItem(
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
-                        TweetItemHeader(tweet)
+                        TweetItemHeader(tweet, parentEntry)
 
                         tweet.content?.let {
                             Text(
@@ -141,7 +141,9 @@ fun TweetItem(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory ->
                                     factory.create(tweet.originalTweet!!)
-                                }, isQuoted = true
+                                },
+                                parentEntry,
+                                isQuoted = true
                             )
                         }
                         Row(
@@ -163,7 +165,7 @@ fun TweetItem(
             }
         } else {
             // original tweet by current user.
-            TweetBlock(viewModel)
+            TweetBlock(viewModel, parentEntry)
         }
     }
 }

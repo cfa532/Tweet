@@ -52,4 +52,5 @@
     <string name="share_link">分享链接</string>
     <string name="screenshot">截屏</string>
     <string name="social_media">其他App</string>
+    <string name="addToTop">置顶</string>
 </resources>

@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
@@ -53,6 +56,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
@@ -93,7 +97,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, navController)
+                TweetDropdownMenu(tweet, parentEntry)
             }
             // Tweet detail's content
             Spacer(modifier = Modifier.padding(2.dp))
@@ -152,7 +156,9 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             TweetBlock(
                                 hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                     parentEntry, key = tweet.originalTweetId
-                                ) { factory -> factory.create(tweet.originalTweet!!) }, true
+                                ) { factory -> factory.create(tweet.originalTweet!!) },
+                                parentEntry,
+                                true
                             )
                         }
                     }
@@ -177,8 +183,14 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 }
 
 @Composable
-fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
+fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
     var expanded by remember { mutableStateOf(false) }
+    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry,
+        key = appUser.mid
+    ) { factory ->
+        factory.create(appUser.mid)
+    }
     Box {
         IconButton(
             modifier = Modifier.width(32.dp).alpha(0.8f).rotate(-90f)
@@ -205,7 +217,6 @@ fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
                         tweet.mid?.let {
                             tweetFeedViewModel.delTweet(it)
                             expanded = false
-//                            navController.popBackStack()
                         } },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -218,6 +229,29 @@ fun TweetDropdownMenu(tweet: Tweet, navController: NavController) {
                             Text(
                                 text = stringResource(R.string.delete),
                                 color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                )
+                // put the current Tweet to top list
+                DropdownMenuItem(
+                    modifier = Modifier.alpha(0.7f),
+                    onClick = {
+                        tweet.mid?.let {
+                            HproseInstance.addToTopList(it)
+                            expanded = false
+                        } },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Favorite,
+                                contentDescription = "Top",
+                                tint = MaterialTheme.colorScheme.surfaceTint
+                            )
+                            Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                            Text(
+                                text = stringResource(R.string.addToTop),
+                                color = MaterialTheme.colorScheme.surfaceTint
                             )
                         }
                     }

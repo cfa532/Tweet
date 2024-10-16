@@ -62,6 +62,7 @@ fun UserProfileScreen(
         factory.create(userId)
     }
     val tweets by viewModel.tweets.collectAsState()
+    val topTweets by viewModel.topTweets.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -111,6 +112,27 @@ fun UserProfileScreen(
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
 
+                }
+                if (topTweets.isNotEmpty()) {
+                    item {
+                    Text(R.string.addToTop.toString(),
+                        modifier = Modifier.padding( bottom = 8.dp),
+                        style = MaterialTheme.typography.titleLarge)
+                }}
+                items(topTweets, key = {it.mid.toString()}) { tweet ->
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 1.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.surfaceTint
+                    )
+                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                }
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(top = 8.dp),
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.surfaceTint
+                    )
                 }
                 items(tweets, key = {it.mid.toString()}) { tweet ->
                     HorizontalDivider(

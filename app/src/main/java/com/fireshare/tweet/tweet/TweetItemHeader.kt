@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
@@ -22,7 +23,7 @@ import java.util.concurrent.TimeUnit
 
 // Tweet header when displayed as an item in a list.
 @Composable
-fun TweetItemHeader(tweet: Tweet) {
+fun TweetItemHeader(tweet: Tweet, parentEntry: NavBackStackEntry) {
     // Use a Row to align author name and potential verification badge
     val navController = LocalNavController.current
     val author = tweet.author
@@ -51,7 +52,7 @@ fun TweetItemHeader(tweet: Tweet) {
         }
 
         // the 3 dots at the right end
-        TweetDropdownMenu(tweet, navController)
+        TweetDropdownMenu(tweet, parentEntry)
     }
 }
 

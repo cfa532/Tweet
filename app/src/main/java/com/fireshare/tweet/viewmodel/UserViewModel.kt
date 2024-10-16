@@ -35,8 +35,11 @@ class UserViewModel @AssistedInject constructor(
 ): ViewModel() {
     private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
+
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
+    private val _topTweets = MutableStateFlow<List<Tweet>>(emptyList())
+    val topTweets: StateFlow<List<Tweet>> get() = _topTweets.asStateFlow()
 
     private var _fans = MutableStateFlow(emptyList<MimeiId>())
     val fans: StateFlow<List<MimeiId>> get() = _fans.asStateFlow()
@@ -147,6 +150,20 @@ class UserViewModel @AssistedInject constructor(
                 _user.value = getUserBase(userId) ?: return@launch
 //                getTweets(startTimestamp.longValue, endTimestamp.longValue)
             }
+        }
+    }
+
+    fun getTopTweets() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val user = getUserBase(userId) ?: return@launch
+            val tweetsList = HproseInstance.getToTopList(user)
+
+            // Update _tweets with tweetList, replacing duplicates and ensuring no duplicates
+            tweetsList?.forEach { mid ->
+                val t = HproseInstance.getTweet(mid, user.mid)
+                t?.let {_topTweets.update { list-> list + it } }
+            }
+            _topTweets.value = topTweets.value.distinctBy { it.mid }.sortedByDescending { it.timestamp } // Update _tweets with the final result
         }
     }
 

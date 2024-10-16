@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
@@ -34,6 +35,7 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 @Composable
 fun TweetBlock(
     viewModel: TweetViewModel,
+    parentEntry: NavBackStackEntry,
     isQuoted: Boolean = false     // the block is a quoted tweet or not
 ) {
     val navController = LocalNavController.current
@@ -56,7 +58,7 @@ fun TweetBlock(
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(tweet)
+            TweetItemHeader(tweet, parentEntry)
 
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
