@@ -579,7 +579,7 @@ object HproseInstance {
 
                     if (retweetId != null) {
                         delTweet(retweetId) {
-                            tweetFeedViewModel.delTweet(retweetId)
+                            tweetFeedViewModel.delTweet(retweetId) {}
                         }
                     }
                 }
@@ -864,6 +864,7 @@ object HproseInstance {
         }
         return null
     }
+
     fun getToTopList(user: User): List<MimeiId>? {
         val entry = "get_top_tweets"
         val json = """

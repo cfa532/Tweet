@@ -36,7 +36,7 @@
     <string name="months_ago">%d months ago</string>
     <string name="years_ago">%d years ago</string>
     <string name="fans">Followers</string>
-    <string name="posts">Tweet</string>
+    <string name="posts">Tweets</string>
     <string name="show_more">Show more....</string>
     <string name="logout">Logout</string>
     <string name="login_failed">Login failed</string>
@@ -52,4 +52,5 @@
     <string name="screenshot">Screenshot</string>
     <string name="social_media">Social media</string>
     <string name="addToTop">Pin to top</string>
+    <string name="followings">Followings</string>
 </resources>

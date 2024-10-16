@@ -115,24 +115,25 @@ fun UserProfileScreen(
                 }
                 if (topTweets.isNotEmpty()) {
                     item {
-                    Text(R.string.addToTop.toString(),
-                        modifier = Modifier.padding( bottom = 8.dp),
-                        style = MaterialTheme.typography.titleLarge)
-                }}
-                items(topTweets, key = {it.mid.toString()}) { tweet ->
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.surfaceTint
-                    )
-                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-                }
-                item {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 8.dp),
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.surfaceTint
-                    )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(top = 0.dp),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.surfaceTint
+                        )
+                        Text(
+                            text = stringResource(R.string.addToTop),
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    items(topTweets, key = { it.mid.toString() }) { tweet ->
+                        if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 1.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.surfaceTint
+                        )
+                    }
                 }
                 items(tweets, key = {it.mid.toString()}) { tweet ->
                     HorizontalDivider(
@@ -185,6 +186,7 @@ fun ProfileDetail(
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val profile by remember { derivedStateOf {user.profile} }
+    val tweetCount by remember { derivedStateOf { user.tweetCount } }
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
 
@@ -207,7 +209,7 @@ fun ProfileDetail(
                 })
             )
             Text(
-                text = "${followingsList.count()} ${stringResource(R.string.follow)}",
+                text = "${followingsList.count()} ${stringResource(R.string.followings)}",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
                     .padding(horizontal = 20.dp)
@@ -216,7 +218,7 @@ fun ProfileDetail(
                     }),
             )
             Text(
-                text = "${user.tweetCount} ${stringResource(R.string.posts)}",
+                text = "$tweetCount ${stringResource(R.string.posts)}",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

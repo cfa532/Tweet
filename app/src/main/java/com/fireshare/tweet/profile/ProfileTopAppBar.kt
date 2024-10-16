@@ -124,7 +124,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     }
                 }
                 Box {
-                    val tweetFeedviewModel = hiltViewModel<TweetFeedViewModel>()
+                    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
@@ -141,7 +141,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         if (user.mid == appUser.mid) {
                             DropdownMenuItem(onClick = {
                                 viewModel.logout()
-                                tweetFeedviewModel.clearTweets()
+                                tweetFeedViewModel.clearTweets()
                                 navController.navigate(NavTweet.TweetFeed)
                             },
                                 text = {

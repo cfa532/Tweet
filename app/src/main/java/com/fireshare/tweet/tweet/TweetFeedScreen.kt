@@ -32,7 +32,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,7 +61,6 @@ fun TweetFeedScreen(
 ) {
      val viewModel = hiltViewModel<TweetFeedViewModel>()
      val tweets by viewModel.tweets.collectAsState()
-
      val scrollBehavior =
          TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -73,19 +74,18 @@ fun TweetFeedScreen(
      val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
      val isAtBottom =
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
+     val shouldRefresh by viewModel.shouldRefresh.collectAsState()
 
-     LaunchedEffect(isAtBottom) {
-         if (isAtBottom) {
-             viewModel.loadOlderTweets()
+     LaunchedEffect(isAtBottom, appUser.mid) {
+         if (shouldRefresh) {
+             if (isAtBottom) {
+                 viewModel.loadOlderTweets()
+             } else {
+                 viewModel.refresh()
+             }
+             viewModel.shouldRefresh.value = false // Reset the flag
          }
      }
-     LaunchedEffect(appUser.mid) {
-         viewModel.refresh()
-     }
-//     LaunchedEffect(tweets) {
-//         if (!initState)
-//             listState.animateScrollToItem(0)
-//     }
 
      Scaffold(
          modifier = Modifier.fillMaxSize(),
@@ -93,13 +93,15 @@ fun TweetFeedScreen(
          bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
      ) { innerPadding ->
          Box(
-             modifier = Modifier.fillMaxSize()
+             modifier = Modifier
+                 .fillMaxSize()
                  .background(color = Color.Gray)
                  .pullRefresh(pullRefreshState)
                  .padding(innerPadding),
          ) {
              LazyColumn(
-                 modifier = Modifier.fillMaxSize()
+                 modifier = Modifier
+                     .fillMaxSize()
                      .nestedScroll(scrollBehavior.nestedScrollConnection),
                  state = listState
              ) {

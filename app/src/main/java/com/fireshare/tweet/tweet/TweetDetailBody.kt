@@ -212,10 +212,12 @@ fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
             if (tweet.author?.mid == appUser.mid) {
                 val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                 DropdownMenuItem(
-                    modifier = Modifier.alpha(0.7f),
+                    modifier = Modifier.alpha(0.8f),
                     onClick = {
                         tweet.mid?.let {
-                            tweetFeedViewModel.delTweet(it)
+                            tweetFeedViewModel.delTweet(it) {
+                                appUserViewModel.removeTweet(it)
+                            }
                             expanded = false
                         } },
                     text = {
@@ -235,7 +237,7 @@ fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
                 )
                 // put the current Tweet to top list
                 DropdownMenuItem(
-                    modifier = Modifier.alpha(0.7f),
+                    modifier = Modifier.alpha(1f),
                     onClick = {
                         tweet.mid?.let {
                             HproseInstance.addToTopList(it)

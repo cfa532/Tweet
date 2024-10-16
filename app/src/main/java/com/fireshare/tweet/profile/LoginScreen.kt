@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
@@ -65,6 +67,7 @@ fun LoginScreen() {
     val isLoading by viewModel.isLoading
     val loginError by viewModel.loginError
     val hasLogon by viewModel.hasLogon
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(hasLogon) {
         if (hasLogon) {
@@ -75,13 +78,16 @@ fun LoginScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(32.dp))
         IconButton(onClick = { navController.popBackStack() },
-            modifier = Modifier.align(Alignment.Start).padding(16.dp)
+            modifier = Modifier
+                .align(Alignment.Start)
+                .padding(16.dp)
         ) {
             Icon(imageVector = Icons.Default.Close,
                 tint = MaterialTheme.colorScheme.primary,

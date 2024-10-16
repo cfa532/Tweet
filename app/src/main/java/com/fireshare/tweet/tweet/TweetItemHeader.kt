@@ -51,7 +51,9 @@ fun TweetItemHeader(tweet: Tweet, parentEntry: NavBackStackEntry) {
                 style = MaterialTheme.typography.labelMedium)
         }
 
-        // the 3 dots at the right end
+        /**
+         * The 3 dots at the right end
+         * */
         TweetDropdownMenu(tweet, parentEntry)
     }
 }

@@ -49,7 +49,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    private var initState = MutableStateFlow(true)
+    var initState = MutableStateFlow(true)
+    var  shouldRefresh = MutableStateFlow(true)
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
@@ -69,7 +70,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         Log.d("TweetFeedVM.refresh", "${followings.value}")
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
         _isRefreshingAtTop.value = false
-
+        shouldRefresh.value = true
         initState.value = false
     }
 
@@ -103,6 +104,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         )
         getTweets(startTimestamp, endTimestamp.longValue)
         _isRefreshingAtBottom.value = false
+        shouldRefresh.value = true
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -174,11 +176,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
     }
 
-    fun delTweet(tweetId: MimeiId) {
+    fun delTweet(tweetId: MimeiId, success: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
+            Log.d("delTweet", "Before HproseInstance.delTweet")
             HproseInstance.delTweet(tweetId) { tid ->
                 _tweets.update { currentTweets ->
-                    appUser.tweetCount -= 1
+                    success()
                     currentTweets.filterNot { it.mid == tid }
                 }
             }

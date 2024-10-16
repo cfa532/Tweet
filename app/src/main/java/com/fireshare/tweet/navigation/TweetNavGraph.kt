@@ -84,8 +84,8 @@ fun TweetNavGraph(
                 }
                 // By default NOT to update fans and followings list of an user object.
                 // Do it only when opening the user's profile page.
+                // Only get current user's fans list when opening the app.
                 if (appUser.mid != TW_CONST.GUEST_ID)
-                    // Only get current user's fans list when opening the app.
                     appUserViewModel.updateFollowingsAndFans()
 
                 TweetFeedScreen(navController, parentEntry, 0)
