@@ -49,7 +49,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    var initState = MutableStateFlow(true)
+    private var initState = MutableStateFlow(true)
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
@@ -63,13 +63,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
-        _isRefreshingAtTop.value = true
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-        Log.d("TweetFeedVM.refresh", "${followings.value}")
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
-        _isRefreshingAtTop.value = false
-        initState.value = false
     }
 
     fun clearTweets() {
@@ -146,6 +142,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 }
                             }.await()
                         }
+
+                        // Only allow main process to retrieve tweets at initialization.
+                        if (initState.value) initState.value = false
 
                         _tweets.update { currentTweets ->
                             val updatedTweets = currentTweets.toMutableList()
