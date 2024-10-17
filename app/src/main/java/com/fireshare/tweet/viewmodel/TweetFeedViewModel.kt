@@ -8,6 +8,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -49,7 +50,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    private var initState = MutableStateFlow(true)
+    var initState = MutableStateFlow(true)
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
@@ -60,6 +61,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
 
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            // get current user's following list
+            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+            // add default public tweets
+            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+            // remember to watch oneself.
+            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+                _followings.update { list -> list + appUser.mid }
+            Log.d("UpdateFollowings", followings.value.toString())
+            refresh()
+            initState.value = false
+        }
+    }
 
     // called after login or logout(). Update current user's following list within both calls.
     fun refresh() {
@@ -106,15 +121,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val batchSize = 10 // Adjust batch size as needed
 
         viewModelScope.launch(Dispatchers.IO) {
-            // get current user's following list
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            // add default public tweets
-            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-            // remember to watch oneself.
-            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-                _followings.update { list -> list + appUser.mid }
-            Log.d("UpdateFollowings", followings.value.toString())
-
             followings.value.chunked(batchSize).forEach { batch ->
                 viewModelScope.launch(networkDispatcher) {
                     try {
