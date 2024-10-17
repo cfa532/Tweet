@@ -73,7 +73,6 @@ fun TweetFeedScreen(
      val isAtBottom =
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
-//     viewModel.initState.value = true
      LaunchedEffect(appUser.mid) {
          viewModel.refresh()
      }
@@ -103,8 +102,6 @@ fun TweetFeedScreen(
              ) {
                  items(tweets, key = { it.mid.toString() } ) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-
-//                     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.surfaceTint)
                  }
                  item {
                      if (refreshingAtTop) {
@@ -159,7 +156,9 @@ fun MainTopAppBar(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable(onClick = { navController.navigate(NavTweet.TweetFeed) })
+                        .clickable(onClick = {
+                            navController.navigate(NavTweet.TweetFeed)
+                        } )
                 ) {
                     AppIcon()
                 }
@@ -170,8 +169,8 @@ fun MainTopAppBar(
                 if (appUser.mid == TW_CONST.GUEST_ID)
                     navController.navigate(NavTweet.Login)
                 else
-                    navController.navigate(NavTweet.UserProfile(appUser.mid)) })
-            {
+                    navController.navigate(NavTweet.UserProfile(appUser.mid))
+            } ) {
                 UserAvatar(appUser,32)
             }
         },

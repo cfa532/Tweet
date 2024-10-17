@@ -68,10 +68,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
     }
 
-    fun clearTweets() {
-        _tweets.value = emptyList()
-    }
-
     fun loadNewerTweets() {
         if (initState.value) return
         println("At top already")
@@ -122,43 +118,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             followings.value.chunked(batchSize).forEach { batch ->
                 viewModelScope.launch(networkDispatcher) {
                     try {
-                        val newTweets = batch.flatMap { userId ->
+                        batch.flatMap { userId ->
                             async {
                                 try {
-                                    getUserBase(userId)?.let {
-                                        HproseInstance.getTweetList(
-                                            it,
-                                            startTimestamp,
-                                            sinceTimestamp
-                                        )
+                                    val tweetsList = getUserBase(userId)?.let {
+                                        HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
                                     } ?: emptyList()
+
+                                    // Update _tweets with tweetsList immediately
+                                    _tweets.update { currentTweets ->
+                                        (currentTweets + tweetsList).distinctBy { it.mid }
+                                            .sortedByDescending { it.timestamp }
+                                    }
+
+                                    tweetsList // Return tweetsList for further processing if needed
                                 } catch (e: Exception) {
-                                    Log.e(
-                                        "GetTweets in TweetFeedVM",
-                                        "Error fetching tweets for user: $userId",
-                                        e
-                                    )
+                                    Log.e("GetTweets in TweetFeedVM", "Error fetching tweets for user: $userId", e)
                                     emptyList()
                                 }
                             }.await()
-                        }
-
-                        // Only allow main process to retrieve tweets at initialization.
-                        if (initState.value) initState.value = false
-
-                        _tweets.update { currentTweets ->
-                            val updatedTweets = currentTweets.toMutableList()
-                            newTweets.forEach { newTweet ->
-                                val existingTweetIndex =
-                                    updatedTweets.indexOfFirst { it.mid == newTweet.mid }
-                                if (existingTweetIndex != -1) {
-                                    updatedTweets[existingTweetIndex] =
-                                        newTweet // Replace existing tweet
-                                } else {
-                                    updatedTweets.add(newTweet) // Add new tweet
-                                }
-                            }
-                            updatedTweets.distinctBy { it.mid }.sortedByDescending { it.timestamp }
                         }
                     } catch (e: Exception) {
                         Log.e("GetTweets", "Error fetching tweets", e)
@@ -183,6 +161,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 }
             }
         }
+    }
+
+    fun clearTweets() {
+        _tweets.value = emptyList()
     }
 
     fun toggleRetweet(tweet: Tweet, updateTweetViewModel: (Tweet) -> Unit) {
