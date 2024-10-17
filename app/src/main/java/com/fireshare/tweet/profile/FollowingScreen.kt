@@ -48,6 +48,7 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -115,7 +116,7 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
                     }
                 }
                 items(followingsOfProfile, key = {it}) { userId ->
-                    FollowingItem(userId, navController, appUserViewModel, parentEntry)
+                    FollowingItem(userId, navController, appUserViewModel)
                 }
             }
         }
@@ -123,7 +124,7 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
 }
 
 @Composable
-fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel, parentEntry: NavBackStackEntry) {
+fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel) {
     val user = remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(userId) {
@@ -170,7 +171,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
                         color = Color.Gray
                     )
                 }
-                ToggleFollowingButton(userId, appUserViewModel, parentEntry)
+                ToggleFollowingButton(userId, appUserViewModel)
             }
             Text(
                 text = "${user.value?.profile}",
@@ -182,10 +183,11 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
 }
 
 @Composable
-fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel, parentEntry: NavBackStackEntry) {
+fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollowing) }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(followings) {
         followState.value = isFollowing
@@ -201,7 +203,9 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel, pare
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId)
+                    appUserViewModel.toggleFollow(userId) {
+                        tweetFeedViewModel.updateFollowings(userId)
+                    }
                 })
                 .border(
                     width = 1.dp,

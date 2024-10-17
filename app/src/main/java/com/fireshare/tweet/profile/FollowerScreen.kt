@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
@@ -46,8 +47,10 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -178,6 +181,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     val followings by appUserViewModel.followings.collectAsState()
     val isFollower = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollower) }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(followings) {
         followState.value = isFollower
@@ -193,7 +197,9 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId)
+                    appUserViewModel.toggleFollow(userId) {
+                        tweetFeedViewModel.updateFollowings(userId)
+                    }
                 })
                 .border(
                     width = 1.dp,

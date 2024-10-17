@@ -177,6 +177,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     val buttonText = remember { mutableStateOf("Follow") }
     val context = LocalContext.current
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(followings) {
         buttonText.value = when {
@@ -195,7 +196,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                     context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                     else -> {
                         if (appUser.mid != TW_CONST.GUEST_ID)
-                            appUserViewModel.toggleFollow(user.mid)
+                            appUserViewModel.toggleFollow(user.mid) {
+                                tweetFeedViewModel.updateFollowings(user.mid)
+                            }
                         else {
                             val event = SnackbarEvent(
                                 message = context.getString(R.string.login_follow),

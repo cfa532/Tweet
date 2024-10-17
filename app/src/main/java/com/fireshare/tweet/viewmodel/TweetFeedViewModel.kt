@@ -169,6 +169,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    /**
+     * When appUser toggles following state on a User, update followings list.
+     * Remove it if unfollowing, add it if following.
+     * */
+    fun updateFollowings(userId: MimeiId) {
+        if (_followings.value.contains(userId)) {
+            _followings.update { list -> list - userId }
+        } else {
+            _followings.update { list -> list + userId }
+        }
+    }
+
     fun clearTweets() {
         _tweets.value = emptyList()
     }
