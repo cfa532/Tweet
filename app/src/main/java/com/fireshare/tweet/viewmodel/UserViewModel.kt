@@ -149,11 +149,6 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun removeTweet(tweetId: MimeiId) {
-        _tweets.update { list -> list.filter { it.mid != tweetId } }
-        _user.value = user.value.copy(tweetCount = user.value.tweetCount-1)
-    }
-
     fun updateFollowingsAndFans() {
         viewModelScope.launch(Dispatchers.IO) {
             _fans.value = HproseInstance.getFans(user.value) ?: emptyList()

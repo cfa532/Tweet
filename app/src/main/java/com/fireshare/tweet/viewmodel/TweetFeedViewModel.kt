@@ -24,14 +24,17 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
@@ -168,15 +171,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweetActionListener.onTweetAdded(newTweet)
     }
 
-    fun delTweet(tweetId: MimeiId, success: () -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            Log.d("delTweet", "Before HproseInstance.delTweet")
-            HproseInstance.delTweet(tweetId) { tid ->
-                _tweets.update { currentTweets ->
-                    success()
-                    currentTweets.filterNot { it.mid == tid }
+    // Define a custom scope to ensure tweet deletion job not cancelled.
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob()) // Define a custom scope
+
+    fun delTweet(tweetId: MimeiId) {
+        ioScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    HproseInstance.delTweet(tweetId) { tid ->
+                        _tweets.update { currentTweets ->
+                            currentTweets.filterNot { it.mid == tid }
+                        }
+                        tweetActionListener.onTweetDeleted(tweetId)
+                    }
                 }
-                tweetActionListener.onTweetDeleted(tweetId)
+            } catch (e: Exception) {
+                Log.e("DelTweet", "Error deleting tweet", e)
             }
         }
     }

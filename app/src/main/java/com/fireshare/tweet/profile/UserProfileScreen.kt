@@ -56,8 +56,7 @@ fun UserProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry,
-        key = userId
+        parentEntry, key = userId
     ) { factory ->
         factory.create(userId)
     }

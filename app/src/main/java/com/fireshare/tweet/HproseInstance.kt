@@ -54,7 +54,7 @@ object HproseInstance {
         level = HttpLoggingInterceptor.Level.BODY
     }
     val httpClient = OkHttpClient.Builder()
-//        .addInterceptor(loggingInterceptor)
+        .addInterceptor(loggingInterceptor)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
@@ -579,7 +579,7 @@ object HproseInstance {
 
                     if (retweetId != null) {
                         delTweet(retweetId) {
-                            tweetFeedViewModel.delTweet(retweetId) {}
+                            tweetFeedViewModel.delTweet(retweetId)
                         }
                     }
                 }

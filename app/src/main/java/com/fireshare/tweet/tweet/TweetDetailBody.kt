@@ -182,9 +182,9 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 @Composable
 fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
     var expanded by remember { mutableStateOf(false) }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry,
-        key = appUser.mid
+        parentEntry, key = appUser.mid
     ) { factory ->
         factory.create(appUser.mid)
     }
@@ -207,14 +207,11 @@ fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
                 .height(IntrinsicSize.Min)
         ) {
             if (tweet.author?.mid == appUser.mid) {
-                val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                 DropdownMenuItem(
                     modifier = Modifier.alpha(0.8f),
                     onClick = {
                         tweet.mid?.let {
-                            tweetFeedViewModel.delTweet(it) {
-                                appUserViewModel.removeTweet(it)
-                            }
+                            tweetFeedViewModel.delTweet(it)
                             expanded = false
                         } },
                     text = {
