@@ -8,7 +8,6 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -20,6 +19,7 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
@@ -38,6 +38,8 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
+    lateinit var tweetActionListener: TweetActionListener
+
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
@@ -163,6 +165,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun addTweet(newTweet: Tweet) {
         appUser.tweetCount += 1
         _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
+        tweetActionListener.onTweetAdded(newTweet)
     }
 
     fun delTweet(tweetId: MimeiId, success: () -> Unit) {
@@ -173,6 +176,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     success()
                     currentTweets.filterNot { it.mid == tid }
                 }
+                tweetActionListener.onTweetDeleted(tweetId)
             }
         }
     }
@@ -256,12 +260,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 )
                             }
                         }
-
                         WorkInfo.State.RUNNING -> {
                             // Optionally, show a progress indicator
                             Log.d("UploadTweet", "Tweet upload in progress")
                         }
-
                         else -> {
                             // Handle other states if necessary
                         }

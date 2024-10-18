@@ -76,7 +76,7 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
         // save the current tweetViewModel as sharedViewModel, and change its state
         // after the comment is submitted.
         viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
-            sharedViewModel.sharedTVMInstance = viewModel
+            sharedViewModel.sharedTweetVMInstance = viewModel
             tweet.mid?.let { navController.navigate(ComposeComment(it)) }
         }
     }) {

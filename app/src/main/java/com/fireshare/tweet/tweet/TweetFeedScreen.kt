@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -59,8 +58,8 @@ fun TweetFeedScreen(
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
     selectedBottomBarItemIndex: Int,
+    viewModel: TweetFeedViewModel
 ) {
-     val viewModel = hiltViewModel<TweetFeedViewModel>()
      val tweets by viewModel.tweets.collectAsState()
      val scrollBehavior =
          TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())

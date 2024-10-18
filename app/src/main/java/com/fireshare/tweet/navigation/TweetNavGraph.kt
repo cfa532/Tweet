@@ -31,6 +31,7 @@ import com.fireshare.tweet.tweet.TweetDetailScreen
 import com.fireshare.tweet.tweet.TweetFeedScreen
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.viewmodel.ChatViewModel
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaBrowser
@@ -42,7 +43,7 @@ val LocalNavController = compositionLocalOf<NavController> {
 val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
 class SharedTweetViewModel : ViewModel() {
-    lateinit var sharedTVMInstance: TweetViewModel
+    lateinit var sharedTweetVMInstance: TweetViewModel
 }
 
 @Composable
@@ -54,6 +55,7 @@ fun TweetNavGraph(
     var startDestination: NavTweet = NavTweet.TweetFeed
     lateinit var appUserViewModel: UserViewModel
 
+    // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
         val appLinkData = appLinkIntent.data
         if (appLinkData != null) {
@@ -88,7 +90,10 @@ fun TweetNavGraph(
                 if (appUser.mid != TW_CONST.GUEST_ID)
                     appUserViewModel.updateFollowingsAndFans()
 
-                TweetFeedScreen(navController, parentEntry, 0)
+                val viewModel = hiltViewModel<TweetFeedViewModel>()
+                viewModel.tweetActionListener = appUserViewModel
+
+                TweetFeedScreen(navController, parentEntry, 0, viewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()

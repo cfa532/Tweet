@@ -14,6 +14,7 @@ import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
@@ -25,14 +26,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
-): ViewModel() {
+): ViewModel(), TweetActionListener {
     private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -326,5 +326,13 @@ class UserViewModel @AssistedInject constructor(
     }
     fun onPasswordVisibilityChange() {
         isPasswordVisible.value = ! isPasswordVisible.value
+    }
+
+    override fun onTweetAdded(tweet: Tweet) {
+        _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
+    }
+
+    override fun onTweetDeleted(tweetId: MimeiId) {
+        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
     }
 }
