@@ -63,28 +63,34 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            // get current user's following list
-            _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-            // add default public tweets
-            _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-            // remember to watch oneself.
-            if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-                _followings.update { list -> list + appUser.mid }
-            Log.d("UpdateFollowings", followings.value.toString())
             refresh()
             initState.value = false
         }
     }
 
-    // called after login or logout(). Update current user's following list within both calls.
+    /**
+     * Called after login or logout(). Update current user's following list and tweets.
+     * When new following is added or removed, _followings will be updated also.
+     * */
     fun refresh() {
+        // get current user's following list
+        _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+        // add default public tweets
+        _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
+        // remember to watch oneself.
+        if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
+            _followings.update { list -> list + appUser.mid }
+        Log.d("UpdateFollowings", followings.value.toString())
+
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
     }
 
     fun loadNewerTweets() {
+        // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
+
         println("At top already")
         _isRefreshingAtTop.value = true
         startTimestamp.longValue = System.currentTimeMillis()
@@ -120,33 +126,35 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     ) {
         val batchSize = 10 // Adjust batch size as needed
 
-        viewModelScope.launch(Dispatchers.IO) {
-            followings.value.chunked(batchSize).forEach { batch ->
-                viewModelScope.launch(networkDispatcher) {
-                    try {
-                        batch.flatMap { userId ->
-                            async {
-                                try {
-                                    val tweetsList = getUserBase(userId)?.let {
-                                        HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
-                                    } ?: emptyList()
+        followings.value.chunked(batchSize).forEach { batch ->
+            viewModelScope.launch(networkDispatcher) {
+                try {
+                    batch.flatMap { userId ->
+                        async {
+                            try {
+                                val tweetsList = getUserBase(userId)?.let {
+                                    HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
+                                } ?: emptyList()
 
-                                    // Update _tweets with tweetsList immediately
-                                    _tweets.update { currentTweets ->
-                                        (currentTweets + tweetsList).distinctBy { it.mid }
-                                            .sortedByDescending { it.timestamp }
-                                    }
-
-                                    tweetsList // Return tweetsList for further processing if needed
-                                } catch (e: Exception) {
-                                    Log.e("GetTweets in TweetFeedVM", "Error fetching tweets for user: $userId", e)
-                                    emptyList()
+                                // Update _tweets with tweetsList immediately
+                                _tweets.update { currentTweets ->
+                                    (currentTweets + tweetsList).distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp }
                                 }
-                            }.await()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("GetTweets", "Error fetching tweets", e)
+
+                                tweetsList // Return tweetsList for further processing if needed
+                            } catch (e: Exception) {
+                                Log.e(
+                                    "GetTweets in TweetFeedVM",
+                                    "Error fetching tweets for user: $userId",
+                                    e
+                                )
+                                emptyList()
+                            }
+                        }.await()
                     }
+                } catch (e: Exception) {
+                    Log.e("GetTweets", "Error fetching tweets", e)
                 }
             }
         }

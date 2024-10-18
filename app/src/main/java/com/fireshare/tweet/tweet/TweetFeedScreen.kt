@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -49,6 +50,8 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
  @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -74,7 +77,11 @@ fun TweetFeedScreen(
          layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
      LaunchedEffect(appUser.mid) {
-         viewModel.refresh()
+         // reload page when user login or out
+         if (!viewModel.initState.value)
+             viewModel.viewModelScope.launch(Dispatchers.IO) {
+                 viewModel.refresh()
+             }
      }
      LaunchedEffect(isAtBottom) {
          if (isAtBottom) {
