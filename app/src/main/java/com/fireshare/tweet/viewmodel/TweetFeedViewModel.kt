@@ -125,7 +125,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
         startTimestamp: Long,
-        sinceTimestamp: Long        // earlier in time, therefore smaller timestamp
+        sinceTimestamp: Long,        // earlier in time, therefore smaller timestamp
     ) {
         val batchSize = 10 // Adjust batch size as needed
 
@@ -163,6 +163,23 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    private fun getTweets(userId: MimeiId) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val tweetsList = getUserBase(userId)?.let {
+                    HproseInstance.getTweetList(it, startTimestamp.longValue, endTimestamp.longValue)
+                } ?: return@launch
+                _tweets.update { currentTweets ->
+                    (currentTweets + tweetsList).distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
+                }
+            } catch (e: Exception) {
+                Log.e("GetTweets",
+                    "Error fetching tweets for user: $userId", e)
+            }
+        }
+    }
+
     fun addTweet(newTweet: Tweet) {
         _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
         tweetActionListener.onTweetAdded(newTweet)
@@ -195,8 +212,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun updateFollowings(userId: MimeiId) {
         if (_followings.value.contains(userId)) {
             _followings.update { list -> list - userId }
+            // remove all tweets of this user from list
+            _tweets.update { currentTweets ->
+                currentTweets.filterNot { it.author?.mid == userId }
+            }
         } else {
             _followings.update { list -> list + userId }
+            getTweets(userId)
         }
     }
 
