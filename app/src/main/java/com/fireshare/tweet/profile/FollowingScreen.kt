@@ -109,7 +109,7 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
                         horizontalArrangement = Arrangement.Center // Center align content horizontally
                     ) {
                         Text(
-                            text = stringResource(R.string.follow),
+                            text = stringResource(R.string.followings),
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )

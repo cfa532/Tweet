@@ -102,7 +102,7 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
                         horizontalArrangement = Arrangement.Center // Center align content horizontally
                     ) {
                         Text(
-                            text = stringResource(R.string.follow),
+                            text = stringResource(R.string.fans),
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
