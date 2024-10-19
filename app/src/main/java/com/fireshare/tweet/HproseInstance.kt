@@ -53,7 +53,7 @@ object HproseInstance {
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
-    val httpClient = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
         .build()
 
@@ -112,7 +112,7 @@ object HproseInstance {
                              * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
                              * */
                             getFirstReachableUser(hostIPs, userId) ?:
-                                User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
+                                User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
                         } else {
                             val firstIp = findFirstReachableAddress(hostIPs)
                             User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
@@ -586,8 +586,7 @@ object HproseInstance {
                     }
                 }
             } else {
-                var retweet = Tweet(
-                    content = "",
+                var retweet = Tweet(content = "",
                     authorId = appUser.mid,
                     originalTweetId = tweet.mid,
                     originalAuthorId = tweet.authorId
@@ -602,8 +601,8 @@ object HproseInstance {
                     val gson = Gson()
                     val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
                     tweet.favorites!![UserFavorites.RETWEET] = true
-                    tweet.retweetCount = (res["count"] as Double).toInt()
-                    updateTweet(tweet.copy())
+//                    tweet.retweetCount = (res["count"] as Double).toInt()
+                    updateTweet(tweet.copy(retweetCount = (res["count"] as Double).toInt()))
 
                     retweet.author = appUser
                     retweet.originalTweet = tweet
