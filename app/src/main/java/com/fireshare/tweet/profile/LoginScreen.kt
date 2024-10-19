@@ -71,7 +71,7 @@ fun LoginScreen() {
 
     LaunchedEffect(hasLogon) {
         if (hasLogon) {
-            navController.popBackStack()
+            navController.navigate(NavTweet.TweetFeed)
         }
     }
     Column(

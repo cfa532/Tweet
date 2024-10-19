@@ -85,7 +85,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // remember to watch oneself.
         if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
             _followings.update { list -> list + appUser.mid }
-        Log.d("UpdateFollowings", followings.value.toString())
+        Log.d("Refresh()", followings.value.toString())
 
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
@@ -96,7 +96,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
 
-        println("At top already")
         _isRefreshingAtTop.value = true
         startTimestamp.longValue = System.currentTimeMillis()
         val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
@@ -111,7 +110,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun loadOlderTweets() {
         if (initState.value) return
 
-        println("At bottom already")
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp.longValue
         endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
@@ -166,7 +164,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun addTweet(newTweet: Tweet) {
-        appUser.tweetCount += 1
         _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
         tweetActionListener.onTweetAdded(newTweet)
     }
@@ -207,13 +204,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.value = emptyList()
     }
 
-    fun toggleRetweet(tweet: Tweet, updateTweetViewModel: (Tweet) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // tweet object is updated in toggleRetweet()
-            // if this is a retweet with comments, only forward the original tweet.
+    /**
+     * If original tweet is null, forward the original tweet, otherwise the tweet itself.
+     * Tweet object itself is updated in HproseInstance.toggleRetweet()
+     * */
+    fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
+        ioScope.launch(Dispatchers.IO) {
             val t = if (tweet.originalTweet != null) tweet.originalTweet!! else tweet
-            HproseInstance.toggleRetweet( t, this@TweetFeedViewModel ) { newTweet ->
-                updateTweetViewModel(newTweet)
+            HproseInstance.toggleRetweet(t, this@TweetFeedViewModel) { newTweet ->
+                updateTweet(newTweet)
             }
         }
     }

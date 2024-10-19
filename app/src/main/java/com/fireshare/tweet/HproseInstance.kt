@@ -554,7 +554,10 @@ object HproseInstance {
         }
     }
 
-    fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweetViewModel: (Tweet) -> Unit) {
+    /**
+     * Send a retweet request to backend and get a new tweet object back.
+     * */
+    fun toggleRetweet(tweet: Tweet, tweetFeedViewModel: TweetFeedViewModel, updateTweet: (Tweet) -> Unit) {
         val method = "toggle_retweet"
         val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
@@ -573,10 +576,9 @@ object HproseInstance {
 
                     tweet.favorites!![UserFavorites.RETWEET] = false
                     val count = (res["count"] as? Double)?.toInt() ?: 0
+                    updateTweet(tweet.copy(retweetCount = count))
+
                     val retweetId = res["retweetId"] as? MimeiId
-
-                    updateTweetViewModel(tweet.copy(retweetCount = count))
-
                     if (retweetId != null) {
                         delTweet(retweetId) {
                             tweetFeedViewModel.delTweet(retweetId)
@@ -601,7 +603,7 @@ object HproseInstance {
                     val res = gson.fromJson(responseBody, object : TypeToken<Map<String, Any?>>() {}.type) as Map<String, Any?>
                     tweet.favorites!![UserFavorites.RETWEET] = true
                     tweet.retweetCount = (res["count"] as Double).toInt()
-                    updateTweetViewModel(tweet.copy())
+                    updateTweet(tweet.copy())
 
                     retweet.author = appUser
                     retweet.originalTweet = tweet

@@ -207,9 +207,9 @@ class UserViewModel @AssistedInject constructor(
                 && password.value.isNotEmpty()
                 && keyPhrase.value?.isNotEmpty() == true
             ) {
-                val user =
-                    HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
+                val user = HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
                 isLoading.value = false
+
                 if (user == null) {
                     loginError.value = context.getString(R.string.login_failed)
                     preferencesHelper.saveKeyPhrase("")
@@ -325,9 +325,11 @@ class UserViewModel @AssistedInject constructor(
 
     override fun onTweetAdded(tweet: Tweet) {
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
+        _user.value.tweetCount += 1
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        _user.value.tweetCount -= 1
     }
 }
