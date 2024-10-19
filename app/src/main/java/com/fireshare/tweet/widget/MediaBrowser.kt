@@ -60,8 +60,12 @@ fun MediaBrowser(
     navController: NavController,
     mediaItems: List<MediaItem>,
     startIndex: Int,
-    tweetId: MimeiId
+    tweetId: MimeiId?
 ) {
+    /**
+     *  Create a tweetViewModel of tweetId to remember the position of this tweet in the feed list.
+     *  When user closes the Media browser, goes back to the right position.
+     * */
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweetId) { factory ->
         factory.create(Tweet(authorId = "default", content = "nothing"))
     }
@@ -170,24 +174,26 @@ fun MediaBrowser(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .background(Color.Black)
-                ) {
-                    Row(
+                if (tweetId != null) {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 32.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
+                            .height(100.dp)
+                            .background(Color.Black)
                     ) {
-                        LikeButton(viewModel)
-                        BookmarkButton(viewModel)
-                        CommentButton(viewModel)
-                        RetweetButton(viewModel)
-                        Spacer(modifier = Modifier.width(20.dp))
-                        ShareButton(viewModel)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, bottom = 32.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            LikeButton(viewModel)
+                            BookmarkButton(viewModel)
+                            CommentButton(viewModel)
+                            RetweetButton(viewModel)
+                            Spacer(modifier = Modifier.width(20.dp))
+                            ShareButton(viewModel)
+                        }
                     }
                 }
             }

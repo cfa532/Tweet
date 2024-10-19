@@ -82,7 +82,6 @@ fun UserProfileScreen(
         }
     }
     LaunchedEffect(Unit) {
-        Log.d("UserProfileScreen", "Call getTweets()")
         viewModel.getTweets()
     }
 

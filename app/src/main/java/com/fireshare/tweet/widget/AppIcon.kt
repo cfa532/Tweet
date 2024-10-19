@@ -50,7 +50,7 @@ fun AppIcon() {
 //        contentScale = ContentScale.Crop
 //    )
 //}
-fun UserAvatar(user: User?, size: Int = 40) {
+fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
     val avatarUrl = remember { mutableStateOf<String?>(getMediaUrl(user?.avatar, user?.baseUrl)) }
 
     LaunchedEffect(user?.avatar) {
@@ -71,7 +71,7 @@ fun UserAvatar(user: User?, size: Int = 40) {
         // Display the actual avatar image
         ImageViewer(
             avatarUrl.value!!,
-            modifier = Modifier
+            modifier = modifier
                 .size(size.dp)
                 .clip(CircleShape)
                 .background(Color.Gray),

@@ -183,8 +183,7 @@ class UserViewModel @AssistedInject constructor(
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
             getToppedTweets()
-            val user = getUserBase(userId) ?: return@launch
-            val tweetsList = HproseInstance.getTweetList(user, startTimestamp, endTimestamp)
+            val tweetsList = HproseInstance.getTweetList(user.value, startTimestamp, endTimestamp)
             val updatedTweets = tweetsList.toMutableList()
             updatedTweets.removeAll { currentTweet ->
                 topTweets.value.any { it.mid == currentTweet.mid }
@@ -325,11 +324,11 @@ class UserViewModel @AssistedInject constructor(
 
     override fun onTweetAdded(tweet: Tweet) {
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
-        _user.value.tweetCount += 1
+        _user.value = user.value.copy(tweetCount = user.value.tweetCount + 1)
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _user.value.tweetCount -= 1
+        _user.value = user.value.copy(tweetCount = user.value.tweetCount - 1)
     }
 }

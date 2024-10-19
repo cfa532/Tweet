@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,8 +44,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
+import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
@@ -52,6 +55,9 @@ import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
+import com.fireshare.tweet.widget.MediaBrowser
+import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
 
@@ -77,8 +83,15 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
 
-                    UserAvatar(user, size = (80 - (scrollFraction * 20)).toInt() )
-
+                    UserAvatar(user,
+                        size = (80 - (scrollFraction * 20)).toInt(),
+                        modifier = Modifier.clickable {
+                            val url = getMediaUrl(user.avatar, user.baseUrl) ?: return@clickable
+                            val item = MediaItem(url, MediaType.Image)
+                            val params = MediaViewerParams(listOf(item))
+                            navController.navigate(NavTweet.MediaViewer(params))
+                        }
+                    )
                     Column(modifier = Modifier.padding(start = 8.dp)
                     ) {
                         Text(
@@ -188,8 +201,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
     }
 
     Row(modifier = Modifier.padding(bottom = 4.dp)) {
-        // Follow button
-        if (scrollBehavior?.state?.collapsedFraction == 1f) return  // hide follow button when collapsed.
+        // hide the Follow/Unfollow button when header is collapsed.
+        if (scrollBehavior?.state?.collapsedFraction == 1f) return
+
         Button(
             onClick = {
                 when (buttonText.value) {
