@@ -195,7 +195,7 @@ fun EditProfileScreen(
         ) {
             val user by viewModel.user.collectAsState()
             Text(
-                text = "${user.mid} ${user.baseUrl}",
+                text = "uid: ${user.mid} ${user.baseUrl}",
                 color = MaterialTheme.colorScheme.secondary,
             )
         }
