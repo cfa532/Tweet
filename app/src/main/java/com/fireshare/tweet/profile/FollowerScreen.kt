@@ -137,12 +137,8 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
         .fillMaxWidth()
     ) {
         IconButton( onClick = {
-            if (appUser.mid == TW_CONST.GUEST_ID)
-                navController.navigate(NavTweet.Login)
-            else {
-                user.value?.let{ navController.navigate(NavTweet.UserProfile(it.mid)) }
-            }})
-        {
+            user.value?.let{ navController.navigate(NavTweet.UserProfile(it.mid)) }
+        }) {
             UserAvatar(user.value,40)
         }
         Spacer(modifier = Modifier.width(8.dp))
