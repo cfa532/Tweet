@@ -23,8 +23,11 @@ import java.util.concurrent.TimeUnit
 
 // Tweet header when displayed as an item in a list.
 @Composable
-fun TweetItemHeader(tweet: Tweet, parentEntry: NavBackStackEntry) {
-    // Use a Row to align author name and potential verification badge
+fun TweetItemHeader(
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry,
+    parentTweet: Tweet? = null
+) {
     val navController = LocalNavController.current
     val author = tweet.author
 
@@ -54,7 +57,7 @@ fun TweetItemHeader(tweet: Tweet, parentEntry: NavBackStackEntry) {
         /**
          * The 3 dots at the right end
          * */
-        TweetDropdownMenu(tweet, parentEntry)
+        TweetDropdownMenu(tweet, parentEntry, parentTweet)
     }
 }
 

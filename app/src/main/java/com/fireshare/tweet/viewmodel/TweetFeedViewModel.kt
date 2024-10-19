@@ -16,6 +16,7 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUserBase
 import com.fireshare.tweet.R
+import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -78,6 +79,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When new following is added or removed, _followings will be updated also.
      * */
     fun refresh() {
+        _followings.value = emptyList()
         // get current user's following list
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
         // add default public tweets
@@ -149,22 +151,29 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                             } catch (e: Exception) {
                                 Log.e(
                                     "GetTweets in TweetFeedVM",
-                                    "Error fetching tweets for user: $userId",
-                                    e
-                                )
+                                    "Error fetching tweets for user: $userId", e)
+                                // remove the userId from cached user list, the app will try to
+                                // reacquire the user information
+                                HproseInstance.removeUser(userId)
                                 emptyList()
                             }
                         }.await()
                     }
                 } catch (e: Exception) {
                     Log.e("GetTweets", "Error fetching tweets", e)
+                    // in catastrophic events, such as lost of a service node,
+                    // try to reacquire a valid serving node.
+                    ioScope.launch(Dispatchers.IO) {
+                        HproseInstance.initAppEntry(TweetApplication.preferenceHelper)
+                        refresh()
+                    }
                 }
             }
         }
     }
 
     private fun getTweets(userId: MimeiId) {
-        viewModelScope.launch(Dispatchers.IO) {
+        ioScope.launch(Dispatchers.IO) {
             try {
                 val tweetsList = getUserBase(userId)?.let {
                     HproseInstance.getTweetList(it, startTimestamp.longValue, endTimestamp.longValue)
@@ -261,23 +270,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 if (workInfo != null) {
                     when (workInfo.state) {
                         WorkInfo.State.SUCCEEDED -> {
-                            val outputData = workInfo.outputData
-                            val json = outputData.getString("tweet")
-                            // Handle the success and update UI
-                            val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
-                            Log.d("UploadTweet", "Tweet uploaded successfully: $tweet")
-                            if (tweet != null) {
-                                tweet.author = appUser
-                                // to add tweet in background involves problem with viewModel
-                                // in tweet list. Do NOT update tweet list, just inform user.
-                                addTweet(tweet)
-                                (context as? LifecycleOwner)?.lifecycleScope?.launch {
-                                    SnackbarController.sendEvent(
-                                        event = SnackbarEvent(
-                                            message = context.getString(R.string.tweet_uploaded)
+                            try {
+                                val outputData = workInfo.outputData
+                                val json = outputData.getString("tweet")
+                                // Handle the success and update UI
+                                val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
+                                Log.d("UploadTweet", "Tweet uploaded successfully: $tweet")
+                                if (tweet != null) {
+                                    tweet.author = appUser
+                                    // to add tweet in background involves problem with viewModel
+                                    // in tweet list. Do NOT update tweet list, just inform user.
+                                    addTweet(tweet)
+                                    (context as? LifecycleOwner)?.lifecycleScope?.launch {
+                                        SnackbarController.sendEvent(
+                                            event = SnackbarEvent(
+                                                message = context.getString(R.string.tweet_uploaded)
+                                            )
                                         )
-                                    )
+                                    }
                                 }
+                            } catch (e: Exception) {
+                                Log.e("UploadTweet", "$e")
                             }
                         }
                         WorkInfo.State.FAILED -> {

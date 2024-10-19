@@ -133,31 +133,35 @@ class TweetViewModel @AssistedInject constructor(
                 if (workInfo != null) {
                     when (workInfo.state) {
                         WorkInfo.State.SUCCEEDED -> {
-                            val outputData = workInfo.outputData
-                            val json = outputData.getString("comment") ?: return@observe
-                            Log.d("UploadComment", "Tweet uploaded successfully: $json")
-                            // Handle the success and update UI
-                            val map = Json.decodeFromString<Map<String, String?>>(json)
+                            try {
+                                val outputData = workInfo.outputData
+                                val json = outputData.getString("comment") ?: return@observe
+                                Log.d("UploadComment", "Tweet uploaded successfully: $json")
+                                // Handle the success and update UI
+                                val map = Json.decodeFromString<Map<String, String?>>(json)
 
-                            // the comment also posted as tweet.
-                            val retweet = if (isCheckedToTweet.value) {
-                                map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
-                            } else null
+                                // the comment also posted as tweet.
+                                val retweet = if (isCheckedToTweet.value) {
+                                    map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
+                                } else null
 
-                            var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
-                            comment = comment.copy(author = appUser)
-                            Log.d("UploadComment", "Comment: $comment")
-                            _comments.update { list -> listOf(comment) + list }
+                                var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
+                                comment = comment.copy(author = appUser)
+                                Log.d("UploadComment", "Comment: $comment")
+                                _comments.update { list -> listOf(comment) + list }
 
-                            // parent tweet with the new comment.
-                            val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
-                            Log.d("UploadComment", "Updated tweet: $newTweet")
-                            _tweetState.value = newTweet
+                                // parent tweet with the new comment.
+                                val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
+                                Log.d("UploadComment", "Updated tweet: $newTweet")
+                                _tweetState.value = newTweet
 
-                            if (retweet != null) {
-                                retweet.originalTweet = comment
-                                retweet.originalTweet!!.author = comment.author
-                                tweetFeedViewModel.addTweet(retweet)
+                                if (retweet != null) {
+                                    retweet.originalTweet = comment
+                                    retweet.originalTweet!!.author = comment.author
+                                    tweetFeedViewModel.addTweet(retweet)
+                                }
+                            } catch (e: Exception) {
+                                Log.e("UploadComment", "${e.message}")
                             }
                         }
 

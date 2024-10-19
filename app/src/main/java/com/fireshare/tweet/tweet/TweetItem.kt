@@ -37,7 +37,7 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,      // navGraph scoped
 ) {
-    var viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry,    // keep the tweetViewModel NavGraph scoped.
         key = tweet.mid
     ) { factory ->
@@ -56,23 +56,23 @@ fun TweetItem(
             if (tweet.content == "") {
 
                 // this is a retweet of another tweet.
-                Surface (
+                Surface(
                     modifier = Modifier.padding(top = 0.dp)
                 ) {
                     // The tweet area
-                    viewModel =
+                    val originalTweetViewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                             parentEntry,
                             key = tweet.originalTweetId
                         )
                         { factory -> factory.create(tweet.originalTweet!!) }
-                    TweetBlock(viewModel, parentEntry)
+                    TweetBlock(originalTweetViewModel, parentEntry, parentTweet = tweet)
 
                     // Label: Forward by user, on top of original tweet
                     Box {
-                        val forwardBy = if (tweet.authorId==appUser.mid)
+                        val forwardBy = if (tweet.authorId == appUser.mid)
                             stringResource(R.string.forward_by)
-                        else "@${tweet.author?.username}" + stringResource(R.string.forwarded)
+                        else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
                         Text(
                             text = forwardBy,
                             fontSize = MaterialTheme.typography.labelSmall.fontSize,
@@ -127,8 +127,6 @@ fun TweetItem(
                         }
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-//                        border = BorderStroke(0.4.dp,
-//                            color = MaterialTheme.colorScheme.surfaceTint),
                             tonalElevation = 3.dp,
                             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                         ) {

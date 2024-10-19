@@ -180,14 +180,12 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 }
 
 @Composable
-fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
+fun TweetDropdownMenu(
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry,
+    parentTweet: Tweet? = null
+) {
     var expanded by remember { mutableStateOf(false) }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = appUser.mid
-    ) { factory ->
-        factory.create(appUser.mid)
-    }
     Box {
         IconButton(
             modifier = Modifier.width(32.dp).alpha(0.8f).rotate(-90f)
@@ -206,52 +204,71 @@ fun TweetDropdownMenu(tweet: Tweet, parentEntry: NavBackStackEntry) {
                 .wrapContentWidth(align = Alignment.End)
                 .height(IntrinsicSize.Min)
         ) {
-            if (tweet.author?.mid == appUser.mid) {
-                DropdownMenuItem(
-                    modifier = Modifier.alpha(0.8f),
-                    onClick = {
-                        tweet.mid?.let {
-                            tweetFeedViewModel.delTweet(it)
-                            expanded = false
-                        } },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                            Text(
-                                text = stringResource(R.string.delete),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                )
-                // put the current Tweet to top list
-                DropdownMenuItem(
-                    modifier = Modifier.alpha(1f),
-                    onClick = {
-                        appUserViewModel.pinToTop(tweet)
-                        expanded = false
-                    },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Favorite,
-                                contentDescription = "Top",
-                                tint = MaterialTheme.colorScheme.surfaceTint
-                            )
-                            Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                            Text(
-                                text = stringResource(R.string.addToTop),
-                                color = MaterialTheme.colorScheme.surfaceTint
-                            )
-                        }
-                    }
-                )
+            if (parentTweet != null) {
+                if (parentTweet.author?.mid == appUser.mid) {
+                    TweetDropdownMenuItems(parentTweet, parentEntry)
+                }
+            } else {
+                if (tweet.author?.mid == appUser.mid) {
+                    TweetDropdownMenuItems(tweet, parentEntry)
+                }
             }
         }
     }
+}
+
+@Composable
+fun TweetDropdownMenuItems(
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry,
+) {
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = appUser.mid
+    ) { factory ->
+        factory.create(appUser.mid)
+    }
+    DropdownMenuItem(
+        modifier = Modifier.alpha(0.8f),
+        onClick = {
+            tweet.mid?.let {
+                tweetFeedViewModel.delTweet(it)
+            }
+        },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                Text(
+                    text = stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    )
+    // put the current Tweet to top list
+    DropdownMenuItem(
+        modifier = Modifier.alpha(1f),
+        onClick = {
+            appUserViewModel.pinToTop(tweet)
+        },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = "Top",
+                    tint = MaterialTheme.colorScheme.surfaceTint
+                )
+                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                Text(
+                    text = stringResource(R.string.addToTop),
+                    color = MaterialTheme.colorScheme.surfaceTint
+                )
+            }
+        }
+    )
 }

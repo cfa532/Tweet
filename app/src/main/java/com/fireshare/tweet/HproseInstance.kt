@@ -70,7 +70,7 @@ object HproseInstance {
 
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
-    private suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
+    suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
         val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
         val request = Request.Builder().url(baseUrl).build()
@@ -591,9 +591,10 @@ object HproseInstance {
                     originalTweetId = tweet.mid,
                     originalAuthorId = tweet.authorId
                 )
+                // upload the retweet first
                 retweet = uploadTweet(retweet) ?: return
-                url.append("&retweetid=${retweet.mid}")
 
+                url.append("&retweetid=${retweet.mid}")
                 val request = Request.Builder().url(url.toString()).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
@@ -883,6 +884,10 @@ object HproseInstance {
             Log.e("getTopList", "$e")
         }
         return null
+    }
+
+    fun removeUser(userId: MimeiId) {
+        cachedUsers.removeIf { it.mid == userId }
     }
 }
 

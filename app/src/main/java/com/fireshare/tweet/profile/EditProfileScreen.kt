@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +26,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,114 +90,126 @@ fun EditProfileScreen(
         keyboardController?.show()
     }
 
-    Column(
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
             .padding(8.dp)
-            .imePadding()
-            .verticalScroll(scrollState)
-//            .nestedScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
-        IconButton(onClick = { navController.popBackStack() })
-        {
-            Icon(
-                imageVector = Icons.Default.Clear,
-                contentDescription = "Cancel"
-            )
-        }
-        // show and edit user avatar
-        AvatarSection(launcher, viewModel)
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Column {
-            OutlinedTextField(
-                value = username ?: "",
-                onValueChange = { viewModel.onUsernameChange(it) },
-                label = { Text(stringResource(R.string.usename)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = password,
-                onValueChange = { viewModel.onPasswordChange(it) },
-                label = { Text(stringResource(R.string.password)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
-                    IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
-                        Icon(imageVector = image, contentDescription = null)
-                    }
-                },
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = keyPhrase ?: "",
-                onValueChange = { viewModel.onKeyPhraseChange(it) },
-                label = { Text(stringResource(R.string.key_phrase)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused && keyPhrase.isNullOrBlank()) {
-                            showDialog.value = true
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 48.dp) // Add padding to avoid overlap with the bottom section
+                .imePadding()
+                .verticalScroll(scrollState)
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(
+                    imageVector = Icons.Default.Clear,
+                    contentDescription = "Cancel"
+                )
+            }
+            // show and edit user avatar
+            AvatarSection(launcher, viewModel)
+            Spacer(modifier = Modifier.height(16.dp))
+            Column {
+                OutlinedTextField(
+                    value = username ?: "",
+                    onValueChange = { viewModel.onUsernameChange(it) },
+                    label = { Text(stringResource(R.string.usename)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { viewModel.onPasswordChange(it) },
+                    label = { Text(stringResource(R.string.password)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
+                        IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
+                            Icon(imageVector = image, contentDescription = null)
                         }
                     },
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = name ?: "",
-                onValueChange = { viewModel.onNameChange(it) },
-                label = { Text(stringResource(R.string.name)) },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = keyPhrase ?: "",
+                    onValueChange = { viewModel.onKeyPhraseChange(it) },
+                    label = { Text(stringResource(R.string.key_phrase)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused && keyPhrase.isNullOrBlank()) {
+                                showDialog.value = true
+                            }
+                        },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = name ?: "",
+                    onValueChange = { viewModel.onNameChange(it) },
+                    label = { Text(stringResource(R.string.name)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = profile ?: "",
+                    onValueChange = { viewModel.onProfileChange(it) },
+                    label = { Text(stringResource(R.string.profile)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = false
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { viewModel.register(context) { navController.popBackStack() } },
+                enabled = !isLoading,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = profile ?: "",
-                onValueChange = { viewModel.onProfileChange(it) },
-                label = { Text(stringResource(R.string.profile)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = false
-            )
+                    .width(intrinsicSize = IntrinsicSize.Max)
+                    .align(Alignment.CenterHorizontally)
+            ) {
+                Text(stringResource(R.string.save))
+            }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                viewModel.register(context) {
-                    navController.popBackStack()
-                }
-            },
-            enabled = !isLoading,
+
+        // Bottom section using Box
+        Box(
             modifier = Modifier
-                .width(intrinsicSize = IntrinsicSize.Max)
-                .align(Alignment.CenterHorizontally)
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp) // Add padding to avoid overlap with system UI
         ) {
-            Text(stringResource(R.string.save))
+            val user by viewModel.user.collectAsState()
+            Text(
+                text = "${user.mid} ${user.baseUrl}",
+                color = MaterialTheme.colorScheme.secondary,
+            )
         }
-    }
-    if (showDialog.value) {
-        AlertDialog(
-            onDismissRequest = { showDialog.value = false },
-            confirmButton = {
-                TextButton(onClick = { showDialog.value = false }) {
-                    Text("OK")
-                }
-            },
-            text = { Text(stringResource(R.string.key_phrase_warning)) }
-        )
+
+        if (showDialog.value) {
+            AlertDialog(
+                onDismissRequest = { showDialog.value = false },
+                confirmButton = {
+                    TextButton(onClick = { showDialog.value = false }) {
+                        Text("OK")
+                    }
+                },
+                text = { Text(stringResource(R.string.key_phrase_warning)) }
+            )
+        }
     }
 }
 

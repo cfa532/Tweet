@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -36,7 +37,8 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 fun TweetBlock(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    isQuoted: Boolean = false     // the block is a quoted tweet or not
+    isQuoted: Boolean = false,     // the block is a quoted tweet or not
+    parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -58,7 +60,7 @@ fun TweetBlock(
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(tweet, parentEntry)
+            TweetItemHeader(tweet, parentEntry, parentTweet)
 
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
@@ -68,7 +70,6 @@ fun TweetBlock(
             ) {
                 Column {
                     // Text content of the tweet
-                    if (tweet.content?.isNotEmpty() == true) {
                         tweet.content?.let { txt ->
                             val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                             var lineCount by remember { mutableIntStateOf(0) }
@@ -90,7 +91,6 @@ fun TweetBlock(
                                 )
                             }
                         }
-                    }
                     // attached media files
                     Box(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp)
