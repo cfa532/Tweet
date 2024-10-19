@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -82,9 +84,7 @@ fun EditProfileScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
-//        focusRequester.requestFocus()
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            // a guest user cannot see phrase that may be stored on device.
             viewModel.hidePhrase()
         }
         keyboardController?.show()
@@ -92,12 +92,13 @@ fun EditProfileScreen(
 
     Box(
         modifier = Modifier
+            .fillMaxSize()
             .padding(8.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 48.dp) // Add padding to avoid overlap with the bottom section
+                .padding(bottom = 48.dp)
                 .imePadding()
                 .verticalScroll(scrollState)
         ) {
@@ -108,7 +109,6 @@ fun EditProfileScreen(
                     contentDescription = "Cancel"
                 )
             }
-            // show and edit user avatar
             AvatarSection(launcher, viewModel)
             Spacer(modifier = Modifier.height(16.dp))
             Column {
@@ -189,8 +189,9 @@ fun EditProfileScreen(
         // Bottom section using Box
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp) // Add padding to avoid overlap with system UI
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 16.dp)
+                .alpha(0.2f)
         ) {
             val user by viewModel.user.collectAsState()
             Text(
