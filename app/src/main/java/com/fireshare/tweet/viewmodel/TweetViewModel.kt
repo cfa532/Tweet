@@ -24,7 +24,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -183,8 +185,13 @@ class TweetViewModel @AssistedInject constructor(
             }
     }
 
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     fun shareTweet(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
+        ioScope.launch {
+            /**
+             * Call to checkUpgrade() also returns a map of environmental variables,
+             * that can be used to assign parameters to the App.
+             * */
             val map = HproseInstance.checkUpgrade() ?: return@launch
             val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
             val sendIntent: Intent = Intent().apply {

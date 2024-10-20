@@ -206,10 +206,10 @@ object HproseInstance {
         """.trimIndent()
         val request = gson.fromJson(json, Map::class.java) as Map<*, *>
         return try {
-            hproseClient?.runMApp(entry,request)
+            hproseClient?.runMApp(entry, request)
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("checkUpgrade", e.toString())
+            Log.e("checkUpgrade", "$hproseClient $e")
             null
         }
     }

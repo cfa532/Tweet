@@ -163,7 +163,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     Log.e("GetTweets", "Error fetching tweets", e)
                     // in catastrophic events, such as lost of a service node,
                     // try to reacquire a valid serving node.
-                    ioScope.launch(Dispatchers.IO) {
+                    ioScope.launch {
                         HproseInstance.initAppEntry(TweetApplication.preferenceHelper)
                         refresh()
                     }
@@ -173,7 +173,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     private fun getTweets(userId: MimeiId) {
-        ioScope.launch(Dispatchers.IO) {
+        ioScope.launch {
             try {
                 val tweetsList = getUserBase(userId)?.let {
                     HproseInstance.getTweetList(it, startTimestamp.longValue, endTimestamp.longValue)
@@ -195,7 +195,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     // Define a custom scope to ensure tweet deletion job not cancelled.
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob()) // Define a custom scope
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun delTweet(tweetId: MimeiId) {
         ioScope.launch {
@@ -240,7 +240,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Tweet object itself is updated in HproseInstance.toggleRetweet()
      * */
     fun toggleRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
-        ioScope.launch(Dispatchers.IO) {
+        ioScope.launch {
             val t = if (tweet.originalTweet != null) tweet.originalTweet!! else tweet
             HproseInstance.toggleRetweet(t, this@TweetFeedViewModel) { newTweet ->
                 updateTweet(newTweet)

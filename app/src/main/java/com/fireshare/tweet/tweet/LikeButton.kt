@@ -177,7 +177,8 @@ fun ShareButton(viewModel: TweetViewModel) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
-        } else viewModel.shareTweet(context)
+        } else
+            viewModel.shareTweet(context)
     })
     {
         Row(horizontalArrangement = Arrangement.Center) {
