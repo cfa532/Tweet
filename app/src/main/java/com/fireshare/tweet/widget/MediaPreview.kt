@@ -73,6 +73,7 @@ import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import timber.log.Timber
 import java.io.File
 
 enum class MediaType {
@@ -164,7 +165,7 @@ fun MediaItemPreview(
                 }
             }
             else -> {       // Handle unknown file type
-                Log.e("MediaItemPreview", "unknown file type ${mediaItem.url}")
+                Timber.tag("MediaItemPreview").e("unknown file type ${mediaItem.url}")
             }
         }
         if (isLastItem) {
@@ -236,7 +237,7 @@ fun ImageViewer(
                 val downloadedPath = try {
                     cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
                 } catch (e: Exception) {
-                    Log.e("ImageViewer", "Error downloading image: ${e.message}")
+                    Timber.tag("ImageViewer").e("Error downloading image: ${e.message}")
                     downloadError = true
                     null
                 }
