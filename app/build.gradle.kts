@@ -36,11 +36,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_19
+        targetCompatibility = JavaVersion.VERSION_19
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "19"
     }
     buildFeatures {
         compose = true
@@ -58,6 +58,7 @@ android {
 
 dependencies {
 
+    implementation(libs.timber)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.core)
     implementation(libs.kotlinx.coroutines.core)
@@ -68,7 +69,7 @@ dependencies {
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.hilt.work)
-    kapt("androidx.room:room-compiler:2.6.1")
+    kapt(libs.room.compiler)
     implementation(libs.androidx.room.ktx)
 
     implementation(libs.androidx.material.icons.core)
