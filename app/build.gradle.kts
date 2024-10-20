@@ -2,10 +2,10 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
-    id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
     alias(libs.plugins.compose.compiler)
     kotlin("plugin.serialization")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -64,12 +64,12 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
     implementation(libs.firebase.crashlytics.buildtools)
-    kapt(libs.androidx.hilt.compiler)
+    ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.hilt.work)
-    kapt(libs.room.compiler)
+    ksp(libs.room.compiler)
     implementation(libs.androidx.room.ktx)
 
     implementation(libs.androidx.material.icons.core)
@@ -82,10 +82,10 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.espresso.core)
     implementation(libs.androidx.constraintlayout.compose)
-    kapt(libs.assisted.inject.processor.dagger2)
+    ksp(libs.assisted.inject.processor.dagger2)
     implementation(libs.gson)
     api(libs.androidx.navigation.fragment.ktx)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.coil.compose)
@@ -116,9 +116,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-}
-
-// Allow references to generated code
-kapt {
-    correctErrorTypes = true
 }
