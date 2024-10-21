@@ -79,7 +79,12 @@ fun BottomNavigationBar(
                         }
                         return@NavigationBarItem
                     }
-                    navController.navigate(item.route)
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute != null) {
+                        if (!currentRoute.contains(item.route.toString()) ) {
+                            navController.navigate(item.route)
+                        }
+                    }
                 },
                 icon = {
                     BadgedBox(

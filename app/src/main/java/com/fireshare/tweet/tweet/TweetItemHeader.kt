@@ -39,8 +39,8 @@ fun TweetItemHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = {
-                val currentDestination = navController.currentBackStackEntry?.destination?.route
-                if (currentDestination?.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")
+                val currentRoute = navController.currentBackStackEntry?.destination?.route
+                if (currentRoute?.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")
                     == true) {
                     val currentUserId = navController.currentBackStackEntry?.arguments?.getString("userId")
                     if (currentUserId != tweet.authorId) {
