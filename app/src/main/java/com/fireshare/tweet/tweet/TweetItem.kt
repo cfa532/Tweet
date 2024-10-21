@@ -38,8 +38,7 @@ fun TweetItem(
     parentEntry: NavBackStackEntry,      // navGraph scoped
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry,    // keep the tweetViewModel NavGraph scoped.
-        key = tweet.mid
+        parentEntry, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }

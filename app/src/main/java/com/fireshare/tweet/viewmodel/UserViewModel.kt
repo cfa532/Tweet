@@ -165,6 +165,12 @@ class UserViewModel @AssistedInject constructor(
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
                 _user.value = getUserBase(userId) ?: return@launch
+                if (userId == appUser.mid) {
+                    // By default NOT to update fans and followings list of an user object.
+                    // Do it only when opening the user's profile page.
+                    // Only get current user's fans list when opening the app.
+                    updateFollowingsAndFans()
+                }
             }
         }
     }

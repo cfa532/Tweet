@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -46,6 +47,7 @@ import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
+import com.fireshare.tweet.viewmodel.UserViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -58,6 +60,7 @@ import java.util.concurrent.TimeUnit
 class TweetActivity : ComponentActivity() {
 
     private val activityViewModel: ActivityViewModel by viewModels()
+    private lateinit var appUserViewModel: UserViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
 //        enableEdgeToEdge()
@@ -79,6 +82,13 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
+                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
+                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                    this@TweetActivity, key = appUser.mid
+                ) { factory ->
+                    factory.create(appUser.mid)
+                }
+
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
@@ -115,7 +125,7 @@ class TweetActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent)
+                            TweetNavGraph(intent, appUserViewModel=appUserViewModel)
                             Row(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(innerPadding))

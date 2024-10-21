@@ -51,9 +51,9 @@ fun TweetNavGraph(
     appLinkIntent: Intent,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    appUserViewModel: UserViewModel
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
-    lateinit var appUserViewModel: UserViewModel
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
@@ -78,21 +78,8 @@ fun TweetNavGraph(
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
-                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                    parentEntry, key = appUser.mid
-                ) { factory ->
-                    factory.create(appUser.mid)
-                }
-                // By default NOT to update fans and followings list of an user object.
-                // Do it only when opening the user's profile page.
-                // Only get current user's fans list when opening the app.
-                if (appUser.mid != TW_CONST.GUEST_ID)
-                    appUserViewModel.updateFollowingsAndFans()
-
                 val viewModel = hiltViewModel<TweetFeedViewModel>()
                 viewModel.tweetActionListener = appUserViewModel
-
                 TweetFeedScreen(navController, parentEntry, 0, viewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
@@ -111,7 +98,7 @@ fun TweetNavGraph(
                             // so the init value do not matter here.
                             Tweet(
                                 authorId = "default",
-                                content = "nothing"
+                                content = "Placeholder"
                             )
                         )
                     }

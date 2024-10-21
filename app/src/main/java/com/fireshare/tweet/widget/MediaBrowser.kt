@@ -77,7 +77,7 @@ fun MediaBrowser(
     LaunchedEffect(Unit) {
         val previousRoute = navController.previousBackStackEntry?.destination?.route
         if (previousRoute != null) {
-            viewModel.savePreviousRoute(previousRoute)
+            viewModel.savePreviousRoute(previousRoute, navController)
         }
     }
 
@@ -148,14 +148,26 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
+                            /**
+                             * A strange problem: When there is argument in the previous route, it will be lost.
+                             * Manually restore the previous route's argument for user profile and tweet detail.
+                             * */
                             val previousRoute = viewModel.getPreviousRoute()
                             if (previousRoute != null) {
-                                navController.navigate(previousRoute) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                                if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.TweetDetail")) {
+                                    tweetId?.let { navController.navigate(NavTweet.TweetDetail(tweetId)) }
+                                } else if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")) {
+                                    val userId = viewModel.getPreviousArguments()?.getString("userId")
+                                    userId?.let { navController.navigate(NavTweet.UserProfile(it)) }
+                                }
+                                else {
+                                    navController.navigate(previousRoute) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = false
                                     }
-                                    launchSingleTop = true
-                                    restoreState = false
                                 }
                             } else {
                                 navController.navigate(NavTweet.TweetFeed)

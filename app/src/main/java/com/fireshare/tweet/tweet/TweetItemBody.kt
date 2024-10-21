@@ -51,7 +51,7 @@ fun TweetBlock(
         tonalElevation = 0.dp,
         modifier = Modifier.clickable(
             onClick = {
-                navController.navigate(NavTweet.TweetDetail(tweet.mid ?: return@clickable))
+                tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it) ) }
             })
             .padding(top = 8.dp)
     ) {

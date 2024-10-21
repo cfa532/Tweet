@@ -3,12 +3,14 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -79,11 +81,18 @@ class TweetViewModel @AssistedInject constructor(
      * When browsing attachments in MediaBrowser, track route stack,
      * in order to go back to the correct Tweet in the feed list directly.
      * */
-    fun savePreviousRoute(route: String) {
+    fun savePreviousRoute(route: String, navController: NavController) {
         savedStateHandle["previousRoute"] = route
+        val previousArguments = navController.previousBackStackEntry?.arguments
+        if (previousArguments != null) {
+            savedStateHandle["previousArguments"] = previousArguments
+        }
     }
     fun getPreviousRoute(): String? {
-        return savedStateHandle["previousRoute"]
+        return savedStateHandle.get<String>("previousRoute")
+    }
+    fun getPreviousArguments(): Bundle? {
+        return savedStateHandle.get<Bundle>("previousArguments")
     }
 
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
