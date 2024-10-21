@@ -55,7 +55,7 @@ object HproseInstance {
         level = HttpLoggingInterceptor.Level.BODY
     }
     private val httpClient = OkHttpClient.Builder()
-        .addInterceptor(loggingInterceptor)
+//        .addInterceptor(loggingInterceptor)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {

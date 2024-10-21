@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -257,7 +258,13 @@ fun ImageViewer(
                 modifier = adjustedModifier
                     .fillMaxSize()
                     .background(Color.Gray)
-            )
+            ) {
+                if (!isPreview) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
         } else if (downloadError) {
             // Display a placeholder image or error message if download failed
             Box(

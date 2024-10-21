@@ -79,7 +79,7 @@ class TweetViewModel @AssistedInject constructor(
 
     /**
      * When browsing attachments in MediaBrowser, track route stack,
-     * in order to go back to the correct Tweet in the feed list directly.
+     * in order to go back to the correct Tweet in the feed list DIRECTLY.
      * */
     fun savePreviousRoute(route: String, navController: NavController) {
         savedStateHandle["previousRoute"] = route
