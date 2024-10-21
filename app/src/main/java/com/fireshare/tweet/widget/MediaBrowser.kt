@@ -155,9 +155,13 @@ fun MediaBrowser(
                             val previousRoute = viewModel.getPreviousRoute()
                             if (previousRoute != null) {
                                 if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.TweetDetail")) {
+                                    navController.popBackStack()
+                                    navController.popBackStack()
                                     tweetId?.let { navController.navigate(NavTweet.TweetDetail(tweetId)) }
                                 } else if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")) {
                                     val userId = viewModel.getPreviousArguments()?.getString("userId")
+                                    navController.popBackStack()
+                                    navController.popBackStack()
                                     userId?.let { navController.navigate(NavTweet.UserProfile(it)) }
                                 }
                                 else {
