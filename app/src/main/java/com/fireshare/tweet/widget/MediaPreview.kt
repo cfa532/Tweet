@@ -142,6 +142,10 @@ fun MediaItemPreview(
 ) {
     val mediaItem = mediaItems[index]
     val navController = LocalNavController.current
+    /**
+     * Action to take when the Full Screen button is clicked. Different from image,
+     * which is opened in full screen automatically when clicked.
+     * */
     val goto: (Int) -> Unit = { idx: Int ->
         tweetId?.let { navController.navigate(
             NavTweet.MediaViewer(MediaViewerParams(mediaItems, idx, it))) }
@@ -279,7 +283,7 @@ fun VideoPreview(
     modifier: Modifier = Modifier,
     index: Int = -1,
     inPreviewGrid: Boolean = true,
-    goto: (Int) -> Unit
+    goto: (Int) -> Unit     // action to be performed when video is closed.
 ) {
     val context = LocalContext.current
     val preferenceHelper = TweetApplication.preferenceHelper
