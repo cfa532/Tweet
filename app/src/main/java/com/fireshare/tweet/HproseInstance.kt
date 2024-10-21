@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
+import timber.log.Timber
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
@@ -117,15 +118,15 @@ object HproseInstance {
                             val firstIp = findFirstReachableAddress(hostIPs)
                             User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         }
-                        Log.d("initAppEntry", "Succeed. $appId, $appUser")
+                        Timber.tag("initAppEntry").d("Succeed. $appId, $appUser")
                     }
                 } else {
-                    Log.e("initAppEntry", "No data found within window.setParam()")
+                    Timber.tag("initAppEntry").e("No data found within window.setParam()")
                 }
                 hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
             }
         } catch (e: Exception) {
-            Log.e("initAppEntry", e.toString())
+            Timber.tag("initAppEntry").e(e.toString())
         }
     }
 
@@ -153,7 +154,7 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Log.e("sendMessage", e.toString())
+            Timber.tag("sendMessage").e(e.toString())
             return
         }
     }
@@ -171,7 +172,7 @@ object HproseInstance {
             hproseClient?.runMApp(entry, request)  as List<ChatMessage>?
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("fetchMessages", e.toString())
+            Timber.tag("fetchMessages").e(e.toString())
             null
         }
     }
@@ -193,7 +194,7 @@ object HproseInstance {
             null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("checkNewMessages", appUser.toString())
+            Timber.tag("checkNewMessages").e(appUser.toString())
             null
         }
     }
@@ -209,7 +210,7 @@ object HproseInstance {
             hproseClient?.runMApp(entry, request)
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("checkUpgrade", "$hproseClient $e")
+            Timber.tag("checkUpgrade").e("$hproseClient $e")
             null
         }
     }
@@ -233,7 +234,7 @@ object HproseInstance {
                     return null
                 }
             } catch (e: Exception) {
-                Log.e("GetUserId", "Login failed. ${e.message}")
+                Timber.tag("GetUserId").e("Login failed. ${e.message}")
                 return null
             }
             val user = getUserBase(userId) ?: return null
@@ -255,7 +256,7 @@ object HproseInstance {
             null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("Hprose.Login", "${e.message}")
+            Timber.tag("Hprose.Login").e("${e.message}")
             null
         }
     }
@@ -296,7 +297,7 @@ object HproseInstance {
             return null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("getUserBase()", "${appUser.baseUrl} $userId $e")
+            Timber.tag("getUserBase()").e("${appUser.baseUrl} $userId $e")
             return null
         }
     }
@@ -328,11 +329,11 @@ object HproseInstance {
                 updatedUser.profile?.let { preferenceHelper.saveProfile(it) }
                 return updatedUser
             }
-            Log.e("HproseInstance.setUserData", "Set user data error. $user")
+            Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
             null
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("setUserData", e.toString())
+            Timber.tag("setUserData").e(e.toString())
             null
         }
     }
@@ -347,7 +348,7 @@ object HproseInstance {
         try {
             hproseClient?.runMApp(entry, request) as Unit?
         } catch (e: Exception) {
-            Log.e("setUserAvatar", e.toString())
+            Timber.tag("setUserAvatar").e(e.toString())
         }
     }
 
@@ -369,7 +370,7 @@ object HproseInstance {
             user.followingList
         } catch (e: Exception) {
             e.printStackTrace()
-            Log.e("Hprose.getFollowings", e.toString())
+            Timber.tag("Hprose.getFollowings").e(e.toString())
             emptyList<MimeiId>()   // get default following for testing
         }
 
@@ -390,7 +391,7 @@ object HproseInstance {
             }
             user.fansList
         } catch (e: Exception) {
-            Log.e("HproseInstance.getFollowings", e.toString())
+            Timber.tag("HproseInstance.getFollowings").e(e.toString())
             null
         }
 
@@ -409,7 +410,7 @@ object HproseInstance {
             val responseBody = response.body?.string()
             val gson = Gson()
             val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>).map {
-                Log.d("getTweetList","fetchTweet=$it")
+                Timber.tag("getTweetList").d("fetchTweet=$it")
                 // assign every tweet its author object.
                 it.author = user
                 it
@@ -435,7 +436,7 @@ object HproseInstance {
             emptyList()
     } catch (e: Exception) {
         e.printStackTrace()
-        Log.e("getTweetList()", e.toString())
+        Timber.tag("getTweetList()").e(e.toString())
         emptyList()
     }
 
@@ -462,7 +463,7 @@ object HproseInstance {
             }
             return null
         } catch (e: Exception) {
-            Log.e("getTweet()", "$tweetId $authorId $e")
+            Timber.tag("getTweet()").e("$tweetId $authorId $e")
             return null
         }
     }
@@ -612,6 +613,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            Timber.e("toggleRetweet()", e.toString())
         }
     }
 
@@ -639,10 +641,10 @@ object HproseInstance {
             }
         } catch (e: ProtocolException) {
             // handle network failure (e.g., show an error message)
-            Log.e("getComments()", "Network failure: Unexpected status line", e)
+            Timber.tag("getComments()").e(e, "Network failure: Unexpected status line")
             return null
         } catch (e: Exception) {
-            Log.e("getComments()", "Error: ${e.message}", e)
+            Timber.tag("getComments()").e(e, "Error: ${e.message}")
             return null
         }
         return null
@@ -669,7 +671,7 @@ object HproseInstance {
                 tweet
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.tag("uploadComment()").e(e, "Error: ${e.message}")
             tweet
         }
     }
@@ -693,7 +695,7 @@ object HproseInstance {
                 tweet
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.tag("likeTweet()").e(e, "Error: ${e.message}")
             tweet
         }
     }
@@ -717,7 +719,7 @@ object HproseInstance {
                 tweet
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message}")
             tweet
         }
     }
@@ -750,7 +752,7 @@ object HproseInstance {
 
                     // Determine MediaType based on MIME type
                     val mimeType = context.contentResolver.getType(uri)
-                    Log.d("uploadToIPFS()", "cid=$cid $mimeType")
+                    Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
                     val mediaType = when {
                         mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
                         mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
@@ -778,28 +780,6 @@ object HproseInstance {
         }
     }
 
-//    fun uploadToIPFS(inputStream: InputStream): MimeiId {
-//        var offset = 0
-//        var cid: String = ""
-//        val request = """
-//            {"userid": "${appUser.mid}", "aid": "$appId", "ver": "last"}
-//        """.trimIndent()
-//        val gson = Gson()
-//
-//        inputStream.use { stream ->
-//            val buffer = ByteArray(CHUNK_SIZE)
-//            var bytesRead: Int
-//            while (stream.read(buffer).also { bytesRead = it } != -1) {
-//                cid = client.runMApp("upload_ipfs",
-//                    gson.fromJson(request, object : TypeToken<Map<String, String>>() {}.type),
-//                    listOf(buffer)) as String
-//                offset += bytesRead
-//            }
-//        }
-//        Log.d("uploadToIPFS()", "cid=$cid")
-//        return cid
-//    }
-
     fun getMediaUrl(mid: MimeiId?, baseUrl: String?): String? {
         if (mid != null && baseUrl!= null) {
             return if (mid.length > 27) {
@@ -823,11 +803,11 @@ object HproseInstance {
                 val gson = Gson()
                 val user = gson.fromJson(responseBody, User::class.java)
                 user.baseUrl = "http://$ip"
-                Log.d("getUserData", "TRUE: user=$user")
+                Timber.tag("getUserData").d("TRUE: user=$user")
                 return user
             }
         } catch (e: Exception) {
-            Log.e("getUserData", "No found. $ip $mid $e")
+            Timber.tag("getUserData").e("No found. $ip $mid $e")
             return null
         }
         return null
@@ -845,7 +825,7 @@ object HproseInstance {
                 gson.fromJson(responseBody, String::class.java)
             } else null
         } catch (e: Exception) {
-            Log.e("isReachable", "No reachable. $ip $e")
+            Timber.tag("isReachable").e("No reachable. $ip $e")
             null
         }
     }
@@ -861,8 +841,7 @@ object HproseInstance {
             val list  = hproseClient?.runMApp(entry, request) as List<MimeiId>?
             return list
         } catch (e: Exception) {
-            e.printStackTrace()
-            Log.e("addToTopList", "$e")
+            Timber.tag("addToTopList").e("$e")
         }
         return null
     }
@@ -880,8 +859,7 @@ object HproseInstance {
                 return gson.fromJson(responseBody, object : TypeToken<List<MimeiId>>() {}.type)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-            Log.e("getTopList", "$e")
+            Timber.tag("getTopList").e("$e")
         }
         return null
     }
