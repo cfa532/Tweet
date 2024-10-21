@@ -38,8 +38,18 @@ fun TweetItemHeader(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-            {
+            IconButton(onClick = {
+                val currentDestination = navController.currentBackStackEntry?.destination?.route
+                if (currentDestination?.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")
+                    == true) {
+                    val currentUserId = navController.currentBackStackEntry?.arguments?.getString("userId")
+                    if (currentUserId != tweet.authorId) {
+                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                    }
+                }else {
+                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                }
+            }) {
                 UserAvatar(author, 36)
             }
             Text(text = author?.name ?: "No One",
