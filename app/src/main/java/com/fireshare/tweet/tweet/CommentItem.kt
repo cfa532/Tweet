@@ -86,7 +86,7 @@ fun CommentItem(
             }
             Column(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp, top = 8.dp, end = 8.dp, bottom = 0.dp),
+                    .padding(start = 0.dp, top = 8.dp, end = 4.dp, bottom = 0.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
@@ -135,20 +135,20 @@ fun CommentItem(
                     }
                     mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
                 }
-
-                // Actions Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    LikeButton(viewModel)
-                    BookmarkButton(viewModel)
-                    CommentButton(viewModel)
-                    RetweetButton(viewModel)
-                    Spacer(modifier = Modifier.width(40.dp))
-                    ShareButton(viewModel)
-                }
             }
+        }
+        // Actions Row
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .padding(start = 40.dp, end = 4.dp, bottom = 0.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            LikeButton(viewModel)
+            BookmarkButton(viewModel)
+            CommentButton(viewModel)
+            RetweetButton(viewModel)
+            Spacer(modifier = Modifier.width(40.dp))
+            ShareButton(viewModel)
         }
     }
 }

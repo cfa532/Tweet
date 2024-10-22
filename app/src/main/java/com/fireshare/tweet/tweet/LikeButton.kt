@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -185,7 +186,8 @@ fun ShareButton(viewModel: TweetViewModel) {
             Icon(
                 imageVector = Icons.Default.Share,
                 contentDescription = "Share",
-                modifier = Modifier.size(ButtonDefaults.IconSize),
+                modifier = Modifier.size(ButtonDefaults.IconSize)
+                    .padding(1.dp),
                 tint = MaterialTheme.colorScheme.outline
             )
         }
@@ -212,7 +214,8 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             Icon(
                 painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
                 contentDescription = "Like",
-                modifier = Modifier.size(ButtonDefaults.IconSize),
+                modifier = Modifier.size(ButtonDefaults.IconSize)
+                    .padding(bottom = 1.dp),
                 tint = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
