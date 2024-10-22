@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -20,6 +19,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -110,7 +110,7 @@ fun UserProfileScreen(
                 if (topTweets.isNotEmpty()) {
                     item {
                         Surface( modifier = Modifier.fillMaxWidth(),
-                            tonalElevation = 20.dp,
+                            tonalElevation = 100.dp,
                         ) {
                             Text(
                                 text = stringResource(R.string.addToTop),
@@ -125,6 +125,13 @@ fun UserProfileScreen(
                     }
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
                         if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                    }
+                    item {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                            thickness = 2.dp,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        )
                     }
                 }
 
@@ -187,7 +194,7 @@ fun ProfileDetail(
     Surface(
         modifier = Modifier
             .fillMaxWidth(),
-        tonalElevation = 20.dp,
+        tonalElevation = 100.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
