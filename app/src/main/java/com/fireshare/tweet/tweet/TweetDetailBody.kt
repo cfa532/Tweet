@@ -206,15 +206,12 @@ fun TweetDropdownMenu(
                 .height(IntrinsicSize.Min)
         ) {
             if (parentTweet != null) {
-                // this is a retweet. Allow user to delete the original tweet
+                // this is a retweet.
                 if (parentTweet.author?.mid == appUser.mid) {
-                    TweetDropdownMenuItems(parentTweet, parentEntry)
+                    TweetDropdownMenuItems(parentTweet, parentEntry) { expanded = false }
                 }
             } else {
-                if (tweet.author?.mid == appUser.mid) {
-                    // this is a user's own tweet.
-                    TweetDropdownMenuItems(tweet, parentEntry)
-                }
+                TweetDropdownMenuItems(tweet, parentEntry) { expanded = false }
             }
         }
     }
@@ -224,6 +221,7 @@ fun TweetDropdownMenu(
 fun TweetDropdownMenuItems(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
+    onDismissRequest: () -> Unit,
 ) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
@@ -232,37 +230,43 @@ fun TweetDropdownMenuItems(
         factory.create(appUser.mid)
     }
     val navController = LocalNavController.current
-    DropdownMenuItem(
-        modifier = Modifier.alpha(0.8f),
-        onClick = {
-            tweet.mid?.let {
-                tweetFeedViewModel.delTweet(it)
-                // if current route is TweetDetail. Go to TweetFeed
-                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                    navController.navigate(NavTweet.TweetFeed)
+    if (tweet.authorId == appUser.mid) {
+        DropdownMenuItem(
+            modifier = Modifier.alpha(0.8f),
+            onClick = {
+                tweet.mid?.let {
+                    tweetFeedViewModel.delTweet(it)
+                    // if current route is TweetDetail. Go to TweetFeed
+                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                        navController.navigate(NavTweet.TweetFeed)
+                    } else {
+                        // close the dropdown menu
+                        onDismissRequest()
+                    }
+                }
+            },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
-        },
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    )
-    // put the current Tweet to top list
+        )
+    }
+    // pin the current Tweet to top list
     DropdownMenuItem(
         modifier = Modifier.alpha(1f),
         onClick = {
             appUserViewModel.pinToTop(tweet)
+            onDismissRequest()
         },
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {

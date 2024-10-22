@@ -52,7 +52,9 @@ fun TweetItem(
     ) {
         // Content body
         if (tweet.originalTweet != null) {
-            if (tweet.content == null || tweet.content == "") {
+            if ((tweet.content == null || tweet.content == "")
+                && (tweet.attachments == null || tweet.attachments!!.isEmpty()))
+            {
                 // this is a retweet of another tweet.
                 Surface(
                     modifier = Modifier.padding(top = 4.dp)
@@ -86,7 +88,7 @@ fun TweetItem(
                     }
                 }
             } else {
-                // retweet with comments
+                // retweet with comments. Eiter text or media files.
                 val navController = LocalNavController.current
                 Surface(
                     modifier = Modifier.padding(top = 8.dp)
