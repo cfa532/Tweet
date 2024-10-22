@@ -62,10 +62,9 @@ fun TweetItem(
                     // The tweet area
                     val originalTweetViewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry,
-                            key = tweet.originalTweetId
-                        )
-                        { factory -> factory.create(tweet.originalTweet!!) }
+                            parentEntry, key = tweet.originalTweetId
+                        ) { factory -> factory.create(tweet.originalTweet!!) }
+
                     TweetBlock(originalTweetViewModel, parentEntry, parentTweet = tweet)
 
                     // Label: Forward by user, on top of original tweet

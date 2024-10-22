@@ -52,6 +52,7 @@
     <string name="share_link">分享链接</string>
     <string name="screenshot">截屏</string>
     <string name="social_media">其他App</string>
-    <string name="addToTop">置顶</string>
+    <string name="pinToTop">置顶</string>
     <string name="followings">关注</string>
+    <string name="unpin">取消置顶</string>
 </resources>

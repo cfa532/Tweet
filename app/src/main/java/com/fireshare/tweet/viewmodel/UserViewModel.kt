@@ -92,15 +92,22 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshingAtBottom.value = false
     }
 
+    fun hasPinned(tweet: Tweet): Boolean {
+        return topTweets.value.any { it.mid == tweet.mid }
+    }
+
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
             if (tweet.originalTweet != null) {
                 if ((tweet.content == null || tweet.content == "")
                     && (tweet.attachments == null || tweet.attachments!!.isEmpty())
                 ) {
+                    // A retweet. Pin or unpin the original tweet.
                     HproseInstance.addToTopList(tweet.originalTweetId!!)
-                }
-            }
+                } else
+                    HproseInstance.addToTopList(tweet.mid!!)
+            } else
+                HproseInstance.addToTopList(tweet.mid!!)
 
             // Check if tweet is already in topTweets
             val isInTopTweets = topTweets.value.any { it.mid == tweet.mid }

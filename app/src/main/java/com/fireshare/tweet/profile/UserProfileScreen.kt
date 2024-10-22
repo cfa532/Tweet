@@ -102,6 +102,8 @@ fun UserProfileScreen(
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 state = listState
             ) {
+
+                // the belt where user details and Pin are displayed.
                 item {
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
@@ -112,7 +114,7 @@ fun UserProfileScreen(
                             tonalElevation = 100.dp,
                         ) {
                             Text(
-                                text = stringResource(R.string.addToTop),
+                                text = stringResource(R.string.pinToTop),
                                 modifier = Modifier.padding(
                                     start = 16.dp,
                                     top = 0.dp,
@@ -122,8 +124,10 @@ fun UserProfileScreen(
                             )
                         }
                     }
+
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
-                        if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                        if (!tweet.isPrivate)
+                            TweetItem(tweet, parentEntry)
                     }
                     item {
                         HorizontalDivider(

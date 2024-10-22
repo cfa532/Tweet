@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +69,7 @@ fun CommentItem(
     }
     val author = comment.author
     val parentTweet by parentTweetViewModel.tweetState.collectAsState()
+    var isExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -114,10 +116,26 @@ fun CommentItem(
                     }
                     CommentDropdownMenu(comment, parentTweetViewModel)
                 }
-                comment.content?.let {
-                    Text(text = it,
-                        modifier = Modifier.padding(top = 0.dp),
-                        style = MaterialTheme.typography.bodyLarge)
+
+                if (comment.content != null && comment.content!!.isNotEmpty()) {
+                    val maxLines = if (isExpanded) Int.MAX_VALUE else 9
+                    var lineCount by remember { mutableIntStateOf(0) }
+                    Text(text = comment.content!!,
+                        onTextLayout = { textLayoutResult ->
+                            lineCount = textLayoutResult.lineCount
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = maxLines,
+                    )
+                    if (!isExpanded && lineCount > 8) {
+                        Text(
+                            text = stringResource(R.string.show_more),
+                            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.clickable {
+                                isExpanded = true
+                            }
+                        )
+                    }
                 }
                 // attached media files
                 Box(

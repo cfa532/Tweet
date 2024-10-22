@@ -207,7 +207,7 @@ fun TweetDropdownMenu(
         ) {
             if (parentTweet != null) {
                 // this is a retweet.
-                if (parentTweet.author?.mid == appUser.mid) {
+                if (parentTweet.authorId == appUser.mid) {
                     TweetDropdownMenuItems(parentTweet, parentEntry) { expanded = false }
                 }
             } else {
@@ -230,7 +230,10 @@ fun TweetDropdownMenuItems(
         factory.create(appUser.mid)
     }
     val navController = LocalNavController.current
-    if (tweet.authorId == appUser.mid) {
+
+    // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
+    // unless the user unpins it first.
+    if (tweet.authorId == appUser.mid && !appUserViewModel.hasPinned(tweet)) {
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
@@ -261,26 +264,29 @@ fun TweetDropdownMenuItems(
             }
         )
     }
-    // pin the current Tweet to top list
-    DropdownMenuItem(
-        modifier = Modifier.alpha(1f),
-        onClick = {
-            appUserViewModel.pinToTop(tweet)
-            onDismissRequest()
-        },
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = "Top",
-                    tint = MaterialTheme.colorScheme.surfaceTint
-                )
-                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                Text(
-                    text = stringResource(R.string.addToTop),
-                    color = MaterialTheme.colorScheme.surfaceTint
-                )
+    // Only author can pin the current Tweet to top list
+    if (tweet.authorId == appUser.mid) {
+        DropdownMenuItem(
+            modifier = Modifier.alpha(1f),
+            onClick = {
+                appUserViewModel.pinToTop(tweet)
+                onDismissRequest()
+            },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = "Top",
+                        tint = MaterialTheme.colorScheme.surfaceTint
+                    )
+                    Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                    Text(
+                        text = if (appUserViewModel.hasPinned(tweet)) stringResource(R.string.unpin)
+                        else stringResource(R.string.pinToTop),
+                        color = MaterialTheme.colorScheme.surfaceTint
+                    )
+                }
             }
-        }
-    )
+        )
+    }
 }

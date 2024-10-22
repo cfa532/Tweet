@@ -20,6 +20,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(
@@ -64,12 +65,12 @@ class UploadCommentWorker @AssistedInject constructor(
                 val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
                     "newTweet" to gson.toJson(newTweet))
 
-                Log.d("UploadCommentWorker", map.toString())
+                Timber.tag("UploadCommentWorker").d(map.toString())
                 val outputData = workDataOf("comment" to gson.toJson(map))
                 return Result.success(outputData)
             }
         } catch (e: Exception) {
-            Log.e("UploadTweetWorker", "Error in doWork", e)
+            Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
             Result.failure()
         }
     }
@@ -101,7 +102,7 @@ class UploadTweetWorker @AssistedInject constructor(
                 attachments = attachments
             )
             HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
-                Log.d("UploadTweetWorker", tweet.toString())
+                Timber.tag("UploadTweetWorker").d(tweet.toString())
 //                withContext(Dispatchers.Main) {
 //                    HproseInstance.tweetFeedViewModel.addTweet(newTweet)
 //                }
@@ -114,7 +115,7 @@ class UploadTweetWorker @AssistedInject constructor(
             Result.failure()
 
         } catch (e: Exception) {
-            Log.e("UploadTweetWorker", "Error in doWork", e)
+            Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
             Result.failure()
         }
     }
