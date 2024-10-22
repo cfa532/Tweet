@@ -82,8 +82,9 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     modifier = Modifier.padding(bottom = 4.dp)
                 ) {
                     val author = tweet.author
-                    IconButton(onClick = { navController.navigate(NavTweet.UserProfile(tweet.authorId)) })
-                    {
+                    IconButton(onClick = {
+                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                    }) {
                         UserAvatar(author, 40)
                     }
                     Text(
@@ -205,11 +206,13 @@ fun TweetDropdownMenu(
                 .height(IntrinsicSize.Min)
         ) {
             if (parentTweet != null) {
+                // this is a retweet. Allow user to delete the original tweet
                 if (parentTweet.author?.mid == appUser.mid) {
                     TweetDropdownMenuItems(parentTweet, parentEntry)
                 }
             } else {
                 if (tweet.author?.mid == appUser.mid) {
+                    // this is a user's own tweet.
                     TweetDropdownMenuItems(tweet, parentEntry)
                 }
             }
@@ -228,11 +231,16 @@ fun TweetDropdownMenuItems(
     ) { factory ->
         factory.create(appUser.mid)
     }
+    val navController = LocalNavController.current
     DropdownMenuItem(
         modifier = Modifier.alpha(0.8f),
         onClick = {
             tweet.mid?.let {
                 tweetFeedViewModel.delTweet(it)
+                // if current route is TweetDetail. Go to TweetFeed
+                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                    navController.navigate(NavTweet.TweetFeed)
+                }
             }
         },
         text = {
