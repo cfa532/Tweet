@@ -95,20 +95,21 @@ class UserViewModel @AssistedInject constructor(
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
             HproseInstance.addToTopList(tweet.mid!!)
-            // if the tweet is already on the top list, remove it
-            if (_topTweets.value.indexOf(tweet) > -1) {
-                _topTweets.update { currentTopTweets ->
-                    currentTopTweets.filterNot { it.mid == tweet.mid }
-                }
-                _tweets.update { list -> (list + tweet).sortedByDescending { it.timestamp } }
+
+            // Check if tweet is already in topTweets
+            val isInTopTweets = topTweets.value.any { it.mid == tweet.mid }
+            if (isInTopTweets) {
+                // Remove from topTweets, add to tweets
+                _topTweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
+                _tweets.update { it + tweet } // No need to sort here, done in getTweets()
             } else {
-                _tweets.update { currentTopTweets ->
-                    currentTopTweets.filterNot { it.mid == tweet.mid }
-                }
-                _topTweets.update { list -> (list + tweet).sortedByDescending { it.timestamp } }
+                // Remove from tweets, add to topTweets
+                _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
+                _topTweets.update { it + tweet } // No need to sort here, done in getToppedTweets()
             }
         }
     }
+
     fun hidePhrase() {
         // Even after user logout, its key phrase may still on the device,
         // for future convenience. Hide it in case someone else tries to register a new account.
@@ -179,13 +180,18 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getToppedTweets() {
         val user = getUserBase(userId) ?: return
-        HproseInstance.getTopList(user)?.forEach { mid ->
-            HproseInstance.getTweet(mid, user.mid)?.let {
-                _topTweets.update { list-> list + it }
+
+        _topTweets.update { currentList ->
+            val tempList = currentList.toMutableList() // Start with existing list
+
+            HproseInstance.getTopList(user)?.forEach { mid ->
+                HproseInstance.getTweet(mid, user.mid)?.let { tweet ->
+                    tempList.add(tweet)
+                }
             }
+
+            tempList.distinctBy { it.mid }.sortedByDescending { it.timestamp }
         }
-        _topTweets.value = topTweets.value.distinctBy { it.mid }
-            .sortedByDescending { it.timestamp }
     }
 
     fun getTweets() {
@@ -193,13 +199,20 @@ class UserViewModel @AssistedInject constructor(
             getToppedTweets()
             val tweetsList = HproseInstance.getTweetList(user.value, startTimestamp, endTimestamp)
             val updatedTweets = tweetsList.toMutableList()
+
+            // Remove items from updatedTweets that are already in topTweets.value
             updatedTweets.removeAll { currentTweet ->
                 topTweets.value.any { it.mid == currentTweet.mid }
             }
-            _tweets.update { currentTweets ->
-                (updatedTweets + currentTweets).distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
-            }
+
+            val tempList = mutableListOf<Tweet>()
+            tempList.addAll(updatedTweets)
+            tempList.addAll(_tweets.value)
+
+            // Filter out any duplicates from topTweets.value before assigning to _tweets
+            _tweets.value = tempList.filterNot { tweet -> topTweets.value.any { it.mid == tweet.mid } }
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material3.Surface
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -107,11 +109,19 @@ fun UserProfileScreen(
                 }
                 if (topTweets.isNotEmpty()) {
                     item {
-                        Text(
-                            text = stringResource(R.string.addToTop),
-                            modifier = Modifier.padding(start = 16.dp, top = 0.dp),
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Surface( modifier = Modifier.fillMaxWidth(),
+                            tonalElevation = 20.dp,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.addToTop),
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    top = 0.dp,
+                                    bottom = 8.dp
+                                ),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
                         if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
@@ -174,32 +184,42 @@ fun ProfileDetail(
     }
 
     // go to list of followings of the user
-    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
-        Text(
-            text = profile ?: "Profile",
-            style = MaterialTheme.typography.titleSmall
-        )
-        Row {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth(),
+        tonalElevation = 20.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+        ) {
             Text(
-                text = "${fansList.count()} ${stringResource(R.string.fans)}",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.clickable(onClick = {
-                    navController.navigate((NavTweet.Follower(user.mid)))
-                })
+                text = profile ?: "Profile",
+                style = MaterialTheme.typography.titleSmall
             )
-            Text(
-                text = "${followingsList.count()} ${stringResource(R.string.followings)}",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .padding(horizontal = 20.dp)
-                    .clickable(onClick = {
-                        navController.navigate(NavTweet.Following(user.mid))
-                    }),
-            )
-            Text(
-                text = "$tweetCount ${stringResource(R.string.posts)}",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Row {
+                Text(
+                    text = "${fansList.count()} ${stringResource(R.string.fans)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.clickable(
+                        onClick = {
+                            navController.navigate((NavTweet.Follower(user.mid)))
+                        }
+                    ))
+                Text(
+                    text = "${followingsList.count()} ${stringResource(R.string.followings)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .clickable(onClick = {
+                            navController.navigate(NavTweet.Following(user.mid))
+                        }),
+                )
+                Text(
+                    text = "$tweetCount ${stringResource(R.string.posts)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
