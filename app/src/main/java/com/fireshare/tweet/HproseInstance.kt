@@ -2,7 +2,6 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.room.Room
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage

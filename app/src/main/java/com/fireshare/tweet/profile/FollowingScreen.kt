@@ -40,10 +40,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController

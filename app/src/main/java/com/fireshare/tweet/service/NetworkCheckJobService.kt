@@ -2,11 +2,11 @@ package com.fireshare.tweet.service
 
 import android.app.job.JobParameters
 import android.app.job.JobService
-import android.util.Log
 import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
+import timber.log.Timber
 
 @AndroidEntryPoint
 class NetworkCheckJobService : JobService() {
@@ -18,7 +18,7 @@ class NetworkCheckJobService : JobService() {
 
     override fun onStartJob(params: JobParameters?): Boolean {
         // Perform the network check here
-        Log.d("NetworkCheckJobService", "Performing network check...")
+        Timber.tag("NetworkCheckJobService").d("Performing network check...")
 
         // Simulate network check
         // You can replace this with actual network check logic
@@ -34,7 +34,7 @@ class NetworkCheckJobService : JobService() {
 
     override fun onStopJob(params: JobParameters?): Boolean {
         // Handle job stop
-        Log.d("NetworkCheckJobService", "Job stopped before completion")
+        Timber.tag("NetworkCheckJobService").d("Job stopped before completion")
         return true
     }
 

@@ -15,10 +15,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
-import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.FollowerScreen

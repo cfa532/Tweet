@@ -15,6 +15,7 @@ class BottomBarViewModel : ViewModel() {
 
     fun updateBadgeCount() {
         viewModelScope.launch(Dispatchers.IO) {
+            // check for new messages and update the badge count
             _badgeCount.value = HproseInstance.checkNewMessages()?.size
         }
     }

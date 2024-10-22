@@ -75,6 +75,7 @@ fun MediaBrowser(
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
+        // remember route before entering MediaBrowser screen
         val previousRoute = navController.previousBackStackEntry?.destination?.route
         if (previousRoute != null) {
             viewModel.savePreviousRoute(previousRoute, navController)
@@ -148,33 +149,36 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
+                            val TweetRoutes = object {
+                                val TWEET_DETAIL = "com.fireshare.tweet.navigation.NavTweet.TweetDetail"
+                                val USER_PROFILE = "com.fireshare.tweet.navigation.NavTweet.UserProfile"
+                            }
                             /**
                              * A strange problem: When there is argument in the previous route, it will be lost.
                              * Manually restore the previous route's argument for user profile and tweet detail.
                              * */
                             val previousRoute = viewModel.getPreviousRoute()
-                            if (previousRoute != null) {
-                                if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.TweetDetail")) {
+                            when {
+                                previousRoute?.startsWith(TweetRoutes.TWEET_DETAIL) == true -> {
                                     navController.popBackStack()
                                     navController.popBackStack()
                                     tweetId?.let { navController.navigate(NavTweet.TweetDetail(tweetId)) }
-                                } else if (previousRoute.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")) {
+                                }
+                                previousRoute?.startsWith(TweetRoutes.USER_PROFILE) == true -> {
+                                    navController.popBackStack()
+                                    navController.popBackStack()
                                     val userId = viewModel.getPreviousArguments()?.getString("userId")
-                                    navController.popBackStack()
-                                    navController.popBackStack()
                                     userId?.let { navController.navigate(NavTweet.UserProfile(it)) }
                                 }
-                                else {
+                                previousRoute != null -> {
                                     navController.navigate(previousRoute) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
+                                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
                                         launchSingleTop = true
-                                        restoreState = false
                                     }
                                 }
-                            } else {
-                                navController.navigate(NavTweet.TweetFeed)
+                                else -> {
+                                    navController.navigate(NavTweet.TweetFeed)
+                                }
                             }
                         },
                         modifier = Modifier

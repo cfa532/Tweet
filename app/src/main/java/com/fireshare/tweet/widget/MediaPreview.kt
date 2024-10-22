@@ -2,7 +2,6 @@ package com.fireshare.tweet.widget
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import android.view.View
 import androidx.annotation.OptIn
 import androidx.compose.foundation.Image

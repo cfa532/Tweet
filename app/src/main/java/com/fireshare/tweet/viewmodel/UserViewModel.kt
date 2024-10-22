@@ -2,7 +2,6 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -28,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
@@ -76,7 +76,8 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
         val endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Log.d("UserVM.loadNewerTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+        Timber.tag("UserVM.loadNewerTweets")
+            .d("startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets()
         _isRefreshing.value = false
     }
@@ -85,7 +86,8 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
         endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Log.d("UserVM.loadOlderTweets", "startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+        Timber.tag("UserVM.loadOlderTweets")
+            .d("startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
         getTweets()
         _isRefreshingAtBottom.value = false
     }

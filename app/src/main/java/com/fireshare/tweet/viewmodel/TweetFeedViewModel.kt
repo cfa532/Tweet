@@ -2,7 +2,6 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -37,6 +36,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -87,7 +87,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // remember to watch oneself.
         if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
             _followings.update { list -> list + appUser.mid }
-        Log.d("Refresh()", followings.value.toString())
+        Timber.tag("Refresh()").d(followings.value.toString())
 
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
@@ -101,10 +101,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtTop.value = true
         startTimestamp.longValue = System.currentTimeMillis()
         val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
-        Log.d(
-            "loadNewerTweets",
-            "startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp"
-        )
+        Timber.tag("loadNewerTweets")
+            .d("startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp")
         getTweets(startTimestamp.longValue, endTimestamp)
         _isRefreshingAtTop.value = false
     }
@@ -115,10 +113,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp.longValue
         endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Log.d(
-            "loadOlderTweets",
-            "startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}"
-        )
+        Timber.tag("loadOlderTweets")
+            .d("startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
         getTweets(startTimestamp, endTimestamp.longValue)
         _isRefreshingAtBottom.value = false
     }
@@ -149,9 +145,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
                                 tweetsList // Return tweetsList for further processing if needed
                             } catch (e: Exception) {
-                                Log.e(
-                                    "GetTweets in TweetFeedVM",
-                                    "Error fetching tweets for user: $userId", e)
+                                Timber.tag("GetTweets in TweetFeedVM")
+                                    .e(e, "Error fetching tweets for user: $userId")
                                 // remove the userId from cached user list, the app will try to
                                 // reacquire the user information
                                 HproseInstance.removeUser(userId)
@@ -160,7 +155,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         }.await()
                     }
                 } catch (e: Exception) {
-                    Log.e("GetTweets", "Error fetching tweets", e)
+                    Timber.tag("GetTweets").e(e, "Error fetching tweets")
                     // in catastrophic events, such as lost of a service node,
                     // try to reacquire a valid serving node.
                     ioScope.launch {
@@ -183,8 +178,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         .sortedByDescending { it.timestamp }
                 }
             } catch (e: Exception) {
-                Log.e("GetTweets",
-                    "Error fetching tweets for user: $userId", e)
+                Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
             }
         }
     }
@@ -209,7 +203,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     }
                 }
             } catch (e: Exception) {
-                Log.e("DelTweet", "Error deleting tweet", e)
+                Timber.tag("DelTweet").e(e, "Error deleting tweet")
             }
         }
     }
@@ -275,7 +269,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 val json = outputData.getString("tweet")
                                 // Handle the success and update UI
                                 val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
-                                Log.d("UploadTweet", "Tweet uploaded successfully: $tweet")
+                                Timber.tag("UploadTweet").d("Tweet uploaded successfully: $tweet")
                                 if (tweet != null) {
                                     tweet.author = appUser
                                     // to add tweet in background involves problem with viewModel
@@ -290,12 +284,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                     }
                                 }
                             } catch (e: Exception) {
-                                Log.e("UploadTweet", "$e")
+                                Timber.tag("UploadTweet").e("$e")
                             }
                         }
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
-                            Log.e("UploadTweet", "Tweet upload failed")
+                            Timber.tag("UploadTweet").e("Tweet upload failed")
                             (context as? LifecycleOwner)?.lifecycleScope?.launch {
                                 SnackbarController.sendEvent(
                                     event = SnackbarEvent(
@@ -306,7 +300,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         }
                         WorkInfo.State.RUNNING -> {
                             // Optionally, show a progress indicator
-                            Log.d("UploadTweet", "Tweet upload in progress")
+                            Timber.tag("UploadTweet").d("Tweet upload in progress")
                         }
                         else -> {
                             // Handle other states if necessary

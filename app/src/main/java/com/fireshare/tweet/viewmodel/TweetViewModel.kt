@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
@@ -35,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -147,7 +147,7 @@ class TweetViewModel @AssistedInject constructor(
                             try {
                                 val outputData = workInfo.outputData
                                 val json = outputData.getString("comment") ?: return@observe
-                                Log.d("UploadComment", "Tweet uploaded successfully: $json")
+                                Timber.tag("UploadComment").d("Tweet uploaded successfully: $json")
                                 // Handle the success and update UI
                                 val map = Json.decodeFromString<Map<String, String?>>(json)
 
@@ -158,12 +158,12 @@ class TweetViewModel @AssistedInject constructor(
 
                                 var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
                                 comment = comment.copy(author = appUser)
-                                Log.d("UploadComment", "Comment: $comment")
+                                Timber.tag("UploadComment").d("Comment: $comment")
                                 _comments.update { list -> listOf(comment) + list }
 
                                 // parent tweet with the new comment.
                                 val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
-                                Log.d("UploadComment", "Updated tweet: $newTweet")
+                                Timber.tag("UploadComment").d("Updated tweet: $newTweet")
                                 _tweetState.value = newTweet
 
                                 if (retweet != null) {
@@ -172,18 +172,18 @@ class TweetViewModel @AssistedInject constructor(
                                     tweetFeedViewModel.addTweet(retweet)
                                 }
                             } catch (e: Exception) {
-                                Log.e("UploadComment", "${e.message}")
+                                Timber.tag("UploadComment").e("${e.message}")
                             }
                         }
 
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
-                            Log.e("UploadTweet", "Tweet upload failed")
+                            Timber.tag("UploadTweet").e("Tweet upload failed")
                         }
 
                         WorkInfo.State.RUNNING -> {
                             // Optionally, show a progress indicator
-                            Log.d("UploadTweet", "Tweet upload in progress")
+                            Timber.tag("UploadTweet").d("Tweet upload in progress")
                         }
 
                         else -> {

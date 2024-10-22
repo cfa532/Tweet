@@ -55,7 +55,6 @@ import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
-import com.fireshare.tweet.widget.MediaBrowser
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
