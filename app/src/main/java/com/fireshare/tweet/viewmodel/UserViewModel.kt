@@ -195,16 +195,27 @@ class UserViewModel @AssistedInject constructor(
             // 2. Get topped tweets and update _topTweets, while avoiding duplication
             val toppedTweets = mutableListOf<Tweet>()
             topList.forEach { mid ->
-                HproseInstance.getTweet(mid, user.value.mid)?.let { tweet ->
-                    tweet.originalTweetId?.let {
-                        tweet.originalAuthorId?.let { it1 -> tweet.originalTweet = HproseInstance.getTweet(it, it1) }
-                    } ?: tweet
-                    // Always try to remove from _tweets first
-                    _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
-
-                    // Only add to _topTweets if not already present
-                    if (!_topTweets.value.any { it.mid == tweet.mid }) {
+                val tweet = tweetsList.find { it.mid == mid }
+                if (tweet != null) {
+                    // Remove from _tweets, add to topTweets
+                    _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
+                    if (!_topTweets.value.any { it.mid == mid }) {
                         toppedTweets.add(tweet)
+                    }
+                } else {
+                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
+                        tweet1.originalTweetId?.let {
+                            tweet1.originalAuthorId?.let { it1 ->
+                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                            }
+                        } ?: tweet1
+                        // Always try to remove from _tweets first
+                        _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet1.mid } }
+
+                        // Only add to _topTweets if not already present
+                        if (!_topTweets.value.any { it.mid == tweet1.mid }) {
+                            toppedTweets.add(tweet1)
+                        }
                     }
                 }
             }
