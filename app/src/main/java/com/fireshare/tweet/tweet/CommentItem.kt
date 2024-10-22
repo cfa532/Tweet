@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -85,10 +86,11 @@ fun CommentItem(
             }
             Column(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp, top = 0.dp, end = 4.dp, bottom = 0.dp),
+                    .padding(start = 0.dp, top = 8.dp, end = 8.dp, bottom = 0.dp),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(end = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -123,6 +125,7 @@ fun CommentItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentHeight()
+                        .heightIn(max = 800.dp)
                 ) {
                     val mediaItems = comment.attachments?.mapNotNull { attachment ->
                         comment.author?.baseUrl?.let { baseUrl ->
@@ -142,7 +145,7 @@ fun CommentItem(
                     BookmarkButton(viewModel)
                     CommentButton(viewModel)
                     RetweetButton(viewModel)
-                    Spacer(modifier = Modifier.width(60.dp))
+                    Spacer(modifier = Modifier.width(40.dp))
                     ShareButton(viewModel)
                 }
             }
@@ -153,10 +156,15 @@ fun CommentItem(
 @Composable
 fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
     var expanded by remember { mutableStateOf(false) }
+    val parentTweet by parentTweetViewModel.tweetState.collectAsState()
+
     Box {
         // the 3 dots button on the right
         IconButton(
-            modifier = Modifier.width(24.dp).alpha(0.8f).rotate(-90f),
+            modifier = Modifier
+                .size(24.dp)
+                .alpha(0.9f)
+                .rotate(-90f),
             onClick = { expanded = !expanded }) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
@@ -171,8 +179,8 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
                 .wrapContentWidth(align = Alignment.End)
                 .height(IntrinsicSize.Min)
         ) {
-            if (comment.author?.mid == appUser.mid) {
-                DropdownMenuItem( modifier = Modifier.alpha(0.7f),
+            if (parentTweet.authorId == appUser.mid || comment.authorId == appUser.mid) {
+                DropdownMenuItem( modifier = Modifier.alpha(0.9f),
                     onClick = { comment.mid?.let { parentTweetViewModel.delComment(it) } },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -181,8 +189,8 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
                                 contentDescription = "Delete",
                                 tint = MaterialTheme.colorScheme.error
                             )
-                            Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
                             Text(
+                                modifier = Modifier.padding(start = 8.dp),
                                 text = stringResource(R.string.delete),
                                 color = MaterialTheme.colorScheme.error
                             )
