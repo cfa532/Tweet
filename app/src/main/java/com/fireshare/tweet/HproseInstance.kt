@@ -22,8 +22,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.net.ProtocolException
@@ -209,7 +211,7 @@ object HproseInstance {
             hproseClient?.runMApp(entry, request)
         } catch (e: Exception) {
             e.printStackTrace()
-            Timber.tag("checkUpgrade").e("$hproseClient $e")
+            Timber.tag("checkUpgrade").e("$e")
             null
         }
     }
@@ -865,6 +867,23 @@ object HproseInstance {
 
     fun removeUser(userId: MimeiId) {
         cachedUsers.removeIf { it.mid == userId }
+    }
+
+    fun logging(msg: String) {
+        val str = URLEncoder.encode(msg, "utf-8")
+//          = msg.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val entry = "logging"
+        val url =
+            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&msg=$str"
+        val request = Request.Builder()
+            .url(url)
+//            .post(requestBody)
+            .build()
+        try {
+            httpClient.newCall(request).execute()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 

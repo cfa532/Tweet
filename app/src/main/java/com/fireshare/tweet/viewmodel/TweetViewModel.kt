@@ -101,6 +101,9 @@ class TweetViewModel @AssistedInject constructor(
                 it.author = HproseInstance.getUserBase(it.authorId)
                 it
             } ?: emptyList()
+            _comments.update { list ->
+                list.sortedByDescending { it.timestamp }
+            }
         }
     }
 

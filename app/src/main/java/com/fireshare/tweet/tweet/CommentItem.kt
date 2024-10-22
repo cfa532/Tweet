@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -58,77 +60,91 @@ fun CommentItem(
     val navController = LocalNavController.current
 
     // viewModel of current Comment, which is a Tweet object
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = comment.mid) { factory ->
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry,
+        key = comment.mid
+    ) { factory ->
         factory.create(comment)
     }
     val author = comment.author
     val parentTweet by parentTweetViewModel.tweetState.collectAsState()
 
     Column(
-        modifier = Modifier.clickable(onClick = {
-            comment.mid?.let {navController.navigate(NavTweet.TweetDetail(it))}
-        } )
+        modifier = Modifier
+            .clickable { comment.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) } }
+            .padding(horizontal = 4.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.Start
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
+            IconButton(onClick = {
+                navController.navigate(NavTweet.UserProfile(comment.authorId)) }
             ) {
-                IconButton(onClick = { navController.navigate(NavTweet.UserProfile(comment.authorId)) })
-                {
-                    UserAvatar(author, 32)
-                }
-                Text(text = author?.name ?: "No One",
-                    modifier = Modifier.padding(horizontal = 0.dp),
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Text(text = "@${author?.username}",
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Text( text = " • ", fontSize = 12.sp)
-                Text(text = localizedTimeDifference(comment.timestamp),
-                    style = MaterialTheme.typography.labelSmall)
+                UserAvatar(author, 32)
             }
-            CommentDropdownMenu(comment, parentTweetViewModel)
-        }
-        Column(modifier = Modifier.padding(start = 20.dp, bottom = 0.dp))
-        {
-            comment.content?. let {
-                Text(text = it, style = MaterialTheme.typography.bodyMedium)
-            }
-            // attached media files
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, top = 4.dp, end = 8.dp)
-                    .heightIn(max = 800.dp) // Set a specific height for the grid
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 0.dp, top = 0.dp, end = 4.dp, bottom = 0.dp),
             ) {
-                val mediaItems = comment.attachments?.mapNotNull { attachment ->
-                    comment.author?.baseUrl?.let { baseUrl ->
-                        val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
-                        MediaItem(mediaUrl, attachment.type)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.padding(bottom = 0.dp),
+                    ) {
+                        Text(
+                            text = author?.name ?: "No One",
+                            modifier = Modifier.padding(horizontal = 0.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(
+                            text = "@${author?.username}",
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Text(text = " • ", fontSize = 12.sp)
+                        Text(
+                            text = localizedTimeDifference(comment.timestamp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
+                    CommentDropdownMenu(comment, parentTweetViewModel)
                 }
-                mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
-            }
+                comment.content?.let {
+                    Text(text = it,
+                        modifier = Modifier.padding(top = 0.dp),
+                        style = MaterialTheme.typography.bodyLarge)
+                }
+                // attached media files
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                ) {
+                    val mediaItems = comment.attachments?.mapNotNull { attachment ->
+                        comment.author?.baseUrl?.let { baseUrl ->
+                            val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
+                            MediaItem(mediaUrl, attachment.type)
+                        }
+                    }
+                    mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
+                }
 
-            // Actions Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                // State hoist
-                LikeButton(viewModel)
-                BookmarkButton(viewModel)
-                CommentButton(viewModel)
-                RetweetButton(viewModel)
-                Spacer(modifier = Modifier.width(60.dp))
-                ShareButton(viewModel)
+                // Actions Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    LikeButton(viewModel)
+                    BookmarkButton(viewModel)
+                    CommentButton(viewModel)
+                    RetweetButton(viewModel)
+                    Spacer(modifier = Modifier.width(60.dp))
+                    ShareButton(viewModel)
+                }
             }
         }
     }
@@ -138,6 +154,7 @@ fun CommentItem(
 fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
     var expanded by remember { mutableStateOf(false) }
     Box {
+        // the 3 dots button on the right
         IconButton(
             modifier = Modifier.width(24.dp).alpha(0.8f).rotate(-90f),
             onClick = { expanded = !expanded }) {
