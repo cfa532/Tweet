@@ -52,11 +52,10 @@ fun TweetItem(
     ) {
         // Content body
         if (tweet.originalTweet != null) {
-            if (tweet.content == "") {
-
+            if (tweet.content == null || tweet.content == "") {
                 // this is a retweet of another tweet.
                 Surface(
-                    modifier = Modifier.padding(top = 0.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
                     // The tweet area
                     val originalTweetViewModel =
@@ -79,7 +78,7 @@ fun TweetItem(
                             modifier = Modifier
                                 .padding(start = 60.dp)
                                 .offset(
-                                    y = (-4).dp,
+                                    y = (-0).dp,
                                     x = (-8).dp
                                 ) // Adjust the offset value as needed
                                 .zIndex(1f) // Ensure it appears above the tweet area
@@ -101,11 +100,10 @@ fun TweetItem(
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
                         TweetItemHeader(tweet, parentEntry)
-
-                        tweet.content?.let {
+                        if (tweet.content != null && tweet.content!!.isNotEmpty()) {
                             Text(
                                 modifier = Modifier.padding(start = 16.dp),
-                                text = it,
+                                text = tweet.content!!,
                                 style = MaterialTheme.typography.bodyLarge
                             )
                         }

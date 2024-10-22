@@ -70,30 +70,32 @@ fun TweetBlock(
             ) {
                 Column {
                     // Text content of the tweet
-                        tweet.content?.let { txt ->
-                            val maxLines = if (isExpanded) Int.MAX_VALUE else 9
-                            var lineCount by remember { mutableIntStateOf(0) }
+                    if (tweet.content != null && tweet.content!!.isNotEmpty()) {
+                        val maxLines = if (isExpanded) Int.MAX_VALUE else 9
+                        var lineCount by remember { mutableIntStateOf(0) }
+                        Text(
+                            text = tweet.content!!,
+                            onTextLayout = { textLayoutResult ->
+                                lineCount = textLayoutResult.lineCount
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = maxLines,
+                        )
+                        if (!isExpanded && lineCount > 8) {
                             Text(
-                                text = txt,
-                                onTextLayout = { textLayoutResult ->
-                                    lineCount = textLayoutResult.lineCount
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = maxLines,
+                                text = stringResource(R.string.show_more),
+                                style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.clickable {
+                                    isExpanded = true
+                                }
                             )
-                            if (!isExpanded && lineCount > 8) {
-                                Text(
-                                    text = stringResource(R.string.show_more),
-                                    style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.clickable {
-                                        isExpanded = true
-                                    }
-                                )
-                            }
                         }
+                    }
                     // attached media files
                     Box(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 800.dp)
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .heightIn(max = 800.dp)
                     ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),

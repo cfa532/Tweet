@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +92,7 @@ fun UserProfileScreen(
         Box(
             modifier = Modifier
                 .pullRefresh(pullRefreshState)
+                .background(color = Color.LightGray)
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
@@ -100,46 +102,26 @@ fun UserProfileScreen(
                 state = listState
             ) {
                 item {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 8.dp),
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.surfaceTint
-                    )
-
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
-
                 }
                 if (topTweets.isNotEmpty()) {
                     item {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(top = 0.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.surfaceTint
-                        )
                         Text(
                             text = stringResource(R.string.addToTop),
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                            modifier = Modifier.padding(start = 16.dp, top = 0.dp),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
                         if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 1.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.surfaceTint
-                        )
                     }
                 }
+
                 items(tweets, key = {it.mid.toString()}) { tweet ->
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.surfaceTint
-                    )
                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                 }
+
                 item {
                     if (refreshingAtTop) {
                         CircularProgressIndicator(
