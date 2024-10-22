@@ -439,6 +439,10 @@ object HproseInstance {
         emptyList()
     }
 
+    /**
+     * Get only layer one data of the tweet. Do Not fetch its original tweet.
+     * Let the caller to decide if go further on the tweet hierarchy.
+     * */
     suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId

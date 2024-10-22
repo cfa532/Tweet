@@ -191,41 +191,40 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    private suspend fun getToppedTweets() {
-        val user = getUserBase(userId) ?: return
-
-        _topTweets.update { currentList ->
-            val tempList = currentList.toMutableList() // Start with existing list
-
-            HproseInstance.getTopList(user)?.forEach { mid ->
-                HproseInstance.getTweet(mid, user.mid)?.let { tweet ->
-                    tempList.add(tweet)
-                }
-            }
-
-            tempList.distinctBy { it.mid }.sortedByDescending { it.timestamp }
-        }
-    }
-
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
-            getToppedTweets()
             val tweetsList = HproseInstance.getTweetList(user.value, startTimestamp, endTimestamp)
-            val updatedTweets = tweetsList.toMutableList()
+            val filteredTweets = tweetsList.filterNot { tweet ->
+                topTweets.value.any { it.mid == tweet.mid }
+            }
+            _tweets.update { currentTweets ->
+                val tempList = mutableListOf<Tweet>()
+                tempList.addAll(filteredTweets) // Add the filtered tweets
+                tempList.addAll(currentTweets)  // Add existing tweets (if any)
 
-            // Remove items from updatedTweets that are already in topTweets.value
-            updatedTweets.removeAll { currentTweet ->
-                topTweets.value.any { it.mid == currentTweet.mid }
+                tempList.distinctBy { it.mid }  // Remove duplicates
+                    .sortedByDescending { it.timestamp } // Sort by timestamp
             }
 
-            val tempList = mutableListOf<Tweet>()
-            tempList.addAll(updatedTweets)
-            tempList.addAll(_tweets.value)
-
-            // Filter out any duplicates from topTweets.value before assigning to _tweets
-            _tweets.value = tempList.filterNot { tweet -> topTweets.value.any { it.mid == tweet.mid } }
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
+            HproseInstance.getTopList(user.value)?.forEach { mid ->
+                val tmp = tweets.value.find { mid == it.mid }
+                if (tmp != null) {
+                    _tweets.update { list -> list - tmp }
+                    _topTweets.update { list -> list + tmp }
+                } else {
+                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet ->
+                        val tmp2 = tweet.originalTweetId?.let {
+                            tweet.originalAuthorId?.let { it1 -> HproseInstance.getTweet(it, it1) }
+                        }
+                        if (tmp2 != null) {
+                            _tweets.update { list -> list - tmp2 }
+                            _topTweets.update { list -> list + tmp2 }
+                        }
+                    }
+                }
+                _topTweets.value.distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+            }
         }
     }
 
