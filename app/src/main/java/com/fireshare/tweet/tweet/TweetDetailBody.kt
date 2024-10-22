@@ -276,7 +276,7 @@ fun TweetDropdownMenuItems(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.Favorite,
-                        contentDescription = "Top",
+                        contentDescription = "Pin to top",
                         tint = MaterialTheme.colorScheme.surfaceTint
                     )
                     Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text

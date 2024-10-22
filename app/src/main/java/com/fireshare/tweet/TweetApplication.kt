@@ -22,8 +22,7 @@ class TweetApplication : Application(){
             HproseInstance.init(this@TweetApplication, preferenceHelper)
         }
         if (BuildConfig.DEBUG) {
-            Timber.plant(ReleaseTree())
-//            Timber.plant(Timber.DebugTree())
+            Timber.plant(Timber.DebugTree())
         } else {
             // Plant a custom tree for release builds
             Timber.plant(ReleaseTree())

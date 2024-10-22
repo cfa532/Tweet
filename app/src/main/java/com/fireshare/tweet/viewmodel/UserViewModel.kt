@@ -96,18 +96,13 @@ class UserViewModel @AssistedInject constructor(
         return topTweets.value.any { it.mid == tweet.mid }
     }
 
+    /**
+     * User can pin or unpin any tweet, even tweet belongs to other users but
+     * retweeted or quoted from other users.
+     * */
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
-            if (tweet.originalTweet != null) {
-                if ((tweet.content == null || tweet.content == "")
-                    && (tweet.attachments == null || tweet.attachments!!.isEmpty())
-                ) {
-                    // A retweet. Pin or unpin the original tweet.
-                    HproseInstance.addToTopList(tweet.originalTweetId!!)
-                } else
-                    HproseInstance.addToTopList(tweet.mid!!)
-            } else
-                HproseInstance.addToTopList(tweet.mid!!)
+            HproseInstance.addToTopList(tweet.mid!!)
 
             // Check if tweet is already in topTweets
             val isInTopTweets = topTweets.value.any { it.mid == tweet.mid }
@@ -193,37 +188,36 @@ class UserViewModel @AssistedInject constructor(
 
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
+            // 1. Fetch both lists
             val tweetsList = HproseInstance.getTweetList(user.value, startTimestamp, endTimestamp)
-            val filteredTweets = tweetsList.filterNot { tweet ->
-                topTweets.value.any { it.mid == tweet.mid }
-            }
-            _tweets.update { currentTweets ->
-                val tempList = mutableListOf<Tweet>()
-                tempList.addAll(filteredTweets) // Add the filtered tweets
-                tempList.addAll(currentTweets)  // Add existing tweets (if any)
+            val topList = HproseInstance.getTopList(user.value) ?: emptyList()
 
-                tempList.distinctBy { it.mid }  // Remove duplicates
-                    .sortedByDescending { it.timestamp } // Sort by timestamp
-            }
+            // 2. Get topped tweets and update _topTweets, while avoiding duplication
+            val toppedTweets = mutableListOf<Tweet>()
+            topList.forEach { mid ->
+                HproseInstance.getTweet(mid, user.value.mid)?.let { tweet ->
+                    tweet.originalTweetId?.let {
+                        tweet.originalAuthorId?.let { it1 -> tweet.originalTweet = HproseInstance.getTweet(it, it1) }
+                    } ?: tweet
+                    // Always try to remove from _tweets first
+                    _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
 
-            HproseInstance.getTopList(user.value)?.forEach { mid ->
-                val tmp = tweets.value.find { mid == it.mid }
-                if (tmp != null) {
-                    _tweets.update { list -> list - tmp }
-                    _topTweets.update { list -> list + tmp }
-                } else {
-                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet ->
-                        val tmp2 = tweet.originalTweetId?.let {
-                            tweet.originalAuthorId?.let { it1 -> HproseInstance.getTweet(it, it1) }
-                        }
-                        if (tmp2 != null) {
-                            _tweets.update { list -> list - tmp2 }
-                            _topTweets.update { list -> list + tmp2 }
-                        }
+                    // Only add to _topTweets if not already present
+                    if (!_topTweets.value.any { it.mid == tweet.mid }) {
+                        toppedTweets.add(tweet)
                     }
                 }
-                _topTweets.value.distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
+            }
+            _topTweets.update { currentTopTweets ->
+                (currentTopTweets + toppedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            }
+
+            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+            val filteredTweets = tweetsList.filterNot { tweet ->
+                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
+            }
+            _tweets.update { currentTweets ->
+                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
             }
         }
     }
