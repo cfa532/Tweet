@@ -267,6 +267,7 @@ object HproseInstance {
     suspend fun getUserBase( userId: MimeiId, baseUrl: String? = appUser.baseUrl ): User? {
         // check if user data has been read
         cachedUsers.firstOrNull { it.mid == userId }?.let { return it }
+
         try {
             val url = "$baseUrl/getvar?name=mmprovsips&arg0=$userId"
             val request = Request.Builder().url(url).build()

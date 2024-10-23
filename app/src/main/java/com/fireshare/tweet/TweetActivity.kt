@@ -60,7 +60,6 @@ import java.util.concurrent.TimeUnit
 class TweetActivity : ComponentActivity() {
 
     private val activityViewModel: ActivityViewModel by viewModels()
-    private lateinit var appUserViewModel: UserViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
 //        enableEdgeToEdge()
@@ -82,13 +81,6 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.checkForUpgrade(this@TweetActivity)
 
             setContent {
-                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
-                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                    this@TweetActivity, key = appUser.mid
-                ) { factory ->
-                    factory.create(appUser.mid)
-                }
-
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
@@ -125,7 +117,7 @@ class TweetActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent, appUserViewModel=appUserViewModel)
+                            TweetNavGraph(intent)
                             Row(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(innerPadding))

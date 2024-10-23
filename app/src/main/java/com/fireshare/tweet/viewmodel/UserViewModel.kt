@@ -50,6 +50,7 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
+    var initState = MutableStateFlow(true)      // initial load state
 
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
@@ -72,6 +73,7 @@ class UserViewModel @AssistedInject constructor(
     var hasLogon = mutableStateOf(false)
 
     fun loadNewerTweets() {
+        if (initState.value) return
         println("UserVM at top already")
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
@@ -82,6 +84,7 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshing.value = false
     }
     fun loadOlderTweets() {
+        if (initState.value) return
         println("UserVM at bottom already")
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
@@ -92,6 +95,9 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshingAtBottom.value = false
     }
 
+    /**
+     * Whether the tweet is pinned to top list.
+     * */
     fun hasPinned(tweet: Tweet): Boolean {
         return topTweets.value.any { it.mid == tweet.mid }
     }
@@ -230,6 +236,7 @@ class UserViewModel @AssistedInject constructor(
             _tweets.update { currentTweets ->
                 (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
             }
+            initState.value = false
         }
     }
 
@@ -362,11 +369,11 @@ class UserViewModel @AssistedInject constructor(
 
     override fun onTweetAdded(tweet: Tweet) {
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
-        _user.value = user.value.copy(tweetCount = user.value.tweetCount + 1)
+        println("Added tweet: $tweet")
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _user.value = user.value.copy(tweetCount = user.value.tweetCount - 1)
+        println("Deleted tweet: $tweetId")
     }
 }

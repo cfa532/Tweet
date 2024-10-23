@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 object Gadget {
 
@@ -82,7 +83,7 @@ object Gadget {
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getFirstReachableUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
         val ips = ipList.map { ip ->
-            Log.d("getFirstReachableUser","trying $ip")
+            Timber.tag("getFirstReachableUser").d("trying $ip")
             async {
                 HproseInstance.getUserData(mid, ip)
             }
@@ -92,7 +93,7 @@ object Gadget {
 
     suspend fun findFirstReachableAddress(ipList: List<String>): String? = coroutineScope {
         val ips = ipList.map { ip ->
-            Log.d("getFirstReachableUser","trying $ip")
+            Timber.tag("getFirstReachableUser").d("trying $ip")
             async {
                 if (HproseInstance.isReachable(ip) != null)
                     ip

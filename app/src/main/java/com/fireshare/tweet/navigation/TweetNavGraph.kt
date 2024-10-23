@@ -15,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
@@ -49,9 +50,9 @@ fun TweetNavGraph(
     appLinkIntent: Intent,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
-    appUserViewModel: UserViewModel
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
+    lateinit var appUserViewModel: UserViewModel
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
@@ -77,6 +78,12 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val viewModel = hiltViewModel<TweetFeedViewModel>()
+                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
+                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                    parentEntry, key = appUser.mid
+                ) { factory ->
+                    factory.create(appUser.mid)
+                }
                 viewModel.tweetActionListener = appUserViewModel
                 TweetFeedScreen(navController, parentEntry, 0, viewModel)
             }

@@ -56,7 +56,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
-    var initState = MutableStateFlow(true)
+    var initState = MutableStateFlow(true)      // initial load state
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()

@@ -118,7 +118,7 @@ fun UserProfileScreen(
                                 modifier = Modifier.padding(
                                     start = 16.dp,
                                     top = 0.dp,
-                                    bottom = 8.dp
+                                    bottom = 4.dp
                                 ),
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -185,7 +185,7 @@ fun ProfileDetail(
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val profile by remember { derivedStateOf {user.profile} }
-    val tweetCount by remember { derivedStateOf { user.tweetCount } }
+    val tweetCount = viewModel.tweets.collectAsState().value.size + viewModel.topTweets.collectAsState().value.size
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
 
