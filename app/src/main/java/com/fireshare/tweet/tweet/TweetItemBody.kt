@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,7 +67,7 @@ fun TweetBlock(
                 shape = MaterialTheme.shapes.small, // Inner border
                 tonalElevation = 0.dp,
                 modifier = Modifier
-                    .padding(start = 20.dp, top = 2.dp, bottom = 0.dp, end = 4.dp)
+                    .padding(start = 20.dp, top = 2.dp, bottom = 4.dp, end = 4.dp)
             ) {
                 Column {
                     // Text content of the tweet
@@ -95,7 +96,8 @@ fun TweetBlock(
                     Box(
                         modifier = Modifier.fillMaxWidth()
                             .padding(top = 8.dp)
-                            .heightIn(max = 800.dp)
+                            .wrapContentHeight()
+//                            .heightIn(max = 800.dp)
                     ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),

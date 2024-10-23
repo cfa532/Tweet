@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -107,14 +108,16 @@ fun MediaPreviewGrid(
             .background(Color.Black),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        val modifier = if (gridCells == 1) Modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 16f)
-        else Modifier.size(containerWidth / gridCells)
+        val modifier =
+            if (gridCells == 1)
+                Modifier.fillMaxWidth()
+            else Modifier.size(containerWidth / gridCells)
+
         itemsIndexed(limitedMediaList) { index, mediaItem ->
             MediaItemPreview(
                 limitedMediaList,
                 modifier = modifier
+                    .wrapContentSize()
                     .clickable {
                         val params = MediaViewerParams(mediaItems, index, tweetId)
                         navController.navigate(NavTweet.MediaViewer(params))

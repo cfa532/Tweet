@@ -98,7 +98,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                 TweetDropdownMenu(tweet, parentEntry)
             }
             // Tweet detail's content
-            Spacer(modifier = Modifier.padding(2.dp))
+//            Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
@@ -106,9 +106,10 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             ) {
                 Column {
                     if (tweet.content?.isNotEmpty() == true) {
-                        tweet.content?.let {
-                            Text(text = it, style = MaterialTheme.typography.bodyLarge)
-                        }
+                        Text(text = tweet.content!!,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
                         tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
