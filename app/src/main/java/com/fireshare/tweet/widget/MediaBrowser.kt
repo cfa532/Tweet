@@ -149,37 +149,7 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
-                            val TweetRoutes = object {
-                                val TWEET_DETAIL = "com.fireshare.tweet.navigation.NavTweet.TweetDetail"
-                                val USER_PROFILE = "com.fireshare.tweet.navigation.NavTweet.UserProfile"
-                            }
-                            /**
-                             * A strange problem: When there is argument in the previous route, it will be lost.
-                             * Manually restore the previous route's argument for user profile and tweet detail.
-                             * */
-                            val previousRoute = viewModel.getPreviousRoute()
-                            when {
-                                previousRoute?.startsWith(TweetRoutes.TWEET_DETAIL) == true -> {
-                                    navController.popBackStack()
-                                    navController.popBackStack()
-                                    tweetId?.let { navController.navigate(NavTweet.TweetDetail(tweetId)) }
-                                }
-                                previousRoute?.startsWith(TweetRoutes.USER_PROFILE) == true -> {
-                                    navController.popBackStack()
-                                    navController.popBackStack()
-                                    val userId = viewModel.getPreviousArguments()?.getString("userId")
-                                    userId?.let { navController.navigate(NavTweet.UserProfile(it)) }
-                                }
-                                previousRoute != null -> {
-                                    navController.navigate(previousRoute) {
-                                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                                        launchSingleTop = true
-                                    }
-                                }
-                                else -> {
-                                    navController.navigate(NavTweet.TweetFeed)
-                                }
-                            }
+                            navController.popBackStack()
                         },
                         modifier = Modifier
                             .padding(16.dp)
