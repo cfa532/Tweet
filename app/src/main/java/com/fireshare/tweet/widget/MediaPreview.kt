@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -111,6 +112,7 @@ fun MediaPreviewGrid(
         val modifier =
             if (gridCells == 1)
                 Modifier.fillMaxWidth()
+//                    .heightIn(max = containerWidth)
             else Modifier.size(containerWidth / gridCells)
 
         itemsIndexed(limitedMediaList) { index, mediaItem ->
@@ -260,6 +262,7 @@ fun ImageViewer(
                 modifier = adjustedModifier
                     .fillMaxSize()
                     .background(Color.Gray)
+                    .alpha(0.6f),
             ) {
                 if (!isPreview) {
                     CircularProgressIndicator(
@@ -271,7 +274,7 @@ fun ImageViewer(
             // Display a placeholder image or error message if download failed
             Box(
                 modifier = adjustedModifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .background(Color.Gray),
                 contentAlignment = Alignment.Center
             ) {
