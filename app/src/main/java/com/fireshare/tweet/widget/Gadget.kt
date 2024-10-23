@@ -13,7 +13,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 object Gadget {
-
     /**
      * NodeList format:
      * [
@@ -75,6 +74,7 @@ object Gadget {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                Timber.tag("GetVideoDimensions").e(e)
                 null
             }
         }

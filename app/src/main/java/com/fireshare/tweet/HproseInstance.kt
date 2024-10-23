@@ -97,6 +97,7 @@ object HproseInstance {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         appId = paramMap["mid"].toString()
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        Timber.tag("initAppEntry").d("$paramMap $hostIPs")
 
                         /**
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
@@ -830,7 +831,7 @@ object HproseInstance {
             } else null
         } catch (e: Exception) {
             Timber.tag("isReachable").e("No reachable. $ip $e")
-            null
+            this.preferenceHelper.getAppUrl()
         }
     }
 

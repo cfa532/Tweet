@@ -70,7 +70,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     init {
         viewModelScope.launch(Dispatchers.IO) {
             refresh()
-            initState.value = false
         }
     }
 
@@ -87,7 +86,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // remember to watch oneself.
         if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
             _followings.update { list -> list + appUser.mid }
-        Timber.tag("Refresh()").d(followings.value.toString())
+        Timber.tag("TFVM.Refresh").d(followings.value.toString())
 
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
@@ -154,6 +153,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                             }
                         }.await()
                     }
+                    initState.value = false
                 } catch (e: Exception) {
                     Timber.tag("GetTweets").e(e, "Error fetching tweets")
                     // in catastrophic events, such as lost of a service node,
@@ -220,6 +220,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 currentTweets.filterNot { it.author?.mid == userId }
             }
         } else {
+            // the tweets of a user after following it.
             _followings.update { list -> list + userId }
             getTweets(userId)
         }
