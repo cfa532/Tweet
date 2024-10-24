@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MailOutline
@@ -201,42 +203,41 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
 
     Row(modifier = Modifier.padding(bottom = 4.dp)) {
         // hide the Follow/Unfollow button when header is collapsed.
-        if (scrollBehavior?.state?.collapsedFraction == 1f) return
-
-        Button(
-            onClick = {
-                when (buttonText.value) {
-                    context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
-                    else -> {
-                        if (appUser.mid != TW_CONST.GUEST_ID)
-                            appUserViewModel.toggleFollow(user.mid) {
-                                tweetFeedViewModel.updateFollowings(user.mid)
-                            }
-                        else {
-                            val event = SnackbarEvent(
-                                message = context.getString(R.string.login_follow),
-                                action = SnackbarAction(
-                                    name = context.getString(R.string.go),
-                                    action = { navController.navigate(NavTweet.Login) }
+        if (scrollBehavior?.state?.collapsedFraction == 1f)
+            return
+        Text(
+            text = buttonText.value,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier
+                .border(
+                    width = 1.dp,
+                    color = Color.DarkGray,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable(onClick = {
+                    when (buttonText.value) {
+                        context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
+                        else -> {
+                            if (appUser.mid != TW_CONST.GUEST_ID)
+                                appUserViewModel.toggleFollow(user.mid) {
+                                    tweetFeedViewModel.updateFollowings(user.mid)
+                                }
+                            else {
+                                val event = SnackbarEvent(
+                                    message = context.getString(R.string.login_follow),
+                                    action = SnackbarAction(
+                                        name = context.getString(R.string.go),
+                                        action = { navController.navigate(NavTweet.Login) }
+                                    )
                                 )
-                            )
-                            viewModel.showSnackbar(event)
+                                viewModel.showSnackbar(event)
+                            }
                         }
                     }
-                }
-            },
-            colors = ButtonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                disabledContentColor = Color.Gray, disabledContainerColor = Color.White
-            ),
-            modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max)
-                .height(32.dp)
-        ) {
-            Text(
-                text = buttonText.value,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
+                })
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+            ,
+        )
     }
 }

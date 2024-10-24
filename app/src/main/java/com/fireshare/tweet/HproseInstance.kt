@@ -324,10 +324,10 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val json = response.body?.string()
                 val gson = Gson()
-                val updatedUser = gson.fromJson(json, object : TypeToken<User>() {}.type) as User
+                val updatedUser = gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
 
-                updatedUser.name?.let { preferenceHelper.saveName(it) }
-                updatedUser.profile?.let { preferenceHelper.saveProfile(it) }
+                updatedUser?.name?.let { preferenceHelper.saveName(it) }
+                updatedUser?.profile?.let { preferenceHelper.saveProfile(it) }
                 return updatedUser
             }
             Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")

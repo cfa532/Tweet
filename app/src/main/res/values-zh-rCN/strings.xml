@@ -55,4 +55,5 @@
     <string name="pinToTop">置顶</string>
     <string name="followings">关注</string>
     <string name="unpin">取消置顶</string>
+    <string name="registration_failed">注册失败，试试其它口令。</string>
 </resources>

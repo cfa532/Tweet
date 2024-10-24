@@ -50,7 +50,7 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
-    var initState = MutableStateFlow(true)      // initial load state
+    private var initState = MutableStateFlow(true)      // initial load state
 
     companion object {
         private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
@@ -297,7 +297,8 @@ class UserViewModel @AssistedInject constructor(
                 profile = profile.value, avatar = appUser.avatar
             )
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.setUserData(user, keyPhrase.value!!)?.let {
+                val it = HproseInstance.setUserData(user, keyPhrase.value!!)
+                if (it != null) {
                     if (appUser.mid == TW_CONST.GUEST_ID) {
                         // register new user. Do not update appUser, wait for
                         // new user to login.
@@ -319,6 +320,8 @@ class UserViewModel @AssistedInject constructor(
                         )
                         showSnackbar(event)
                     }
+                } else {
+                    showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
                 }
                 isLoading.value = false
             }

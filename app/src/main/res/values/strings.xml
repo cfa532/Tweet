@@ -54,4 +54,5 @@
     <string name="pinToTop">Pin to top</string>
     <string name="followings">Followings</string>
     <string name="unpin">Unpin</string>
+    <string name="registration_failed">Registration failed. Try different key phrase.</string>
 </resources>
