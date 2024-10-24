@@ -15,6 +15,10 @@ object UserFavorites {
     const val RETWEET = 2
 }
 
+/**
+ * When tweet is added or removed from the tweet feed list,
+ * update tweet list in UserProfileScreen, also add or remove it.
+ * */
 interface TweetActionListener {
     fun onTweetAdded(tweet: Tweet)
     fun onTweetDeleted(tweetId: MimeiId)
