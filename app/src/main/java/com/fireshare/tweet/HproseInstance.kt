@@ -540,6 +540,9 @@ object HproseInstance {
         }
     }
 
+    /**
+     * @param userId is the user that appUser is following or unfollowing.
+     * */
     fun toggleFollowing(userId: MimeiId): Boolean? {
         val method = "toggle_following"
         val url =
@@ -560,11 +563,17 @@ object HproseInstance {
         }
     }
 
-    suspend fun toggleFollower(userId: MimeiId): Boolean? {
+    /**
+     * @param isFollowing indicates if the appUser is following this userId. Passing an argument
+     * instead of toggling the status of a follower because this way will not introduce a
+     * persistent inconsistency, which happens easily with the toggle method.
+     * */
+    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean): Boolean? {
         val user = getUserBase(userId)
         val method = "toggle_follower"
         val url =
-            "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}&userid=${userId}"
+            "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}"+
+                    "&userid=${userId}&isfollower=$isFollowing"
         val request = Request.Builder().url(url).build()
         return try {
             val response = httpClient.newCall(request).execute()

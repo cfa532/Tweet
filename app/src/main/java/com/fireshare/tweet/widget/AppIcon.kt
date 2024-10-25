@@ -51,7 +51,7 @@ fun AppIcon() {
 //    )
 //}
 fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
-    val avatarUrl = remember { mutableStateOf<String?>(getMediaUrl(user?.avatar, user?.baseUrl)) }
+    val avatarUrl = remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(user?.avatar) {
         avatarUrl.value = getMediaUrl(user?.avatar, user?.baseUrl)

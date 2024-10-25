@@ -191,7 +191,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             modifier = Modifier
                 .clickable(onClick = {
                     appUserViewModel.toggleFollow(userId) {
-                        tweetFeedViewModel.updateFollowings(userId)
+                        tweetFeedViewModel.updateFollowings(userId, it)
                     }
                 })
                 .border(

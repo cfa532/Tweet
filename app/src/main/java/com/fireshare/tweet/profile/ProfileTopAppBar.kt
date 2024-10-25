@@ -221,7 +221,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         else -> {
                             if (appUser.mid != TW_CONST.GUEST_ID)
                                 appUserViewModel.toggleFollow(user.mid) {
-                                    tweetFeedViewModel.updateFollowings(user.mid)
+                                    tweetFeedViewModel.updateFollowings(user.mid, it)
                                 }
                             else {
                                 val event = SnackbarEvent(

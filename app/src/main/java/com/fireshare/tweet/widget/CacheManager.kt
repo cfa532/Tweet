@@ -28,9 +28,9 @@ class CacheManager(private val context: Context) {
      */
     fun getCachedImagePath(imageUrl: String, isPreview: Boolean = true): String {
         val fileName = if (isPreview) {
-            imageUrl.substringAfterLast('/') + "_preview.jpg"
+            imageUrl.getMimeiKey() + "_preview.jpg"
         } else {
-            imageUrl.substringAfterLast('/') + ".png"
+            imageUrl.getMimeiKey() + ".png"
         }
         return File(cacheDir, fileName).absolutePath
     }
@@ -69,9 +69,9 @@ class CacheManager(private val context: Context) {
                 val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
 
                 val fileName = if (isPreview) {
-                    imageUrl.substringAfterLast('/') + "_preview.jpg"
+                    imageUrl.getMimeiKey() + "_preview.jpg"
                 } else {
-                    imageUrl.substringAfterLast('/') + ".png"
+                    imageUrl.getMimeiKey() + ".png"
                 }
                 val cacheFile = File(cacheDir, fileName)
 

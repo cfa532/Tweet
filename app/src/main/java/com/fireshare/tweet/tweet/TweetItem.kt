@@ -100,7 +100,7 @@ fun TweetItem(
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
-                        TweetItemHeader(tweet, parentEntry)
+                        TweetItemHeader(viewModel, parentEntry)
                         if (tweet.content != null && tweet.content!!.isNotEmpty()) {
                             Text(
                                 modifier = Modifier.padding(start = 16.dp),

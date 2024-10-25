@@ -62,7 +62,7 @@ fun TweetBlock(
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(tweet, parentEntry, parentTweet)
+            TweetItemHeader(viewModel, parentEntry, parentTweet)
 
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border

@@ -86,6 +86,10 @@ enum class MediaType {
 // url is in the format of http://ip/mm/mimei_id
 data class MediaItem(val url: String, var type: MediaType = MediaType.Unknown)
 
+fun String.getMimeiKey(): String {
+    return this.substringAfterLast('/')
+}
+
 @Composable
 fun MediaPreviewGrid(
     mediaItems: List<MediaItem>,
@@ -219,10 +223,10 @@ fun ImageViewer(
     var isDownloading by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf(false) }
 
-    // Check if image is already cached and use it directly
-    val cachedImage =
-        remember(imageUrl) { mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value)) }
-
+    // Check if image is already cached. Use it directly if so.
+    val cachedImage = remember(imageUrl.getMimeiKey()) {
+        mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value))
+    }
     val adjustedModifier = if (isPreview) {
         modifier.fillMaxSize()      // image is viewed within a parent composable
     } else {
@@ -262,12 +266,26 @@ fun ImageViewer(
                 modifier = adjustedModifier
                     .fillMaxSize()
                     .background(Color.Gray)
-                    .alpha(0.6f),
+//                    .alpha(0.6f),
             ) {
                 if (!isPreview) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    val cachedPreviewPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, true))
+                    val cachedPreviewImage =
+                        remember(imageUrl.getMimeiKey()) {
+                            mutableStateOf(cacheManager.loadImageFromCache(cachedPreviewPath.value))
+                        }
+                    if (cachedPreviewImage.value != null) {
+                        Image(
+                            painter = BitmapPainter(cachedPreviewImage.value!!),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = adjustedModifier
+                                .fillMaxWidth()
+                        )
+                    } else
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                 }
             }
         } else if (downloadError) {
@@ -306,7 +324,7 @@ fun VideoPreview(
     val exoPlayer = remember { createExoPlayer(context, url) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
 
-    LaunchedEffect(url.substringAfterLast('/')) {
+    LaunchedEffect(url.getMimeiKey()) {
         if (!inPreviewGrid) {
             val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
             aspectRatio = width.toFloat() / height.toFloat()

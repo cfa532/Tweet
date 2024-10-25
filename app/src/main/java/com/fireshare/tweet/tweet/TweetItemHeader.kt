@@ -8,6 +8,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -18,18 +22,20 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import java.util.concurrent.TimeUnit
 
 // Tweet header when displayed as an item in a list.
 @Composable
 fun TweetItemHeader(
-    tweet: Tweet,
+    viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null
 ) {
     val navController = LocalNavController.current
-    val author = tweet.author
+    val tweet by viewModel.tweetState.collectAsState()
+    val author by remember { derivedStateOf { tweet.author } }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
