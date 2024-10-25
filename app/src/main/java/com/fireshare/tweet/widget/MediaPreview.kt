@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -264,8 +263,7 @@ fun ImageViewer(
         if (isDownloading) {
             Box(
                 modifier = adjustedModifier
-                    .fillMaxSize()
-                    .background(Color.Gray)
+//                    .background(Color.Gray)
 //                    .alpha(0.6f),
             ) {
                 if (!isPreview) {
