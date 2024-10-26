@@ -568,25 +568,17 @@ object HproseInstance {
      * instead of toggling the status of a follower because this way will not introduce a
      * persistent inconsistency, which happens easily with the toggle method.
      * */
-    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean): Boolean? {
+    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean) {
         val user = getUserBase(userId)
         val method = "toggle_follower"
         val url =
             "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}"+
                     "&userid=${userId}&isfollower=$isFollowing"
         val request = Request.Builder().url(url).build()
-        return try {
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = response.body?.string()
-                val gson = Gson()
-                gson.fromJson(json, Boolean::class.java)
-            } else {
-                null
-            }
+        try {
+            httpClient.newCall(request).execute()
         } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            Timber.tag("toggleFollower()").e(e.toString())
         }
     }
 

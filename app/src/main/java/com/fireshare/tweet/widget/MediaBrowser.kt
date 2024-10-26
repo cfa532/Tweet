@@ -5,6 +5,7 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -87,17 +90,40 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { showControls = !showControls }
-                )
-                detectHorizontalDragGestures { _, dragAmount ->
-                    if (dragAmount > 0) {
-                        animationScope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val dragAmount = event.changes.firstOrNull()?.positionChange()?.y ?: 0f
+
+                        // Handle tap
+                        if (event.changes.any { it.changedToUp() }) {
+                            showControls = !showControls
                         }
-                    } else {
-                        animationScope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+
+                        // Handle horizontal drag
+                        if (event.changes.any { it.positionChange().x != 0f }) {
+                            val horizontalDragAmount = event.changes.first().positionChange().x
+                            if (horizontalDragAmount > 50) {
+                                animationScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                }
+                            } else if (horizontalDragAmount < -50) {
+                                animationScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
+                            }
+                        }
+
+                        // Handle vertical drag
+                        if (dragAmount != 0f) {
+                            println("Swipe down")
+                            if (dragAmount > 0) { // Check if swipe-down
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                } else {
+                                    navController.navigate(NavTweet.TweetFeed)
+                                }
+                            }
                         }
                     }
                 }

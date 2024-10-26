@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -50,7 +49,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
  @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -78,7 +77,7 @@ fun TweetFeedScreen(
      LaunchedEffect(appUser.mid) {
          // reload page when user login or out
          if (!viewModel.initState.value)
-             viewModel.viewModelScope.launch(Dispatchers.IO) {
+             withContext(Dispatchers.IO) {
                  viewModel.refresh()
              }
      }
