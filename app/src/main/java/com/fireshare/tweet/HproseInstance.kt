@@ -32,11 +32,10 @@ import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-    private lateinit var appId: MimeiId     // Application Mimei ID, assigned by Leither
 
-    //    var BASE_URL: String? = null    // in case no network
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
+    private var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
@@ -48,7 +47,6 @@ object HproseInstance {
     private lateinit var database: ChatDatabase
 
     // Keys within the mimei of the user's database
-    private const val CHUNK_SIZE = 5 * 1024 * 1024 // 5MB in bytes
     private var hproseClient: HproseService? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -721,7 +719,7 @@ object HproseInstance {
     fun likeTweet(tweet: Tweet): Tweet {
         return try {
             val author = tweet.author ?: return tweet
-            val method = "liked_count"
+            val method = "toggle_likes"
             val url =
                 "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
@@ -749,7 +747,7 @@ object HproseInstance {
     fun bookmarkTweet(tweet: Tweet): Tweet {
         return try {
             val author = tweet.author ?: return tweet
-            val method = "bookmark"
+            val method = "toggle_bookmark"
             val url =
                 "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
@@ -789,7 +787,7 @@ object HproseInstance {
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
                         var offset = 0
                         inputStream.use { stream ->
-                            val buffer = ByteArray(CHUNK_SIZE)
+                            val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
                             var bytesRead: Int
                             while (stream.read(buffer).also { bytesRead = it } != -1) {
                                 if (fsid != null) {
@@ -827,6 +825,7 @@ object HproseInstance {
                     null
                 }
             } catch (e: Exception) {
+                Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message} $appUser")
                 e.printStackTrace()
                 null
             }

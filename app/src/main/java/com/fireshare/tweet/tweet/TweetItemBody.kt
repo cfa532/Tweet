@@ -68,7 +68,7 @@ fun TweetBlock(
                 shape = MaterialTheme.shapes.small, // Inner border
                 tonalElevation = 0.dp,
                 modifier = Modifier
-                    .padding(start = 20.dp, top = 2.dp, bottom = 4.dp, end = 4.dp)
+                    .padding(start = 20.dp, top = 2.dp, bottom = 4.dp, end = 8.dp)
             ) {
                 Column {
                     // Text content of the tweet

@@ -38,7 +38,8 @@ fun TweetItemHeader(
     val author by remember { derivedStateOf { tweet.author } }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .padding(end = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
