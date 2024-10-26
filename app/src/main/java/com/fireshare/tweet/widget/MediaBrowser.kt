@@ -55,6 +55,7 @@ import com.fireshare.tweet.tweet.RetweetButton
 import com.fireshare.tweet.tweet.ShareButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -103,11 +104,11 @@ fun MediaBrowser(
                         // Handle horizontal drag
                         if (event.changes.any { it.positionChange().x != 0f }) {
                             val horizontalDragAmount = event.changes.first().positionChange().x
-                            if (horizontalDragAmount > 50) {
+                            if (horizontalDragAmount > 20) {
                                 animationScope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage - 1)
                                 }
-                            } else if (horizontalDragAmount < -50) {
+                            } else if (horizontalDragAmount < -20) {
                                 animationScope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 }
@@ -117,11 +118,12 @@ fun MediaBrowser(
                         // Handle vertical drag
                         if (dragAmount != 0f) {
                             println("Swipe down")
-                            if (dragAmount > 0) { // Check if swipe-down
+                            if (dragAmount > 20) { // Check if swipe-down
                                 if (navController.previousBackStackEntry != null) {
                                     navController.popBackStack()
                                 } else {
-                                    navController.navigate(NavTweet.TweetFeed)
+                                    Timber.tag("MediaBrowser").d("No previous back stack entry")
+//                                    navController.navigate(NavTweet.TweetFeed)
                                 }
                             }
                         }

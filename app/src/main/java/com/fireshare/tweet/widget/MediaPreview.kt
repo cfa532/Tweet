@@ -392,7 +392,6 @@ fun VideoPreview(
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)
-                        .alpha(0.8f)
                 )
             }
             // Mute button
@@ -409,7 +408,6 @@ fun VideoPreview(
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)
-                        .alpha(0.8f)
                 )
             }
         }
