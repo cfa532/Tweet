@@ -202,7 +202,7 @@ class TweetViewModel @AssistedInject constructor(
         ioScope.launch {
             /**
              * Call to checkUpgrade() also returns a map of environmental variables,
-             * that can be used to assign parameters to the App.
+             * which includes environment variables of the App.
              * */
             val map = HproseInstance.checkUpgrade() ?: return@launch
             val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"

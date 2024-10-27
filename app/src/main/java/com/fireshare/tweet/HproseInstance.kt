@@ -35,7 +35,7 @@ object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
-    private var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
+    var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
@@ -814,16 +814,11 @@ object HproseInstance {
                         // ... add more mappings for other MediaType values ...
                         else -> com.fireshare.tweet.widget.MediaType.Unknown
                     }
-
                     // Return MimeiFileType
                     if (cid != null) {
                         MimeiFileType(cid, mediaType)
-                    } else {
-                        null
-                    }
-                } else {
-                    null
-                }
+                    } else null
+                } else null
             } catch (e: Exception) {
                 Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message} $appUser")
                 e.printStackTrace()
