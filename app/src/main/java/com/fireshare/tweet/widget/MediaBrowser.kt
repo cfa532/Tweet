@@ -3,6 +3,8 @@ package com.fireshare.tweet.widget
 import android.view.View
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -91,43 +93,27 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val dragAmount = event.changes.firstOrNull()?.positionChange()?.y ?: 0f
+                detectDragGestures { change, dragAmount ->
+                    // Handle horizontal drag
+                    if (change.positionChange().x > 20) {
+                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                    } else if (change.positionChange().x < -20) {
+                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    }
 
-                        // Handle tap
-                        if (event.changes.any { it.changedToUp() }) {
-                            showControls = !showControls
-                        }
-
-                        // Handle horizontal drag
-                        if (event.changes.any { it.positionChange().x != 0f }) {
-                            val horizontalDragAmount = event.changes.first().positionChange().x
-                            if (horizontalDragAmount > 20) {
-                                animationScope.launch {
-                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                }
-                            } else if (horizontalDragAmount < -20) {
-                                animationScope.launch {
-                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                }
-                            }
-                        }
-
-                        // Handle vertical drag
-                        if (dragAmount != 0f) {
-                            println("Swipe down")
-                            if (dragAmount > 20) { // Check if swipe-down
-                                if (navController.previousBackStackEntry != null) {
-                                    navController.popBackStack()
-                                } else {
-                                    Timber.tag("MediaBrowser").d("No previous back stack entry")
-//                                    navController.navigate(NavTweet.TweetFeed)
-                                }
-                            }
+                    // Handle vertical drag (swipe down)
+                    if (dragAmount.y > 20) {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        } else {
+                            Timber.tag("MediaBrowser").d("No previous back stack entry")
                         }
                     }
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    showControls = !showControls
                 }
             }
     ) {
