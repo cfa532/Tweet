@@ -122,7 +122,7 @@ fun TweetBlock(
                             BookmarkButton(viewModel)
                             CommentButton(viewModel)
                             RetweetButton(viewModel)
-                            Spacer(modifier = Modifier.width(20.dp))
+                            Spacer(modifier = Modifier.width(40.dp))
                             ShareButton(viewModel)
 //                            ShareScreenshotButton(viewModel)
                         }

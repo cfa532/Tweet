@@ -108,7 +108,7 @@ class UserViewModel @AssistedInject constructor(
      * */
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
-            HproseInstance.addToTopList(tweet.mid!!)
+            HproseInstance.toggleTopList(tweet.mid!!)
 
             // Check if tweet is already in topTweets
             val isInTopTweets = topTweets.value.any { it.mid == tweet.mid }

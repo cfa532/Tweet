@@ -12,6 +12,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 
@@ -22,7 +23,7 @@ class CacheManager(private val context: Context) {
 
     /**
      * Generates the file path for a cached image based on the image URL and whether it's a preview.
-     * @param imageUrl The URL of the image.
+     * @param imageUrl The URL of the image. http//ip/mm/mimeiId_preview.jpg
      * @param isPreview Boolean indicating if the image is a preview.
      * @return The absolute path of the cached image file.
      */
@@ -110,6 +111,7 @@ class CacheManager(private val context: Context) {
 
                 cacheFile.absolutePath
             } catch (e: Exception) {
+                Timber.tag("CacheManager").e("Error downloading image: $e")
                 e.printStackTrace()
                 null
             }

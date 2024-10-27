@@ -882,7 +882,7 @@ object HproseInstance {
         }
     }
 
-    fun addToTopList(tweetId: MimeiId): List<MimeiId>? {
+    fun toggleTopList(tweetId: MimeiId): List<MimeiId>? {
         val entry = "toggle_top_tweets"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${appUser.mid}, "tweetid": $tweetId}
@@ -893,7 +893,7 @@ object HproseInstance {
             val list = hproseClient?.runMApp(entry, request) as List<MimeiId>?
             return list
         } catch (e: Exception) {
-            Timber.tag("addToTopList").e("$e")
+            Timber.tag("toggleTopList").e("$e")
         }
         return null
     }
