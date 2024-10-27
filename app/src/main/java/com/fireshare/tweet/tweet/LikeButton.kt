@@ -169,32 +169,6 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
 }
 
 @Composable
-fun ShareButton(viewModel: TweetViewModel) {
-    val navController = LocalNavController.current
-    val context = LocalContext.current
-
-    IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
-            }
-        } else
-            viewModel.shareTweet(context)
-    })
-    {
-        Row(horizontalArrangement = Arrangement.Center) {
-            Icon(
-                imageVector = Icons.Default.Share,
-                contentDescription = "Share",
-                modifier = Modifier.size(ButtonDefaults.IconSize)
-                    .padding(1.dp),
-                tint = MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-}
-
-@Composable
 fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
@@ -223,6 +197,32 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                 text = "$count",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+            )
+        }
+    }
+}
+
+@Composable
+fun ShareButton(viewModel: TweetViewModel) {
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+
+    IconButton(onClick = {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
+                guestWarning(context, navController)
+            }
+        } else
+            viewModel.shareTweet(context)
+    })
+    {
+        Row(horizontalArrangement = Arrangement.Center) {
+            Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = "Share",
+                modifier = Modifier.size(ButtonDefaults.IconSize)
+                    .padding(1.dp),
+                tint = MaterialTheme.colorScheme.outline
             )
         }
     }

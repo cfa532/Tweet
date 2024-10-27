@@ -45,6 +45,10 @@ class UploadCommentWorker @AssistedInject constructor(
                     }.awaitAll()
                 }.mapNotNull { it }
             }
+            if (attachmentUris.size != attachments.size) {
+                Timber.tag("UploadCommentWorker").e("Attachments upload failure")
+                return Result.failure()
+            }
             val comment = Tweet(
                 authorId = appUser.mid,
                 content = commentContent,
@@ -95,6 +99,10 @@ class UploadTweetWorker @AssistedInject constructor(
                         }
                     }.awaitAll()
                 }.mapNotNull { it } // Use getOrNull() without an index
+            }
+            if (attachmentUris.size != attachments.size) {
+                Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                return Result.failure()
             }
             val tweet = Tweet(
                 authorId = appUser.mid,
