@@ -189,7 +189,7 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                             navController.popBackStack()
                         },
                         modifier = Modifier
