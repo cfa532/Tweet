@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.BottomNavigationBar
@@ -126,7 +127,10 @@ fun UserProfileScreen(
                     }
 
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
-                        if (!tweet.isPrivate)
+                        if (tweet.isPrivate) {
+                            if (userId == appUser.mid)
+                                TweetItem(tweet, parentEntry)
+                        } else
                             TweetItem(tweet, parentEntry)
                     }
                     item {
@@ -139,7 +143,11 @@ fun UserProfileScreen(
                 }
 
                 items(tweets, key = {it.mid.toString()}) { tweet ->
-                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                    if (tweet.isPrivate) {
+                        if (userId == appUser.mid)
+                            TweetItem(tweet, parentEntry)
+                    } else
+                        TweetItem(tweet, parentEntry)
                 }
 
                 item {
