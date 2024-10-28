@@ -90,6 +90,7 @@ class UploadTweetWorker @AssistedInject constructor(
         return try {
             val tweetContent = inputData.getString("tweetContent")
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
+            val isPrivate = inputData.getBoolean("isPrivate", false)
 
             val attachments = withContext(Dispatchers.IO) {
                 supervisorScope {
@@ -107,7 +108,8 @@ class UploadTweetWorker @AssistedInject constructor(
             val tweet = Tweet(
                 authorId = appUser.mid,
                 content = tweetContent ?: " ",
-                attachments = attachments
+                attachments = attachments,
+                isPrivate = isPrivate
             )
             HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                 Timber.tag("UploadTweetWorker").d(tweet.toString())
