@@ -74,16 +74,16 @@ fun TweetNavGraph(
             route = NavTwee::class
         ) {
             composable<NavTweet.TweetFeed> {
-                val parentEntry = remember(it) {
+                val parentEntry = remember(navController) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                val viewModel = hiltViewModel<TweetFeedViewModel>()
                 // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
                 appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
                     parentEntry, key = appUser.mid
                 ) { factory ->
                     factory.create(appUser.mid)
                 }
+                val viewModel = hiltViewModel<TweetFeedViewModel>()
                 viewModel.tweetActionListener = appUserViewModel
                 TweetFeedScreen(navController, parentEntry, 0, viewModel)
             }
