@@ -82,24 +82,6 @@ class TweetViewModel @AssistedInject constructor(
         isCheckedToTweet.value = value
     }
 
-    /**
-     * When browsing attachments in MediaBrowser, track route stack,
-     * in order to go back to the correct Tweet in the feed list DIRECTLY.
-     * */
-    fun savePreviousRoute(route: String, navController: NavController) {
-        savedStateHandle["previousRoute"] = route
-        val previousArguments = navController.previousBackStackEntry?.arguments
-        if (previousArguments != null) {
-            savedStateHandle["previousArguments"] = previousArguments
-        }
-    }
-    fun getPreviousRoute(): String? {
-        return savedStateHandle.get<String>("previousRoute")
-    }
-    fun getPreviousArguments(): Bundle? {
-        return savedStateHandle.get<Bundle>("previousArguments")
-    }
-
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.IO) {
             _comments.value = HproseInstance.getComments(tweet)?.map {

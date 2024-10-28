@@ -98,13 +98,6 @@ fun MediaBrowser(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(Unit) {
-        // remember route before entering MediaBrowser screen
-        val previousRoute = navController.previousBackStackEntry?.destination?.route
-        if (previousRoute != null) {
-            viewModel.savePreviousRoute(previousRoute, navController)
-        }
-    }
-    LaunchedEffect(Unit) {
         activity?.window?.let { window ->
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.setFlags(
