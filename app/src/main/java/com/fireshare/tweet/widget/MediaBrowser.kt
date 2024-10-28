@@ -99,8 +99,12 @@ fun MediaBrowser(
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
-    val lifecycleOwner = LocalLifecycleOwner.current
 
+    /**
+     * Keep screen ON when video is playing in full screen mode.
+     * Stop playing when screen locked.
+     * */
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
         activity?.window?.let { window ->
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

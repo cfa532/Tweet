@@ -820,7 +820,7 @@ object HproseInstance {
                     } else null
                 } else null
             } catch (e: Exception) {
-                Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message} $appUser")
+                Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
                 e.printStackTrace()
                 null
             }

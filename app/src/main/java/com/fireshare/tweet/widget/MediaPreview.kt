@@ -53,6 +53,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
@@ -320,6 +323,26 @@ fun VideoPreview(
     val exoPlayer = remember { createExoPlayer(context, url) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(Unit) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    // Pause or stop video playback here
+                    exoPlayer.playWhenReady = false
+                }
+                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
+                    // Resume video playback here (if needed)
+                    exoPlayer.playWhenReady = true
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     LaunchedEffect(url.getMimeiKey()) {
         if (!inPreviewGrid) {
             val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
