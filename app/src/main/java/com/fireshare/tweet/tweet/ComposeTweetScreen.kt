@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +45,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
@@ -82,6 +84,7 @@ fun ComposeTweetScreen(
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
+    var isPrivate by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -105,6 +108,7 @@ fun ComposeTweetScreen(
         }
     }
 
+    // take a picture at attachment
     val takeAShot = {
         val photoFile = createImageFile(context)
         photoFile?.also {
@@ -118,6 +122,7 @@ fun ComposeTweetScreen(
         }
     }
 
+    // request user permission to user camera
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
@@ -166,7 +171,8 @@ fun ComposeTweetScreen(
                             viewModel.uploadTweet(
                                 context,
                                 tweetContent.trim(),
-                                selectedAttachments
+                                selectedAttachments,
+                                isPrivate
                             )
                             navController.popBackStack()
                         }, modifier = Modifier
@@ -217,6 +223,26 @@ fun ComposeTweetScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    Row (
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                            .alpha(0.9f)
+                            .size(40.dp)
+                    ) {
+                        Checkbox(
+                            checked = isPrivate,
+                            onCheckedChange = { isPrivate = !isPrivate },
+                            modifier = Modifier
+                        )
+                        Text(
+                            text = "Private",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
                     IconButton(onClick = {
                         if (ContextCompat.checkSelfPermission(
                                 context,
