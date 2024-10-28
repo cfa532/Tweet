@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -97,6 +98,7 @@ fun ComposeTweetScreen(
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val selectedAttachmentsState = remember { mutableStateMapOf<Uri, Boolean>() }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -168,10 +170,16 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
+                            val attachmentsToUpload = selectedAttachments.filter {
+                                selectedAttachmentsState.getOrDefault(
+                                    it,
+                                    true
+                                )
+                            }
                             viewModel.uploadTweet(
                                 context,
                                 tweetContent.trim(),
-                                selectedAttachments,
+                                attachmentsToUpload,
                                 isPrivate
                             )
                             navController.popBackStack()
@@ -226,7 +234,8 @@ fun ComposeTweetScreen(
                     Row (
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
                             .alpha(0.9f)
                             .size(40.dp)
                     ) {
@@ -253,7 +262,8 @@ fun ComposeTweetScreen(
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
                         } },
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier
+                            .size(40.dp)
                             .padding(top = 10.dp, end = 8.dp)
                     ) {
                         Icon(
@@ -288,7 +298,9 @@ fun ComposeTweetScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(rowItems) { uri ->
-                                UploadFilePreview(uri)
+                                UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
+                                    selectedAttachmentsState[updatedUri] = checked
+                                })
                             }
                         }
                     }

@@ -1,6 +1,5 @@
 package com.fireshare.tweet.navigation
 
-import android.app.Activity
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider

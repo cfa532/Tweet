@@ -6,7 +6,10 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -25,14 +29,16 @@ import androidx.compose.ui.unit.dp
 import com.fireshare.tweet.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 @Composable
-fun UploadFilePreview(uri: Uri) {
+fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
     val view = LocalView.current
     val viewWidth = with(LocalDensity.current) { view.width.toDp() }.value.toInt()
     val canvasSize = viewWidth / 2 - 20
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     val contentResolver = LocalContext.current.contentResolver
+    var isChecked by remember { mutableStateOf(true) }
 
     LaunchedEffect(uri) {
         withContext(Dispatchers.IO) {
@@ -63,28 +69,33 @@ fun UploadFilePreview(uri: Uri) {
                     paint
                 )
                 imageBitmap = resizedBitmap.asImageBitmap()
-                println("Canvas Size: $canvasSize dp")
-                println("Thumbnail Size: ${bitmap.width} x ${bitmap.height}")
-                imageBitmap?.let {
-                    println("ImageBitmap Size: ${it.width} x ${it.height}")
-                }
             } catch (e: Exception) {
-                println("Error loading thumbnail: ${e.message}")
+                Timber.tag("UploadFilePreview").e(e, "Error loading thumbnail")
             }
         }
     }
-
-    imageBitmap?.let {
-        Image(
-            bitmap = it,
-            contentDescription = "Attached File",
-            modifier = Modifier.size(canvasSize.dp)
-        )
-    } ?: run {
-        Icon(
-            painter = painterResource(id = R.drawable.ic_photo_plus),
-            contentDescription = "Attached File",
-            modifier = Modifier.size(canvasSize.dp)
+    Box(modifier = Modifier.size(canvasSize.dp)) {
+        imageBitmap?.let {
+            Image(
+                bitmap = it,
+                contentDescription = "Attached File",
+                modifier = Modifier.size(canvasSize.dp)
+            )
+        } ?: run {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_photo_plus),
+                contentDescription = "Attached File",
+                modifier = Modifier.size(canvasSize.dp)
+            )
+        }
+        Checkbox(
+            checked = isChecked,
+            onCheckedChange = {
+                isChecked = it
+                onCheckedChange(uri, it) },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp) // Add some padding for better visibility
         )
     }
 }

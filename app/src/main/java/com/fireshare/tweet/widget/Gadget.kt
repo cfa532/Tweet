@@ -1,7 +1,6 @@
 package com.fireshare.tweet.widget
 
 import android.media.MediaMetadataRetriever
-import android.util.Log
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -41,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -86,6 +86,7 @@ fun ComposeCommentScreen(
     val viewModel = sharedViewModel?.sharedTweetVMInstance ?: return
     val tweet by viewModel.tweetState.collectAsState()
     val author = tweet.author
+    val selectedAttachmentsState = remember { mutableStateMapOf<Uri, Boolean>() }
 
     val isCheckedToTweet by viewModel.isCheckedToTweet
 
@@ -166,16 +167,24 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
-                    IconButton( onClick = {
-                        viewModel.uploadComment(context,
+                    IconButton(onClick = {
+                        val attachmentsToUpload = selectedAttachments.filter {
+                            selectedAttachmentsState.getOrDefault(
+                                it,
+                                true
+                            )
+                        }
+                        viewModel.uploadComment(
+                            context,
                             tweetContent.trim(),
-                            selectedAttachments,
+                            attachmentsToUpload,
                             tweetViewModel
                         )
                         // clear and return to previous screen
                         selectedAttachments.clear()
                         tweetContent = ""
-                        navController.popBackStack()}
+                        navController.popBackStack()
+                    }
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
@@ -246,7 +255,8 @@ fun ComposeCommentScreen(
                     Row (
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
                             .alpha(0.9f)
                             .size(40.dp)
                     ) {
@@ -309,7 +319,9 @@ fun ComposeCommentScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(rowItems) { uri ->
-                                UploadFilePreview(uri)
+                                UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
+                                    selectedAttachmentsState[updatedUri] = checked
+                                })
                             }
                         }
                     }
