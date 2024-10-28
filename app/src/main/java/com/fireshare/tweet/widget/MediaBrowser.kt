@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ComponentCallbacks
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.os.PowerManager
 import android.view.View
 import android.view.WindowManager
 import androidx.annotation.OptIn
@@ -146,6 +147,7 @@ fun MediaBrowser(
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
                     val exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
+                    exoPlayer.setWakeMode(PowerManager.PARTIAL_WAKE_LOCK)
                     exoPlayer.playWhenReady = true
                     exoPlayer.volume = 1f
 
