@@ -247,10 +247,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Use WorkManager to update tweet. When the upload succeeds, a message will be sent back.
      * Show a snackbar to inform user of the result.
      * */
-    fun uploadTweet(context: Context, content: String, attachments: List<Uri>?) {
+    fun uploadTweet(context: Context, content: String, attachments: List<Uri>?, isPrivate: Boolean = false) {
         val data = workDataOf(
             "tweetContent" to content,
-            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
+            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
+            "isPrivate" to isPrivate
         )
         val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
             .setInputData(data)
