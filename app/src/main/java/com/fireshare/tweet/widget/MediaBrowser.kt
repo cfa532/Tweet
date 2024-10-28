@@ -2,6 +2,7 @@ package com.fireshare.tweet.widget
 
 import android.app.Activity
 import android.content.ComponentCallbacks
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.PowerManager
@@ -100,14 +101,20 @@ fun MediaBrowser(
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(Unit) {
+    DisposableEffect(Unit) {
         activity?.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             WindowCompat.setDecorFitsSystemWindows(window, false)
             val controller = WindowInsetsControllerCompat(window, window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
+
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -147,7 +154,6 @@ fun MediaBrowser(
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
                     val exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
-                    exoPlayer.setWakeMode(PowerManager.PARTIAL_WAKE_LOCK)
                     exoPlayer.playWhenReady = true
                     exoPlayer.volume = 1f
 
