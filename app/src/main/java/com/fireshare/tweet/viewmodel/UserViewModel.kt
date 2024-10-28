@@ -370,11 +370,9 @@ class UserViewModel @AssistedInject constructor(
 
     override fun onTweetAdded(tweet: Tweet) {
         _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
-        println("Added tweet: $tweet")
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        println("Deleted tweet: $tweetId")
     }
 }

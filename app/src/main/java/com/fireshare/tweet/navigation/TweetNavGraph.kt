@@ -1,11 +1,13 @@
 package com.fireshare.tweet.navigation
 
+import android.app.Activity
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -16,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.TweetActivity
 import com.fireshare.tweet.chat.ChatListScreen
 import com.fireshare.tweet.chat.ChatScreen
 import com.fireshare.tweet.datamodel.Tweet
@@ -52,7 +55,14 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
-    lateinit var appUserViewModel: UserViewModel
+    val context = LocalContext.current
+    // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
+    // do it here to survive configuration changes.
+    val appUserViewModel: UserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        context as TweetActivity, key = appUser.mid
+    ) { factory ->
+        factory.create(appUser.mid)
+    }
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
@@ -76,12 +86,6 @@ fun TweetNavGraph(
             composable<NavTweet.TweetFeed> {
                 val parentEntry = remember(navController) {
                     navController.getBackStackEntry(NavTwee)
-                }
-                // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
-                appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                    parentEntry, key = appUser.mid
-                ) { factory ->
-                    factory.create(appUser.mid)
                 }
                 val viewModel = hiltViewModel<TweetFeedViewModel>()
                 viewModel.tweetActionListener = appUserViewModel

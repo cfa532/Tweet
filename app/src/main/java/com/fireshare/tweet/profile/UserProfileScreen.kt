@@ -57,11 +57,12 @@ fun UserProfileScreen(
     parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel,
 ) {
-    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
-    ) { factory ->
-        factory.create(userId)
-    }
+    val viewModel = if (userId == appUser.mid) appUserViewModel
+        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+            parentEntry, key = userId
+        ) { factory ->
+            factory.create(userId)
+        }
     val tweets by viewModel.tweets.collectAsState()
     val topTweets by viewModel.topTweets.collectAsState()
     val scrollBehavior =
@@ -192,8 +193,9 @@ fun ProfileDetail(
 ) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
-    val profile by remember { derivedStateOf {user.profile} }
-    val tweetCount = viewModel.tweets.collectAsState().value.size + viewModel.topTweets.collectAsState().value.size
+    val profile by remember { derivedStateOf { user.profile } }
+    val tweetCount =
+        viewModel.tweets.collectAsState().value.size + viewModel.topTweets.collectAsState().value.size
     val fansList by viewModel.fans.collectAsState()
     val followingsList by viewModel.followings.collectAsState()
 
