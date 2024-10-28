@@ -116,7 +116,6 @@ fun MediaPreviewGrid(
         val modifier =
             if (gridCells == 1)
                 Modifier.fillMaxWidth()
-//                    .heightIn(max = containerWidth)
             else Modifier.size(containerWidth / gridCells)
 
         itemsIndexed(limitedMediaList) { index, mediaItem ->
@@ -146,7 +145,7 @@ fun MediaItemPreview(
     modifier: Modifier = Modifier,
     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
     index: Int = -1,               // autoplay first video item, index 0
-    inPreviewGrid: Boolean = true,  // real aspectRatio when not displaying in preview grid.
+    inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     tweetId: MimeiId? = null
 ) {
     val mediaItem = mediaItems[index]
@@ -264,8 +263,6 @@ fun ImageViewer(
         if (isDownloading) {
             Box(
                 modifier = adjustedModifier
-//                    .background(Color.Gray)
-//                    .alpha(0.6f),
             ) {
                 if (!isPreview) {
                     val cachedPreviewPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, true))

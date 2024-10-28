@@ -109,9 +109,24 @@ fun MediaBrowser(
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    // Pause or stop video playback here
+                    viewModel.exoPlayer?.playWhenReady = false
+                }
+                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
+                    // Resume video playback here (if needed)
+                    viewModel.exoPlayer?.playWhenReady = true
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -153,24 +168,24 @@ fun MediaBrowser(
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-                    val exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
-                    exoPlayer.playWhenReady = true
-                    exoPlayer.volume = 1f
+                    viewModel.exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
+                    viewModel.exoPlayer?.playWhenReady = true
+                    viewModel.exoPlayer?.volume = 1f
 
                     DisposableEffect(Unit) {
                         onDispose {
-                            viewModel.playbackPosition = exoPlayer.currentPosition
-                            exoPlayer.release()
+                            viewModel.playbackPosition = viewModel.exoPlayer?.currentPosition ?: 0
+                            viewModel.exoPlayer?.release()
                         }
                     }
                     LaunchedEffect(viewModel.playbackPosition) {
-                        exoPlayer.seekTo(viewModel.playbackPosition)
-                        exoPlayer.playWhenReady = true
+                        viewModel.exoPlayer?.seekTo(viewModel.playbackPosition)
+                        viewModel.exoPlayer?.playWhenReady = true
                     }
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
-                                player = exoPlayer
+                                player = viewModel.exoPlayer
                                 useController = true // Disable default controls
                                 setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                                     showControls = visibility == View.VISIBLE

@@ -12,6 +12,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
@@ -59,6 +60,7 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     var playbackPosition: Long by mutableLongStateOf(0L)
+    var exoPlayer: ExoPlayer? = null
 
     init {
         /**
