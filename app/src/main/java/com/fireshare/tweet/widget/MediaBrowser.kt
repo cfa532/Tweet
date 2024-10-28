@@ -33,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +51,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -93,6 +95,7 @@ fun MediaBrowser(
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(Unit) {
         // remember route before entering MediaBrowser screen
@@ -154,8 +157,13 @@ fun MediaBrowser(
 
                     DisposableEffect(Unit) {
                         onDispose {
+                            viewModel.playbackPosition = exoPlayer.currentPosition
                             exoPlayer.release()
                         }
+                    }
+                    LaunchedEffect(viewModel.playbackPosition) {
+                        exoPlayer.seekTo(viewModel.playbackPosition)
+                        exoPlayer.playWhenReady = true
                     }
                     AndroidView(
                         factory = { ctx ->
@@ -183,7 +191,7 @@ fun MediaBrowser(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(100.dp)
-                        .background(Color.Black)
+                        .background(Color.Transparent)
                 ) {
                     IconButton(
                         onClick = {
@@ -222,12 +230,13 @@ fun MediaBrowser(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                if (tweetId != null) {
+                val mediaItem = mediaItems[pagerState.currentPage]
+                if (tweetId != null && mediaItem.type != MediaType.Video) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp)
-                            .background(Color.Black)
+                            .background(Color.Transparent)
                     ) {
                         Row(
                             modifier = Modifier
