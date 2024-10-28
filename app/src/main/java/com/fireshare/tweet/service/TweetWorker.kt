@@ -37,13 +37,14 @@ class UploadCommentWorker @AssistedInject constructor(
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
             val attachments = withContext(Dispatchers.IO) {
-                supervisorScope {
-                    attachmentUris.map { uri ->
-                        async {
-                            uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
-                        }
-                    }.awaitAll()
-                }.mapNotNull { it }
+                attachmentUris.mapNotNull { uri ->
+                    try {
+                        uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                    } catch (e: Exception) {
+                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
+                        null // Return null in case of error
+                    }
+                }
             }
             if (attachmentUris.size != attachments.size) {
                 Timber.tag("UploadCommentWorker").e("Attachments upload failure")
@@ -93,13 +94,14 @@ class UploadTweetWorker @AssistedInject constructor(
             val isPrivate = inputData.getBoolean("isPrivate", false)
 
             val attachments = withContext(Dispatchers.IO) {
-                supervisorScope {
-                    attachmentUris.map { uri ->
-                        async {
-                            uploadToIPFS(applicationContext, Uri.parse((uri.toString())))
-                        }
-                    }.awaitAll()
-                }.mapNotNull { it } // Use getOrNull() without an index
+                attachmentUris.mapNotNull { uri ->
+                    try {
+                        uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                    } catch (e: Exception) {
+                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
+                        null // Return null in case of error
+                    }
+                }
             }
             if (attachmentUris.size != attachments.size) {
                 Timber.tag("UploadTweetWorker").e("Attachments upload failure")

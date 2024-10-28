@@ -125,8 +125,9 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun hidePhrase() {
-        // Even after user logout, its key phrase may still on the device,
-        // for future convenience. Hide it in case someone else tries to register a new account.
+        // Even after user logout, its key phrase may still be stored on the device,
+        // for future convenience. Hide it in case someone else tries to register
+        // a new account with this device.
         keyPhrase.value = ""
     }
 
