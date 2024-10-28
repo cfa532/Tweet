@@ -135,11 +135,7 @@ fun UserProfileScreen(
                     }
 
                     items(topTweets, key = { it.mid.toString() }) { tweet ->
-                        if (tweet.isPrivate) {
-                            if (userId == appUser.mid)
-                                TweetItem(tweet, parentEntry)
-                        } else
-                            TweetItem(tweet, parentEntry)
+                        TweetItem(tweet, parentEntry)
                     }
                     item {
                         HorizontalDivider(
@@ -151,11 +147,7 @@ fun UserProfileScreen(
                 }
 
                 items(tweets, key = {it.mid.toString()}) { tweet ->
-                    if (tweet.isPrivate) {
-                        if (userId == appUser.mid)
-                            TweetItem(tweet, parentEntry)
-                    } else
-                        TweetItem(tweet, parentEntry)
+                    TweetItem(tweet, parentEntry)
                 }
 
                 item {

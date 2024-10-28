@@ -113,7 +113,7 @@ fun TweetFeedScreen(
                  state = listState
              ) {
                  items(tweets, key = { it.mid.toString() } ) { tweet ->
-                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                     TweetItem(tweet, parentEntry)
                  }
                  item {
                      if (refreshingAtTop) {

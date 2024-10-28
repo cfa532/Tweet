@@ -407,8 +407,9 @@ object HproseInstance {
             null
         }
 
-    // get tweets of a given author in a given span of time
-    // if end is null, get all tweets
+    /**
+     * Get tweets of a given author in a given span of time. if end is null, get all tweets.
+     * */
     suspend fun getTweetList(
         user: User,
         startTimestamp: Long,
@@ -416,7 +417,8 @@ object HproseInstance {
     ): List<Tweet> = try {
         val method = "get_tweets"
         val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-            .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()
+            .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp")
+            .append("&gid=${appUser.mid}").toString()   // viewer's Id.
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
@@ -911,6 +913,9 @@ object HproseInstance {
         return null
     }
 
+    /**
+     * Remove user from cachedUsers list.
+     * */
     fun removeUser(userId: MimeiId) {
         cachedUsers.removeIf { it.mid == userId }
     }
