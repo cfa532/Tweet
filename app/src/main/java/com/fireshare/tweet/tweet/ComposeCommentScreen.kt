@@ -194,41 +194,23 @@ fun ComposeCommentScreen(
                 .imePadding()
         ) {
             Column(
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp)
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)
             ) {
-                Spacer(modifier = Modifier.padding(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Row (
                         horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        UserAvatar(author, 32)
+                        UserAvatar(author, 36)
                         Spacer(modifier = Modifier.padding(4.dp))
                         Text(
                             text = "Reply to @${author?.username}",
-                            modifier = Modifier.alpha(0.6f)
-                        )
-                    }
-                    Row (
-                        horizontalArrangement = Arrangement.End,
-                        modifier = Modifier.weight(1f)
-                            .padding(end = 8.dp)
-                    ) {
-                        Checkbox(
-                            checked = isCheckedToTweet,
-                            onCheckedChange = { viewModel.onCheckedChange(it) },
-                            modifier = Modifier
-                                .size(18.dp)
-                                .alpha(0.8f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Post as Tweet",
-                            modifier = Modifier.alpha(0.6f),
-                            style = MaterialTheme.typography.bodyMedium
+                            modifier = Modifier.alpha(0.7f)
                         )
                     }
                 }
@@ -254,11 +236,33 @@ fun ComposeCommentScreen(
                             }
                         },
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                // row of icons at bottom of text field.
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    Row (
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                            .alpha(0.9f)
+                            .size(40.dp)
+                    ) {
+                        Checkbox(
+                            checked = isCheckedToTweet,
+                            onCheckedChange = { viewModel.onCheckedChange(it) },
+                            modifier = Modifier
+                        )
+                        Text(
+                            text = "Post as Tweet",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
                     IconButton(onClick = {
                         if (ContextCompat.checkSelfPermission(
                                 context,
@@ -269,7 +273,8 @@ fun ComposeCommentScreen(
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
                         } },
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier
+                            .size(40.dp)
                             .padding(top = 10.dp, end = 8.dp)
                     ) {
                         Icon(
