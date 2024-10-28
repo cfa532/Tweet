@@ -56,6 +56,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
@@ -323,6 +324,10 @@ fun VideoPreview(
     val exoPlayer = remember { createExoPlayer(context, url) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
 
+    /**
+     * Stop playing when screen is locked or closed.
+     * Resume play when unlocked.
+     * */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
         val observer = LifecycleEventObserver { _, event ->
@@ -338,9 +343,11 @@ fun VideoPreview(
                 else -> {}
             }
         }
+
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            exoPlayer.release()
         }
     }
     LaunchedEffect(url.getMimeiKey()) {
@@ -351,18 +358,12 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isVideoVisible, index) {
-        delay(500)
+        delay(300)
         exoPlayer.playWhenReady = isVideoVisible && index == 0
     }
 
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
     }
 
     val scope = rememberCoroutineScope()
@@ -378,7 +379,7 @@ fun VideoPreview(
                         if (areControlsVisible) {
                             // Start a coroutine to hide controls after 2 seconds
                             scope.launch {
-                                delay(2000)
+                                delay(1000)
                                 areControlsVisible = false
                             }
                         }
