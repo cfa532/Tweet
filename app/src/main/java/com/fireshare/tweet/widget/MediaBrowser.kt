@@ -1,13 +1,15 @@
 package com.fireshare.tweet.widget
 
+import android.app.Activity
+import android.content.ComponentCallbacks
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.view.View
+import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,20 +40,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.BookmarkButton
 import com.fireshare.tweet.tweet.CommentButton
 import com.fireshare.tweet.tweet.LikeButton
@@ -80,6 +90,10 @@ fun MediaBrowser(
     val animationScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val activity = context as? Activity
+    val configuration = LocalConfiguration.current
+    val orientation by remember { mutableIntStateOf(configuration.orientation) }
+
     LaunchedEffect(Unit) {
         // remember route before entering MediaBrowser screen
         val previousRoute = navController.previousBackStackEntry?.destination?.route
@@ -87,7 +101,15 @@ fun MediaBrowser(
             viewModel.savePreviousRoute(previousRoute, navController)
         }
     }
-
+    LaunchedEffect(Unit) {
+        activity?.window?.let { window ->
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            )
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -106,7 +128,9 @@ fun MediaBrowser(
                         if (navController.previousBackStackEntry != null) {
                             navController.popBackStack()
                         } else {
-                            Timber.tag("MediaBrowser").d("No previous back stack entry")
+                            Timber
+                                .tag("MediaBrowser")
+                                .d("No previous back stack entry")
                         }
                     }
                 }
@@ -144,7 +168,7 @@ fun MediaBrowser(
                                 hideController()
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 else -> {
@@ -163,17 +187,37 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
+                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                             navController.popBackStack()
                         },
                         modifier = Modifier
-                            .padding(16.dp)
+                            .padding(24.dp)
                             .align(Alignment.TopStart)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            activity?.requestedOrientation = when(orientation) {
+                                Configuration.ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                Configuration.ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            }
+                        },
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_rotate),
+                            contentDescription = "Orientation",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }

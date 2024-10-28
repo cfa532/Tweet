@@ -77,6 +77,7 @@ import kotlinx.serialization.Serializable
 import timber.log.Timber
 import java.io.File
 
+@Serializable
 enum class MediaType {
     Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
 }
