@@ -30,13 +30,14 @@ interface TweetActionListener {
 data class MimeiFileType(
     val mid: MimeiId,
     val type: MediaType,
+    val size: Long? = null,
 )
 
 @Serializable
 data class Tweet(
     var mid: MimeiId? = null,   // mid of the tweet
     val authorId: MimeiId,        // mid of the author, is also the mimei database Id
-    var content: String ? = null,   // content or attachments must have one.
+    var content: String? = null,   // content or attachments must have one.
     val timestamp: Long = System.currentTimeMillis(),
 
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
@@ -44,31 +45,23 @@ data class Tweet(
 
     // the following six attributes are for display only. Not stored in database.
     var author: User? = null,
-//    var originalAuthor: User? = null,
     var originalTweet: Tweet? = null,        // the original tweet for display only.
 
     // if the current user has liked or bookmarked this tweet
-//    var hasLiked: Boolean? = false,
-//    var hasBookmarked: Boolean? = false,
-//    var hasRetweeted: Boolean? = false,
     var favorites: MutableList<Boolean>? = mutableListOf(false, false, false),
 
     var likeCount: Int = 0,     // Number of likes
-//    var likers: List<MimeiId> = emptyList(),     // user list that liked the tweet
 
     var bookmarkCount: Int = 0, // Number of bookmarks
-//    var bookmarks: List<MimeiId> = emptyList(), // user list that bookmarked the tweet
 
     // List of retweets ID, without comments.
-//    var retweets: List<MimeiId> = emptyList(),
     var retweetCount: Int = 0,  // Number of retweets
 
     // List of comments (tweets) Id on this tweet.
-//    var comments: List<MimeiId> = emptyList(),
     var commentCount: Int = 0,  // Number of comments
 
     // List of media IDs attached to the tweet. Max 4 items for now.
-    var attachments: List<MimeiFileType>? = emptyList(),
+    var attachments: List<MimeiFileType>? = null,
 
     var isPrivate: Boolean = false,     // Viewable by the author only if true.
 )
@@ -91,12 +84,12 @@ data class User(
     var publicKey: String? = null,
 
     // List of tweet MIDs bookmarked by the user
-    var fansList: List<MimeiId>? = emptyList(),
-    var followingList: List<MimeiId>? = emptyList(),
-    var bookmarkedTweets: List<MimeiId>? = emptyList(),
-    var likedTweets: List<MimeiId>? = emptyList(),
-    var repliedTweets: List<MimeiId>? = emptyList(),
+    var fansList: List<MimeiId>? = null,
+    var followingList: List<MimeiId>? = null,
+    var bookmarkedTweets: List<MimeiId>? = null,
+    var likedTweets: List<MimeiId>? = null,
+    var repliedTweets: List<MimeiId>? = null,
 
     // List of top tweets liked by the user
-    var topTweets: List<MimeiId>? = emptyList(),
+    var topTweets: List<MimeiId>? = null,
 )

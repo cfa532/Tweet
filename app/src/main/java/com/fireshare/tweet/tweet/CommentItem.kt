@@ -142,7 +142,7 @@ fun CommentItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentHeight()
-                        .heightIn(max = 800.dp)
+                        .heightIn(max = 400.dp)
                 ) {
                     val mediaItems = comment.attachments?.mapNotNull { attachment ->
                         comment.author?.baseUrl?.let { baseUrl ->

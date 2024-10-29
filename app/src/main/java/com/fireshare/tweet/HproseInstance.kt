@@ -786,8 +786,8 @@ object HproseInstance {
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     val fsid = response.body?.string()
+                    var offset = 0L
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        var offset = 0
                         inputStream.use { stream ->
                             val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
                             var bytesRead: Int
@@ -800,7 +800,9 @@ object HproseInstance {
                         }
                     }
                     val cid = fsid?.let {
-                        hproseClient?.mfTemp2Ipfs(it, appUser.mid)
+                        // Do not know the tweet mid yet, cannot add reference.
+                        // Do it later when uploading tweet.
+                        hproseClient?.mfTemp2Ipfs(it)
                     }
 
                     // Determine MediaType based on MIME type
@@ -818,7 +820,7 @@ object HproseInstance {
                     }
                     // Return MimeiFileType
                     if (cid != null) {
-                        MimeiFileType(cid, mediaType)
+                        MimeiFileType(cid, mediaType, offset)
                     } else null
                 } else null
             } catch (e: Exception) {
@@ -969,9 +971,9 @@ interface HproseService {
     fun mmSetObject(fsid: String, obj: Any)
     fun mimeiPublish(sid: String, memo: String, mid: MimeiId)
     fun mfOpenTempFile(sid: String): String
-    fun mfTemp2Ipfs(fsid: String, ref: MimeiId): MimeiId
+    fun mfTemp2Ipfs(fsid: String, ref: MimeiId? = null): MimeiId
     fun mfSetCid(sid: String, mid: MimeiId, cid: MimeiId)
-    fun mfSetData(fsid: String, data: ByteArray, offset: Int)
+    fun mfSetData(fsid: String, data: ByteArray, offset: Long)
     fun set(sid: String, key: String, value: Any)
     fun get(sid: String, key: String): Any?
     fun hGet(sid: String, key: String, field: String): Any?
