@@ -86,7 +86,6 @@ fun ComposeCommentScreen(
     val viewModel = sharedViewModel?.sharedTweetVMInstance ?: return
     val tweet by viewModel.tweetState.collectAsState()
     val author = tweet.author
-    val selectedAttachmentsState = remember { mutableStateMapOf<Uri, Boolean>() }
 
     val isCheckedToTweet by viewModel.isCheckedToTweet
 
@@ -168,24 +167,19 @@ fun ComposeCommentScreen(
                 actions = {
                     val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(onClick = {
-                        val attachmentsToUpload = selectedAttachments.filter {
-                            selectedAttachmentsState.getOrDefault(
-                                it,
-                                true
+                        if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                            viewModel.uploadComment(
+                                context,
+                                tweetContent.trim(),
+                                selectedAttachments,
+                                tweetViewModel
                             )
-                        }
-                        viewModel.uploadComment(
-                            context,
-                            tweetContent.trim(),
-                            attachmentsToUpload,
-                            tweetViewModel
-                        )
-                        // clear and return to previous screen
-                        selectedAttachments.clear()
-                        tweetContent = ""
-                        navController.popBackStack()
-                    }
-                    ) {
+                            // clear and return to previous screen
+                            selectedAttachments.clear()
+                            tweetContent = ""
+                            navController.popBackStack()
+                        } })
+                    {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
@@ -320,7 +314,9 @@ fun ComposeCommentScreen(
                         ) {
                             items(rowItems) { uri ->
                                 UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
-                                    selectedAttachmentsState[updatedUri] = checked
+                                    if (!checked) {
+                                        selectedAttachments.remove(updatedUri)
+                                    }
                                 })
                             }
                         }

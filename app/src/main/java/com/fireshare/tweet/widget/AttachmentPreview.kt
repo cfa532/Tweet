@@ -90,9 +90,7 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
         }
         Checkbox(
             checked = isChecked,
-            onCheckedChange = {
-                isChecked = it
-                onCheckedChange(uri, it) },
+            onCheckedChange = { onCheckedChange(uri, it) },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(4.dp) // Add some padding for better visibility

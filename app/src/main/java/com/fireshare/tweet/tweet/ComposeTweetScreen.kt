@@ -82,9 +82,9 @@ fun ComposeTweetScreen(
     navController: NavHostController,
     viewModel: TweetFeedViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
-    val context = LocalContext.current
     var isPrivate by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -98,7 +98,6 @@ fun ComposeTweetScreen(
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-    val selectedAttachmentsState = remember { mutableStateMapOf<Uri, Boolean>() }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -170,19 +169,15 @@ fun ComposeTweetScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            val attachmentsToUpload = selectedAttachments.filter {
-                                selectedAttachmentsState.getOrDefault(
-                                    it,
-                                    true
+                            if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                                viewModel.uploadTweet(
+                                    context,
+                                    tweetContent.trim(),
+                                    selectedAttachments,
+                                    isPrivate
                                 )
+                                navController.popBackStack()
                             }
-                            viewModel.uploadTweet(
-                                context,
-                                tweetContent.trim(),
-                                attachmentsToUpload,
-                                isPrivate
-                            )
-                            navController.popBackStack()
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
                             .alpha(1f) // Set opacity to 80%
@@ -299,7 +294,9 @@ fun ComposeTweetScreen(
                         ) {
                             items(rowItems) { uri ->
                                 UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
-                                    selectedAttachmentsState[updatedUri] = checked
+                                    if (!checked) {
+                                        selectedAttachments.remove(updatedUri)
+                                    }
                                 })
                             }
                         }
