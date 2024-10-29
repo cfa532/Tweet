@@ -17,6 +17,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appId
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
@@ -191,8 +192,10 @@ class TweetViewModel @AssistedInject constructor(
              * Call to checkUpgrade() also returns a map of environmental variables,
              * which includes environment variables of the App.
              * */
-            val map = HproseInstance.checkUpgrade() ?: return@launch
-            val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+//            val map = HproseInstance.checkUpgrade() ?: return@launch
+//            val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
+                    "${tweet.mid}/${tweet.authorId}"
             val sendIntent: Intent = Intent().apply {
                 action = Intent.ACTION_SEND
                 putExtra(Intent.EXTRA_TEXT, deepLink)
