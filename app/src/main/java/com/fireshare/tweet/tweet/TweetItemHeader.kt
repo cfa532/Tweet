@@ -46,9 +46,14 @@ fun TweetItemHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = {
+                /**
+                 * Click on user avatar of a tweet, to navigate to the user profile.
+                 * If the current user is not the author of the tweet, navigate to the user profile.
+                 * If the current user is the author of the tweet, or the user profile is already
+                 * opened, do nothing.
+                 * */
                 val currentRoute = navController.currentBackStackEntry?.destination?.route
-                if (currentRoute?.startsWith("com.fireshare.tweet.navigation.NavTweet.UserProfile")
-                    == true) {
+                if (currentRoute?.contains("UserProfile") == true) {
                     val currentUserId = navController.currentBackStackEntry?.arguments?.getString("userId")
                     if (currentUserId != tweet.authorId) {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
