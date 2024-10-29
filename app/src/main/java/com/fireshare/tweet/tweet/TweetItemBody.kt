@@ -33,6 +33,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.MediaType
 
 @Composable
 fun TweetBlock(
@@ -101,7 +102,7 @@ fun TweetBlock(
                     ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                it.type)
+                                it.type ?: MediaType.Unknown)
                         } ?: emptyList()
 
                         tweet.mid?.let {

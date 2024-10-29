@@ -56,6 +56,7 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
+import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
@@ -113,7 +114,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
                         tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
-                            ?.let { it2 -> MediaItem(it2, it.type) }
+                            ?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
                     }
                     mediaItems?.let {
                         LazyColumn(

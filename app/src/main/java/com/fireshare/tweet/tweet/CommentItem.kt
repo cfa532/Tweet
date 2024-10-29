@@ -50,6 +50,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
@@ -147,7 +148,7 @@ fun CommentItem(
                     val mediaItems = comment.attachments?.mapNotNull { attachment ->
                         comment.author?.baseUrl?.let { baseUrl ->
                             val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
-                            MediaItem(mediaUrl, attachment.type)
+                            MediaItem(mediaUrl, attachment.type ?: MediaType.Unknown)
                         }
                     }
                     mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }

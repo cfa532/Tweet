@@ -31,6 +31,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.MediaType
 
 @Composable
 fun TweetItem(
@@ -117,7 +118,7 @@ fun TweetItem(
                             val mediaItems = tweet.attachments?.mapNotNull {
                                 tweet.author?.baseUrl?.let { it1 ->
                                     getMediaUrl(it.mid, it1).toString()
-                                }?.let { it2 -> MediaItem(it2, it.type) }
+                                }?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
                             }
                             if (tweet.mid != null && mediaItems != null) {
                                 MediaPreviewGrid(mediaItems, tweet.mid!!)
