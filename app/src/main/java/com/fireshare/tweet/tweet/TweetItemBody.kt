@@ -99,7 +99,7 @@ fun TweetItemBody(
                         modifier = Modifier.fillMaxWidth()
                             .padding(top = 8.dp)
                             .wrapContentHeight()
-                            .heightIn(max = 500.dp)
+                            .heightIn(max = 400.dp)
                     ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
