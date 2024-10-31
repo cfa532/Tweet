@@ -153,7 +153,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             tonalElevation = 2.dp,
                             modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
                         ) {
-                            TweetBlock(
+                            TweetItemBody(
                                 hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory -> factory.create(tweet.originalTweet!!) },

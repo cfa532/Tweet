@@ -54,10 +54,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable
-fun LoginScreen() {
-    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(key = TW_CONST.GUEST_ID) {
-            factory -> factory.create(TW_CONST.GUEST_ID)
-    }
+fun LoginScreen(viewModel: UserViewModel) {
     val navController = LocalNavController.current
     val focusManager = LocalFocusManager.current
     val username by viewModel.username

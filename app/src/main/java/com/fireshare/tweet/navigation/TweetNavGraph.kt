@@ -158,7 +158,7 @@ fun TweetNavGraph(
                 )
             }
             composable<NavTweet.Login> {
-                LoginScreen()
+                LoginScreen(appUserViewModel)
             }
             composable<NavTweet.Registration> {
                 EditProfileScreen(navController, appUserViewModel)

@@ -36,7 +36,7 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 
 @Composable
-fun TweetBlock(
+fun TweetItemBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
@@ -61,6 +61,7 @@ fun TweetBlock(
             modifier = Modifier
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
+
             // Tweet Header. Icon, name, timestamp, more actions
             TweetItemHeader(viewModel, parentEntry, parentTweet)
 

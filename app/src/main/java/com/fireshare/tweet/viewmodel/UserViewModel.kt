@@ -74,7 +74,6 @@ class UserViewModel @AssistedInject constructor(
 
     fun loadNewerTweets() {
         if (initState.value) return
-        println("UserVM at top already")
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
         val endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
@@ -85,7 +84,6 @@ class UserViewModel @AssistedInject constructor(
     }
     fun loadOlderTweets() {
         if (initState.value) return
-        println("UserVM at bottom already")
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
         endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
@@ -103,8 +101,8 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * User can pin or unpin any tweet, even tweet belongs to other users but
-     * retweeted or quoted from other users.
+     * User can pin or unpin any tweet, even tweet belongs to other users,
+     * as long as quoted or retweet by this user.
      * */
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
@@ -135,13 +133,10 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             isLoading.value = true
             // For now, user avatar can only be image.
-            val mimeiId = HproseInstance.uploadToIPFS(context, uri)?.mid
-            if (userId != TW_CONST.GUEST_ID && mimeiId != null) {
-                // Update avatar for logged-in user right away.
-                // Otherwise, wait for user to submit.
-                HproseInstance.setUserAvatar(userId, mimeiId)   // Update database value
-                _user.value = user.value.copy(avatar = mimeiId)
-                appUser = appUser.copy(avatar = mimeiId)
+            HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
+                HproseInstance.setUserAvatar(userId, it)   // Update database value
+                _user.value = user.value.copy(avatar = it)
+                appUser = appUser.copy(avatar = it)
             }
             isLoading.value = false
         }

@@ -424,15 +424,13 @@ object HproseInstance {
         if (response.isSuccessful) {
             val responseBody = response.body?.string()
             val gson = Gson()
-            val tweets = (gson.fromJson(
-                responseBody,
-                object : TypeToken<List<Tweet>>() {}.type
-            ) as List<Tweet>).map {
+            val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>?>() {}.type
+            ) as List<Tweet>?)?.map {
                 Timber.tag("getTweetList").d("fetchTweet=$it")
                 // assign every tweet its author object.
                 it.author = user
                 it
-            }
+            } ?: emptyList()
             val cachedTweets = tweets.toMutableList()
             tweets.forEach {
                 it.originalTweetId?.let { ori ->
@@ -443,8 +441,7 @@ object HproseInstance {
                         it.originalTweet = cachedTweet
                     } else {
                         // the tweet might belong to other users.
-                        it.originalTweet =
-                            it.originalAuthorId?.let { oa -> getTweet(ori, oa) }
+                        it.originalTweet = it.originalAuthorId?.let { oa -> getTweet(ori, oa) }
                         it.originalTweet?.let { t -> cachedTweets.add(t) }
                     }
                 }

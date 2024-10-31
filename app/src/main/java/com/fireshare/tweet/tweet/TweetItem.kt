@@ -66,7 +66,7 @@ fun TweetItem(
                             parentEntry, key = tweet.originalTweetId
                         ) { factory -> factory.create(tweet.originalTweet!!) }
 
-                    TweetBlock(originalTweetViewModel, parentEntry, parentTweet = tweet)
+                    TweetItemBody(originalTweetViewModel, parentEntry, parentTweet = tweet)
 
                     // Label: Forward by user, on top of original tweet
                     Box {
@@ -130,7 +130,7 @@ fun TweetItem(
                             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                         ) {
                             // quoted tweet
-                            TweetBlock(
+                            TweetItemBody(
                                 hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory ->
@@ -159,7 +159,7 @@ fun TweetItem(
             }
         } else {
             // original tweet by current user.
-            TweetBlock(viewModel, parentEntry)
+            TweetItemBody(viewModel, parentEntry)
         }
     }
 }
