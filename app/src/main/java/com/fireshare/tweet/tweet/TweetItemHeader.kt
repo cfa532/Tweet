@@ -63,10 +63,7 @@ fun TweetItemHeader(
                     navController.navigate(NavTweet.UserProfile(tweet.authorId))
                 }
             }) {
-                if (author?.mid == appUser.mid)
-                    UserAvatar(appUser, 36)
-                else
-                    UserAvatar(author, 36)
+                UserAvatar(if (author?.mid == appUser.mid) appUser else author, 36)
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),
