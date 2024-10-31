@@ -6,6 +6,8 @@ import android.content.res.Configuration
 import android.view.View
 import android.view.WindowManager
 import androidx.annotation.OptIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,11 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -67,6 +73,7 @@ import com.fireshare.tweet.tweet.ShareButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.math.roundToInt
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -126,13 +133,29 @@ fun MediaBrowser(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var isShrinking by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isShrinking) 0f else 1f, animationSpec = tween(durationMillis = 300),
+        label = ""
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
+                detectDragGestures(
+                    onDragEnd = {
+                        if (offsetY > 300f) { // Arbitrary threshold to trigger shrink
+                            isShrinking = true
+                        } else {
+                            offsetY = 0f
+                        }
+                    },
+                    onDrag = { change, dragAmount ->
+                        // Update the vertical offset based on the drag amount
+                        offsetY += dragAmount.y
+                        change.consume()
+
                     // Handle horizontal drag
                     if (change.positionChange().x > 20) {
                         animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
@@ -150,7 +173,7 @@ fun MediaBrowser(
                                 .d("No previous back stack entry")
                         }
                     }
-                }
+                })
             }
             .pointerInput(Unit) {
                 detectTapGestures {
@@ -194,7 +217,9 @@ fun MediaBrowser(
                     )
                 }
                 else -> {
-                    ImageViewer(mediaItem.url, isPreview = false)
+                    ImageViewer(mediaItem.url, isPreview = false,
+                        modifier = Modifier.offset{ IntOffset(0, offsetY.roundToInt()) }
+                            .graphicsLayer(scaleX = scale, scaleY = scale))
                 }
             }
         }

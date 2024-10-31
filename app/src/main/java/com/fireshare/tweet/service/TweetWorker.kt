@@ -111,11 +111,6 @@ class UploadTweetWorker @AssistedInject constructor(
             )
             HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                 Timber.tag("UploadTweetWorker").d(tweet.toString())
-//                withContext(Dispatchers.Main) {
-//                    HproseInstance.tweetFeedViewModel.addTweet(newTweet)
-//                }
-//                val map = mapOf("mid" to t.mid, "content" to t.content, "authorId" to t.authorId,
-//                    "attachments" to t.attachments, "timestamp" to t.timestamp)
                 val gson = Gson()
                 val outputData = workDataOf("tweet" to gson.toJson(t))
                 return Result.success(outputData)
