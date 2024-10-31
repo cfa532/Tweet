@@ -95,7 +95,7 @@ fun MediaBrowser(
 
     /**
      * Keep screen ON when video is playing in full screen mode.
-     * Stop playing when screen locked.
+     * Stop playing when screen locked. Also hide system bars.
      * */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
