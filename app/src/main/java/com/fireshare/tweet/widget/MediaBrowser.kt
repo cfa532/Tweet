@@ -214,6 +214,8 @@ fun MediaBrowser(
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
+                            .offset{ IntOffset(0, offsetY.roundToInt()) }
+                            .graphicsLayer(scaleX = scale, scaleY = scale)
                     )
                 }
                 else -> {

@@ -29,7 +29,7 @@ interface TweetActionListener {
 @Serializable
 data class MimeiFileType(
     val mid: MimeiId,
-    val type: MediaType? = MediaType.Image,
+    val type: MediaType,
     val size: Long? = null,
 )
 
