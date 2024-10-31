@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavBackStackEntry
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
@@ -62,7 +63,10 @@ fun TweetItemHeader(
                     navController.navigate(NavTweet.UserProfile(tweet.authorId))
                 }
             }) {
-                UserAvatar(author, 36)
+                if (author?.mid == appUser.mid)
+                    UserAvatar(appUser, 36)
+                else
+                    UserAvatar(author, 36)
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),

@@ -38,7 +38,6 @@ fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
     LaunchedEffect(user?.avatar) {
         avatarUrl.value = getMediaUrl(user?.avatar, user?.baseUrl)
     }
-
     if (avatarUrl.value == null) {
         Image(
             painter = painterResource(id = R.drawable.ic_user_avatar),
