@@ -130,17 +130,15 @@ class TweetActivity : ComponentActivity() {
 
     @Composable
     fun CustomSnackbarHost(hostState: SnackbarHostState) {
-        val configuration = LocalConfiguration.current
-        val screenHeightDp = configuration.screenHeightDp.dp
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .padding(bottom = screenHeightDp.minus(100.dp)) // Adjust the padding as needed
         ) {
             SnackbarHost(
                 hostState = hostState,
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = 10.dp)
             )
         }
     }
