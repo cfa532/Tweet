@@ -139,10 +139,20 @@ fun MediaBrowser(
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
+    var isNavigationTriggered by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        isNavigationTriggered = false
+                    },
+                    onDrag = {_, _ ->
+                    },
+                )
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
@@ -201,6 +211,7 @@ fun MediaBrowser(
                         },
                         modifier = Modifier.fillMaxWidth()
                             .offset{ IntOffset(0, offsetY.roundToInt()) }
+
                             .draggable(
                                 orientation = Orientation.Horizontal,
                                 state = rememberDraggableState { delta ->
@@ -215,7 +226,8 @@ fun MediaBrowser(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
-                                    if (offsetY > 20f) {
+                                    if (offsetY > 20f && !isNavigationTriggered) {
+                                        isNavigationTriggered = true
                                         if (navController.previousBackStackEntry != null) {
                                             navController.popBackStack()
                                         } else {
@@ -253,7 +265,8 @@ fun MediaBrowser(
                                     orientation = Orientation.Vertical,
                                     state = rememberDraggableState { delta ->
                                         offsetY += delta
-                                        if (offsetY > 20f && scaleFactor <= 1) {
+                                        if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered) {
+                                            isNavigationTriggered = true
                                             if (navController.previousBackStackEntry != null) {
                                                 navController.popBackStack()
                                             } else {
