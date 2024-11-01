@@ -139,6 +139,7 @@ fun MediaBrowser(
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
+    // prevent double trigger of popBack event
     var isNavigationTriggered by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
@@ -211,7 +212,6 @@ fun MediaBrowser(
                         },
                         modifier = Modifier.fillMaxWidth()
                             .offset{ IntOffset(0, offsetY.roundToInt()) }
-
                             .draggable(
                                 orientation = Orientation.Horizontal,
                                 state = rememberDraggableState { delta ->
