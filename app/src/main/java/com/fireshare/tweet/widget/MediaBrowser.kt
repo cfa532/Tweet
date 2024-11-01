@@ -6,8 +6,6 @@ import android.content.res.Configuration
 import android.view.View
 import android.view.WindowManager
 import androidx.annotation.OptIn
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -133,9 +131,10 @@ fun MediaBrowser(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-    var isImageExpanded by remember { mutableStateOf(false) }
+
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -143,7 +142,7 @@ fun MediaBrowser(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
-                        if (offsetY > 20f) {
+                        if (scaleFactor <= 1f && offsetY > 20f) {
                             if (navController.previousBackStackEntry != null) {
                                 navController.popBackStack()
                             } else {
@@ -152,7 +151,7 @@ fun MediaBrowser(
                         }
                     },
                     onDrag = { change, dragAmount ->
-                        // Update the vertical offset based on the drag amount
+                        offsetX += dragAmount.x
                         offsetY += dragAmount.y
                         change.consume()
 
@@ -166,9 +165,15 @@ fun MediaBrowser(
                 )
             }
             .pointerInput(Unit) {
-                detectTapGestures {
-                    showControls = !showControls
-                }
+                detectTapGestures(
+                    onDoubleTap = {
+                        scaleFactor = if (scaleFactor > 1f) 1f else 2f
+                    },
+                    onTap = {
+                        scaleFactor = 1f
+                        showControls = !showControls
+                    }
+                )
             }
     ) {
         HorizontalPager(
@@ -188,6 +193,7 @@ fun MediaBrowser(
                             viewModel.exoPlayer?.release()
                         }
                     }
+                    // remember the current playback position during configuration changes.
                     LaunchedEffect(viewModel.playbackPosition) {
                         viewModel.exoPlayer?.seekTo(viewModel.playbackPosition)
                         viewModel.exoPlayer?.playWhenReady = true
@@ -196,11 +202,11 @@ fun MediaBrowser(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
                                 player = viewModel.exoPlayer
-                                useController = true // Disable default controls
+                                useController = true    // otherwise video won't play
                                 setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                                     showControls = visibility == View.VISIBLE
                                 })
-                                hideController()
+                                hideController()    // hide control buttons
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -209,30 +215,11 @@ fun MediaBrowser(
                 }
                 else -> {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        isImageExpanded = !isImageExpanded
-                                        scaleFactor = if (isImageExpanded) 2f else 1f
-                                    },
-                                    onTap = {
-                                        if (isImageExpanded) {
-                                            isImageExpanded = false
-                                            scaleFactor = 1f
-                                        } else {
-                                            showControls = !showControls
-                                        }
-                                    }
-                                )
-                            }
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-                        val centerOffset = screenHeight / 2
                         ImageViewer(mediaItem.url, isPreview = false,
                             modifier = Modifier
-                                .offset { IntOffset(0, offsetY.roundToInt()) }
+                                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                                 .fillMaxWidth()
                                 .graphicsLayer(
                                     scaleX = scaleFactor,
