@@ -62,17 +62,13 @@ object HproseInstance {
         this.preferenceHelper = preferenceHelper
         initAppEntry(preferenceHelper)
 
-        chatDatabase = Room.databaseBuilder(
-            context.applicationContext,
-            ChatDatabase::class.java,
-            "chat_database"
-        ).build()
-
-        tweetCache = Room.databaseBuilder(
-            context.applicationContext,
-            TweetCacheDatabase::class.java,
-            "tweet_cache_database"
-        ).build()
+//        chatDatabase = Room.databaseBuilder(
+//            context.applicationContext,
+//            ChatDatabase::class.java,
+//            "chat_database"
+//        ).build()
+        chatDatabase = ChatDatabase.getInstance(context.applicationContext)
+        tweetCache = TweetCacheDatabase.getInstance(context.applicationContext)
 //        tweetCache.tweetDao().clearAllCachedTweets()
     }
 

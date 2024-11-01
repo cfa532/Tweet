@@ -1,11 +1,13 @@
 package com.fireshare.tweet.datamodel
 
+import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
@@ -141,4 +143,21 @@ interface CachedTweetDao {
 @TypeConverters(DateConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: TweetCacheDatabase? = null
+
+        fun getInstance(context: Context): TweetCacheDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    TweetCacheDatabase::class.java,
+                    "tweet_cache_database"
+                ).build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
 }
