@@ -2,7 +2,12 @@ package com.fireshare.tweet
 
 import android.app.Application
 import android.util.Log
+import androidx.work.Configuration
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.service.CleanUpWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -10,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import org.json.JSONObject
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class TweetApplication : Application(){
@@ -27,6 +33,19 @@ class TweetApplication : Application(){
             // Plant a custom tree for release builds
             Timber.plant(ReleaseTree())
         }
+
+        // Initialize WorkManager
+//        WorkManager.initialize(this, Configuration.Builder().build())
+
+        // Schedule the CleanUpWorker
+        val cleanUpRequest = PeriodicWorkRequestBuilder<CleanUpWorker>(1, TimeUnit.DAYS)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "CleanUpOldTweets",
+            ExistingPeriodicWorkPolicy.KEEP,
+            cleanUpRequest
+        )
     }
 
     companion object {
@@ -43,6 +62,9 @@ class TweetApplication : Application(){
 //            .build()
 }
 
+/**
+ * Gather error log from production release builds.
+ * */
 class ReleaseTree : Timber.Tree() {
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
         // Only log WARN, ERROR, and WTF levels in release builds
