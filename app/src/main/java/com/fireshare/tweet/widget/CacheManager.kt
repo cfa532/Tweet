@@ -18,7 +18,6 @@ import java.io.FileOutputStream
 
 class CacheManager(private val context: Context) {
 
-    // Directory where cached images will be stored
     private val cacheDir: File = context.cacheDir
 
     /**
