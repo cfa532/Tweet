@@ -250,7 +250,7 @@ fun MediaBrowser(
                                     orientation = Orientation.Horizontal,
                                     state = rememberDraggableState { delta ->
                                         if (scaleFactor > 1f)
-                                            offsetX += delta
+                                            offsetX += delta    // move expanded image
                                         else {
                                             // Do not update offsetX when flipping images
                                             if (delta > 20) {
