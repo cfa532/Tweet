@@ -17,7 +17,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appId
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
@@ -68,10 +67,8 @@ class TweetViewModel @AssistedInject constructor(
          * */
         if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
-                tweet.mid?.let {
-                    HproseInstance.getTweet(it, tweet.authorId)?.let { tweet ->
-                        _tweetState.value = tweet
-                    }
+                HproseInstance.getTweet(tweet.mid, tweet.authorId)?.let { tweet ->
+                    _tweetState.value = tweet
                 }
             }
         }

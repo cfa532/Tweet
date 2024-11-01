@@ -42,6 +42,10 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
+    /**
+     * @param tweetActionListener add new tweet to the tweet list
+     * of UserViewModel, so that new tweet appears in both viewModel.
+     * */
     lateinit var tweetActionListener: TweetActionListener
 
     companion object {
@@ -56,6 +60,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
+    // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
 
     private val _isRefreshingAtTop = MutableStateFlow(false)
@@ -63,11 +68,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
-    // current time, end time is earlier in time, therefore smaller timestamp
+    // current time, end time is earlier in time, therefore smaller than current time.
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
 
     init {
+        // init tweet feed. Need to disable loadNewer and loadOlderTweets() to prevent
+        // duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             refresh()
         }

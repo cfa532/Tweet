@@ -1,5 +1,7 @@
 package com.fireshare.tweet.datamodel
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import com.fireshare.tweet.widget.MediaType
 import kotlinx.serialization.Serializable
 
@@ -34,8 +36,9 @@ data class MimeiFileType(
 )
 
 @Serializable
+@Entity(tableName = "tweets")
 data class Tweet(
-    var mid: MimeiId? = null,   // mid of the tweet
+    @PrimaryKey var mid: MimeiId,
     val authorId: MimeiId,        // mid of the author, is also the mimei database Id
     var content: String? = null,   // content or attachments must have one.
     val timestamp: Long = System.currentTimeMillis(),

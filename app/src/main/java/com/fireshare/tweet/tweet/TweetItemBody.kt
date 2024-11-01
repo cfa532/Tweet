@@ -33,7 +33,6 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.widget.MediaType
 
 @Composable
 fun TweetItemBody(
@@ -53,7 +52,7 @@ fun TweetItemBody(
         tonalElevation = 0.dp,
         modifier = Modifier.clickable(
             onClick = {
-                tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it) ) }
+                navController.navigate(NavTweet.TweetDetail(tweet.mid) )
             })
             .padding(top = 8.dp)
     ) {
@@ -103,12 +102,10 @@ fun TweetItemBody(
                     ) {
                         val mediaItems = tweet.attachments?.map {
                             MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                it.type ?: MediaType.Unknown)
+                                it.type
+                            )
                         } ?: emptyList()
-
-                        tweet.mid?.let {
-                            MediaPreviewGrid(mediaItems, it)
-                        }
+                        MediaPreviewGrid(mediaItems, tweet.mid)
                     }
 
                     /**

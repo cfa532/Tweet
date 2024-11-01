@@ -86,7 +86,7 @@ fun TweetDetailScreen(
             /**
              * Comment list of this tweet. Need to add pagination later.
              * */
-            items(comments, key = {it.mid.toString()})
+            items(comments, key = { it.mid })
             { comment ->
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),

@@ -74,7 +74,7 @@ fun CommentItem(
 
     Column(
         modifier = Modifier
-            .clickable { comment.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) } }
+            .clickable { navController.navigate(NavTweet.TweetDetail(comment.mid)) }
             .padding(horizontal = 4.dp)
     ) {
         Row(
@@ -151,7 +151,7 @@ fun CommentItem(
                             MediaItem(mediaUrl, attachment.type ?: MediaType.Unknown)
                         }
                     }
-                    mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid!!) }
+                    mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid) }
                 }
             }
         }
@@ -199,7 +199,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
         ) {
             if (parentTweet.authorId == appUser.mid || comment.authorId == appUser.mid) {
                 DropdownMenuItem( modifier = Modifier.alpha(0.9f),
-                    onClick = { comment.mid?.let { parentTweetViewModel.delComment(it) } },
+                    onClick = { parentTweetViewModel.delComment(comment.mid) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(

@@ -97,7 +97,7 @@ fun TweetItem(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .clickable(onClick = {
-                                tweet.mid?.let { navController.navigate(NavTweet.TweetDetail(it)) }
+                                navController.navigate(NavTweet.TweetDetail(tweet.mid))
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
@@ -120,8 +120,8 @@ fun TweetItem(
                                     getMediaUrl(it.mid, it1).toString()
                                 }?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
                             }
-                            if (tweet.mid != null && mediaItems != null) {
-                                MediaPreviewGrid(mediaItems, tweet.mid!!)
+                            if (mediaItems != null) {
+                                MediaPreviewGrid(mediaItems, tweet.mid)
                             }
                         }
                         Surface(

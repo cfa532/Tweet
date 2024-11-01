@@ -134,7 +134,7 @@ fun UserProfileScreen(
                         }
                     }
 
-                    items(topTweets, key = { it.mid.toString() }) { tweet ->
+                    items(topTweets, key = { it.mid }) { tweet ->
                         TweetItem(tweet, parentEntry)
                     }
                     item {
@@ -146,7 +146,7 @@ fun UserProfileScreen(
                     }
                 }
 
-                items(tweets, key = {it.mid.toString()}) { tweet ->
+                items(tweets, key = { it.mid }) { tweet ->
                     TweetItem(tweet, parentEntry)
                 }
 

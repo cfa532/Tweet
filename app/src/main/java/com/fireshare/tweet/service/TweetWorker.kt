@@ -47,6 +47,7 @@ class UploadCommentWorker @AssistedInject constructor(
                 return Result.failure()
             }
             val comment = Tweet(
+                mid = System.currentTimeMillis().toString(),  // placeholder
                 authorId = appUser.mid,
                 content = commentContent,
                 attachments = attachments,
@@ -104,6 +105,7 @@ class UploadTweetWorker @AssistedInject constructor(
                 return Result.failure()
             }
             val tweet = Tweet(
+                mid = System.currentTimeMillis().toString(),  // placeholder
                 authorId = appUser.mid,
                 content = tweetContent ?: " ",
                 attachments = attachments,

@@ -78,7 +78,7 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
         // after the comment is submitted.
         viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
             sharedViewModel.sharedTweetVMInstance = viewModel
-            tweet.mid?.let { navController.navigate(ComposeComment(it)) }
+            navController.navigate(ComposeComment(tweet.mid))
         }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

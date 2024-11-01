@@ -105,6 +105,7 @@ fun TweetNavGraph(
                             // The tweet is surely created. The right key will locate it.
                             // so the init value do not matter here.
                             Tweet(
+                                mid = "",
                                 authorId = "default",
                                 content = "Placeholder"
                             )

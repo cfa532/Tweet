@@ -56,7 +56,6 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
-import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 
 @Composable
@@ -114,21 +113,21 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
                         tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
-                            ?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
+                            ?.let { it2 -> MediaItem(it2, it.type) }
                     }
                     mediaItems?.let {
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth()
                                 .heightIn(max = 800.dp) // Set a specific height for the grid
                         ) {
-                            itemsIndexed(it as List<MediaItem>) { index, mi ->
+                            itemsIndexed(it) { index, _ ->
                                 MediaItemPreview(
                                     it,
                                     Modifier.fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
                                             val params =
-                                                MediaViewerParams(mediaItems, index, tweet.mid!!)
+                                                MediaViewerParams(mediaItems, index, tweet.mid)
                                             navController.navigate(
                                                 NavTweet.MediaViewer(params)
                                             )
@@ -239,15 +238,13 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                tweet.mid?.let {
-                    tweetFeedViewModel.delTweet(it)
-                    // if current route is TweetDetail. Go to TweetFeed
-                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                        navController.navigate(NavTweet.TweetFeed)
-                    } else {
-                        // close the dropdown menu
-                        onDismissRequest()
-                    }
+                tweetFeedViewModel.delTweet(tweet.mid)
+                // if current route is TweetDetail. Go to TweetFeed
+                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                    navController.navigate(NavTweet.TweetFeed)
+                } else {
+                    // close the dropdown menu
+                    onDismissRequest()
                 }
             },
             text = {

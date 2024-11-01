@@ -619,6 +619,7 @@ object HproseInstance {
                 }
             } else {
                 var retweet = Tweet(
+                    mid = System.currentTimeMillis().toString(),    // placeholder
                     content = "",
                     authorId = appUser.mid,
                     originalTweetId = tweet.mid,
