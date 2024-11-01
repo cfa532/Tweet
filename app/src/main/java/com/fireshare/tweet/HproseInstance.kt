@@ -3,6 +3,8 @@ package com.fireshare.tweet
 import android.content.Context
 import android.net.Uri
 import androidx.room.Room
+import com.fireshare.tweet.datamodel.CachedTweet
+import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -35,18 +37,18 @@ object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
-    var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
+    private var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
         return listOf("uTE6yhCWGLlkK6KGI9iMkOFZGGv")
     }
 
-    // all loaded User objects will be inserted in the list, for better performance.
+    // A in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
-    private lateinit var database: ChatDatabase
 
-    // Keys within the mimei of the user's database
+    private lateinit var chatDatabase: ChatDatabase
+    private lateinit var tweetCache: TweetCacheDatabase
     private var hproseClient: HproseService? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -60,11 +62,18 @@ object HproseInstance {
         this.preferenceHelper = preferenceHelper
         initAppEntry(preferenceHelper)
 
-        database = Room.databaseBuilder(
+        chatDatabase = Room.databaseBuilder(
             context.applicationContext,
             ChatDatabase::class.java,
             "chat_database"
         ).build()
+
+        tweetCache = Room.databaseBuilder(
+            context.applicationContext,
+            TweetCacheDatabase::class.java,
+            "tweet_cache_database"
+        ).build()
+//        tweetCache.tweetDao().clearAllCachedTweets()
     }
 
     // Find network entrance of the App
@@ -415,35 +424,29 @@ object HproseInstance {
         startTimestamp: Long,
         endTimestamp: Long?
     ): List<Tweet> = try {
-        val method = "get_tweets"
+        val tweets = mutableListOf<Tweet>()
+        val method = "get_tweet_list"
         val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-            .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp")
-            .append("&gid=${appUser.mid}").toString()   // viewer's Id.
+            .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string()
             val gson = Gson()
-            val tweets = (gson.fromJson(responseBody, object : TypeToken<List<Tweet>?>() {}.type
-            ) as List<Tweet>?)?.map {
-                Timber.tag("getTweetList").d("fetchTweet=$it")
-                // assign every tweet its author object.
-                it.author = user
-                it
-            } ?: emptyList()
-            val cachedTweets = tweets.toMutableList()
-            tweets.forEach {
-                it.originalTweetId?.let { ori ->
-                    // this is a retweet or quoted tweet, now get the original tweet
-                    val cachedTweet = cachedTweets.find { twt -> twt.mid == ori }
-                    if (cachedTweet != null) {
-                        // the original tweet has been fetched.
-                        it.originalTweet = cachedTweet
-                    } else {
-                        // the tweet might belong to other users.
-                        it.originalTweet = it.originalAuthorId?.let { oa -> getTweet(ori, oa) }
-                        it.originalTweet?.let { t -> cachedTweets.add(t) }
+            val midList = gson.fromJson(responseBody, object : TypeToken<List<MimeiId>?>() {}.type) as List<MimeiId>?
+            val uncachedMidList = midList?.map {
+                val cachedTweet = restoreCachedTweet(it)
+                if (cachedTweet != null) {
+                    tweets.add(cachedTweet)
+                    null
+                } else it
+            }
+            uncachedMidList?.filterNotNull()?.map {
+                getTweet(it, user.mid)?.let {t ->
+                    if (t.originalTweetId != null) {
+                        t.originalTweet = getTweet(t.originalTweetId!!, t.originalAuthorId!!)
                     }
+                    tweets.add(t)
                 }
             }
             tweets
@@ -451,25 +454,30 @@ object HproseInstance {
             emptyList()
     } catch (e: Exception) {
         e.printStackTrace()
-        Timber.tag("getTweetList()").e(e.toString())
+        Timber.tag("getTweetList").e(e.toString())
         emptyList()
     }
 
     /**
-     * Get only layer one data of the tweet. Do Not fetch its original tweet.
+     * Get only layer one data of the tweet. Do Not fetch its original tweet if there is any.
      * Let the caller to decide if go further on the tweet hierarchy.
      * */
     suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {
-        val author = getUserBase(authorId) ?: return null   // cannot get author data, return null
-        val method = "get_tweet"
-        val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-            .append("&tweetid=$tweetId")
-            // appUser is passed to sever, to check if the current user has liked or bookmarked.
-            .append("&userid=${appUser.mid}").toString()
         try {
+            val cachedTweet = restoreCachedTweet(tweetId)
+            if (cachedTweet != null) {
+                return cachedTweet
+            }
+            val author =
+                getUserBase(authorId) ?: return null   // cannot get author data, return null
+            val method = "get_tweet"
+            val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+                .append("&tweetid=$tweetId")
+                // appUser is passed to sever, to check if the current user has liked or bookmarked.
+                .append("&userid=${appUser.mid}").toString()
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -477,14 +485,31 @@ object HproseInstance {
                     val gson = Gson()
                     val tweet = gson.fromJson(json, Tweet::class.java)
                     tweet.author = author
+                    tweetCache.tweetDao().insertCachedTweet(
+                        CachedTweet(tweet.mid, gson.toJson(tweet))
+                    )
+                    Timber.tag("getTweet").d("$tweet")
                     return tweet
                 }
             }
             return null
         } catch (e: Exception) {
-            Timber.tag("getTweet()").e("$tweetId $authorId $e")
+            Timber.tag("getTweet").e("$tweetId $authorId $e")
             return null
         }
+    }
+
+    private suspend fun restoreCachedTweet(tweetId: MimeiId): Tweet? {
+        val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
+        val gson = Gson()
+        val tweet = gson.fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
+        Timber.tag("restoreTweet").d("$tweet")
+        tweet.author = getUserBase(tweet.authorId)
+        if (tweet.originalTweetId != null) {
+            tweet.originalTweet =
+                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+        }
+        return tweet
     }
 
     // Store an object in a Mimei file and return its MimeiId.
