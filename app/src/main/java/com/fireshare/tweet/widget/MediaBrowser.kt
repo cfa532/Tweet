@@ -7,8 +7,11 @@ import android.view.View
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -140,36 +143,15 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        if (scaleFactor <= 1f && offsetY > 20f) {
-                            if (navController.previousBackStackEntry != null) {
-                                navController.popBackStack()
-                            } else {
-                                Timber.tag("MediaBrowser").e("No previous back stack entry")
-                            }
-                        }
-                    },
-                    onDrag = { change, dragAmount ->
-                        offsetX += dragAmount.x
-                        offsetY += dragAmount.y
-                        change.consume()
-
-                        // Handle horizontal drag
-                        if (change.positionChange().x > 20) {
-                            animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-                        } else if (change.positionChange().x < -20) {
-                            animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                        }
-                    }
-                )
-            }
-            .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
-                        scaleFactor = if (scaleFactor > 1f) 1f else 2f
+                        scaleFactor = if (scaleFactor > 1f) {
+                            offsetX = 0f
+                            1f
+                        } else 2f
                     },
                     onTap = {
+                        offsetX = 0f
                         scaleFactor = 1f
                         showControls = !showControls
                     }
@@ -220,8 +202,34 @@ fun MediaBrowser(
                         ImageViewer(mediaItem.url, isPreview = false,
                             modifier = Modifier
                                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                                .fillMaxWidth()
-                                .graphicsLayer(
+                                .draggable(
+                                    orientation = Orientation.Horizontal,
+                                    state = rememberDraggableState { delta ->
+                                        if (scaleFactor > 1f)
+                                            offsetX += delta
+                                        else {
+                                            if (delta > 20) {
+                                                animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                                            } else if (delta < -20) {
+                                                animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                                            }
+                                        }
+                                    }
+                                )
+                                .draggable(
+                                    orientation = Orientation.Vertical,
+                                    state = rememberDraggableState { delta ->
+                                        offsetY += delta
+                                        if (offsetY > 20f && scaleFactor <= 1) {
+                                            if (navController.previousBackStackEntry != null) {
+                                                navController.popBackStack()
+                                            } else {
+                                                Timber.tag("MediaBrowser")
+                                                    .e("No previous back stack entry")
+                                            }
+                                        }
+                                    }
+                                ).graphicsLayer(
                                     scaleX = scaleFactor,
                                     scaleY = scaleFactor
                                 )
