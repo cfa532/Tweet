@@ -18,7 +18,7 @@ import java.io.FileOutputStream
 
 class CacheManager(private val context: Context) {
 
-    private val cacheDir: File = context.cacheDir
+    private val cacheDir: File = File(context.cacheDir, "image_cache")
 
     /**
      * Generates the file path for a cached image based on the image URL and whether it's a preview.
@@ -113,6 +113,18 @@ class CacheManager(private val context: Context) {
                 Timber.tag("CacheManager").e("Error downloading image: $e")
                 e.printStackTrace()
                 null
+            }
+        }
+    }
+
+    fun clearOldCachedImages(maxAgeInMillis: Long) {
+        val imageCacheDir = context.cacheDir // Assuming images are stored in the main cache directory
+        if (imageCacheDir.exists() && imageCacheDir.isDirectory) {
+            val files = imageCacheDir.listFiles() ?: return
+            for (file in files) {
+                if (file.isFile && System.currentTimeMillis() - file.lastModified() > maxAgeInMillis) {
+                    file.delete()
+                }
             }
         }
     }

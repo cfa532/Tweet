@@ -249,13 +249,9 @@ fun ImageViewer(
             val job = scope.launch {
                 isDownloading = true
                 downloadError = false
-                val downloadedPath = try {
+                val downloadedPath =
                     cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
-                } catch (e: Exception) {
-                    Timber.tag("ImageViewer").e("Error downloading image: ${e.message}")
-                    downloadError = true
-                    null
-                }
+
                 isDownloading = false
                 if (downloadedPath != null) {
                     cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
@@ -467,8 +463,24 @@ object VideoCacheManager {
         }
         return simpleCache!!
     }
+
+    fun clearOldCachedVideos(context: Context, maxAgeInMillis: Long) {
+        val videoCacheDir = File(context.cacheDir, "video_cache")
+
+        if (videoCacheDir.exists() && videoCacheDir.isDirectory) {
+            val files = videoCacheDir.listFiles() ?: return
+            for (file in files) {
+                if (file.isFile && System.currentTimeMillis() - file.lastModified() > maxAgeInMillis) {
+                    file.delete()
+                }
+            }
+        }
+    }
 }
 
+/**
+ * Check if a tweet is 70% visible in the screen.
+ * */
 fun isElementVisible(layoutCoordinates: LayoutCoordinates): Boolean {
     val threshold = 70
     val layoutHeight = layoutCoordinates.size.height
