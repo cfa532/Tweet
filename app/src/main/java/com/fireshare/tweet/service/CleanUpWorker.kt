@@ -28,6 +28,7 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
             val oneMonthInMillis = 30L * 24L * 60L * 60L * 1000L
             cacheManager.clearOldCachedImages(oneMonthInMillis)
             VideoCacheManager.clearOldCachedVideos(applicationContext, oneMonthInMillis)
+            Timber.tag("CleanUpWorker").d("Clean up finished!!!!")
 
             return Result.success()
         } catch (e: Exception) {
