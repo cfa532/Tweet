@@ -134,10 +134,6 @@ fun MediaBrowser(
         }
     }
     var offsetY by remember { mutableFloatStateOf(0f) }
-    var isShrinking by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isShrinking) 0f else 1f, animationSpec = tween(durationMillis = 300),
-        label = ""
-    )
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -145,10 +141,12 @@ fun MediaBrowser(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
-                        if (offsetY > 300f) { // Arbitrary threshold to trigger shrink
-                            isShrinking = true
-                        } else {
-                            offsetY = 0f
+                        if (offsetY > 20f) {
+                            if (navController.previousBackStackEntry != null) {
+                                navController.popBackStack()
+                            } else {
+                                Timber.tag("MediaBrowser").e("No previous back stack entry")
+                            }
                         }
                     },
                     onDrag = { change, dragAmount ->
@@ -156,24 +154,14 @@ fun MediaBrowser(
                         offsetY += dragAmount.y
                         change.consume()
 
-                    // Handle horizontal drag
-                    if (change.positionChange().x > 20) {
-                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-                    } else if (change.positionChange().x < -20) {
-                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                    }
-
-                    // Handle vertical drag (swipe down)
-                    if (dragAmount.y > 20) {
-                        if (navController.previousBackStackEntry != null) {
-                            navController.popBackStack()
-                        } else {
-                            Timber
-                                .tag("MediaBrowser")
-                                .d("No previous back stack entry")
+                        // Handle horizontal drag
+                        if (change.positionChange().x > 20) {
+                            animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                        } else if (change.positionChange().x < -20) {
+                            animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
                         }
                     }
-                })
+                )
             }
             .pointerInput(Unit) {
                 detectTapGestures {
@@ -215,13 +203,11 @@ fun MediaBrowser(
                         },
                         modifier = Modifier.fillMaxWidth()
                             .offset{ IntOffset(0, offsetY.roundToInt()) }
-                            .graphicsLayer(scaleX = scale, scaleY = scale)
                     )
                 }
                 else -> {
                     ImageViewer(mediaItem.url, isPreview = false,
-                        modifier = Modifier.offset{ IntOffset(0, offsetY.roundToInt()) }
-                            .graphicsLayer(scaleX = scale, scaleY = scale))
+                        modifier = Modifier.offset{ IntOffset(0, offsetY.roundToInt()) })
                 }
             }
         }
