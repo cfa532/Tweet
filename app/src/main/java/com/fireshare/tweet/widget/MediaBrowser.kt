@@ -240,6 +240,7 @@ fun MediaBrowser(
                                         if (scaleFactor > 1f)
                                             offsetX += delta
                                         else {
+                                            // Do not update offsetX when flipping images
                                             if (delta > 20) {
                                                 animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
                                             } else if (delta < -20) {
