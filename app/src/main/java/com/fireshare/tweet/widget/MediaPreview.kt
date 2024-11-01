@@ -74,6 +74,9 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.Gadget.getVideoDimensions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -218,7 +221,6 @@ fun ImageViewer(
     imageSize: Int = 200    // Cache size in KB
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val cacheManager = remember { CacheManager(context) }
     val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, isPreview))
 
@@ -245,8 +247,9 @@ fun ImageViewer(
         }
     } else {
         // Download and cache image if not already cached
+        val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         LaunchedEffect(cachedPath.value) {
-            val job = scope.launch {
+            val job = downloadScope.launch {
                 isDownloading = true
                 downloadError = false
                 val downloadedPath =
