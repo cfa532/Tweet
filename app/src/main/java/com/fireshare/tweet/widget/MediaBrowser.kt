@@ -133,6 +133,8 @@ fun MediaBrowser(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+    var isImageExpanded by remember { mutableStateOf(false) }
+    var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = Modifier
@@ -206,8 +208,39 @@ fun MediaBrowser(
                     )
                 }
                 else -> {
-                    ImageViewer(mediaItem.url, isPreview = false,
-                        modifier = Modifier.offset{ IntOffset(0, offsetY.roundToInt()) })
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        isImageExpanded = !isImageExpanded
+                                        scaleFactor = if (isImageExpanded) 2f else 1f
+                                    },
+                                    onTap = {
+                                        if (isImageExpanded) {
+                                            isImageExpanded = false
+                                            scaleFactor = 1f
+                                        } else {
+                                            showControls = !showControls
+                                        }
+                                    }
+                                )
+                            }
+                    ) {
+                        val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+                        val centerOffset = screenHeight / 2
+                        ImageViewer(mediaItem.url, isPreview = false,
+                            modifier = Modifier
+                                .offset { IntOffset(0, offsetY.roundToInt()) }
+                                .fillMaxWidth()
+                                .graphicsLayer(
+                                    scaleX = scaleFactor,
+                                    scaleY = scaleFactor
+                                )
+                                .align(Alignment.Center)
+                        )
+                    }
                 }
             }
         }
