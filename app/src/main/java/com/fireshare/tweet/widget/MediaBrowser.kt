@@ -193,6 +193,30 @@ fun MediaBrowser(
                         },
                         modifier = Modifier.fillMaxWidth()
                             .offset{ IntOffset(0, offsetY.roundToInt()) }
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { delta ->
+                                    if (delta > 20) {
+                                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                                    } else if (delta < -20) {
+                                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                                    }
+                                }
+                            )
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta ->
+                                    offsetY += delta
+                                    if (offsetY > 20f) {
+                                        if (navController.previousBackStackEntry != null) {
+                                            navController.popBackStack()
+                                        } else {
+                                            Timber.tag("MediaBrowser")
+                                                .e("No previous back stack entry")
+                                        }
+                                    }
+                                }
+                            )
                     )
                 }
                 else -> {
@@ -229,7 +253,8 @@ fun MediaBrowser(
                                             }
                                         }
                                     }
-                                ).graphicsLayer(
+                                )
+                                .graphicsLayer(
                                     scaleX = scaleFactor,
                                     scaleY = scaleFactor
                                 )
