@@ -26,6 +26,7 @@ import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +39,7 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
 
     LaunchedEffect(Unit) {
+        Timber.tag("TweetDetailScreen").d("$tweet")
         viewModel.loadComments( tweet )
     }
 

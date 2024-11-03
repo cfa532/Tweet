@@ -630,6 +630,9 @@ object HproseInstance {
                     tweet.favorites!![UserFavorites.RETWEET] = false
                     val count = (res["count"] as? Double)?.toInt() ?: 0
                     updateTweet(tweet.copy(retweetCount = count))
+                    tweetCache.tweetDao().updateCachedTweet(
+                        CachedTweet(tweet.mid, gson.toJson(tweet.copy(retweetCount = count)))
+                    )
 
                     val retweetId = res["retweetId"] as? MimeiId
                     if (retweetId != null) {
@@ -660,9 +663,10 @@ object HproseInstance {
                         object : TypeToken<Map<String, Any?>>() {}.type
                     ) as Map<String, Any?>
                     tweet.favorites!![UserFavorites.RETWEET] = true
-//                    tweet.retweetCount = (res["count"] as Double).toInt()
                     updateTweet(tweet.copy(retweetCount = (res["count"] as Double).toInt()))
-
+                    tweetCache.tweetDao().updateCachedTweet(
+                        CachedTweet(tweet.mid, gson.toJson(tweet.copy(retweetCount = (res["count"] as Double).toInt())))
+                    )
                     retweet.author = appUser
                     retweet.originalTweet = tweet
                     tweetFeedViewModel.addTweet(retweet)
@@ -671,6 +675,70 @@ object HproseInstance {
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.e("toggleRetweet()", e.toString())
+        }
+    }
+
+    fun likeTweet(tweet: Tweet): Tweet {
+        return try {
+            val author = tweet.author ?: return tweet
+            val method = "toggle_likes"
+            val url =
+                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return tweet
+                val gson = Gson()
+                val res = gson.fromJson(
+                    responseBody,
+                    object : TypeToken<Map<String, Any?>>() {}.type
+                ) as Map<String, Any?>
+                tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
+                val ret = tweet.copy(
+                    likeCount = (res["count"] as Double).toInt()
+                )
+                tweetCache.tweetDao().updateCachedTweet(
+                    CachedTweet(tweet.mid, gson.toJson(ret))
+                )
+                ret
+            } else {
+                tweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("likeTweet()").e(e, "Error: ${e.message}")
+            tweet
+        }
+    }
+
+    fun bookmarkTweet(tweet: Tweet): Tweet {
+        return try {
+            val author = tweet.author ?: return tweet
+            val method = "toggle_bookmark"
+            val url =
+                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return tweet
+                val gson = Gson()
+                val res = gson.fromJson(
+                    responseBody,
+                    object : TypeToken<Map<String, Any?>>() {}.type
+                ) as Map<String, Any?>
+                tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
+                val ret = tweet.copy(
+                    bookmarkCount = (res["count"] as Double).toInt()
+                )
+                tweetCache.tweetDao().updateCachedTweet(
+                    CachedTweet(tweet.mid, gson.toJson(ret))
+                )
+                ret
+            } else {
+                tweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message}")
+            tweet
         }
     }
 
@@ -725,70 +793,18 @@ object HproseInstance {
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any?>
                 comment.mid = res["commentId"] as MimeiId
-                tweet.copy(
+                val ret = tweet.copy(
                     commentCount = (res["count"] as Double).toInt()
                 )
+                tweetCache.tweetDao().updateCachedTweet(
+                    CachedTweet(ret.mid, gson.toJson(ret))
+                )
+                ret
             } else {
                 tweet
             }
         } catch (e: Exception) {
             Timber.tag("uploadComment()").e(e, "Error: ${e.message}")
-            tweet
-        }
-    }
-
-    fun likeTweet(tweet: Tweet): Tweet {
-        return try {
-            val author = tweet.author ?: return tweet
-            val method = "toggle_likes"
-            val url =
-                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return tweet
-                val gson = Gson()
-                val res = gson.fromJson(
-                    responseBody,
-                    object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any?>
-                tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
-                tweet.copy(
-                    likeCount = (res["count"] as Double).toInt()
-                )
-            } else {
-                tweet
-            }
-        } catch (e: Exception) {
-            Timber.tag("likeTweet()").e(e, "Error: ${e.message}")
-            tweet
-        }
-    }
-
-    fun bookmarkTweet(tweet: Tweet): Tweet {
-        return try {
-            val author = tweet.author ?: return tweet
-            val method = "toggle_bookmark"
-            val url =
-                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return tweet
-                val gson = Gson()
-                val res = gson.fromJson(
-                    responseBody,
-                    object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any?>
-                tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
-                tweet.copy(
-                    bookmarkCount = (res["count"] as Double).toInt()
-                )
-            } else {
-                tweet
-            }
-        } catch (e: Exception) {
-            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message}")
             tweet
         }
     }

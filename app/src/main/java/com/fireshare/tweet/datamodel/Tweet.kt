@@ -11,6 +11,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.Update
 import com.fireshare.tweet.widget.MediaType
 import kotlinx.serialization.Serializable
 import java.util.Date
@@ -137,6 +138,9 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedTweet")
     fun clearAllCachedTweets()
+
+    @Update
+    fun updateCachedTweet(cachedTweet: CachedTweet)
 }
 
 @Database(entities = [CachedTweet::class], version = 1)
