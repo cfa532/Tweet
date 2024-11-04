@@ -17,7 +17,10 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.addRetweetCount
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.tweetCache
+import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
@@ -148,11 +151,6 @@ class TweetViewModel @AssistedInject constructor(
                                 // Handle the success and update UI
                                 val map = Json.decodeFromString<Map<String, String?>>(json)
 
-                                // the comment also posted as tweet.
-                                val retweet = if (isCheckedToTweet.value) {
-                                    map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
-                                } else null
-
                                 var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
                                 comment = comment.copy(author = appUser)
                                 Timber.tag("UploadComment").d("Comment: $comment")
@@ -163,10 +161,24 @@ class TweetViewModel @AssistedInject constructor(
                                 Timber.tag("UploadComment").d("Updated tweet: $newTweet")
                                 _tweetState.value = newTweet
 
+                                // the comment also posted as tweet.
+                                val retweet =
+                                    map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
                                 if (retweet != null) {
-                                    retweet.originalTweet = comment
-                                    retweet.originalTweet!!.author = comment.author
+                                    retweet.originalTweet = newTweet
+                                    retweet.originalTweet!!.author = newTweet.author
                                     tweetFeedViewModel.addTweet(retweet)
+
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        addRetweetCount(tweet, retweet.mid)?.let { t ->
+                                            updateTweet(t)
+
+                                            // update cached tweet in the database.
+                                            tweetCache.tweetDao().updateCachedTweet(
+                                                CachedTweet(tweet.mid, Gson().toJson(t))
+                                            )
+                                        }
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("UploadComment").e("${e.message}")

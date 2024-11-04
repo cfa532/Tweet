@@ -3,16 +3,15 @@ package com.fireshare.tweet
 import android.content.Context
 import android.net.Uri
 import com.fireshare.tweet.datamodel.CachedTweet
-import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
@@ -36,7 +35,7 @@ object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
-    private var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
+    var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
@@ -47,13 +46,13 @@ object HproseInstance {
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
 
     private lateinit var chatDatabase: ChatDatabase
-    private lateinit var tweetCache: TweetCacheDatabase
+    lateinit var tweetCache: TweetCacheDatabase
     private var hproseClient: HproseService? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
-    private val httpClient = OkHttpClient.Builder()
+    val httpClient = OkHttpClient.Builder()
 //        .addInterceptor(loggingInterceptor)
         .build()
 
@@ -574,7 +573,7 @@ object HproseInstance {
         }
     }
 
-    fun delTweet(tweet: Tweet, delTweet: (MimeiId) -> Unit) {
+    fun delTweet(tweet: Tweet, cleanup: (MimeiId) -> Unit) {
         var method = "delete_tweet"
         var url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&authorid=${appUser.mid}"
@@ -582,9 +581,10 @@ object HproseInstance {
         try {
             var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
+
                 // if the originalTweet is not null, also decrease its quote count
-                if (tweet.originalTweet != null) {
-                    method = "remove_retweet"
+                if (tweet.originalTweetId != null) {
+                    method = "retweet_remove"
                     url = "${tweet.originalTweet!!.author?.baseUrl}/entry?aid=$appId&ver=last" +
                             "&entry=$method&tweetid=${tweet.originalTweetId}&userid=${appUser.mid}"
                     request = Request.Builder().url(url).build()
@@ -592,9 +592,11 @@ object HproseInstance {
                     if (response.isSuccessful) {
                         // get retweet count of the original tweet
                         val count = Gson().fromJson(response.body?.string(), Int::class.java)
+                        // should have updated the original tweet on the run. Maybe later.
+                        // the count will be updated when tweet is refreshed anyway.
                     }
                 }
-                delTweet(tweet.mid)
+                cleanup(tweet.mid)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -674,36 +676,38 @@ object HproseInstance {
                 originalTweetId = tweet.mid,
                 originalAuthorId = tweet.authorId
             )) ?: return
+            retweet.author = appUser
+            retweet.originalTweet = tweet
+            addTweet(retweet)
 
-            val method = "retweet"
-            val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-                .append("&tweetid=${tweet.mid}")
-                .append("&userid=${appUser.mid}")
-                .append("&retweetid=${retweet.mid}")
-            val request = Request.Builder().url(url.toString()).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return
-                val gson = Gson()
-                val count = gson.fromJson(responseBody, Int::class.java)
-                tweet.favorites!![UserFavorites.RETWEET] = true
-                updateTweet(tweet.copy(retweetCount = count))
+            addRetweetCount(tweet, retweet.mid)?.let { t ->
+                updateTweet(t)
 
                 // update cached tweet in the database.
                 tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(
-                        tweet.mid,
-                        gson.toJson(tweet.copy(retweetCount = count))
-                    )
+                    CachedTweet(tweet.mid, Gson().toJson(t))
                 )
-                retweet.author = appUser
-                retweet.originalTweet = tweet
-                addTweet(retweet)
             }
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.e("toggleRetweet()", e.toString())
         }
+    }
+
+    fun addRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? {
+        val method = "retweet_add"
+        val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+            .append("&tweetid=${tweet.mid}")
+            .append("&userid=${appUser.mid}")
+            .append("&retweetid=$retweetId")
+        val request = Request.Builder().url(url.toString()).build()
+        val response = httpClient.newCall(request).execute()
+        if (response.isSuccessful) {
+            val responseBody = response.body?.string() ?: return null
+            val gson = Gson()
+            return gson.fromJson(responseBody, Tweet::class.java)
+        }
+        return null
     }
 
     fun likeTweet(tweet: Tweet): Tweet {
@@ -773,7 +777,6 @@ object HproseInstance {
     /**
      * Load all comments on a tweet.
      * @param pageNumber
-     * @param pageSize
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? {
         try {
