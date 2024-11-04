@@ -17,7 +17,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.addRetweetCount
+import com.fireshare.tweet.HproseInstance.increaseRetweetCount
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.datamodel.CachedTweet
@@ -170,7 +170,7 @@ class TweetViewModel @AssistedInject constructor(
                                     tweetFeedViewModel.addTweet(retweet)
 
                                     viewModelScope.launch(Dispatchers.IO) {
-                                        addRetweetCount(tweet, retweet.mid)?.let { t ->
+                                        increaseRetweetCount(tweet, retweet.mid)?.let { t ->
                                             updateTweet(t)
 
                                             // update cached tweet in the database.

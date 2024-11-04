@@ -190,7 +190,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // Define a custom scope to ensure tweet deletion job not cancelled.
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun delTweet(tweet: Tweet) {
+    fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
         ioScope.launch(Dispatchers.IO) {
             try {
                 HproseInstance.delTweet(tweet) { tid ->
@@ -198,6 +198,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         currentTweets.filterNot { it.mid == tid }
                     }
                     tweetActionListener.onTweetDeleted(tweet.mid)  // remove from userViewModel's feed
+
+                    // If there is an original tweet, update its viewModel.
+                    updateOriginTweet()
                 }
             } catch (e: Exception) {
                 Timber.tag("DelTweet").e("Error deleting tweet. $e")
@@ -228,16 +231,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * If original tweet is not null, forward the original tweet, otherwise the tweet itself.
-     * Tweet object itself is updated in HproseInstance.toggleRetweet()
+     * If original tweet is not null, retweet the original tweet, otherwise the tweet itself.
      * */
     fun addRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
         ioScope.launch {
-            val t = if (tweet.originalTweet != null) tweet.originalTweet!! else tweet
-            HproseInstance.retweet(
-                t,
-                addTweet = { addTweet(it) }
-            ) {
+            val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
+            HproseInstance.retweet(t, addTweetToFeed = { addTweet(it) }) {
                 updateTweet(it)
             }
         }

@@ -573,7 +573,7 @@ object HproseInstance {
         }
     }
 
-    fun delTweet(tweet: Tweet, cleanup: (MimeiId) -> Unit) {
+    fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) {
         var method = "delete_tweet"
         var url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&authorid=${appUser.mid}"
@@ -590,13 +590,14 @@ object HproseInstance {
                     request = Request.Builder().url(url).build()
                     response = httpClient.newCall(request).execute()
                     if (response.isSuccessful) {
-                        // get retweet count of the original tweet
-                        val count = Gson().fromJson(response.body?.string(), Int::class.java)
-                        // should have updated the original tweet on the run. Maybe later.
-                        // the count will be updated when tweet is refreshed anyway.
+                        val updateOriginTweet = Gson().fromJson(response.body?.string(), Tweet::class.java)
+                        tweetCache.tweetDao().updateCachedTweet(
+                            CachedTweet(updateOriginTweet.mid, Gson().toJson(updateOriginTweet))
+                        )
+                        callback(tweet.mid)
                     }
-                }
-                cleanup(tweet.mid)
+                } else
+                    callback(tweet.mid)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -664,11 +665,12 @@ object HproseInstance {
      * Send a retweet request to backend and get a new tweet object back.
      * */
     fun retweet(
-        tweet: Tweet,
-        addTweet: (Tweet) -> Unit,
-        updateTweet: (Tweet) -> Unit
+        tweet: Tweet,                       // original tweet to be retweeted
+        addTweetToFeed: (Tweet) -> Unit,    // add tweet to user's feed
+        updateTweet: (Tweet) -> Unit        // update viewModel of original tweet
     ) {
         try {
+            // upload the retweet
             val retweet = uploadTweet(Tweet(
                 mid = System.currentTimeMillis().toString(),    // placeholder
                 content = "",
@@ -676,12 +678,12 @@ object HproseInstance {
                 originalTweetId = tweet.mid,
                 originalAuthorId = tweet.authorId
             )) ?: return
-            retweet.author = appUser
-            retweet.originalTweet = tweet
-            addTweet(retweet)
 
-            addRetweetCount(tweet, retweet.mid)?.let { t ->
-                updateTweet(t)
+            retweet.originalTweet = tweet
+            addTweetToFeed(retweet)
+
+            increaseRetweetCount(tweet, retweet.mid)?.let { t ->
+                updateTweet(t.copy(author = tweet.author))
 
                 // update cached tweet in the database.
                 tweetCache.tweetDao().updateCachedTweet(
@@ -694,7 +696,11 @@ object HproseInstance {
         }
     }
 
-    fun addRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? {
+    /**
+     * Increase the retweet count of a tweet.
+     * @return updated tweet object.
+     * */
+    fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? {
         val method = "retweet_add"
         val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
             .append("&tweetid=${tweet.mid}")

@@ -231,6 +231,13 @@ fun TweetDropdownMenuItems(
         factory.create(appUser.mid)
     }
     val navController = LocalNavController.current
+    val originTweetViewModel = if (tweet.originalTweetId != null) {
+        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+            parentEntry, key = tweet.originalTweetId
+        ) { factory -> factory.create(tweet.originalTweet!!) }
+    } else {
+        null
+    }
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.
@@ -238,10 +245,13 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                tweetFeedViewModel.delTweet(tweet)
+                tweetFeedViewModel.delTweet(tweet) {
+                    originTweetViewModel?.refreshTweet()
+                }
                 // if current route is TweetDetail. Go to TweetFeed
                 if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                    navController.navigate(NavTweet.TweetFeed)
+//                    navController.navigate(NavTweet.TweetFeed)
+                    navController.popBackStack()
                 } else {
                     // close the dropdown menu
                     onDismissRequest()
