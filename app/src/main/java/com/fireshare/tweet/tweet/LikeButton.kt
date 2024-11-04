@@ -113,10 +113,10 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
             return@IconButton
         }
-        tweetFeedViewModel.toggleRetweet(tweet) { updatedTweet ->
+        tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
             viewModel.updateTweet(updatedTweet)
         }
-    })
+    } )
     {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(

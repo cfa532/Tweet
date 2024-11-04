@@ -238,7 +238,7 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                tweetFeedViewModel.delTweet(tweet.mid)
+                tweetFeedViewModel.delTweet(tweet)
                 // if current route is TweetDetail. Go to TweetFeed
                 if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                     navController.navigate(NavTweet.TweetFeed)

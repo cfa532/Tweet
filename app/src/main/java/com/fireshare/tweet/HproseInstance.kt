@@ -2,7 +2,6 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.net.Uri
-import androidx.room.Room
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.ChatDatabase
@@ -566,24 +565,36 @@ object HproseInstance {
             if (response.isSuccessful) {
                 tweet.mid = response.body?.string() ?: return null
                 tweet.author = appUser
-                return tweet
-            }
-            null
+                tweet
+            } else null
         } catch (e: Exception) {
+            Timber.tag("uploadTweet").e(e.toString())
             e.printStackTrace()
             null
         }
     }
 
-    fun delTweet(tweetId: MimeiId, delTweet: (MimeiId) -> Unit) {
-        val method = "delete_tweet"
-        val url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=$tweetId&authorid=${appUser.mid}"
-        val request = Request.Builder().url(url).build()
+    fun delTweet(tweet: Tweet, delTweet: (MimeiId) -> Unit) {
+        var method = "delete_tweet"
+        var url =
+            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&authorid=${appUser.mid}"
+        var request = Request.Builder().url(url).build()
         try {
-            val response = httpClient.newCall(request).execute()
+            var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                delTweet(tweetId)
+                // if the originalTweet is not null, also decrease its quote count
+                if (tweet.originalTweet != null) {
+                    method = "remove_retweet"
+                    url = "${tweet.originalTweet!!.author?.baseUrl}/entry?aid=$appId&ver=last" +
+                            "&entry=$method&tweetid=${tweet.originalTweetId}&userid=${appUser.mid}"
+                    request = Request.Builder().url(url).build()
+                    response = httpClient.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        // get retweet count of the original tweet
+                        val count = Gson().fromJson(response.body?.string(), Int::class.java)
+                    }
+                }
+                delTweet(tweet.mid)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -650,74 +661,44 @@ object HproseInstance {
     /**
      * Send a retweet request to backend and get a new tweet object back.
      * */
-    fun toggleRetweet(
+    fun retweet(
         tweet: Tweet,
-        tweetFeedViewModel: TweetFeedViewModel,
+        addTweet: (Tweet) -> Unit,
         updateTweet: (Tweet) -> Unit
     ) {
-        val method = "toggle_retweet"
-        val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: return
-        val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-            .append("&tweetid=${tweet.mid}")
-            .append("&userid=${appUser.mid}")
-
         try {
-            if (hasRetweeted) {
-                // remove the retweet. Get retweetId first
-                val request = Request.Builder().url(url.toString()).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string() ?: return
-                    val gson = Gson()
-                    val res = gson.fromJson(
-                        responseBody,
-                        object : TypeToken<Map<String, Any?>>() {}.type
-                    ) as Map<String, Any?>
+            val retweet = uploadTweet(Tweet(
+                mid = System.currentTimeMillis().toString(),    // placeholder
+                content = "",
+                authorId = appUser.mid,
+                originalTweetId = tweet.mid,
+                originalAuthorId = tweet.authorId
+            )) ?: return
 
-                    tweet.favorites!![UserFavorites.RETWEET] = false
-                    val count = (res["count"] as? Double)?.toInt() ?: 0
-                    updateTweet(tweet.copy(retweetCount = count))
-                    tweetCache.tweetDao().updateCachedTweet(
-                        CachedTweet(tweet.mid, gson.toJson(tweet.copy(retweetCount = count)))
+            val method = "retweet"
+            val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+                .append("&tweetid=${tweet.mid}")
+                .append("&userid=${appUser.mid}")
+                .append("&retweetid=${retweet.mid}")
+            val request = Request.Builder().url(url.toString()).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: return
+                val gson = Gson()
+                val count = gson.fromJson(responseBody, Int::class.java)
+                tweet.favorites!![UserFavorites.RETWEET] = true
+                updateTweet(tweet.copy(retweetCount = count))
+
+                // update cached tweet in the database.
+                tweetCache.tweetDao().updateCachedTweet(
+                    CachedTweet(
+                        tweet.mid,
+                        gson.toJson(tweet.copy(retweetCount = count))
                     )
-
-                    val retweetId = res["retweetId"] as? MimeiId
-                    if (retweetId != null) {
-                        delTweet(retweetId) {
-                            tweetFeedViewModel.delTweet(retweetId)
-                        }
-                    }
-                }
-            } else {
-                var retweet = Tweet(
-                    mid = System.currentTimeMillis().toString(),    // placeholder
-                    content = "",
-                    authorId = appUser.mid,
-                    originalTweetId = tweet.mid,
-                    originalAuthorId = tweet.authorId
                 )
-                // upload the retweet first
-                retweet = uploadTweet(retweet) ?: return
-
-                url.append("&retweetid=${retweet.mid}")
-                val request = Request.Builder().url(url.toString()).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string() ?: return
-                    val gson = Gson()
-                    val res = gson.fromJson(
-                        responseBody,
-                        object : TypeToken<Map<String, Any?>>() {}.type
-                    ) as Map<String, Any?>
-                    tweet.favorites!![UserFavorites.RETWEET] = true
-                    updateTweet(tweet.copy(retweetCount = (res["count"] as Double).toInt()))
-                    tweetCache.tweetDao().updateCachedTweet(
-                        CachedTweet(tweet.mid, gson.toJson(tweet.copy(retweetCount = (res["count"] as Double).toInt())))
-                    )
-                    retweet.author = appUser
-                    retweet.originalTweet = tweet
-                    tweetFeedViewModel.addTweet(retweet)
-                }
+                retweet.author = appUser
+                retweet.originalTweet = tweet
+                addTweet(retweet)
             }
         } catch (e: Exception) {
             e.printStackTrace()
