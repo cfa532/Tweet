@@ -55,11 +55,11 @@ class UploadCommentWorker @AssistedInject constructor(
             )
 
             HproseInstance.uploadComment(parentTweet, comment).let { newTweet: Tweet ->
-                // newTweet is the parent Tweet with new comment. After uploading it,
+                // newTweet is the updated tweet with new comment. After uploading it,
                 // comment.mid is updated inside uploadComment() with newly created id.
+                // retweet is a new tweet with comment as content
                 val gson = Gson()
                 val retweet = if (isChecked) {
-                    // retweet is the comment posted as a new tweet
                     comment.originalTweetId = parentTweet.mid
                     comment.originalAuthorId = parentTweet.authorId
                     HproseInstance.uploadTweet(comment)
