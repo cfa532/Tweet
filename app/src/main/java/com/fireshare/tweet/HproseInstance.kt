@@ -35,7 +35,7 @@ object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
-    var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
+    private var appId: MimeiId = "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
@@ -52,13 +52,13 @@ object HproseInstance {
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
-    val httpClient = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder()
 //        .addInterceptor(loggingInterceptor)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
         this.preferenceHelper = preferenceHelper
-        initAppEntry(preferenceHelper)
+        initAppEntry()
 
 //        chatDatabase = Room.databaseBuilder(
 //            context.applicationContext,
@@ -72,7 +72,7 @@ object HproseInstance {
 
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
-    suspend fun initAppEntry(preferenceHelper: PreferenceHelper) {
+    private suspend fun initAppEntry() {
         val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
         val request = Request.Builder().url(baseUrl).build()
@@ -122,7 +122,7 @@ object HproseInstance {
                             val firstIp = findFirstReachableAddress(hostIPs)
                             User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         }
-                        Timber.tag("initAppEntry").d("Succeed. $appId, $appUser")
+                        Timber.tag("initAppEntry").d("Init succeed. $appId, $appUser")
                     }
                 } else {
                     Timber.tag("initAppEntry").e("No data found within window.setParam()")
@@ -278,7 +278,7 @@ object HproseInstance {
      * Therefore it is indispensable to acquire base url for each user.
      * */
     suspend fun getUserBase(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
-        // check if user data has been read
+        // check if user data has been cached
         cachedUsers.firstOrNull { it.mid == userId }?.let { return it }
 
         try {
@@ -1010,6 +1010,22 @@ object HproseInstance {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private suspend fun retryInitAppEntry(block: suspend () -> Unit) {
+        var retryCount = 0
+        while (retryCount < 2) { // Retry up to 2 times
+            try {
+                block()
+                return // If successful, return
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Network error: ${e.message}")
+                retryCount++
+                initAppEntry() // Retry initAppEntry()
+            }
+        }
+        // If all retries fail, handle the error (e.g., show an error message)
+        Timber.tag("HproseInstance").e("Network error: All retries failed.")
     }
 }
 
