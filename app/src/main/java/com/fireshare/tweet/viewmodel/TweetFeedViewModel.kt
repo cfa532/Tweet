@@ -162,13 +162,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     }
                     initState.value = false
                 } catch (e: Exception) {
-                    Timber.tag("GetTweets").e(e, "Error fetching tweets")
-                    // in catastrophic events, such as lost of a service node,
-                    // try to reacquire a valid serving node.
-                    ioScope.launch {
-                        HproseInstance.initAppEntry(TweetApplication.preferenceHelper)
-                        refresh()
-                    }
+                    Timber.tag("GetTweets").e(e, "Error fetching tweets. $appUser")
                 }
             }
         }
@@ -221,12 +215,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     fun updateFollowings(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
-            // the tweets of a user after following it.
+            // Get the tweets of a user after following it.
             _followings.update { list -> list + userId }
             getTweets(userId)
         } else {
             _followings.update { list -> list - userId }
-            // remove all tweets of this user from list
+            // remove all tweets of this user from list after unfollowing it.
             _tweets.update { currentTweets ->
                 currentTweets.filterNot { it.author?.mid == userId }
             }

@@ -73,8 +73,17 @@ class TweetViewModel @AssistedInject constructor(
             }
         }
     }
+    fun refreshTweet() {
+        viewModelScope.launch(Dispatchers.IO) {
+            HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
+                _tweetState.value = tweet
+            }
+        }
+    }
 
-    // when composing a comment, also post is as a tweet or not.
+    /**
+     * when composing a comment, also post is as a tweet or not.
+     * */
     val isCheckedToTweet = mutableStateOf(false)
     fun onCheckedChange(value: Boolean) {
         isCheckedToTweet.value = value

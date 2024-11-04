@@ -138,6 +138,7 @@ fun MediaBrowser(
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
+    var initOffsetY by remember { mutableFloatStateOf(0f) }
     // prevent double trigger of popBack event
     var isNavigationTriggered by remember { mutableStateOf(false) }
     Box(
@@ -147,10 +148,14 @@ fun MediaBrowser(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
+                        offsetY = initOffsetY
                         isNavigationTriggered = false
                     },
                     onDrag = {_, _ ->
                     },
+                    onDragStart = {
+                        initOffsetY = offsetY
+                    }
                 )
             }
             .pointerInput(Unit) {

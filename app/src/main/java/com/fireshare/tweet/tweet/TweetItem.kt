@@ -16,7 +16,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -32,6 +39,8 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
+import com.fireshare.tweet.widget.isElementVisible
+import kotlinx.coroutines.delay
 
 @Composable
 fun TweetItem(
@@ -43,11 +52,26 @@ fun TweetItem(
     ) { factory ->
         factory.create(tweet)
     }
+    var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var isVisible by remember { mutableStateOf(false) }
 
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            delay(1000) // Delay to avoid immediate refresh
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastRefreshTime > 180000) {
+                lastRefreshTime = currentTime
+                viewModel.refreshTweet()
+            }
+        }
+    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 800.dp)
+            .onGloballyPositioned { layoutCoordinates ->
+                isVisible = isElementVisible(layoutCoordinates, 20)
+            }
             .padding(bottom = 1.dp),
         tonalElevation = 0.dp
     ) {

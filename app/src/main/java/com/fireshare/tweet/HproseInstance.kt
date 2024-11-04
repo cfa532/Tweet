@@ -481,6 +481,9 @@ object HproseInstance {
                     val gson = Gson()
                     val tweet = gson.fromJson(json, Tweet::class.java)
                     tweet.author = author
+                    /**
+                     * Insert the tweet into the cache database.
+                     * */
                     tweetCache.tweetDao().insertCachedTweet(
                         CachedTweet(tweet.mid, gson.toJson(tweet))
                     )
@@ -495,6 +498,50 @@ object HproseInstance {
         }
     }
 
+    /**
+     * Get tweet from Mimei DB to refresh cached tweet.
+     * Called when the given tweet is visible.
+     * */
+    suspend fun refreshTweet(
+        tweetId: MimeiId,
+        authorId: MimeiId
+    ): Tweet? {
+        try {
+            val author =
+                getUserBase(authorId) ?: return null   // cannot get author data, return null
+            val method = "get_tweet"
+            val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+                .append("&tweetid=$tweetId")
+                // appUser is passed to sever, to check if the current user has liked or bookmarked.
+                .append("&userid=${appUser.mid}").toString()
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                response.body?.string()?.let { json ->
+                    val gson = Gson()
+                    val tweet = gson.fromJson(json, Tweet::class.java)
+                    tweet.author = author
+                    /**
+                     * update the tweet in the cache database.
+                     * */
+                    tweetCache.tweetDao().updateCachedTweet(
+                        CachedTweet(tweet.mid, gson.toJson(tweet))
+                    )
+                    Timber.tag("refreshTweet").d("$tweet")
+                    return tweet
+                }
+            }
+            return null
+        } catch (e: Exception) {
+            Timber.tag("refreshTweet").e("$tweetId $authorId $e")
+            return null
+        }
+    }
+
+    /**
+     * Retrieve cached tweet from Mimei DB. User info is not cached,
+     * which changes frequently.
+     * */
     private suspend fun restoreCachedTweet(tweetId: MimeiId): Tweet? {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
         val gson = Gson()

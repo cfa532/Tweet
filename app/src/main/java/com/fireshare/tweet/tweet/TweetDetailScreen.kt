@@ -19,6 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -26,6 +30,7 @@ import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.delay
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,10 +44,16 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
 
     LaunchedEffect(Unit) {
-        Timber.tag("TweetDetailScreen").d("$tweet")
+        viewModel.refreshTweet()
         viewModel.loadComments( tweet )
+        Timber.tag("TweetDetailScreen").d("$tweet")
     }
-
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5 * 60 * 1000) // Delay for 5 minutes
+            viewModel.refreshTweet()
+        }
+    }
     Scaffold(
         topBar = { TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
