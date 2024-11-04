@@ -171,7 +171,7 @@ class TweetViewModel @AssistedInject constructor(
 
                                     viewModelScope.launch(Dispatchers.IO) {
                                         increaseRetweetCount(tweet, retweet.mid)?.let { t ->
-                                            updateTweet(t)
+                                            updateTweet(t.copy(author = tweetState.value.author))
 
                                             // update cached tweet in the database.
                                             tweetCache.tweetDao().updateCachedTweet(
