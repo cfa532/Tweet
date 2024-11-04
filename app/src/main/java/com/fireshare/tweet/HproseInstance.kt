@@ -477,16 +477,17 @@ object HproseInstance {
             if (response.isSuccessful) {
                 response.body?.string()?.let { json ->
                     val gson = Gson()
-                    val tweet = gson.fromJson(json, Tweet::class.java)
-                    tweet.author = author
-                    /**
-                     * Insert the tweet into the cache database.
-                     * */
-                    tweetCache.tweetDao().insertCachedTweet(
-                        CachedTweet(tweet.mid, gson.toJson(tweet))
-                    )
-                    Timber.tag("getTweet").d("$tweet")
-                    return tweet
+                    gson.fromJson(json, Tweet::class.java)?.let { tweet ->
+                        tweet.author = author
+                        /**
+                         * Insert the tweet into the cache database.
+                         * */
+                        tweetCache.tweetDao().insertCachedTweet(
+                            CachedTweet(tweet.mid, gson.toJson(tweet))
+                        )
+                        Timber.tag("getTweet").d("$tweet")
+                        return tweet
+                    }
                 }
             }
             return null
