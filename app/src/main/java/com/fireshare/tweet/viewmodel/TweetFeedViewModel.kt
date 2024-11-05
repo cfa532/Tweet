@@ -82,7 +82,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    fun refresh() {
+    suspend fun refresh() {
         _followings.value = emptyList()
         // get current user's following list
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()

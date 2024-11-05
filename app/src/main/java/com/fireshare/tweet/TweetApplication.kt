@@ -11,7 +11,9 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -66,6 +68,7 @@ class TweetApplication : Application(){
  * */
 class ReleaseTree : Timber.Tree() {
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+
         // Only log WARN, ERROR, and WTF levels in release builds
         if (priority == Log.VERBOSE || priority == Log.DEBUG || priority == Log.INFO) {
             return
@@ -77,7 +80,10 @@ class ReleaseTree : Timber.Tree() {
             put("message", message)
             t?.let { put("exception", it.toString()) }
         }
-        HproseInstance.logging(logEntry.toString())
+        val scope = CoroutineScope(IO)
+        scope.launch {
+            HproseInstance.logging(logEntry.toString())
+        }
 
         // Log to your crash reporting tool or any other logging service
         // For example, using Firebase Crashlytics:

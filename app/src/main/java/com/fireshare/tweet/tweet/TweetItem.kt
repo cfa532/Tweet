@@ -54,14 +54,21 @@ fun TweetItem(
     }
     var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var isVisible by remember { mutableStateOf(false) }
+    var visibilityStartTime by remember { mutableStateOf(0L) }
 
+    /**
+     * If the composable stays visible for more than 1 second, refresh tweet.
+     * Only do it 3 minutes after the last refresh.
+     * */
     LaunchedEffect(isVisible) {
         if (isVisible) {
-            delay(1000) // Delay to avoid immediate refresh
+            visibilityStartTime = System.currentTimeMillis() // Record visibility start time
+            delay(500) // Wait for 1 second
+
             val currentTime = System.currentTimeMillis()
-            if (currentTime - lastRefreshTime > 180000) {
-                lastRefreshTime = currentTime
+            if (currentTime - visibilityStartTime >= 500 && currentTime - lastRefreshTime >= 3 * 60 * 1000) {
                 viewModel.refreshTweet()
+                lastRefreshTime = currentTime
             }
         }
     }

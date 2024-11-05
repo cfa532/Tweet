@@ -79,6 +79,10 @@ class TweetViewModel @AssistedInject constructor(
     fun refreshTweet() {
         viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
+                if (tweet.originalTweetId != null)
+                    HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)?.let {
+                        tweet.originalTweet = it
+                    }
                 _tweetState.value = tweet
             }
         }
