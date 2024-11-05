@@ -79,6 +79,7 @@ object HproseInstance {
     // Find network entrance of the App
     // Given entry URL, initiate appId, and BASE_URL.
     private suspend fun initAppEntry() {
+        cachedUsers.clear()     // make sure no stale data during retry init.
         val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
         val request = Request.Builder().url(baseUrl).build()
@@ -128,13 +129,14 @@ object HproseInstance {
                             val firstIp = findFirstReachableAddress(hostIPs)
                             User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         }
+                        cachedUsers.add(appUser)
+                        hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                            .useService(HproseService::class.java)
                         Timber.tag("initAppEntry").d("Init succeed. $appId, $appUser")
                     }
                 } else {
                     Timber.tag("initAppEntry").e("No data found within window.setParam()")
                 }
-                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                    .useService(HproseService::class.java)
             }
         } catch (e: Exception) {
             Timber.tag("initAppEntry").e(e.toString())

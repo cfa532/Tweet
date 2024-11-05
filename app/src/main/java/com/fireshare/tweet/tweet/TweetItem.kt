@@ -54,7 +54,7 @@ fun TweetItem(
     }
     var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var isVisible by remember { mutableStateOf(false) }
-    var visibilityStartTime by remember { mutableStateOf(0L) }
+    var visibilityStartTime by remember { mutableLongStateOf(0L) }
 
     /**
      * If the composable stays visible for more than 1 second, refresh tweet.
