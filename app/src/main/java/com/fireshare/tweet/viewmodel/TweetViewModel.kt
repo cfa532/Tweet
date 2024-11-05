@@ -215,7 +215,7 @@ class TweetViewModel @AssistedInject constructor(
              * which includes environment variables of the App.
              * */
             val map = HproseInstance.checkUpgrade() ?: return@launch
-            val deepLink = "http://${map["domain"]}/#/tweet/${tweet.mid}/${tweet.authorId}"
+            val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
 //            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
 //                    "${tweet.mid}/${tweet.authorId}"
             val sendIntent: Intent = Intent().apply {
