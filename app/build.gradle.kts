@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -16,7 +17,7 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "16"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -57,6 +58,8 @@ android {
 }
 
 dependencies {
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
 
     implementation(libs.timber)
     implementation(libs.androidx.core.splashscreen)
