@@ -12,28 +12,44 @@ plugins {
 android {
     namespace = "com.fireshare.tweet"
     compileSdk = 35
+    ndkVersion = "28.0.12433566"
 
     defaultConfig {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "16"   // compared with App Mimei version to check for upgrade.
+        versionCode = 5
+        versionName = "17"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
     }
-
     buildTypes {
-        release {
-            isMinifyEnabled = false
+        debug {
+            isMinifyEnabled = true
+//            isShrinkResources = true
 //            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
+        }
+        release {
+            isMinifyEnabled = true
+//            isShrinkResources = true
+//            isDebuggable = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {
@@ -58,6 +74,7 @@ android {
 }
 
 dependencies {
+
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
 
@@ -80,7 +97,6 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.work.runtime.ktx)
 
-    implementation(libs.kotlinx.serialization.json)
     implementation(libs.assisted.inject.annotations.dagger2)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.espresso.core)

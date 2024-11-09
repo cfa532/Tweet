@@ -307,6 +307,7 @@ object HproseInstance {
                     // only to verify the login succeed.
                     val gson = Gson()
                     gson.fromJson(json, User::class.java) ?: return@withRetry null
+                    println(user)
                     /**
                      * Now user object has a new baseUrl of the node which hold user data.
                      * If login succeed, httpClient need to use the new IP from now on.

@@ -153,21 +153,21 @@ class TweetViewModel @AssistedInject constructor(
                                 val json = outputData.getString("comment") ?: return@observe
                                 Timber.tag("UploadComment").d("Tweet uploaded successfully: $json")
                                 // Handle the success and update UI
-                                val map = Json.decodeFromString<Map<String, String?>>(json)
+                                val map = gson.fromJson(json, Map::class.java) as Map<*, *>
 
-                                var comment = Json.decodeFromString<Tweet>(map["comment"]!!)
+                                var comment = gson.fromJson(map["comment"].toString(), Tweet::class.java)
                                 comment = comment.copy(author = appUser)
                                 Timber.tag("UploadComment").d("Comment: $comment")
                                 _comments.update { list -> listOf(comment) + list }
 
                                 // parent tweet with the new comment.
-                                val newTweet = Json.decodeFromString<Tweet>(map["newTweet"]!!)
+                                val newTweet = gson.fromJson(map["newTweet"].toString(), Tweet::class.java)
                                 Timber.tag("UploadComment").d("Updated tweet: $newTweet")
                                 _tweetState.value = newTweet
 
                                 // the comment also posted as tweet.
                                 val retweet =
-                                    map["retweet"]?.let { Json.decodeFromString<Tweet>(it) }
+                                    map["retweet"]?.let { gson.fromJson(it.toString(), Tweet::class.java) }
                                 if (retweet != null) {
                                     retweet.originalTweet = newTweet
                                     retweet.originalTweet!!.author = newTweet.author

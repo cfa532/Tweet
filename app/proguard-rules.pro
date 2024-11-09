@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+-keep class com.fireshare.tweet.HproseInstance { *; }
+-keep class com.fireshare.tweet.HproseService { *; }
+-keep class com.fireshare.tweet.ScorePair { *; }
+-keep class com.fireshare.tweet.widget.Gadget { *; }
+-keep class com.fireshare.tweet.viewmodel.** { *; }
+-keep class hprose.client.** { *; }
+-keep class com.fireshare.tweet.** { *; }
