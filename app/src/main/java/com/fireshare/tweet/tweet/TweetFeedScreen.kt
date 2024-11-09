@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material3.Icon
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -217,16 +219,16 @@ fun MainTopAppBar(
                 BasicAlertDialog(
                     onDismissRequest = { showDialog = false }
                 ) {
-                    Surface(
+                    ConstraintLayout(
                         modifier = Modifier
                             .width(400.dp)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        shape = MaterialTheme.shapes.medium,
-                        tonalElevation = 6.dp
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White),
                     ) {
+                        val (content, button) = createRefs()
                         LazyColumn(
-                            modifier = Modifier.padding(8.dp)
+                            modifier = Modifier
+                                .padding(8.dp)
                                 .height(800.dp)
                         ) {
                             item {
@@ -265,7 +267,10 @@ fun MainTopAppBar(
                                 Spacer(modifier = Modifier.height(24.dp))
                                 TextButton(
                                     onClick = { showDialog = false },
-                                    modifier = Modifier.align(Alignment.Bottom)
+                                    modifier = Modifier.constrainAs(button) {
+                                        bottom.linkTo(parent.bottom)
+                                        centerHorizontallyTo(parent)
+                                    },
                                 ) {
                                     Text("Confirm")
                                 }
