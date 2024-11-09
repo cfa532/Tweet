@@ -71,8 +71,7 @@ fun TweetItemHeader(
             Text(text = "@${author?.username}",
                 modifier = Modifier.padding(horizontal = 0.dp),
                 style = MaterialTheme.typography.labelMedium)
-            Text( text = " • ", fontSize = 12.sp
-            )
+            Text( text = " • ", fontSize = 12.sp)
             Text(text = localizedTimeDifference(tweet.timestamp),
                 style = MaterialTheme.typography.labelMedium)
         }

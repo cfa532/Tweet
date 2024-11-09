@@ -7,25 +7,39 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
@@ -34,7 +48,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -170,7 +186,7 @@ fun MainTopAppBar(
                         .clip(CircleShape)
                         .clickable(onClick = {
                             navController.navigate(NavTweet.TweetFeed)
-                        } )
+                        })
                 ) {
                     AppIcon()
                 }
@@ -187,8 +203,79 @@ fun MainTopAppBar(
             }
         },
         actions = {
-            // add delete action here
+            var showDialog by remember { mutableStateOf(false) }
+            IconButton(onClick = {
+                showDialog = true
+            }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "privacy policy",
+                    tint = MaterialTheme.colorScheme.surfaceTint
+                )
+            }
+            if (showDialog) {
+                BasicAlertDialog(
+                    onDismissRequest = { showDialog = false }
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .width(400.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 6.dp
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.padding(8.dp)
+                                .height(800.dp)
+                        ) {
+                            item {
+                                Text(
+                                    "Privacy Policy\n" +
+                                            "\n" +
+                                            "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
+                                            "\n" +
+                                            "Information Collection and Use\n" +
+                                            "\n" +
+                                            "We collect several types of information for various purposes to provide and improve our App for you.\n" +
+                                            "\n" +
+                                            "Types of Data Collected\n" +
+                                            "\n" +
+                                            "Personal Data: While using our App, we may ask you to provide us with certain personally identifiable information, such as your name, email address.\n" +
+                                            "\n" +
+                                            "Usage Data: We may collect information on how the App is accessed and used, such as your device's Internet Protocol address (e.g., IP address), browser type, browser version, the pages of our App that you visit, the time and date of your visit, and other diagnostic data.\n" +
+                                            "\n" +
+                                            "Cookies and Tracking Technologies: We use cookies and similar tracking technologies to track the activity on our App and hold certain information.\n" +
+                                            "\n" +
+                                            "Use of Data\n" +
+                                            "\n" +
+                                            "We use the collected data for various purposes:\n" +
+                                            "\n" +
+                                            "To provide and maintain our App\n" +
+                                            "To notify you about changes to our App\n" +
+                                            "To allow you to participate in interactive features of our App when you choose to do so\n" +
+                                            "To provide customer support\n" +
+                                            "To gather analysis or valuable information so that we can improve our App\n" +
+                                            "To monitor the usage of our App\n" +
+                                            "To detect, prevent, and address technical issues\n" +
+                                            "Data Security\n" +
+                                            "\n" +
+                                            "The security of your data is important to us, but remember that no method of transmission over the Internet is 100% secure. While we try our best to protect you data, there is always potential leakholes. Do not disclose sensitive personal information on this App.",
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                TextButton(
+                                    onClick = { showDialog = false },
+                                    modifier = Modifier.align(Alignment.Bottom)
+                                ) {
+                                    Text("Confirm")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
         scrollBehavior = scrollBehavior
+
     )
 }
