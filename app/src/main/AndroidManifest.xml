@@ -14,7 +14,7 @@
     <uses-permission android:name="MediaStore.createWriteRequest" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.CAMERA" />
-
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
     <application
         android:name=".TweetApplication"
         android:windowSoftInputMode="adjustResize"
