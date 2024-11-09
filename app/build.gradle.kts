@@ -18,8 +18,8 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "17"   // compared with App Mimei version to check for upgrade.
+        versionCode = 6
+        versionName = "18"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -29,7 +29,7 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = true
-//            isShrinkResources = true
+            isShrinkResources = true
 //            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -41,7 +41,7 @@ android {
         }
         release {
             isMinifyEnabled = true
-//            isShrinkResources = true
+            isShrinkResources = true
 //            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
