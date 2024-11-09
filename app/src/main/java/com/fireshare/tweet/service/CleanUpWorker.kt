@@ -23,7 +23,7 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
             val cachedTweetDao = database.tweetDao()
             cachedTweetDao.deleteOldCachedTweets(oneMonthAgo)
 
-            // clear old cached images
+            // clear old cached images after 30 days.
             val cacheManager = CacheManager(applicationContext)
             val oneMonthInMillis = 30L * 24L * 60L * 60L * 1000L
             cacheManager.clearOldCachedImages(oneMonthInMillis)
