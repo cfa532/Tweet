@@ -18,11 +18,7 @@ import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
