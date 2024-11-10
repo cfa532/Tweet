@@ -3,7 +3,9 @@ package com.fireshare.tweet.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.chat.ChatSessionRepository
+import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -34,6 +36,18 @@ class ChatListViewModel @Inject constructor(
                 _userMap.update { it + (chatSession.receiptId to user) }
                 _chatSessions.update { it + chatSession }
             }
+        }
+    }
+
+    /**
+     * Given a message, update corresponding chat session.
+     * */
+    fun updateSession(msg: ChatMessage) {
+        val receiptId = if (msg.authorId==appUser.mid) msg.receiptId else msg.authorId
+        chatSessions.value.find { it.receiptId == receiptId }?.let {
+            val updatedSessions = it.copy(hasNews = false, lastMessage = msg, timestamp = msg.timestamp)
+            _chatSessions.update { sessions -> sessions - it }
+            _chatSessions.update { sessions -> sessions + updatedSessions }
         }
     }
 

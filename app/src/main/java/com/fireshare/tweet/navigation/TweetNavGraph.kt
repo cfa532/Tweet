@@ -136,6 +136,7 @@ fun TweetNavGraph(
                     key = args.receiptId ) { factory ->
                     factory.create(receiptId = args.receiptId)
                 }
+                viewModel.chatListViewModel = hiltViewModel<ChatListViewModel>()
                 ChatScreen(viewModel)
             }
             composable<NavTweet.ChatList> {

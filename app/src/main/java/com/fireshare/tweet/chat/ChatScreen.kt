@@ -81,9 +81,9 @@ fun ChatScreen(
             scrollToBottom()
         }
         // fetch new messages every 30s when on chat screen.
-        timer(period = 30000, action = {
+        timer(period = 10000, action = {
             viewModel.fetchNewMessage()
-        }, initialDelay = 30000)
+        }, initialDelay = 10000)
     }
 
     // Scroll to the bottom when a new message is added
