@@ -1,6 +1,8 @@
 package com.fireshare.tweet.datamodel
 
 import android.content.Context
+import androidx.compose.ui.input.key.type
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -10,6 +12,10 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -17,7 +23,7 @@ data class ChatMessage(
     val receiptId: MimeiId,     // receiver of the message
     val authorId: MimeiId,      // author of the message
     val content: String,
-    val attachment: MimeiId? = null,  // media file
+    val attachments: List<MimeiId>? = null,  // media file
     val timestamp: Long
 )
 
@@ -36,7 +42,7 @@ data class ChatMessageEntity(
     val receiptId: String,
     val authorId: String,
     val content: String,
-    val attachment: MimeiId? = null,
+    val attachments: List<MimeiId>? = null,
     val timestamp: Long
 )
 
@@ -55,7 +61,7 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
-        attachment = this.attachment,
+        attachments = this.attachments,
         timestamp = this.timestamp
     )
 }
@@ -65,7 +71,7 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
-        attachment = this.attachment,
+        attachments = this.attachments,
         timestamp = this.timestamp
     )
 }
@@ -88,6 +94,19 @@ fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
         hasNews = this.hasNews,
         lastMessage = lastMessage
     )
+}
+
+class MimeiIdListConverter {
+    @TypeConverter
+    fun fromMimeiIdList(list: List<MimeiId>?): String? {
+        return Gson().toJson(list)
+    }
+
+    @TypeConverter
+    fun toMimeiIdList(value: String?): List<MimeiId>? {
+        val listType = object : TypeToken<List<MimeiId>>() {}.type
+        return Gson().fromJson(value, listType)
+    }
 }
 
 @Dao
@@ -139,7 +158,8 @@ interface ChatSessionDao {
     suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 2)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 3)
+@TypeConverters(MimeiIdListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun chatSessionDao(): ChatSessionDao
