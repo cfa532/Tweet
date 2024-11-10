@@ -80,7 +80,7 @@ fun ChatScreen(
             delay(100)
             scrollToBottom()
         }
-        // fetch new messages every time open chat screen.
+        // fetch new messages every 30s when on chat screen.
         timer(period = 30000, action = {
             viewModel.fetchNewMessage()
         }, initialDelay = 30000)

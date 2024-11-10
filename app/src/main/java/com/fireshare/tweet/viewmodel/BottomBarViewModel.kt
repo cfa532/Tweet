@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlin.concurrent.timer
 
 class BottomBarViewModel : ViewModel() {
     private val _badgeCount = MutableStateFlow<Int?>(null)
@@ -21,15 +22,8 @@ class BottomBarViewModel : ViewModel() {
     }
 
     init {
-//        startPeriodicUpdate()
-    }
-
-    private fun startPeriodicUpdate() {
-        viewModelScope.launch(Dispatchers.IO) {
-            while (true) {
-                updateBadgeCount()
-                delay(600 * 1000) // Delay for 1 minute
-            }
-        }
+        timer(period = 300000, action = {
+            updateBadgeCount()
+        }, initialDelay = 300000)
     }
 }
