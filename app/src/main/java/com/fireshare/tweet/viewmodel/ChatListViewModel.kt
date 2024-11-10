@@ -29,29 +29,38 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            loadChatSessions().forEach { chatSession ->
-                launch { // Launch a separate coroutine for each chat session
-                    val user = HproseInstance.getUserBase(chatSession.receiptId)
-                    _userMap.value =
-                        _userMap.value.toMutableMap().apply { put(chatSession.receiptId, user) }
-                    _chatSessions.update { it + chatSession } // Update chatSessions with the new session
-                }
+            chatSessionRepository.getAllSessions().forEach { chatSession ->
+                val user = HproseInstance.getUserBase(chatSession.receiptId)
+                _userMap.update { it + (chatSession.receiptId to user) }
+                _chatSessions.update { it + chatSession }
             }
         }
-    }
-
-    private suspend fun loadChatSessions(): List<ChatSession> {
-        return chatSessionRepository.getAllSessions()
     }
 
     fun previewMessages() {
         viewModelScope.launch(Dispatchers.IO) {
             val newMessages = HproseInstance.checkNewMessages() ?: return@launch
             val updatedSessions =
-                chatSessionRepository.mergeMessagesWithSessions(_chatSessions.value, newMessages)
-            // Do not update session database, only show new sessions on UI
-            // Update session database only when user opens chat screen.
-            _chatSessions.update { updatedSessions }
+                chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, newMessages)
+
+            // Do not update chat session database, only show new sessions on UI
+            // Update chat session database only when user opens chat screen.
+//            _chatSessions.update { updatedSessions }
+            updatedSessions.forEach { chatSession ->
+                val existingSession = _chatSessions.value.find { it.receiptId == chatSession.receiptId }
+                if (existingSession != null) {
+                    existingSession.hasNews = chatSession.hasNews
+                    existingSession.lastMessage = chatSession.lastMessage
+                    existingSession.timestamp = chatSession.timestamp
+                } else {
+                    _chatSessions.update { it + chatSession }
+                }
+            }
         }
+    }
+
+    suspend fun updateUser(userId: MimeiId) {
+        val user = HproseInstance.getUserBase(userId) ?: return
+        _userMap.update { it + (user.mid to user) }
     }
 }

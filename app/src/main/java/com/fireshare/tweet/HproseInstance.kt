@@ -210,50 +210,57 @@ object HproseInstance {
 
     // get the recent unread message from a sender.
     suspend fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage>? { return withRetry {
-        return@withRetry {
+        return@withRetry try {
             val gson = Gson()
             val entry = "message_fetch"
-            val json = """
-            {"aid": $appId, "ver":"last", "userid":${appUser.mid}, "senderid":${senderId}}
-        """.trimIndent()
-            val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-            try {
+            val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                    "&userid=${appUser.mid}&senderid=$senderId"
+            val request = Request.Builder().url(url).build()
                 // write outgoing message to user's Mimei db
-                hproseClient?.runMApp(entry, request) as List<ChatMessage>?
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Timber.tag("fetchMessages").e(e.toString())
-                null
-            }
-        }.withRetry()
-    }}
-
-    // get a list of unread incoming messages from other users
-    suspend fun checkNewMessages(): List<ChatMessage>? {
-        return withRetry {
-            if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
-            return@withRetry try {
-                val gson = Gson()
-                val url =
-                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=message_check&userid=${appUser.mid}"
-                val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     val json = response.body?.string()
                     val list = gson.fromJson(
                         json,
                         object : TypeToken<List<ChatMessage>>() {}.type
-                    ) as List<ChatMessage>
+                    ) as List<ChatMessage>?
                     return@withRetry list
                 }
                 null
             } catch (e: Exception) {
                 e.printStackTrace()
-                Timber.tag("checkNewMessages").e(appUser.toString())
+                Timber.tag("fetchMessages").e(e.toString())
                 null
             }
         }
     }
+
+    /**
+     * Get a list of unread incoming messages. Only check, do not fetch them.
+     * */
+    suspend fun checkNewMessages(): List<ChatMessage>? { return withRetry {
+        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
+        return@withRetry try {
+            val gson = Gson()
+            val url =
+                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=message_check&userid=${appUser.mid}"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val list = gson.fromJson(
+                    json,
+                    object : TypeToken<List<ChatMessage>>() {}.type
+                ) as List<ChatMessage>?
+                return@withRetry list
+            }
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Timber.tag("checkNewMessages").e(appUser.toString())
+            null
+        }
+    } }
 
     suspend fun checkUpgrade(): Map<String, String>? {
         return withRetry {

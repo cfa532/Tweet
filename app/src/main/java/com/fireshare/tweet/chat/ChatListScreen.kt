@@ -43,6 +43,9 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -106,10 +109,13 @@ fun ChatListScreen(viewModel: ChatListViewModel)
 fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navController: NavController) {
     val chatMessage = chatSession.lastMessage
     val userMap by viewModel.userMap.collectAsState()
-    val user = userMap[chatSession.receiptId]
+    var user = userMap[chatSession.receiptId]
 
-    LaunchedEffect(user) {
-//        viewModel.getSender(chatSession.receiptId)
+    LaunchedEffect(chatSession.receiptId) {
+        withContext(Dispatchers.IO) {
+            viewModel.updateUser(chatSession.receiptId)
+            user = userMap[chatSession.receiptId]
+        }
     }
 
     Row(modifier = Modifier.padding(8.dp)) {

@@ -17,16 +17,17 @@ data class ChatMessage(
     val receiptId: MimeiId,     // receiver of the message
     val authorId: MimeiId,      // author of the message
     val content: String,
+    val attachment: MimeiId? = null,  // media file
     val timestamp: Long
 )
 
 @Serializable
 data class ChatSession(
-    val timestamp: Long,    // last time the chat screen is opened
+    var timestamp: Long,    // last time the chat screen is opened
     val userId: MimeiId,    // always the appUser
     val receiptId: MimeiId, // whom the app user is chatting with
-    val hasNews: Boolean,   // new message hasn't been read.
-    val lastMessage: ChatMessage    // could be from either appUser or the other party
+    var hasNews: Boolean,   // new message hasn't been read.
+    var lastMessage: ChatMessage    // the most recent msg, could be from either appUser or the other party
 )
 
 @Entity(tableName = "chat_messages")
@@ -35,6 +36,7 @@ data class ChatMessageEntity(
     val receiptId: String,
     val authorId: String,
     val content: String,
+    val attachment: MimeiId? = null,
     val timestamp: Long
 )
 
@@ -53,6 +55,7 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
+        attachment = this.attachment,
         timestamp = this.timestamp
     )
 }
@@ -62,6 +65,7 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
+        attachment = this.attachment,
         timestamp = this.timestamp
     )
 }
@@ -135,7 +139,7 @@ interface ChatSessionDao {
     suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 1)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 2)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun chatSessionDao(): ChatSessionDao
@@ -150,7 +154,7 @@ abstract class ChatDatabase : RoomDatabase() {
                     context.applicationContext,
                     ChatDatabase::class.java,
                     "chat_database"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }

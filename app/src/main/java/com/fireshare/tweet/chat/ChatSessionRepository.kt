@@ -51,7 +51,6 @@ class ChatSessionRepository(
         }
     }
 
-
     /**
      * Update existing chat sessions with incoming chat message.
      * Chat message is identified by its pair of authorId and receiptId. Depending on
@@ -63,6 +62,8 @@ class ChatSessionRepository(
         existingSessions: List<ChatSession>,
         newMessages: List<ChatMessage>
     ): List<ChatSession> {
+
+        // a map using senderId and receiptId as key, and ChatMessage as value
         val messageMap = mutableMapOf<Pair<MimeiId, MimeiId>, ChatMessage>()
         fun normalizedKey(message: ChatMessage): Pair<MimeiId, MimeiId> {
             return if (message.receiptId < message.authorId) {
@@ -78,7 +79,7 @@ class ChatSessionRepository(
             messageMap[key] = message
         }
 
-        // Normalize the new messages and merge them into the map
+        // Merge new messages into the map
         val gson = Gson()
         for (i in newMessages.indices) {
             val json = gson.toJson(newMessages[i])
@@ -89,25 +90,26 @@ class ChatSessionRepository(
                 messageMap[key] = msg
             }
         }
-
-        // Create a list of ChatSession from the merged messages
-        return existingSessions.map { existingSession ->
-            val key = normalizedKey(existingSession.lastMessage)
-            val updatedLastMessage = messageMap[key] ?: existingSession.lastMessage // Use existing if not in messageMap
-            val receiptId = if (updatedLastMessage.authorId == appUser.mid) {
-                updatedLastMessage.receiptId
-            } else updatedLastMessage.authorId
-
-            // if the session receipt is author of any new message
-            val hasNews = hasNews(newMessages, receiptId)
-            ChatSession(
-                timestamp = updatedLastMessage.timestamp,
-                userId = appUser.mid,
-                receiptId = receiptId,
-                hasNews = hasNews,
-                lastMessage = updatedLastMessage
-            )
+        val updatedSessions = existingSessions.toMutableList()
+        messageMap.forEach { (key, value) ->
+            val es = existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
+            if (es == null) {
+                updatedSessions.add(
+                ChatSession(
+                    timestamp = value.timestamp,
+                    userId = appUser.mid,
+                    receiptId = if (key.first == appUser.mid) key.second else key.first,
+                    hasNews = true,
+                    lastMessage = value
+                ))
+            } else {
+                if (value.timestamp > es.lastMessage.timestamp) {
+                    updatedSessions.remove(es)
+                    updatedSessions.add(es.copy(lastMessage = value, timestamp = value.timestamp))
+                }
+            }
         }
+        return updatedSessions.toList()
     }
 
     /**
