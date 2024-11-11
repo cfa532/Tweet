@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -14,10 +13,12 @@ class BottomBarViewModel : ViewModel() {
     private val _badgeCount = MutableStateFlow<Int?>(null)
     val badgeCount: StateFlow<Int?> get() = _badgeCount
 
-    fun updateBadgeCount() {
+    fun updateBadgeCount(count: Int? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             // check for new messages and update the badge count in the main page bottom bar
-            _badgeCount.value = HproseInstance.checkNewMessages()?.size
+            if (count != null) _badgeCount.value = count
+            else
+                _badgeCount.value = HproseInstance.checkNewMessages()?.size
         }
     }
 

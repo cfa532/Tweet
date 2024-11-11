@@ -27,7 +27,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,7 +48,6 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,16 +55,7 @@ fun ChatListScreen(viewModel: ChatListViewModel)
 {
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
-
-    DisposableEffect(Unit) {
-        val timerJob = timer(period = 300000, action = {
-            viewModel.previewMessages()
-        }, initialDelay = 500)
-
-        onDispose {
-            timerJob.cancel()
-        }
-    }
+    viewModel.previewMessages()
 
     Scaffold(
         topBar = {

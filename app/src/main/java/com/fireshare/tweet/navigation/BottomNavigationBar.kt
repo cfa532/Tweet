@@ -17,12 +17,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -64,7 +64,6 @@ fun BottomNavigationBar(
         )
     )
     NavigationBar {
-        val scope = rememberCoroutineScope()
         val context = LocalContext.current
 
         items.forEachIndexed { index, item ->
@@ -74,7 +73,7 @@ fun BottomNavigationBar(
                 onClick = {
                     selectedItemIndex = index
                     if (appUser.mid == TW_CONST.GUEST_ID && index > 0) {
-                        scope.launch {
+                        bottomBarViewModel.viewModelScope.launch {
                             guestWarning(context, navController)
                         }
                         return@NavigationBarItem
@@ -82,6 +81,9 @@ fun BottomNavigationBar(
                     val currentRoute = navController.currentBackStackEntry?.destination?.route
                     if (currentRoute != null) {
                         if (!currentRoute.contains(item.route.toString()) ) {
+                            if (item.route == NavTweet.ChatList) {
+                                bottomBarViewModel.updateBadgeCount(0)
+                            }
                             navController.navigate(item.route)
                         }
                     }

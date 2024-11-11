@@ -49,7 +49,6 @@ import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.concurrent.timer
 
@@ -74,27 +73,33 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to the bottom when the screen is first shown
     LaunchedEffect(Unit) {
-        // update its session flag once a chatbox is opened and message is read.
+        // Upon opening of ChatBox, set corresponding chat session new message flag to false.
         viewModel.chatListViewModel?.updateSession(null, viewModel.receiptId)
 
-        if (chatMessages.isNotEmpty()) {
-            delay(100)
-            scrollToBottom()
-        }
         // fetch new messages every 10s when on chat screen.
         timer(period = 10000, action = {
             viewModel.fetchNewMessage()
-        }, initialDelay = 10000)
+        }, initialDelay = 100)
+    }
+
+    // Scroll to the bottom when the screen is first shown
+    LaunchedEffect(key1 = listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress && chatMessages.isNotEmpty()) {
+            scrollToBottom()
+        }
     }
 
     // Scroll to the bottom when a new message is added
     LaunchedEffect(chatMessages) {
         if (chatMessages.isNotEmpty()) {
-            snapshotFlow { layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-                .collect { lastVisibleItemIndex ->
-                    if (lastVisibleItemIndex != null && lastVisibleItemIndex == chatMessages.size - 2) {
+            snapshotFlow {
+                listState.layoutInfo.visibleItemsInfo.lastOrNull()?.offset?.let { offset ->
+                    offset + (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.size ?: 0) > listState.layoutInfo.viewportEndOffset
+                } ?: false
+            }
+                .collect { isLastItemVisible ->
+                    if (isLastItemVisible) {
                         scrollToBottom()
                     }
                 }
