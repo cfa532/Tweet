@@ -56,13 +56,13 @@ class ChatViewModel @AssistedInject constructor(
             timestamp = System.currentTimeMillis(),
             content = textState.value.trim()
         )
-        _chatMessages.value += message
+        _chatMessages.value += message  // update message list in memory
         viewModelScope.launch(Dispatchers.IO) {
-            chatRepository.insertMessage(message)
-            HproseInstance.sendMessage(receiptId, message)
-            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
+            chatRepository.insertMessage(message)   // update chat records in Room
+            HproseInstance.sendMessage(receiptId, message)  // send it to network
+            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)  // update session in Room
 
-            chatListViewModel?.updateSession(message)
+            chatListViewModel?.updateSession(message)  // update session list in memory
         }
     }
 

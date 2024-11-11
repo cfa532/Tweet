@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,7 +45,6 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.ChatListViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,10 +58,14 @@ fun ChatListScreen(viewModel: ChatListViewModel)
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
 
-    LaunchedEffect(Unit) {
-        timer(period = 60000, action = {
+    DisposableEffect(Unit) {
+        val timerJob = timer(period = 300000, action = {
             viewModel.previewMessages()
         }, initialDelay = 500)
+
+        onDispose {
+            timerJob.cancel()
+        }
     }
 
     Scaffold(

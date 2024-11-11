@@ -16,14 +16,14 @@ class BottomBarViewModel : ViewModel() {
 
     fun updateBadgeCount() {
         viewModelScope.launch(Dispatchers.IO) {
-            // check for new messages and update the badge count
+            // check for new messages and update the badge count in the main page bottom bar
             _badgeCount.value = HproseInstance.checkNewMessages()?.size
         }
     }
 
     init {
-        timer(period = 300000, action = {
+        timer(period = 900000, action = {
             updateBadgeCount()
-        }, initialDelay = 300000)
+        }, initialDelay = 30000)
     }
 }

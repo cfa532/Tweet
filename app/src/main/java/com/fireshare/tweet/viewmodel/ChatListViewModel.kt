@@ -81,6 +81,7 @@ class ChatListViewModel @Inject constructor(
                         lastMessage = chatSession.lastMessage,
                         timestamp = chatSession.timestamp
                     )
+                    // create a new Session object to force recomposition of session list
                     _chatSessions.update { it - existingSession }
                     _chatSessions.update { it + updatedSession }
                 } else {
