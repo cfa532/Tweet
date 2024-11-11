@@ -91,21 +91,23 @@ class ChatSessionRepository(
             }
         }
         val updatedSessions = existingSessions.toMutableList()
-        messageMap.forEach { (key, value) ->
+        messageMap.forEach { (key, msg) ->
             val es = existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
             if (es == null) {
+                // a new session is created.
                 updatedSessions.add(
                 ChatSession(
-                    timestamp = value.timestamp,
+                    timestamp = msg.timestamp,
                     userId = appUser.mid,
                     receiptId = if (key.first == appUser.mid) key.second else key.first,
                     hasNews = true,
-                    lastMessage = value
+                    lastMessage = msg
                 ))
             } else {
-                if (value.timestamp > es.lastMessage.timestamp) {
+                if (msg.timestamp > es.lastMessage.timestamp) {
+                    // existing session is updated with new message.
                     updatedSessions.remove(es)
-                    updatedSessions.add(es.copy(lastMessage = value, timestamp = value.timestamp))
+                    updatedSessions.add(es.copy(lastMessage = msg, timestamp = msg.timestamp, hasNews = true))
                 }
             }
         }

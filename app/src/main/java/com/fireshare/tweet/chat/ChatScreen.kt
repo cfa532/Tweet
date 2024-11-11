@@ -76,11 +76,14 @@ fun ChatScreen(
 
     // Scroll to the bottom when the screen is first shown
     LaunchedEffect(Unit) {
+        // update its session flag once a chatbox is opened and message is read.
+        viewModel.chatListViewModel?.updateSession(null, viewModel.receiptId)
+
         if (chatMessages.isNotEmpty()) {
             delay(100)
             scrollToBottom()
         }
-        // fetch new messages every 30s when on chat screen.
+        // fetch new messages every 10s when on chat screen.
         timer(period = 10000, action = {
             viewModel.fetchNewMessage()
         }, initialDelay = 10000)
@@ -89,9 +92,7 @@ fun ChatScreen(
     // Scroll to the bottom when a new message is added
     LaunchedEffect(chatMessages) {
         if (chatMessages.isNotEmpty()) {
-            snapshotFlow {
-                layoutInfo.visibleItemsInfo.lastOrNull()?.index
-            }
+            snapshotFlow { layoutInfo.visibleItemsInfo.lastOrNull()?.index }
                 .collect { lastVisibleItemIndex ->
                     if (lastVisibleItemIndex != null && lastVisibleItemIndex == chatMessages.size - 2) {
                         scrollToBottom()

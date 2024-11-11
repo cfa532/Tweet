@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.concurrent.timer
 
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
@@ -40,9 +41,21 @@ class ChatListViewModel @Inject constructor(
     }
 
     /**
+     * Called only from ChatBox screen.
      * Given a message, update corresponding chat session.
+     * If a session id is given, update its new message flag to false.
      * */
-    fun updateSession(msg: ChatMessage) {
+    fun updateSession(msg: ChatMessage?, sessionId: MimeiId? = null) {
+        if (sessionId != null) {
+            // update chat session's new message flag to false
+            val session = _chatSessions.value.find { it.receiptId == sessionId }
+            if (session != null) {
+                _chatSessions.update { it - session }
+                _chatSessions.update { it + session.copy(hasNews = false) }
+            }
+            return
+        }
+        if (msg == null) return
         val receiptId = if (msg.authorId==appUser.mid) msg.receiptId else msg.authorId
         chatSessions.value.find { it.receiptId == receiptId }?.let {
             val updatedSessions = it.copy(hasNews = false, lastMessage = msg, timestamp = msg.timestamp)
@@ -59,13 +72,17 @@ class ChatListViewModel @Inject constructor(
 
             // Do not update chat session database, only show new sessions on UI
             // Update chat session database only when user opens chat screen.
-//            _chatSessions.update { updatedSessions }
             updatedSessions.forEach { chatSession ->
-                val existingSession = _chatSessions.value.find { it.receiptId == chatSession.receiptId }
+                val existingSession =
+                    _chatSessions.value.find { it.receiptId == chatSession.receiptId }
                 if (existingSession != null) {
-                    existingSession.hasNews = chatSession.hasNews
-                    existingSession.lastMessage = chatSession.lastMessage
-                    existingSession.timestamp = chatSession.timestamp
+                    val updatedSession = existingSession.copy(
+                        hasNews = chatSession.hasNews,
+                        lastMessage = chatSession.lastMessage,
+                        timestamp = chatSession.timestamp
+                    )
+                    _chatSessions.update { it - existingSession }
+                    _chatSessions.update { it + updatedSession }
                 } else {
                     _chatSessions.update { it + chatSession }
                 }

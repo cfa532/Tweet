@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel( assistedFactory = ChatViewModel.ChatViewModelFactory::class)
 class ChatViewModel @AssistedInject constructor(
-    @Assisted private val receiptId: MimeiId,
+    @Assisted val receiptId: MimeiId,
     private val chatRepository: ChatRepository,
     private val chatSessionRepository: ChatSessionRepository
     ): ViewModel()

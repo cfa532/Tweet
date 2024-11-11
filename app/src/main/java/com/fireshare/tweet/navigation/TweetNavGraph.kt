@@ -131,17 +131,23 @@ fun TweetNavGraph(
             }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
                 val args = it.toRoute<NavTweet.ChatBox>()
                 val viewModel = hiltViewModel<ChatViewModel, ChatViewModel.ChatViewModelFactory>(
-                    key = args.receiptId ) { factory ->
+                    key = args.receiptId
+                ) { factory ->
                     factory.create(receiptId = args.receiptId)
                 }
-                viewModel.chatListViewModel = hiltViewModel<ChatListViewModel>()
+                viewModel.chatListViewModel = hiltViewModel<ChatListViewModel>(parentEntry)
                 ChatScreen(viewModel)
             }
             composable<NavTweet.ChatList> {
-                // chatbox list
-                val viewModel = hiltViewModel<ChatListViewModel>()
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
+                val viewModel = hiltViewModel<ChatListViewModel>(parentEntry)
                 ChatListScreen(viewModel)
             }
             composable<NavTweet.MediaViewer>(

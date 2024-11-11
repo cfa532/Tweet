@@ -49,6 +49,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +57,12 @@ fun ChatListScreen(viewModel: ChatListViewModel)
 {
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
-    viewModel.previewMessages()
+
+    LaunchedEffect(Unit) {
+        timer(period = 60000, action = {
+            viewModel.previewMessages()
+        }, initialDelay = 500)
+    }
 
     Scaffold(
         topBar = {
