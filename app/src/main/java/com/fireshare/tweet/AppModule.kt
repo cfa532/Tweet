@@ -21,16 +21,16 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    @Provides
-    @Singleton
-    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
-        return context.getSharedPreferences("my_preferences", Context.MODE_PRIVATE)
-    }
+//    @Provides
+//    @Singleton
+//    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+//        return context.getSharedPreferences("my_preferences", Context.MODE_PRIVATE)
+//    }
 
     @Provides
     @Singleton
-    fun provideTweetFeedViewModel(sharedPreferences: SharedPreferences): TweetFeedViewModel {
-        return TweetFeedViewModel(sharedPreferences)
+    fun provideTweetFeedViewModel(): TweetFeedViewModel {
+        return TweetFeedViewModel()
     }
 
     @Provides
