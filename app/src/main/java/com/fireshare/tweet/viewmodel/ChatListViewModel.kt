@@ -40,9 +40,8 @@ class ChatListViewModel @Inject constructor(
     }
 
     /**
-     * Called only from ChatBox screen.
-     * Given a message, update corresponding chat session.
-     * If a session id is given, update its new message flag to false.
+     * Called only from ChatBox screen. Given a message, update corresponding chat session.
+     * If a session id is given, update its hasNews message flag to false.
      * */
     fun updateSession(msg: ChatMessage?, sessionId: MimeiId? = null) {
         if (sessionId != null) {

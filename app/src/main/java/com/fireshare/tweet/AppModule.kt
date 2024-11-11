@@ -1,6 +1,7 @@
 package com.fireshare.tweet
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
 import com.fireshare.tweet.chat.ChatRepository
 import com.fireshare.tweet.chat.ChatSessionRepository
@@ -22,8 +23,14 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTweetFeedViewModel(): TweetFeedViewModel {
-        return TweetFeedViewModel()
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("my_preferences", Context.MODE_PRIVATE)
+    }
+
+    @Provides
+    @Singleton
+    fun provideTweetFeedViewModel(sharedPreferences: SharedPreferences): TweetFeedViewModel {
+        return TweetFeedViewModel(sharedPreferences)
     }
 
     @Provides

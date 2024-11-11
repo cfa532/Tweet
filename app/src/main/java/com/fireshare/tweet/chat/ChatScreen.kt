@@ -78,7 +78,7 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null, viewModel.receiptId)
 
         // fetch new messages every 10s when on chat screen.
-        timer(period = 10000, action = {
+        timer(period = 15000, action = {
             viewModel.fetchNewMessage()
         }, initialDelay = 100)
     }

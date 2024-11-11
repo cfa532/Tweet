@@ -19,7 +19,7 @@ android {
         minSdk = 29
         targetSdk = 35
         versionCode = 6
-        versionName = "19"   // compared with App Mimei version to check for upgrade.
+        versionName = "20"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
