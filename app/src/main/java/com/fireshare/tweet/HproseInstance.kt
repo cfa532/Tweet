@@ -262,23 +262,27 @@ object HproseInstance {
         }
     } }
 
-    suspend fun checkUpgrade(): Map<String, String>? {
-        return withRetry {
-            val gson = Gson()
-            val entry = "check_upgrade"
-            val json = """
-             {"aid": $appId, "ver":"last"}
-        """.trimIndent()
-            val request = gson.fromJson(json, Map::class.java) as Map<*, *>
-            return@withRetry try {
-                hproseClient?.runMApp(entry, request) as Map<String, String>?
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Timber.tag("checkUpgrade").e("$e")
-                null
+    suspend fun checkUpgrade(): Map<String, String>? { return withRetry {
+        val gson = Gson()
+        return@withRetry try {
+            val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=check_upgrade"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val map = gson.fromJson(
+                    json,
+                    object : TypeToken<Map<String, String>>() {}.type
+                ) as Map<String, String>?
+                return@withRetry map
             }
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Timber.tag("checkUpgrade").e("$e")
+            null
         }
-    }
+    } }
 
     /**
      * There are two steps for a guest user to login.
