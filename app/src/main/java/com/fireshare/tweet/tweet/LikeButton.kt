@@ -36,7 +36,7 @@ import com.fireshare.tweet.navigation.ComposeComment
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.navigation.SharedTweetViewModel
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
@@ -74,10 +74,9 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
             return@IconButton
         }
 
-        // save the current tweetViewModel as sharedViewModel, and change its state
-        // after the comment is submitted.
-        viewModelProvider?.get(SharedTweetViewModel::class)?.let { sharedViewModel ->
-            sharedViewModel.sharedTweetVMInstance = viewModel
+        // save the current tweetViewModel in sharedViewModel
+        viewModelProvider?.get(SharedViewModel::class)?.let { sharedViewModel ->
+            sharedViewModel.sharedTweetViewModel = viewModel
             navController.navigate(ComposeComment(tweet.mid))
         }
     }) {

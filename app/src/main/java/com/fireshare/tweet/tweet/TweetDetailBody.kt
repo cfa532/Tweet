@@ -48,8 +48,10 @@ import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
+import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
@@ -207,7 +209,7 @@ fun TweetDropdownMenu(
                 .height(IntrinsicSize.Min)
         ) {
             if (parentTweet != null) {
-                // this is a retweet.
+                // this is a retweet. Allow the author to delete it.
                 if (parentTweet.authorId == appUser.mid) {
                     TweetDropdownMenuItems(parentTweet, parentEntry) { expanded = false }
                 }
@@ -224,13 +226,12 @@ fun TweetDropdownMenuItems(
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
 ) {
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = appUser.mid
-    ) { factory ->
-        factory.create(appUser.mid)
-    }
+    val viewModelProvider = LocalViewModelProvider.current
+    val sharedViewModel = viewModelProvider?.get(SharedViewModel::class)
+    val appUserViewModel = sharedViewModel?.sharedAppUserViewModel ?: return
     val navController = LocalNavController.current
+
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val originTweetViewModel = if (tweet.originalTweetId != null) {
         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
             parentEntry, key = tweet.originalTweetId

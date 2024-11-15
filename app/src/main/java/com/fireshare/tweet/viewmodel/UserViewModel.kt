@@ -101,8 +101,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * User can pin or unpin any tweet, even tweet belongs to other users,
-     * as long as quoted or retweet by this user.
+     * User can pin or unpin any tweet, including quoted or retweet by this user.
      * */
     fun pinToTop(tweet: Tweet) {
         viewModelScope.launch {
@@ -113,11 +112,11 @@ class UserViewModel @AssistedInject constructor(
             if (isInTopTweets) {
                 // Remove from topTweets, add to tweets
                 _topTweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
-                _tweets.update { it + tweet } // No need to sort here, done in getTweets()
+                _tweets.update { (it + tweet).sortedByDescending {t-> t.timestamp } }
             } else {
                 // Remove from tweets, add to topTweets
                 _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
-                _topTweets.update { it + tweet } // No need to sort here, done in getToppedTweets()
+                _topTweets.update { (it + tweet).sortedByDescending {t-> t.timestamp } }
             }
         }
     }
@@ -189,14 +188,15 @@ class UserViewModel @AssistedInject constructor(
 
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Fetch both lists
-            val tweetsList = HproseInstance.getTweetList(user.value, startTimestamp, endTimestamp)
-            val topList = HproseInstance.getTopList(user.value) ?: emptyList()
+            // 1. Fetch all tweets of the author and update _tweets
+            _tweets.value = emptyList()
+            HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
 
             // 2. Get topped tweets and update _topTweets, while avoiding duplication
             val toppedTweets = mutableListOf<Tweet>()
+            val topList = HproseInstance.getTopList(user.value) ?: emptyList()
             topList.forEach { mid ->
-                val tweet = tweetsList.find { it.mid == mid }
+                val tweet = tweets.value.find { it.mid == mid }
                 if (tweet != null) {
                     // Remove from _tweets, add to topTweets
                     _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
@@ -225,7 +225,7 @@ class UserViewModel @AssistedInject constructor(
             }
 
             // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            val filteredTweets = tweetsList.filterNot { tweet ->
+            val filteredTweets = tweets.value.filterNot { tweet ->
                 topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
             }
             _tweets.update { currentTweets ->

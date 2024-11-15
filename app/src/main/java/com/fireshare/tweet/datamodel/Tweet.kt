@@ -139,6 +139,12 @@ data class UserData(
     @PrimaryKey val userId: String = appUser.mid, // Assuming appUser.mid is the user ID
     val followings: List<MimeiId> = emptyList() // Store followings as a list
 )
+@Entity
+data class UserTweetMidList(
+    @PrimaryKey val userId: String,
+    val tweetMidList: List<MimeiId> = emptyList()
+)
+
 @Dao
 interface CachedTweetDao {
     /**
@@ -147,8 +153,17 @@ interface CachedTweetDao {
     @Query("SELECT followings FROM UserData WHERE userId = :userId")
     suspend fun getCachedFollowings(userId: String = appUser.mid): List<MimeiId>?
 
+    /**
+     * Cache of tweet mid list per user.
+     * */
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
     suspend fun insertOrUpdateUserData(userData: UserData)
+
+    @Query("SELECT tweetMidList FROM UserTweetMidList WHERE userId = :userId")
+    suspend fun getCachedTweetMidList(userId: String): List<MimeiId>?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateTweetMidList(userTweetMidList: UserTweetMidList)
 
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
@@ -169,7 +184,7 @@ interface CachedTweetDao {
     fun updateCachedTweet(cachedTweet: CachedTweet)
 }
 
-@Database(entities = [CachedTweet::class, UserData::class], version = 1)
+@Database(entities = [CachedTweet::class, UserData::class, UserTweetMidList::class], version = 1)
 @TypeConverters(DateConverter::class, MimeiIdListConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao

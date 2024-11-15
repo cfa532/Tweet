@@ -43,8 +43,9 @@ val LocalNavController = compositionLocalOf<NavController> {
 }
 val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
-class SharedTweetViewModel : ViewModel() {
-    lateinit var sharedTweetVMInstance: TweetViewModel
+class SharedViewModel : ViewModel() {
+    lateinit var sharedTweetViewModel: TweetViewModel
+    lateinit var sharedAppUserViewModel: UserViewModel
 }
 
 @Composable
@@ -124,6 +125,12 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val profile = it.toRoute<NavTweet.UserProfile>()
+
+                // before navigating to the profile screen, share the appUserViewModel
+                val viewModelProvider = LocalViewModelProvider.current
+                viewModelProvider?.get(SharedViewModel::class.java)?.let {shareViewModel ->
+                    shareViewModel.sharedAppUserViewModel = appUserViewModel
+                }
                 UserProfileScreen(navController, profile.userId, parentEntry, appUserViewModel)
             }
             composable<ProfileEditor> {

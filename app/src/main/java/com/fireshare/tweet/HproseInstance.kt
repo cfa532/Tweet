@@ -12,6 +12,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
+import com.fireshare.tweet.datamodel.UserTweetMidList
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
@@ -19,6 +20,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -30,6 +33,7 @@ import java.io.IOException
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
+import kotlin.collections.addAll
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -491,16 +495,29 @@ object HproseInstance {
      * */
     suspend fun getTweetList(
         user: User,
+        tweets: MutableStateFlow<List<Tweet>>,
         startTimestamp: Long,
         endTimestamp: Long?
-    ): List<Tweet> { return withRetry {
+    ) { return withRetry {
         try {
-            val tweets = mutableListOf<Tweet>()
+            // 1. Retrieve cached tweet mid list for the user
+            val cachedMidList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
+
+            // 2. Retrieve tweets from cache using cached mid list
+            cachedMidList?.mapNotNull { restoreCachedTweet(it) }?.also { cachedTweets ->
+                tweets.update { currentTweets -> (currentTweets + cachedTweets)
+                    .sortedByDescending { it.timestamp }
+                    .distinctBy { it.mid }
+                }
+            }
+
+            // 3. Make network call to get mid list from server
             val method = "get_tweet_list"
             val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
                 .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
+
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
                 val gson = Gson()
@@ -508,28 +525,29 @@ object HproseInstance {
                     responseBody,
                     object : TypeToken<List<MimeiId>?>() {}.type
                 ) as List<MimeiId>?
-                val unCachedMidList = midList?.map {
-                    val cachedTweet = restoreCachedTweet(it)
-                    if (cachedTweet != null) {
-                        tweets.add(cachedTweet)
-                        null
-                    } else it
+
+                // 4. Overwrite cached mid list with the new list
+                midList?.let {
+                    tweetCache.tweetDao().insertOrUpdateTweetMidList(UserTweetMidList(user.mid, it))
                 }
-                unCachedMidList?.filterNotNull()?.map {
-                    getTweet(it, user.mid)?.let { t ->
-                        if (t.originalTweetId != null) {
-                            t.originalTweet = getTweet(t.originalTweetId!!, t.originalAuthorId!!)
+
+                // 5. Retrieve any tweets not in the cached list
+                val unCachedMidList = midList?.filterNot { cachedMidList?.contains(it) ?: false }
+                unCachedMidList?.forEach { tweetId ->
+                    getTweet(tweetId, user.mid)?.let { tweet ->
+                        if (tweet.originalTweetId != null) {
+                            tweet.originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
                         }
-                        tweets.add(t)
+                        tweets.update { currentTweets -> (currentTweets + tweet)
+                            .sortedByDescending { it.timestamp }
+                            .distinctBy { it.mid }
+                        }
                     }
                 }
-                tweets
-            } else
-                emptyList()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("getTweetList").e(e.toString())
-            emptyList()
         }
     }}
 
@@ -1039,6 +1057,9 @@ object HproseInstance {
         }
     }}
 
+    /**
+     * Return the current tweet list that is pinned to top.
+     * */
     suspend fun toggleTopList(tweetId: MimeiId): List<MimeiId>? { return withRetry {
         val entry = "toggle_top_tweets"
         val json = """
@@ -1050,6 +1071,7 @@ object HproseInstance {
             val list = hproseClient?.runMApp(entry, request) as List<MimeiId>?
             return@withRetry list
         } catch (e: Exception) {
+            e.printStackTrace()
             Timber.tag("toggleTopList").e("$e")
         }
         return@withRetry null

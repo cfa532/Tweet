@@ -133,7 +133,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtBottom.value = false
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
         startTimestamp: Long,
@@ -144,27 +143,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         followings.value.chunked(batchSize).forEach { batch ->
             viewModelScope.launch(networkDispatcher) {
                 try {
-                    batch.flatMap { userId ->
+                    batch.forEach { userId ->
                         async {
                             try {
-                                val tweetsList = getUserBase(userId)?.let {
-                                    HproseInstance.getTweetList(it, startTimestamp, sinceTimestamp)
-                                } ?: emptyList()
-
-                                // Update _tweets with tweetsList immediately
-                                _tweets.update { currentTweets ->
-                                    (currentTweets + tweetsList).distinctBy { it.mid }
-                                        .sortedByDescending { it.timestamp }
+                                getUserBase(userId)?.let {
+                                    HproseInstance.getTweetList(it, _tweets, startTimestamp, sinceTimestamp)
                                 }
-
-                                tweetsList // Return tweetsList for further processing if needed
                             } catch (e: Exception) {
                                 Timber.tag("GetTweets in TweetFeedVM")
                                     .e(e, "Error fetching tweets for user: $userId")
                                 // remove the userId from cached user list, the app will try to
-                                // reacquire the user information
+                                // reacquire the user information.
                                 HproseInstance.removeUser(userId)
-                                emptyList()
                             }
                         }.await()
                     }
@@ -179,12 +169,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private fun getTweets(userId: MimeiId) {
         ioScope.launch {
             try {
-                val tweetsList = getUserBase(userId)?.let {
-                    HproseInstance.getTweetList(it, startTimestamp.longValue, endTimestamp.longValue)
-                } ?: return@launch
-                _tweets.update { currentTweets ->
-                    (currentTweets + tweetsList).distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
+                getUserBase(userId)?.let {
+                    HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
                 }
             } catch (e: Exception) {
                 Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")

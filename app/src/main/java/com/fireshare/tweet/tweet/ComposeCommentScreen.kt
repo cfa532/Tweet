@@ -63,7 +63,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalViewModelProvider
-import com.fireshare.tweet.navigation.SharedTweetViewModel
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
@@ -82,8 +82,8 @@ fun ComposeCommentScreen(
     val context = LocalContext.current
 
     val viewModelProvider = LocalViewModelProvider.current
-    val sharedViewModel = viewModelProvider?.get(SharedTweetViewModel::class)
-    val viewModel = sharedViewModel?.sharedTweetVMInstance ?: return
+    val sharedViewModel = viewModelProvider?.get(SharedViewModel::class)
+    val viewModel = sharedViewModel?.sharedTweetViewModel ?: return
     val tweet by viewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by viewModel.isCheckedToTweet
