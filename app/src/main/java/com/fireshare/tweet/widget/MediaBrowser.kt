@@ -109,7 +109,6 @@ fun MediaBrowser(
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
 
     val exoPlayer: ExoPlayer = createExoPlayer(context, "")
-    val isVideoVisible by remember { mutableStateOf(false) }
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -187,12 +186,10 @@ fun MediaBrowser(
                                     // Pause or stop video playback here
                                     exoPlayer.playWhenReady = false
                                 }
-
                                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                                     // Resume video playback here (if needed)
                                     exoPlayer.playWhenReady = true
                                 }
-
                                 else -> {}
                             }
                         }
@@ -201,18 +198,18 @@ fun MediaBrowser(
                         onDispose {
                             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                             lifecycleOwner.lifecycle.removeObserver(observer)
-                            exoPlayer.release()
+//                            exoPlayer.release()
                         }
                     }
 
                     exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaItem.url))
-                    exoPlayer.playWhenReady = true && isVideoVisible
+//                    exoPlayer.playWhenReady = true && isVideoVisible
                     exoPlayer.volume = 1f
 
                     LaunchedEffect(currentPage) {
                         if (page != currentPage) {
                             exoPlayer.playWhenReady = false
-                            exoPlayer.release()
+//                            exoPlayer.release()
                         }
                     }
                     DisposableEffect(Unit) {
@@ -225,7 +222,7 @@ fun MediaBrowser(
                     // remember the current playback position during configuration changes.
                     LaunchedEffect(viewModel.playbackPosition) {
                         exoPlayer.seekTo(viewModel.playbackPosition)
-                        exoPlayer.playWhenReady = true && isVideoVisible
+//                        exoPlayer.playWhenReady = true && isVideoVisible
                     }
 
                     AndroidView(
