@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -61,6 +62,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -87,14 +89,18 @@ fun MediaBrowser(
     tweetId: MimeiId?
 ) {
     /**
-     *  Create a tweetViewModel of tweetId to remember the position of this tweet in the feed list.
-     *  When user closes the Media browser, goes back to the right position.
+     *  Create a tweetViewModel with given tweetId to remember the position of this tweet
+     *  in the feed list. When user closes the Media browser, goes back to the right position.
+     *  The viewModel is also necessary for favorite and retweeting buttons at the bottom.
      * */
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(parentEntry, key = tweetId) { factory ->
-        factory.create(Tweet(mid="", authorId = "default", content = "nothing"))
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry,
+        key = tweetId
+    ) { factory ->
+        factory.create(Tweet(mid = "", authorId = "default", content = "nothing"))
     }
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
-    var showControls by remember { mutableStateOf(false) }
+    var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -102,39 +108,8 @@ fun MediaBrowser(
     val configuration = LocalConfiguration.current
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
 
-    /**
-     * Keep screen ON when video is playing in full screen mode.
-     * Stop playing when screen locked. Also hide system bars.
-     * */
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(Unit) {
-        activity?.window?.let { window ->
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            val controller = WindowInsetsControllerCompat(window, window.decorView)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-        }
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    // Pause or stop video playback here
-                    viewModel.exoPlayer?.playWhenReady = false
-                }
-                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                    // Resume video playback here (if needed)
-                    viewModel.exoPlayer?.playWhenReady = true
-                }
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
+    val exoPlayer: ExoPlayer = createExoPlayer(context, "")
+    val isVideoVisible by remember { mutableStateOf(false) }
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -188,33 +163,75 @@ fun MediaBrowser(
         ) { page ->
             val mediaItem = mediaItems[page]
             val currentPage by remember { derivedStateOf { pagerState.currentPage } }
+            viewModel.playbackPosition = 0
+
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-                    viewModel.exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
-                    viewModel.exoPlayer?.playWhenReady = true
-                    viewModel.exoPlayer?.volume = 1f
-
+                    /**
+                     * Keep screen ON when video is playing in full screen mode.
+                     * Stop playing when screen locked. Also hide system bars.
+                     * */
+                    val lifecycleOwner = LocalLifecycleOwner.current
                     DisposableEffect(Unit) {
+                        activity?.window?.let { window ->
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)     // keep screen ON
+                            WindowCompat.setDecorFitsSystemWindows(window, false)
+                            val controller = WindowInsetsControllerCompat(window, window.decorView)
+                            controller.systemBarsBehavior =
+                                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                            controller.hide(WindowInsetsCompat.Type.systemBars())
+                        }
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                                    // Pause or stop video playback here
+                                    exoPlayer.playWhenReady = false
+                                }
+
+                                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
+                                    // Resume video playback here (if needed)
+                                    exoPlayer.playWhenReady = true
+                                }
+
+                                else -> {}
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+
                         onDispose {
-                            viewModel.playbackPosition = viewModel.exoPlayer?.currentPosition ?: 0
-                            viewModel.exoPlayer?.release()
+                            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                            exoPlayer.release()
                         }
                     }
-                    // remember the current playback position during configuration changes.
-                    LaunchedEffect(viewModel.playbackPosition) {
-                        viewModel.exoPlayer?.seekTo(viewModel.playbackPosition)
-                        viewModel.exoPlayer?.playWhenReady = true
-                    }
-                    // Pause playback when leaving the current page
+
+                    exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaItem.url))
+                    exoPlayer.playWhenReady = true && isVideoVisible
+                    exoPlayer.volume = 1f
+
                     LaunchedEffect(currentPage) {
                         if (page != currentPage) {
-                            viewModel.exoPlayer?.playWhenReady = false
+                            exoPlayer.playWhenReady = false
+                            exoPlayer.release()
                         }
                     }
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            viewModel.playbackPosition = exoPlayer.currentPosition
+                            exoPlayer.release()
+                        }
+                    }
+
+                    // remember the current playback position during configuration changes.
+                    LaunchedEffect(viewModel.playbackPosition) {
+                        exoPlayer.seekTo(viewModel.playbackPosition)
+                        exoPlayer.playWhenReady = true && isVideoVisible
+                    }
+
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
-                                player = viewModel.exoPlayer
+                                player = exoPlayer
                                 useController = true    // otherwise video won't play
                                 setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                                     showControls = visibility == View.VISIBLE
@@ -261,7 +278,8 @@ fun MediaBrowser(
                             )
                     )
                 }
-                else -> {
+
+                else -> {       // image view
                     Box(
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -328,7 +346,10 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            activity?.requestedOrientation =
+                                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            exoPlayer.playWhenReady = false
+                            exoPlayer.release()
                             navController.popBackStack()
                         },
                         modifier = Modifier
@@ -344,7 +365,7 @@ fun MediaBrowser(
                     }
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation = when(orientation) {
+                            activity?.requestedOrientation = when (orientation) {
                                 Configuration.ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                 Configuration.ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                                 else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

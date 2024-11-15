@@ -60,7 +60,7 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     var playbackPosition: Long by mutableLongStateOf(0L)
-    var exoPlayer: ExoPlayer? = null
+//    var exoPlayer: ExoPlayer? = null
 
     init {
         /**
