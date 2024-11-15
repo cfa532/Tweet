@@ -206,9 +206,9 @@ class TweetViewModel @AssistedInject constructor(
             }
     }
 
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+//    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     fun shareTweet(context: Context) {
-        ioScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             /**
              * Call to checkUpgrade() also returns a map of environmental variables,
              * which includes environment variables of the App.
