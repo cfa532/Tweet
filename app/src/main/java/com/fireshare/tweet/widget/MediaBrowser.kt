@@ -116,6 +116,43 @@ fun MediaBrowser(
     var initOffsetY by remember { mutableFloatStateOf(0f) }
     // prevent double trigger of popBack event
     var isNavigationTriggered by remember { mutableStateOf(false) }
+
+    /**
+     * Keep screen ON when video is playing in full screen mode.
+     * Stop playing when screen locked. Also hide system bars.
+     * */
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(Unit) {
+        activity?.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)     // keep screen ON
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    // Pause or stop video playback here
+                    exoPlayer.playWhenReady = false
+                }
+                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
+                    // Resume video playback here (if needed)
+                    exoPlayer.playWhenReady = true
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+//                            exoPlayer.release()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -162,48 +199,13 @@ fun MediaBrowser(
         ) { page ->
             val mediaItem = mediaItems[page]
             val currentPage by remember { derivedStateOf { pagerState.currentPage } }
-            viewModel.playbackPosition = 0
 
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-                    /**
-                     * Keep screen ON when video is playing in full screen mode.
-                     * Stop playing when screen locked. Also hide system bars.
-                     * */
-                    val lifecycleOwner = LocalLifecycleOwner.current
-                    DisposableEffect(Unit) {
-                        activity?.window?.let { window ->
-                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)     // keep screen ON
-                            WindowCompat.setDecorFitsSystemWindows(window, false)
-                            val controller = WindowInsetsControllerCompat(window, window.decorView)
-                            controller.systemBarsBehavior =
-                                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                            controller.hide(WindowInsetsCompat.Type.systemBars())
-                        }
-                        val observer = LifecycleEventObserver { _, event ->
-                            when (event) {
-                                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                                    // Pause or stop video playback here
-                                    exoPlayer.playWhenReady = false
-                                }
-                                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                                    // Resume video playback here (if needed)
-                                    exoPlayer.playWhenReady = true
-                                }
-                                else -> {}
-                            }
-                        }
-                        lifecycleOwner.lifecycle.addObserver(observer)
-
-                        onDispose {
-                            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                            lifecycleOwner.lifecycle.removeObserver(observer)
-//                            exoPlayer.release()
-                        }
-                    }
+//                    viewModel.playbackPosition = 0
 
                     exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaItem.url))
-//                    exoPlayer.playWhenReady = true && isVideoVisible
+//                    exoPlayer.playWhenReady = true
                     exoPlayer.volume = 1f
 
                     LaunchedEffect(currentPage) {
