@@ -508,14 +508,14 @@ object HproseInstance {
                     responseBody,
                     object : TypeToken<List<MimeiId>?>() {}.type
                 ) as List<MimeiId>?
-                val uncachedMidList = midList?.map {
+                val unCachedMidList = midList?.map {
                     val cachedTweet = restoreCachedTweet(it)
                     if (cachedTweet != null) {
                         tweets.add(cachedTweet)
                         null
                     } else it
                 }
-                uncachedMidList?.filterNotNull()?.map {
+                unCachedMidList?.filterNotNull()?.map {
                     getTweet(it, user.mid)?.let { t ->
                         if (t.originalTweetId != null) {
                             t.originalTweet = getTweet(t.originalTweetId!!, t.originalAuthorId!!)

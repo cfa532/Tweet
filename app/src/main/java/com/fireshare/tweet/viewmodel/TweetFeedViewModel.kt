@@ -19,6 +19,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
+import com.fireshare.tweet.datamodel.UserData
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
@@ -41,13 +42,13 @@ import javax.inject.Inject
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
     /**
-     * @param tweetActionListener add new tweet to the tweet list
+     * tweetActionListener adds new tweet to the tweet list
      * of UserViewModel, so that new tweet appears in both viewModel.
      * */
     lateinit var tweetActionListener: TweetActionListener
 
     companion object {
-        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
+        private const val THIRTY_DAYS_IN_MILLIS = 2 * 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
         private const val ONE_DAY_IN_MILLIS = 86_400_000L
     }
@@ -83,6 +84,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh() {
+        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()
+        if (!cachedFollowings.isNullOrEmpty()) {
+            _followings.value = cachedFollowings
+            startTimestamp.longValue = System.currentTimeMillis()
+            endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
+            getTweets(startTimestamp.longValue, endTimestamp.longValue)
+        }
         _followings.value = emptyList()
         // get current user's following list
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
@@ -92,10 +100,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
             _followings.update { list -> list + appUser.mid }
         Timber.tag("TFVM.Refresh").d(followings.value.toString())
-
-        startTimestamp.longValue = System.currentTimeMillis()
-        endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
         getTweets(startTimestamp.longValue, endTimestamp.longValue)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val userData = UserData(userId = appUser.mid, followings = _followings.value)
+            HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
+        }
     }
 
     fun loadNewerTweets() {
@@ -127,7 +137,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
         startTimestamp: Long,
-        sinceTimestamp: Long,        // earlier in time, therefore smaller timestamp
+        sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
     ) {
         val batchSize = 10 // Adjust batch size as needed
 

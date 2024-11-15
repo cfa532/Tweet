@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -151,7 +152,7 @@ fun MediaBrowser(
                         offsetY = initOffsetY
                         isNavigationTriggered = false
                     },
-                    onDrag = {_, _ ->
+                    onDrag = { _, _ ->
                     },
                     onDragStart = {
                         initOffsetY = offsetY
@@ -186,6 +187,7 @@ fun MediaBrowser(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val mediaItem = mediaItems[page]
+            val currentPage by remember { derivedStateOf { pagerState.currentPage } }
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
                     viewModel.exoPlayer = remember { createExoPlayer(context, mediaItem.url) }
@@ -203,6 +205,12 @@ fun MediaBrowser(
                         viewModel.exoPlayer?.seekTo(viewModel.playbackPosition)
                         viewModel.exoPlayer?.playWhenReady = true
                     }
+                    // Pause playback when leaving the current page
+                    LaunchedEffect(currentPage) {
+                        if (page != currentPage) {
+                            viewModel.exoPlayer?.playWhenReady = false
+                        }
+                    }
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -214,15 +222,24 @@ fun MediaBrowser(
                                 hideController()    // hide control buttons
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
-                            .offset{ IntOffset(0, offsetY.roundToInt()) }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset { IntOffset(0, offsetY.roundToInt()) }
                             .draggable(
                                 orientation = Orientation.Horizontal,
                                 state = rememberDraggableState { delta ->
                                     if (delta > 20) {
-                                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                                        animationScope.launch {
+                                            pagerState.animateScrollToPage(
+                                                pagerState.currentPage - 1
+                                            )
+                                        }
                                     } else if (delta < -20) {
-                                        animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                                        animationScope.launch {
+                                            pagerState.animateScrollToPage(
+                                                pagerState.currentPage + 1
+                                            )
+                                        }
                                     }
                                 }
                             )
@@ -235,7 +252,8 @@ fun MediaBrowser(
                                         if (navController.previousBackStackEntry != null) {
                                             navController.popBackStack()
                                         } else {
-                                            Timber.tag("MediaBrowser")
+                                            Timber
+                                                .tag("MediaBrowser")
                                                 .e("No previous back stack entry")
                                         }
                                     }
@@ -258,9 +276,17 @@ fun MediaBrowser(
                                         else {
                                             // Do not update offsetX when flipping images
                                             if (delta > 20) {
-                                                animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                                                animationScope.launch {
+                                                    pagerState.animateScrollToPage(
+                                                        pagerState.currentPage - 1
+                                                    )
+                                                }
                                             } else if (delta < -20) {
-                                                animationScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                                                animationScope.launch {
+                                                    pagerState.animateScrollToPage(
+                                                        pagerState.currentPage + 1
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -274,7 +300,8 @@ fun MediaBrowser(
                                             if (navController.previousBackStackEntry != null) {
                                                 navController.popBackStack()
                                             } else {
-                                                Timber.tag("MediaBrowser")
+                                                Timber
+                                                    .tag("MediaBrowser")
                                                     .e("No previous back stack entry")
                                             }
                                         }

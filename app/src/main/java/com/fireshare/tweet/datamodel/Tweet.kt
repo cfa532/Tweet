@@ -1,10 +1,12 @@
 package com.fireshare.tweet.datamodel
 
 import android.content.Context
+import androidx.compose.ui.input.key.type
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
@@ -12,7 +14,10 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Update
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.Serializable
 import java.util.Date
 
@@ -119,14 +124,35 @@ class DateConverter {
         return timestamp?.let { Date(it) }
     }
 }
+
+// cache for tweets
 @Entity
 data class CachedTweet(
     @PrimaryKey val mid: MimeiId,
     val originalTweetJson: String? = null, // Store the original tweet as JSON
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
+
+// cache for appUser's followings list
+@Entity
+data class UserData(
+    @PrimaryKey val userId: String = appUser.mid, // Assuming appUser.mid is the user ID
+    val followings: List<MimeiId> = emptyList() // Store followings as a list
+)
 @Dao
 interface CachedTweetDao {
+    /**
+     * Cache of appUser's followings list.
+     * */
+    @Query("SELECT followings FROM UserData WHERE userId = :userId")
+    suspend fun getCachedFollowings(userId: String = appUser.mid): List<MimeiId>?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
+    suspend fun insertOrUpdateUserData(userData: UserData)
+
+    /**
+     * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
+     * */
     @Insert
     fun insertCachedTweet(cachedTweet: CachedTweet)
 
@@ -143,8 +169,8 @@ interface CachedTweetDao {
     fun updateCachedTweet(cachedTweet: CachedTweet)
 }
 
-@Database(entities = [CachedTweet::class], version = 1)
-@TypeConverters(DateConverter::class)
+@Database(entities = [CachedTweet::class, UserData::class], version = 1)
+@TypeConverters(DateConverter::class, MimeiIdListConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
 
