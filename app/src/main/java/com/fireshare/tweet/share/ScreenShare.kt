@@ -50,6 +50,7 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -72,7 +73,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
                 guestWarning(context, navController)
             }
         } else {
-            viewModel.viewModelScope.launch {
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
                 val map = HproseInstance.checkUpgrade() ?: return@launch
                 contentToShare = "http://${map["domain"]}/tweet/${viewModel.tweetState.value.mid}"
                 showBottomSheet = true
