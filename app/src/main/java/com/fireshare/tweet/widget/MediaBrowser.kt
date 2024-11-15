@@ -198,22 +198,13 @@ fun MediaBrowser(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val mediaItem = mediaItems[page]
-            val currentPage by remember { derivedStateOf { pagerState.currentPage } }
 
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-//                    viewModel.playbackPosition = 0
 
                     exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaItem.url))
-//                    exoPlayer.playWhenReady = true
                     exoPlayer.volume = 1f
 
-                    LaunchedEffect(currentPage) {
-                        if (page != currentPage) {
-                            exoPlayer.playWhenReady = false
-//                            exoPlayer.release()
-                        }
-                    }
                     DisposableEffect(Unit) {
                         onDispose {
                             viewModel.playbackPosition = exoPlayer.currentPosition
@@ -224,7 +215,7 @@ fun MediaBrowser(
                     // remember the current playback position during configuration changes.
                     LaunchedEffect(viewModel.playbackPosition) {
                         exoPlayer.seekTo(viewModel.playbackPosition)
-//                        exoPlayer.playWhenReady = true && isVideoVisible
+//                        exoPlayer.playWhenReady = true
                     }
 
                     AndroidView(
