@@ -101,7 +101,7 @@ fun TweetItemBody(
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)
                                 .wrapContentHeight()
-                                .heightIn(min = 200.dp, max = 400.dp)
+                                .heightIn(min = 100.dp, max = 400.dp)
                                 .background(color = MaterialTheme.colorScheme.surfaceTint,
                                     shape = MaterialTheme.shapes.medium
                                 )

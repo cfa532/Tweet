@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -66,6 +67,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
@@ -75,6 +77,8 @@ import com.fireshare.tweet.tweet.LikeButton
 import com.fireshare.tweet.tweet.RetweetButton
 import com.fireshare.tweet.tweet.ShareButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.flow.count
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlin.math.roundToInt
@@ -84,7 +88,6 @@ import kotlin.math.roundToInt
 fun MediaBrowser(
     parentEntry: NavBackStackEntry,
     navController: NavController,
-    mediaItems: List<MediaItem>,
     startIndex: Int,
     tweetId: MimeiId?
 ) {
@@ -99,6 +102,10 @@ fun MediaBrowser(
     ) { factory ->
         factory.create(Tweet(mid = "", authorId = "default", content = "nothing"))
     }
+    val mediaItems = viewModel.tweetAttachments!!.map {
+        MediaItem(HproseInstance.getMediaUrl(it.mid, HproseInstance.appUser.baseUrl)!!, it.type)
+    }
+
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
@@ -136,12 +143,10 @@ fun MediaBrowser(
                     // Pause or stop video playback here
                     exoPlayer.playWhenReady = false
                 }
-
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback here (if needed)
                     exoPlayer.playWhenReady = true
                 }
-
                 else -> {}
             }
         }
@@ -202,7 +207,6 @@ fun MediaBrowser(
 
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
-
                     exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(mediaItem.url))
                     exoPlayer.volume = 1f
 
@@ -267,8 +271,8 @@ fun MediaBrowser(
                             )
                     )
                 }
-
-                else -> {       // image view
+                // image view
+                else -> {
                     Box(
                         modifier = Modifier.fillMaxSize()
                     ) {

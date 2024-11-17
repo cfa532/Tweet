@@ -220,17 +220,17 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
             }
-//            _topTweets.update { currentTopTweets ->
-//                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-//            }
-//
-//            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-//            val filteredTweets = tweets.value.filterNot { tweet ->
-//                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
-//            }
-//            _tweets.update { currentTweets ->
-//                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-//            }
+            _topTweets.update { currentTopTweets ->
+                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            }
+
+            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+            val filteredTweets = tweets.value.filterNot { tweet ->
+                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
+            }
+            _tweets.update { currentTweets ->
+                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            }
             initState.value = false
         }
     }

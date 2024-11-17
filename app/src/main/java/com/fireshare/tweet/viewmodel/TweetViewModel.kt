@@ -58,9 +58,9 @@ class TweetViewModel @AssistedInject constructor(
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
-
+    val tweetAttachments = tweet.attachments
     var playbackPosition: Long by mutableLongStateOf(0L)
-    var exoPlayer: ExoPlayer? = null
+//    var exoPlayer: ExoPlayer? = null
 
     init {
         /**
