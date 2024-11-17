@@ -77,6 +77,10 @@ class TweetViewModel @AssistedInject constructor(
         playbackPositions[url] = position
         savedStateHandle["playbackPosition_$url"] = position
     }
+    fun releaseAllPlayers() {
+        exoPlayers.values.forEach { it.release() }
+        exoPlayers.clear()
+    }
 
     init {
         /**

@@ -156,6 +156,7 @@ fun MediaBrowser(
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.releaseAllPlayers()
         }
     }
 
