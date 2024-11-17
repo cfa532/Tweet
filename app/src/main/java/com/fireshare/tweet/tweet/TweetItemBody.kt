@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -100,7 +101,7 @@ fun TweetItemBody(
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)
                                 .wrapContentHeight()
-                                .heightIn(max = 400.dp)
+                                .heightIn(min = 200.dp, max = 400.dp)
                                 .background(color = MaterialTheme.colorScheme.surfaceTint,
                                     shape = MaterialTheme.shapes.medium
                                 )
