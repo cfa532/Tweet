@@ -25,6 +25,7 @@ import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.service.UploadCommentWorker
+import com.fireshare.tweet.widget.createExoPlayer
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -59,8 +60,23 @@ class TweetViewModel @AssistedInject constructor(
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
     val tweetAttachments = tweet.attachments
-    var playbackPosition: Long by mutableLongStateOf(0L)
-//    var exoPlayer: ExoPlayer? = null
+
+    private val exoPlayers = mutableMapOf<String, ExoPlayer>()
+    private val playbackPositions = mutableMapOf<String, Long>()
+
+    fun getExoPlayer(url: String, context: Context): ExoPlayer {
+        return exoPlayers.getOrPut(url) {
+            createExoPlayer(context, url).also { player ->
+                val position = savedStateHandle.get<Long>("playbackPosition_$url") ?: 0L
+                player.seekTo(position)
+                playbackPositions[url] = position
+            }
+        }
+    }
+    fun savePlaybackPosition(url: String, position: Long) {
+        playbackPositions[url] = position
+        savedStateHandle["playbackPosition_$url"] = position
+    }
 
     init {
         /**
