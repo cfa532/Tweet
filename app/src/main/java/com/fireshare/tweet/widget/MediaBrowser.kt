@@ -104,11 +104,10 @@ fun MediaBrowser(
     val animationScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val lifecycleOwner = LocalLifecycleOwner.current
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
     val orientation by remember { mutableIntStateOf(configuration.orientation) }
-
-    val exoPlayer: ExoPlayer = createExoPlayer(context, "")
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -121,7 +120,7 @@ fun MediaBrowser(
      * Keep screen ON when video is playing in full screen mode.
      * Stop playing when screen locked. Also hide system bars.
      * */
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val exoPlayer: ExoPlayer = remember { createExoPlayer(context, "") }
     DisposableEffect(Unit) {
         activity?.window?.let { window ->
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)     // keep screen ON
@@ -137,10 +136,12 @@ fun MediaBrowser(
                     // Pause or stop video playback here
                     exoPlayer.playWhenReady = false
                 }
+
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback here (if needed)
                     exoPlayer.playWhenReady = true
                 }
+
                 else -> {}
             }
         }
@@ -149,7 +150,7 @@ fun MediaBrowser(
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             lifecycleOwner.lifecycle.removeObserver(observer)
-//                            exoPlayer.release()
+            exoPlayer.release()
         }
     }
 
@@ -208,14 +209,12 @@ fun MediaBrowser(
                     DisposableEffect(Unit) {
                         onDispose {
                             viewModel.playbackPosition = exoPlayer.currentPosition
-                            exoPlayer.release()
                         }
                     }
 
                     // remember the current playback position during configuration changes.
                     LaunchedEffect(viewModel.playbackPosition) {
                         exoPlayer.seekTo(viewModel.playbackPosition)
-//                        exoPlayer.playWhenReady = true
                     }
 
                     AndroidView(
@@ -338,8 +337,6 @@ fun MediaBrowser(
                         onClick = {
                             activity?.requestedOrientation =
                                 ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                            exoPlayer.playWhenReady = false
-                            exoPlayer.release()
                             navController.popBackStack()
                         },
                         modifier = Modifier

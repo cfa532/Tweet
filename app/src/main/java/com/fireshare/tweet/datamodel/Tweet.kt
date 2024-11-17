@@ -1,7 +1,6 @@
 package com.fireshare.tweet.datamodel
 
 import android.content.Context
-import androidx.compose.ui.input.key.type
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -16,8 +15,6 @@ import androidx.room.TypeConverters
 import androidx.room.Update
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.Serializable
 import java.util.Date
 
@@ -140,7 +137,7 @@ data class UserData(
     val followings: List<MimeiId> = emptyList() // Store followings as a list
 )
 @Entity
-data class UserTweetMidList(
+data class TweetMidList(
     @PrimaryKey val userId: String,
     val tweetMidList: List<MimeiId> = emptyList()
 )
@@ -159,11 +156,11 @@ interface CachedTweetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
     suspend fun insertOrUpdateUserData(userData: UserData)
 
-    @Query("SELECT tweetMidList FROM UserTweetMidList WHERE userId = :userId")
+    @Query("SELECT tweetMidList FROM TweetMidList WHERE userId = :userId")
     suspend fun getCachedTweetMidList(userId: String): List<MimeiId>?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdateTweetMidList(userTweetMidList: UserTweetMidList)
+    suspend fun insertOrUpdateTweetMidList(tweetMidList: TweetMidList)
 
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
@@ -184,7 +181,7 @@ interface CachedTweetDao {
     fun updateCachedTweet(cachedTweet: CachedTweet)
 }
 
-@Database(entities = [CachedTweet::class, UserData::class, UserTweetMidList::class], version = 1)
+@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 1)
 @TypeConverters(DateConverter::class, MimeiIdListConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao

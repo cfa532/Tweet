@@ -12,7 +12,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.datamodel.UserTweetMidList
+import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
@@ -33,7 +33,6 @@ import java.io.IOException
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
-import kotlin.collections.addAll
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -492,6 +491,7 @@ object HproseInstance {
 
     /**
      * Get tweets of a given author in a given span of time. if end is null, get all tweets.
+     * Update tweets state flow directly.
      * */
     suspend fun getTweetList(
         user: User,
@@ -501,13 +501,13 @@ object HproseInstance {
     ) { return withRetry {
         try {
             // 1. Retrieve cached tweet mid list for the user
-            val cachedMidList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
+            val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.first()?.split(",")
 
             // 2. Retrieve tweets from cache using cached mid list
-            cachedMidList?.mapNotNull { restoreCachedTweet(it) }?.also { cachedTweets ->
+            cachedTweetIdList?.mapNotNull { restoreCachedTweet(it) }?.also { cachedTweets ->
                 tweets.update { currentTweets -> (currentTweets + cachedTweets)
-                    .sortedByDescending { it.timestamp }
                     .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
                 }
             }
 
@@ -528,12 +528,12 @@ object HproseInstance {
 
                 // 4. Overwrite cached mid list with the new list
                 midList?.let {
-                    tweetCache.tweetDao().insertOrUpdateTweetMidList(UserTweetMidList(user.mid, it))
+                    tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
                 }
 
                 // 5. Retrieve any tweets not in the cached list
-                val unCachedMidList = midList?.filterNot { cachedMidList?.contains(it) ?: false }
-                unCachedMidList?.forEach { tweetId ->
+                val unCachedTweetIdList = midList?.filterNot { cachedTweetIdList?.contains(it) == true }
+                unCachedTweetIdList?.forEach { tweetId ->
                     getTweet(tweetId, user.mid)?.let { tweet ->
                         if (tweet.originalTweetId != null) {
                             tweet.originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)

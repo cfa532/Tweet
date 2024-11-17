@@ -84,13 +84,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh() {
-        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()
+        // get cached followings and load cached tweets.
+        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()?.first()?.split(",")
         if (!cachedFollowings.isNullOrEmpty()) {
-            _followings.value = cachedFollowings
             startTimestamp.longValue = System.currentTimeMillis()
             endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-            getTweets(startTimestamp.longValue, endTimestamp.longValue)
+            getTweets(startTimestamp.longValue, endTimestamp.longValue, cachedFollowings)
         }
+
+        // get followings from server and load tweets not cached.
         _followings.value = emptyList()
         // get current user's following list
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
@@ -99,13 +101,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // remember to watch oneself.
         if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
             _followings.update { list -> list + appUser.mid }
-        Timber.tag("TFVM.Refresh").d(followings.value.toString())
-        getTweets(startTimestamp.longValue, endTimestamp.longValue)
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val userData = UserData(userId = appUser.mid, followings = _followings.value)
-            HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
-        }
+        getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
+
+        // update cached following list of the user
+        val userData = UserData(userId = appUser.mid, followings = followings.value)
+        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     fun loadNewerTweets() {
@@ -137,10 +138,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private fun getTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
+        followings: List<MimeiId> = this.followings.value
     ) {
         val batchSize = 10 // Adjust batch size as needed
 
-        followings.value.chunked(batchSize).forEach { batch ->
+        followings.chunked(batchSize).forEach { batch ->
             viewModelScope.launch(networkDispatcher) {
                 try {
                     batch.forEach { userId ->

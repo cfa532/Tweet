@@ -60,12 +60,12 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     var playbackPosition: Long by mutableLongStateOf(0L)
-//    var exoPlayer: ExoPlayer? = null
+    var exoPlayer: ExoPlayer? = null
 
     init {
         /**
-         * Usually a tweet object has been well populated in the tweet feed list.
-         * However if invoked by Deeplink, the tweet object has to be initiated.
+         * Usually a tweet object has been well initialized in the tweet feed list.
+         * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
         if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -88,7 +88,7 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     /**
-     * when composing a comment, also post is as a tweet or not.
+     * when composing a comment, also post it as a tweet or not.
      * */
     val isCheckedToTweet = mutableStateOf(false)
     fun onCheckedChange(value: Boolean) {

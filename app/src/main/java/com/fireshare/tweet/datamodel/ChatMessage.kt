@@ -97,13 +97,12 @@ fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
 class MimeiIdListConverter {
     @TypeConverter
     fun fromMimeiIdList(list: List<MimeiId>?): String? {
-        return Gson().toJson(list)
+        return list?.joinToString(",")
     }
 
     @TypeConverter
     fun toMimeiIdList(value: String?): List<MimeiId>? {
-        val listType = object : TypeToken<List<MimeiId>>() {}.type
-        return Gson().fromJson(value, listType)
+        return value?.split(",")
     }
 }
 

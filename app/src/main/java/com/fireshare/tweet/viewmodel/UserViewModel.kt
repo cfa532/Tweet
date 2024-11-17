@@ -193,15 +193,15 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
 
             // 2. Get topped tweets and update _topTweets, while avoiding duplication
-            val toppedTweets = mutableListOf<Tweet>()
-            val topList = HproseInstance.getTopList(user.value) ?: emptyList()
-            topList.forEach { mid ->
+            val pinnedTweets = mutableListOf<Tweet>()
+            val pinnedMidList = HproseInstance.getTopList(user.value) ?: emptyList()
+            pinnedMidList.forEach { mid ->
                 val tweet = tweets.value.find { it.mid == mid }
                 if (tweet != null) {
                     // Remove from _tweets, add to topTweets
                     _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
                     if (!_topTweets.value.any { it.mid == mid }) {
-                        toppedTweets.add(tweet)
+                        pinnedTweets.add(tweet)
                     }
                 } else {
                     HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
@@ -215,13 +215,13 @@ class UserViewModel @AssistedInject constructor(
 
                         // Only add to _topTweets if not already present
                         if (!_topTweets.value.any { it.mid == tweet1.mid }) {
-                            toppedTweets.add(tweet1)
+                            pinnedTweets.add(tweet1)
                         }
                     }
                 }
             }
             _topTweets.update { currentTopTweets ->
-                (currentTopTweets + toppedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
             }
 
             // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets

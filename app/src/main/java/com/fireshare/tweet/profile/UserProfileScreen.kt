@@ -92,6 +92,7 @@ fun UserProfileScreen(
         }
     }
     LaunchedEffect(Unit) {
+        // load tweets only when user profile screen is opened.
         viewModel.getTweets()
     }
 
