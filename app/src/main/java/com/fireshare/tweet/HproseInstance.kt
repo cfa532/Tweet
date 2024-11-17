@@ -16,6 +16,7 @@ import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
+import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
@@ -500,17 +501,18 @@ object HproseInstance {
         endTimestamp: Long?
     ) { return withRetry {
         try {
-            // 1. Retrieve cached tweet mid list for the user
-            val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.first()?.split(",")
-
+            // 1. Retrieve cached tweet mid list for the user. In case of no network, the
+            // user can still see cached ones.
+            val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
+                ?.let { splitJson(it) }
             // 2. Retrieve tweets from cache using cached mid list
-            cachedTweetIdList?.mapNotNull { restoreCachedTweet(it) }?.also { cachedTweets ->
-                tweets.update { currentTweets -> (currentTweets + cachedTweets)
-                    .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
+            cachedTweetIdList?.mapNotNull { retrieveCachedTweet(it) }?.also { cachedTweets ->
+                tweets.update { currentTweets ->
+                    (currentTweets + cachedTweets)
+                        .distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
                 }
             }
-
             // 3. Make network call to get mid list from server
             val method = "get_tweet_list"
             val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
@@ -560,7 +562,7 @@ object HproseInstance {
         authorId: MimeiId
     ): Tweet? { return withRetry {
         try {
-            val cachedTweet = restoreCachedTweet(tweetId)
+            val cachedTweet = retrieveCachedTweet(tweetId)
             if (cachedTweet != null) {
                 return@withRetry cachedTweet
             }
@@ -640,7 +642,7 @@ object HproseInstance {
      * Retrieve cached tweet from Mimei DB. User info is not cached,
      * which changes frequently.
      * */
-    private suspend fun restoreCachedTweet(tweetId: MimeiId): Tweet? { return withRetry {
+    private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? { return withRetry {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return@withRetry null
         val gson = Gson()
         val tweet = gson.fromJson(cachedTweet.originalTweetJson, Tweet::class.java)

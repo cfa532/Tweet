@@ -12,6 +12,20 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 object Gadget {
+    fun splitJson(arrJson: List<MimeiId>): List<MimeiId>? {
+        /**
+         * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
+         * element is a comma separated string of MimeiIds, that should have been
+         * the elements of the returned array.
+         * */
+        if (arrJson.isNotEmpty()) {
+            val first = arrJson.first()
+            if (first.isNotEmpty()) {
+                return first.split(",").map { it.trim() }
+            }
+        }
+        return null
+    }
     /**
      * NodeList format:
      * [

@@ -10,10 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -92,18 +89,6 @@ fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
         hasNews = this.hasNews,
         lastMessage = lastMessage
     )
-}
-
-class MimeiIdListConverter {
-    @TypeConverter
-    fun fromMimeiIdList(list: List<MimeiId>?): String? {
-        return list?.joinToString(",")
-    }
-
-    @TypeConverter
-    fun toMimeiIdList(value: String?): List<MimeiId>? {
-        return value?.split(",")
-    }
 }
 
 @Dao

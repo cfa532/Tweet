@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,21 +94,26 @@ fun TweetItemBody(
                             )
                         }
                     }
-                    // attached media files
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(top = 8.dp)
-                            .wrapContentHeight()
-                            .heightIn(max = 400.dp)
-                    ) {
-                        val mediaItems = tweet.attachments?.map {
-                            MediaItem(getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                it.type
-                            )
-                        } ?: emptyList()
-                        MediaPreviewGrid(mediaItems, tweet.mid)
+                    // there are attached media files
+                    if (!tweet.attachments.isNullOrEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .wrapContentHeight()
+                                .heightIn(max = 400.dp)
+                                .background(color = MaterialTheme.colorScheme.surfaceTint,
+                                    shape = MaterialTheme.shapes.medium
+                                )
+                        ) {
+                            val mediaItems = tweet.attachments?.map {
+                                MediaItem(
+                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                    it.type
+                                )
+                            } ?: emptyList()
+                            MediaPreviewGrid(mediaItems, tweet.mid)
+                        }
                     }
-
                     /**
                      * If the tweet being displayed is quoted by other tweet, do not show buttons
                      * */
