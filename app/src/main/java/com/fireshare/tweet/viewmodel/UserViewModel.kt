@@ -189,13 +189,13 @@ class UserViewModel @AssistedInject constructor(
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
             // 1. Fetch all tweets of the author and update _tweets
-            _tweets.value = emptyList()
+//            _tweets.value = emptyList()
             HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
 
-            // 2. Get topped tweets and update _topTweets, while avoiding duplication
+            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
             val pinnedTweets = mutableListOf<Tweet>()
-            val pinnedMidList = HproseInstance.getTopList(user.value) ?: emptyList()
-            pinnedMidList.forEach { mid ->
+            val pinnedMidList = HproseInstance.getTopList(user.value)
+            pinnedMidList?.forEach { mid ->
                 val tweet = tweets.value.find { it.mid == mid }
                 if (tweet != null) {
                     // Remove from _tweets, add to topTweets
@@ -220,17 +220,17 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
             }
-            _topTweets.update { currentTopTweets ->
-                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-            }
-
-            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            val filteredTweets = tweets.value.filterNot { tweet ->
-                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
-            }
-            _tweets.update { currentTweets ->
-                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-            }
+//            _topTweets.update { currentTopTweets ->
+//                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+//            }
+//
+//            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+//            val filteredTweets = tweets.value.filterNot { tweet ->
+//                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
+//            }
+//            _tweets.update { currentTweets ->
+//                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+//            }
             initState.value = false
         }
     }
