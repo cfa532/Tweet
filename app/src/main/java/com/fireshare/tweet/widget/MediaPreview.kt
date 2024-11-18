@@ -319,8 +319,9 @@ fun VideoPreview(
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    val exoPlayer = remember { createExoPlayer(context, url) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
+    val exoPlayer = remember { createExoPlayer(context, url) }
+    exoPlayer.playWhenReady = false
 
     /**
      * Stop playing when screen is locked or closed.
@@ -328,8 +329,7 @@ fun VideoPreview(
      * */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
-        // Do not play video by default
-        exoPlayer.playWhenReady = false
+        // Do not play video by default.
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
@@ -357,9 +357,14 @@ fun VideoPreview(
         } // No need for an 'else' block as aspectRatio is initialized to 1f
     }
 
-    LaunchedEffect(isVideoVisible, index) {
-        delay(300)
-        exoPlayer.playWhenReady = isVideoVisible && index == 0
+    LaunchedEffect(isVideoVisible) {
+        if (isVideoVisible) {
+            exoPlayer.playWhenReady = true
+            delay(15000)
+            if (index > 0)
+                exoPlayer.playWhenReady = false
+        } else
+            exoPlayer.playWhenReady = false
     }
 
     LaunchedEffect(isMuted) {
