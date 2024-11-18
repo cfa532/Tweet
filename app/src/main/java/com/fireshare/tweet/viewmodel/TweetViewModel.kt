@@ -81,6 +81,9 @@ class TweetViewModel @AssistedInject constructor(
         exoPlayers.values.forEach { it.release() }
         exoPlayers.clear()
     }
+    fun stopPlayer(url: String) {
+        exoPlayers[url]?.playWhenReady = false  // have to set it here, otherwise won't work.
+    }
 
     init {
         /**

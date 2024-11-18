@@ -336,7 +336,7 @@ fun VideoPreview(
                 }
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback here (if needed)
-                    exoPlayer.playWhenReady = true && index == 0
+                    exoPlayer.playWhenReady = true
                 }
                 else -> {}
             }

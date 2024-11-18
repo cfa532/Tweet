@@ -120,7 +120,7 @@ fun MediaBrowser(
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var initOffsetY by remember { mutableFloatStateOf(0f) }
-    var exoPlayer: ExoPlayer? = null
+    var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     // prevent double trigger of popBack event
     var isNavigationTriggered by remember { mutableStateOf(false) }
@@ -208,12 +208,15 @@ fun MediaBrowser(
             when (mediaItem.type) {
                 MediaType.Video, MediaType.Audio -> {
                     exoPlayer = viewModel.getExoPlayer(mediaItem.url, context)
-                    exoPlayer?.playWhenReady = true
                     exoPlayer?.volume = 1f
 
-                    DisposableEffect(exoPlayer) {
+                    DisposableEffect(page) {
+                        exoPlayer?.playWhenReady = true
                         onDispose {
-                            exoPlayer?.let { viewModel.savePlaybackPosition(mediaItem.url, it.currentPosition) }
+                            exoPlayer?.let {
+                                viewModel.savePlaybackPosition(mediaItem.url, it.currentPosition)
+                                viewModel.stopPlayer(mediaItem.url)
+                            }
                         }
                     }
 
