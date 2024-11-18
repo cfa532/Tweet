@@ -328,6 +328,8 @@ fun VideoPreview(
      * */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
+        // Do not play video by default
+        exoPlayer.playWhenReady = false
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
