@@ -321,6 +321,7 @@ fun VideoPreview(
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
     val exoPlayer = remember { createExoPlayer(context, url) }
+//    var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     /**
      * Stop playing when screen is locked or closed.
@@ -357,12 +358,17 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isVideoVisible) {
-        delay(500)
         if (isVideoVisible) {
-            if (index == 0)
+            exoPlayer.prepare()
+            if (index == 0) {
+                delay(500)
                 exoPlayer.playWhenReady = true
-        } else
+            }
+        } else {
+            delay(500)
             exoPlayer.playWhenReady = false
+            exoPlayer.stop()
+        }
     }
 
     LaunchedEffect(isMuted) {
