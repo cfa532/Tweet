@@ -18,8 +18,8 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "20"   // compared with App Mimei version to check for upgrade.
+        versionCode = 7
+        versionName = "1"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -74,7 +74,7 @@ android {
 }
 
 dependencies {
-
+    implementation(libs.accompanist.systemuicontroller)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
 

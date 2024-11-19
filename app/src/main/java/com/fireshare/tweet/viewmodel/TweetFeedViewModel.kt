@@ -27,7 +27,6 @@ import com.fireshare.tweet.widget.Gadget.splitJson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,11 +86,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     suspend fun refresh() {
         // get cached followings and load cached tweets.
         val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()
-            ?.let { splitJson(it) }
-        if (cachedFollowings != null) {
+        if (cachedFollowings!!.isNotEmpty()) {
             startTimestamp.longValue = System.currentTimeMillis()
             endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-            getTweets(startTimestamp.longValue, endTimestamp.longValue,cachedFollowings)
+            splitJson(cachedFollowings)?.let {
+                getTweets(startTimestamp.longValue, endTimestamp.longValue, it)
+            }
         }
 
         // get followings from server and load tweets not cached.

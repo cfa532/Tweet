@@ -16,7 +16,6 @@ import androidx.room.Update
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
 import kotlinx.serialization.Serializable
-import timber.log.Timber
 import java.util.Date
 
 typealias MimeiId = String      // 27 or 64 character long string

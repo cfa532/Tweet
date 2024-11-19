@@ -82,6 +82,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import timber.log.Timber
 import java.io.File
+import kotlin.math.max
 
 @Serializable
 enum class MediaType {
@@ -139,6 +140,7 @@ fun MediaPreviewGrid(
                  * */
                 isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
                 index = index,      // autoplay first video item, index 0
+                inPreviewGrid = true,
                 tweetId = tweetId
             )
         }
@@ -351,10 +353,11 @@ fun VideoPreview(
         }
     }
     LaunchedEffect(url.getMimeiKey()) {
-        if (!inPreviewGrid) {
-            val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
-            aspectRatio = width.toFloat() / height.toFloat()
-        } // No need for an 'else' block as aspectRatio is initialized to 1f
+        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+        aspectRatio = width.toFloat() / height.toFloat()
+        if (inPreviewGrid) {
+            aspectRatio = max(1f, aspectRatio)
+        }
     }
 
     LaunchedEffect(isVideoVisible) {

@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -26,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
@@ -46,7 +52,6 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.service.SnackbarAction
@@ -54,9 +59,9 @@ import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
-import com.fireshare.tweet.widget.MediaItem
-import com.fireshare.tweet.widget.MediaType
+import com.fireshare.tweet.widget.ImageViewer
 import com.fireshare.tweet.widget.UserAvatar
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +74,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
+    var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
 
     LargeTopAppBar(
         title = {
@@ -80,14 +86,14 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 verticalAlignment = Alignment.Bottom,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-
+                    if (showDialog) {
+                        ImageModalDialog(getMediaUrl(user.avatar, user.baseUrl) ?: "",
+                            onDismiss = { showDialog = false })
+                    }
                     UserAvatar(user,
                         size = (80 - (scrollFraction * 20)).toInt(),
                         modifier = Modifier.clickable {
-                            val url = getMediaUrl(user.avatar, user.baseUrl) ?: return@clickable
-                            val item = MediaItem(url, MediaType.Image)
-                            val params = MediaViewerParams(listOf(item))
-                            navController.navigate(NavTweet.MediaViewer(params))
+                            showDialog = true
                         }
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)
@@ -234,7 +240,49 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                     }
                 })
                 .padding(horizontal = 12.dp, vertical = 4.dp)
-            ,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ImageModalDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    val systemUiController = rememberSystemUiController()
+
+    // Hide system bars when dialog is shown
+    LaunchedEffect(Unit) {
+        systemUiController.isSystemBarsVisible = false
+    }
+
+    // Restore system bars when dialog is dismissed
+    DisposableEffect(Unit) {
+        onDispose {
+            systemUiController.isSystemBarsVisible = true
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false // Disable platform default width
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize() // Make the dialog fill the entire screen
+                .background(Color.Black) // Set background color to black
+        ) {
+            ImageViewer(imageUrl, isPreview = false) // Use your ImageViewer composable
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+            }
+        }
     }
 }
