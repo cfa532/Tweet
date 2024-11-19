@@ -22,6 +22,7 @@ import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -538,7 +539,9 @@ object HproseInstance {
                 }
 
                 // 5. Retrieve any tweets not in the cached list
-                val unCachedTweetIdList = midList?.filterNot { cachedTweetIdList?.contains(it) == true }
+                val unCachedTweetIdList = midList?.filterNot {mid->
+                    tweets.value.any { it.mid == mid }
+                }
                 unCachedTweetIdList?.forEach { tweetId ->
                     getTweet(tweetId, user.mid)?.let { tweet ->
                         if (tweet.originalTweetId != null) {
