@@ -108,6 +108,11 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         appId = paramMap["mid"].toString()
+
+                        /**
+                         * The code above makes a call to base URL of the app, get a html page
+                         * and tries to extract host IP addresses from source code.
+                         * */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         Timber.tag("initAppEntry").d("$paramMap $hostIPs")
 
@@ -121,8 +126,9 @@ object HproseInstance {
                         val userId = preferenceHelper.getUserId()
                         appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                             /**
-                             * This is a login user if preference has valid userId. Initiate current account.
-                             * Get its IP list and choose the best one, and assign it to appUser.baseUrl.
+                             * If there is a valid userId  in preference, this is a login user.
+                             * Initiate current account. Get its IP list and choose the best one,
+                             * and assign it to appUser.baseUrl.
                              * */
                             getFirstReachableUser(hostIPs, userId) ?: User(
                                 mid = TW_CONST.GUEST_ID,
