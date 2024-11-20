@@ -1,7 +1,6 @@
 package com.fireshare.tweet
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.room.Room
 import com.fireshare.tweet.chat.ChatRepository
 import com.fireshare.tweet.chat.ChatSessionRepository

@@ -10,9 +10,9 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetCacheDatabase
+import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
 import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
@@ -22,6 +22,7 @@ import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -41,11 +42,11 @@ object HproseInstance {
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
     private var appId: MimeiId =
-        "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, assigned by Leither
+        "heWgeGkeBX2gaENbIBS_Iy1mdTS"    // Application Mimei ID, a placeholder.
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
-        return listOf("uTE6yhCWGLlkK6KGI9iMkOFZGGv")
+        return listOf("yrzVzrGB8Te5mBbm4kUVKjxEoTx")
     }
 
     // A in-memory cache of users.
@@ -64,6 +65,9 @@ object HproseInstance {
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
         this.preferenceHelper = preferenceHelper
+        chatDatabase = ChatDatabase.getInstance(context.applicationContext)
+        tweetCache = TweetCacheDatabase.getInstance(context.applicationContext)
+
         initAppEntry()
 
 //        chatDatabase = Room.databaseBuilder(
@@ -71,8 +75,7 @@ object HproseInstance {
 //            ChatDatabase::class.java,
 //            "chat_database"
 //        ).build()
-        chatDatabase = ChatDatabase.getInstance(context.applicationContext)
-        tweetCache = TweetCacheDatabase.getInstance(context.applicationContext)
+
 //        tweetCache.tweetDao().clearAllCachedTweets()
     }
 
@@ -504,13 +507,15 @@ object HproseInstance {
             // 1. Retrieve cached tweet mid list for the user. In case of no network, the
             // user can still see cached ones.
             val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
-                ?.let { splitJson(it) }
-            // 2. Retrieve tweets from cache using cached mid list
-            cachedTweetIdList?.mapNotNull { retrieveCachedTweet(it) }?.also { cachedTweets ->
-                tweets.update { currentTweets ->
-                    (currentTweets + cachedTweets)
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
+            if (cachedTweetIdList!!.isNotEmpty()) {
+
+                // 2. Retrieve tweets from cache using cached mid list
+                splitJson(cachedTweetIdList)?.mapNotNull { retrieveCachedTweet(it) }?.also { cachedTweets ->
+                    tweets.update { currentTweets ->
+                        (currentTweets + cachedTweets)
+                            .distinctBy { it.mid }
+                            .sortedByDescending { it.timestamp }
+                    }
                 }
             }
             // 3. Make network call to get mid list from server
@@ -534,7 +539,9 @@ object HproseInstance {
                 }
 
                 // 5. Retrieve any tweets not in the cached list
-                val unCachedTweetIdList = midList?.filterNot { cachedTweetIdList?.contains(it) == true }
+                val unCachedTweetIdList = midList?.filterNot {mid->
+                    tweets.value.any { it.mid == mid }
+                }
                 unCachedTweetIdList?.forEach { tweetId ->
                     getTweet(tweetId, user.mid)?.let { tweet ->
                         if (tweet.originalTweetId != null) {

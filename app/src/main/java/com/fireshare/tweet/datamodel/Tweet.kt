@@ -15,8 +15,9 @@ import androidx.room.TypeConverters
 import androidx.room.Update
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.serialization.Serializable
-import timber.log.Timber
 import java.util.Date
 
 typealias MimeiId = String      // 27 or 64 character long string
@@ -111,18 +112,6 @@ data class User(
     var topTweets: List<MimeiId>? = null,
 )
 
-class DateConverter {
-    @TypeConverter
-    fun fromDate(date: Date?): Long? {
-        return date?.time
-    }
-
-    @TypeConverter
-    fun toDate(timestamp: Long?): Date? {
-        return timestamp?.let { Date(it) }
-    }
-}
-
 // cache for tweets
 @Entity
 data class CachedTweet(
@@ -143,6 +132,18 @@ data class TweetMidList(
     val tweetMidList: List<MimeiId> = emptyList()
 )
 
+class DateConverter {
+    @TypeConverter
+    fun fromDate(date: Date?): Long? {
+        return date?.time
+    }
+
+    @TypeConverter
+    fun toDate(timestamp: Long?): Date? {
+        return timestamp?.let { Date(it) }
+    }
+}
+
 class MimeiIdListConverter {
     @TypeConverter
     fun fromMimeiIdList(list: List<MimeiId>?): String? {
@@ -150,8 +151,9 @@ class MimeiIdListConverter {
     }
 
     @TypeConverter
-    fun toMimeiIdList(value: String?): List<MimeiId>? {
-        return value?.split(",")?.map { it.trim() } // Split and trim each element
+    fun toMimeiIdList(str: String?): List<MimeiId>? {
+        val type = object : TypeToken<List<MimeiId>>() {}.type
+        return Gson().fromJson(str, type)
     }
 }
 
@@ -161,7 +163,7 @@ interface CachedTweetDao {
      * Cache of appUser's followings list.
      * */
     @Query("SELECT followings FROM UserData WHERE userId = :userId")
-    suspend fun getCachedFollowings(userId: String = appUser.mid): List<MimeiId>?
+    suspend fun getCachedFollowings(userId: String = appUser.mid): List<String>?
 
     /**
      * Cache of tweet mid list per user.
@@ -170,7 +172,7 @@ interface CachedTweetDao {
     suspend fun insertOrUpdateUserData(userData: UserData)
 
     @Query("SELECT tweetMidList FROM TweetMidList WHERE userId = :userId")
-    suspend fun getCachedTweetMidList(userId: String): List<MimeiId>?
+    suspend fun getCachedTweetMidList(userId: String): List<String>?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateTweetMidList(tweetMidList: TweetMidList)
@@ -194,7 +196,7 @@ interface CachedTweetDao {
     fun updateCachedTweet(cachedTweet: CachedTweet)
 }
 
-@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 1)
+@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 2)
 @TypeConverters(DateConverter::class, MimeiIdListConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
@@ -209,7 +211,9 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     context.applicationContext,
                     TweetCacheDatabase::class.java,
                     "tweet_cache_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

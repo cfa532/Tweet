@@ -133,7 +133,8 @@ fun TweetItem(
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
                         TweetItemHeader(viewModel, parentEntry)
-                        if (tweet.content != null && tweet.content!!.isNotEmpty()) {
+
+                        if (!tweet.content.isNullOrEmpty()) {
                             Text(
                                 modifier = Modifier.padding(start = 16.dp),
                                 text = tweet.content!!,
