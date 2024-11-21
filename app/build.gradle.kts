@@ -38,6 +38,10 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
+            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
+            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
+            // default account to be followed by all users
+            buildConfigField("String", "ALPHA_ID", "\"uTE6yhCWGLlkK6KGI9iMkOFZGGv\"")
         }
         release {
             isMinifyEnabled = true
@@ -50,6 +54,9 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
+            buildConfigField("String", "BASE_URL", "\"tweet1.fireshare.uk\"")
+            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
+            buildConfigField("String", "ALPHA_ID", "\"uTE6yhCWGLlkK6KGI9iMkOFZGGv\"")
         }
     }
     compileOptions {

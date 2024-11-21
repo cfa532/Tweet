@@ -35,7 +35,7 @@ class PreferenceHelper(context: Context) {
         return sharedPreferences.edit().putString("appUrl", baseUrl).apply()
     }
     fun getAppUrl(): String? {
-        return sharedPreferences.getString("appUrl", "twbe.fireshare.uk")
+        return sharedPreferences.getString("appUrl", BuildConfig.BASE_URL)
     }
 
     fun saveKeyPhrase(phrase: String) {
