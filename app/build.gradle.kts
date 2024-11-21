@@ -55,8 +55,8 @@ android {
                 debugSymbolLevel = "FULL"
             }
             buildConfigField("String", "BASE_URL", "\"tweet1.fireshare.uk\"")
-            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
-            buildConfigField("String", "ALPHA_ID", "\"uTE6yhCWGLlkK6KGI9iMkOFZGGv\"")
+            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
+            buildConfigField("String", "ALPHA_ID", "\"yrzVzrGB8Te5mBbm4kUVKjxEoTx\"")
         }
     }
     compileOptions {

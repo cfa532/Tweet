@@ -41,12 +41,11 @@ object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
-    private var appId: MimeiId =
-        "d4lRyhABgqOnqY4bURSm_T-4FZ4"    // Application Mimei ID, a placeholder.
+    private var appId: MimeiId = BuildConfig.APP_ID     // placeholder, overwritten later
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
-        return listOf("uTE6yhCWGLlkK6KGI9iMkOFZGGv")
+        return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
     // A in-memory cache of users.
