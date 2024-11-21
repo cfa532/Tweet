@@ -65,7 +65,6 @@ fun EditProfileScreen(
     val context = LocalContext.current
     val username by viewModel.username
     val password by viewModel.password
-    val keyPhrase by viewModel.keyPhrase
     val name by viewModel.name
     val profile by viewModel.profile
     val isPasswordVisible by viewModel.isPasswordVisible
@@ -83,9 +82,6 @@ fun EditProfileScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.hidePhrase()
-        }
         keyboardController?.show()
     }
 
@@ -135,21 +131,6 @@ fun EditProfileScreen(
                             Icon(imageVector = image, contentDescription = null)
                         }
                     },
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = keyPhrase ?: "",
-                    onValueChange = { viewModel.onKeyPhraseChange(it) },
-                    label = { Text(stringResource(R.string.key_phrase)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused && keyPhrase.isNullOrBlank()) {
-                                showDialog.value = true
-                            }
-                        },
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))

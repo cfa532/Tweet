@@ -57,7 +57,6 @@ fun LoginScreen(viewModel: UserViewModel) {
     val focusManager = LocalFocusManager.current
     val username by viewModel.username
     val password by viewModel.password
-    val keyPhrase by viewModel.keyPhrase
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
     val loginError by viewModel.loginError
@@ -131,25 +130,6 @@ fun LoginScreen(viewModel: UserViewModel) {
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
-
-        // no valid key phrase on record, ask for it.
-        if (viewModel.preferencePhrase?.isEmpty() == true) {
-            OutlinedTextField(
-                value = keyPhrase ?: "",
-                onValueChange = { viewModel.onKeyPhraseChange(it) },
-                label = { Text(stringResource(R.string.key_phrase)) },
-                singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions.Default.copy(
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
 
         val context = LocalContext.current
         Button(

@@ -53,7 +53,7 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
-    private var hproseClient: HproseService? = null
+    var hproseClient: HproseService? = null
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -302,51 +302,49 @@ object HproseInstance {
      * Second, find the node which has this user's data, and use it to login.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    suspend fun login(username: String, password: String, keyPhrase: String): User? {
-        return HproseInstance.withRetry {
-            return@withRetry try {
-                val userId = try {
-                    val entry = "get_userid"
-                    val url =
-                        "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&phrase=$keyPhrase"
-                    val request = Request.Builder().url(url).build()
-                    val response = httpClient.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        response.body?.string() ?: return@withRetry null
-                    } else {
-                        return@withRetry null
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("GetUserId").e("Login failed. ${e.message}")
-                    return@withRetry null
-                }
-                val user = getUserBase(userId) ?: return@withRetry null
+    suspend fun login(username: String, password: String): Pair<User?, String?> { return withRetry {
+        return@withRetry try {
+            val reason = Pair(null, "Login failed")
+            val userId = try {
                 val url =
-                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password&phrase=$keyPhrase"
+                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=get_userid&username=$username"
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
-                    val json = response.body?.string() ?: return@withRetry null
-                    // only to verify the login succeed.
-                    val gson = Gson()
-                    gson.fromJson(json, User::class.java) ?: return@withRetry null
-                    println(user)
-                    /**
-                     * Now user object has a new baseUrl of the node which hold user data.
-                     * If login succeed, httpClient need to use the new IP from now on.
-                     * */
-                    hproseClient =
-                        HproseClient.create(user.baseUrl).useService(HproseService::class.java)
-                    return@withRetry user
+                    response.body?.string() ?: return@withRetry reason
+                } else {
+                    return@withRetry reason
                 }
-                null
             } catch (e: Exception) {
-                e.printStackTrace()
-                Timber.tag("Hprose.Login").e("${e.message}")
-                null
+                Timber.tag("GetUserId").e("Login failed. ${e.message}")
+                return@withRetry reason
             }
+
+            val user = getUserBase(userId) ?: return@withRetry reason
+            val url =
+                "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string() ?: return@withRetry reason
+                val ret = Gson().fromJson(json, Map::class.java)
+                if (ret != null) {
+                    if (ret["status"] == "success") {
+                        /**
+                         * Now user object has a new baseUrl of the node which hold user data.
+                         * If login succeed, httpClient need to use the new IP from now on.
+                         * */
+                        hproseClient =
+                            HproseClient.create(user.baseUrl).useService(HproseService::class.java)
+                        return@withRetry Pair(user, null)
+                    } else reason
+                } else reason
+            } else reason
+        } catch (e: Exception) {
+            Timber.tag("Hprose.Login").e("${e.message}")
+            return@withRetry Pair(null, "Login failed")
         }
-    }
+    } }
 
     /**
      * Get baseUrl where user data can be accessed. Each user may has a different node.
@@ -393,14 +391,17 @@ object HproseInstance {
         }
     }
 
-    suspend fun setUserData(user: User, phrase: String): User? {
+    /**
+     * Register or update user data.
+     * */
+    suspend fun setUserData(user: User): Map<*, *>? {
         return withRetry {
             val url: String
             if (user.mid == TW_CONST.GUEST_ID) {
                 // register a new User account
                 val method = "register"
                 url =
-                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&phrase=$phrase&user=${
+                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
                         Json.encodeToString(user)
                     }"
             } else {
@@ -417,10 +418,8 @@ object HproseInstance {
                     val json = response.body?.string()
                     val gson = Gson()
                     val updatedUser =
-                        gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
-
-                    updatedUser?.name?.let { preferenceHelper.saveName(it) }
-                    updatedUser?.profile?.let { preferenceHelper.saveProfile(it) }
+//                        gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
+                        gson.fromJson(json, Map::class.java)
                     return@withRetry updatedUser
                 }
                 Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")

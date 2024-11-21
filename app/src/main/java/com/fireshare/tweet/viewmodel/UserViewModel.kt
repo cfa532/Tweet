@@ -3,13 +3,17 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.key.type
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUserBase
+import com.fireshare.tweet.HproseInstance.hproseClient
+import com.fireshare.tweet.HproseService
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
+import com.fireshare.tweet.TweetApplication.Companion.preferenceHelper
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -17,10 +21,13 @@ import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,8 +72,6 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    var preferencePhrase = preferencesHelper.getKeyPhrase()
-    var keyPhrase = mutableStateOf(preferencePhrase)
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
@@ -119,13 +124,6 @@ class UserViewModel @AssistedInject constructor(
                 _topTweets.update { (it + tweet).sortedByDescending {t-> t.timestamp } }
             }
         }
-    }
-
-    fun hidePhrase() {
-        // Even after user logout, its key phrase may still be stored on the device,
-        // for future convenience. Hide it in case someone else tries to register
-        // a new account with this device.
-        keyPhrase.value = ""
     }
 
     fun updateAvatar(context: Context, uri: Uri) {
@@ -244,28 +242,21 @@ class UserViewModel @AssistedInject constructor(
             isLoading.value = true
             if (username.value?.isNotEmpty() == true
                 && password.value.isNotEmpty()
-                && keyPhrase.value?.isNotEmpty() == true
             ) {
-                val user = HproseInstance.login(username.value!!, password.value, keyPhrase.value!!)
+                val ret = HproseInstance.login(username.value!!, password.value)
                 isLoading.value = false
 
-                if (user == null) {
-                    loginError.value = context.getString(R.string.login_failed)
-                    preferencesHelper.saveKeyPhrase("")
-                    preferencePhrase = ""
-                    keyPhrase.value = null
+                if (ret.second != null) {
+                    loginError.value = ret.second.toString()
                 } else {
-                    preferencesHelper.saveKeyPhrase(keyPhrase.value!!)
-                    preferencesHelper.setUserId(user.mid)
-                    appUser = user
-                    _user.value = user
+                    val u = ret.first as User
+                    preferencesHelper.setUserId(u.mid)
+                    appUser = u
+                    _user.value = u
                     hasLogon.value = true
                 }
             } else {
-                loginError.value = context.getString(R.string.login_failed)
-                preferencesHelper.saveKeyPhrase("")
-                preferencePhrase = ""
-                keyPhrase.value = null
+                loginError.value = context.getString(R.string.username_required)
                 isLoading.value = false
             }
         }
@@ -284,7 +275,6 @@ class UserViewModel @AssistedInject constructor(
     fun register(context: Context, popBack: () -> Unit) {
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
-            && keyPhrase.value?.isNotEmpty() == true
         ) {
             isLoading.value = true
             val user = User( mid = appUser.mid, name = name.value,
@@ -292,27 +282,37 @@ class UserViewModel @AssistedInject constructor(
                 profile = profile.value, avatar = appUser.avatar
             )
             viewModelScope.launch(Dispatchers.IO) {
-                val it = HproseInstance.setUserData(user, keyPhrase.value!!)
-                if (it != null) {
-                    if (appUser.mid == TW_CONST.GUEST_ID) {
-                        // register new user. Do not update appUser, wait for
-                        // new user to login.
-                        val event = SnackbarEvent(
-                            message = context.getString(R.string.registration_ok)
-                        )
-                        showSnackbar(event)
-                        viewModelScope.launch(Dispatchers.Main) {
-                            popBack()
+                val ret = HproseInstance.setUserData(user)
+                if (ret != null) {
+                    if (ret["status"] == "success") {
+                        val gson = Gson()
+                        val type = object : TypeToken<User>() {}.type
+                        val u: User = gson.fromJson(ret["user"].toString(), type)
+                        if (appUser.mid == TW_CONST.GUEST_ID) {
+                            // register new user. Do not update appUser, wait for
+                            // new user to login.
+                            val event = SnackbarEvent(
+                                message = context.getString(R.string.registration_ok)
+                            )
+                            showSnackbar(event)
+                            viewModelScope.launch(Dispatchers.Main) {
+                                popBack()
+                            }
+                        } else {
+                            // update user profile
+                            appUser = appUser.copy(
+                                name = u.name, profile = u.profile, username = u.username)
+                            _user.value = appUser
+                            u.name?.let { preferenceHelper.saveName(it) }
+                            u.profile?.let { preferenceHelper.saveProfile(it) }
+
+                            val event = SnackbarEvent(
+                                message = context.getString(R.string.profile_update_ok)
+                            )
+                            showSnackbar(event)
                         }
                     } else {
-                        // update user profile
-                        appUser = appUser.copy(name = it.name, profile = it.profile,
-                            username = it.username, password = it.password)
-                        _user.value = appUser
-                        val event = SnackbarEvent(
-                            message = context.getString(R.string.profile_update_ok)
-                        )
-                        showSnackbar(event)
+                        showSnackbar(SnackbarEvent(message = context.getString(R.string.username_taken)))
                     }
                 } else {
                     showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
@@ -325,8 +325,6 @@ class UserViewModel @AssistedInject constructor(
                 message = context.getString(R.string.username_required)
             } else if (password.value.isEmpty()) {
                 message = context.getString(R.string.password_required)
-            } else if (keyPhrase.value?.isEmpty() == true) {
-                message = context.getString(R.string.keyphrase_required)
             }
             val event = SnackbarEvent(
                 message = message
@@ -347,11 +345,6 @@ class UserViewModel @AssistedInject constructor(
     }
     fun onProfileChange(value: String) {
         profile.value = value
-        isLoading.value = false
-        loginError.value = ""
-    }
-    fun onKeyPhraseChange(phrase: String) {
-        keyPhrase.value = phrase
         isLoading.value = false
         loginError.value = ""
     }
