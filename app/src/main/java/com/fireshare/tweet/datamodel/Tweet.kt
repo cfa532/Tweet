@@ -10,6 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Update
@@ -123,7 +124,7 @@ data class CachedTweet(
 // cache for appUser's followings list
 @Entity
 data class UserData(
-    @PrimaryKey val userId: String = appUser.mid, // Assuming appUser.mid is the user ID
+    @PrimaryKey val userId: MimeiId = appUser.mid, // Assuming appUser.mid is the user ID
     val followings: List<MimeiId> = emptyList() // Store followings as a list
 )
 @Entity
@@ -163,7 +164,7 @@ interface CachedTweetDao {
      * Cache of appUser's followings list.
      * */
     @Query("SELECT followings FROM UserData WHERE userId = :userId")
-    suspend fun getCachedFollowings(userId: String = appUser.mid): List<String>?
+    suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>?
 
     /**
      * Cache of tweet mid list per user.
@@ -172,7 +173,7 @@ interface CachedTweetDao {
     suspend fun insertOrUpdateUserData(userData: UserData)
 
     @Query("SELECT tweetMidList FROM TweetMidList WHERE userId = :userId")
-    suspend fun getCachedTweetMidList(userId: String): List<String>?
+    suspend fun getCachedTweetMidList(userId: MimeiId): List<MimeiId>?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateTweetMidList(tweetMidList: TweetMidList)
@@ -184,7 +185,7 @@ interface CachedTweetDao {
     fun insertCachedTweet(cachedTweet: CachedTweet)
 
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
-    fun getCachedTweet(tweetId: String): CachedTweet?
+    fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
     @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
@@ -194,6 +195,22 @@ interface CachedTweetDao {
 
     @Update
     fun updateCachedTweet(cachedTweet: CachedTweet)
+
+    @Query("DELETE FROM CachedTweet WHERE mid = :tweetId")
+    fun deleteCachedTweet(tweetId: MimeiId)
+
+    @Transaction
+    suspend fun deleteCachedTweetAndRemoveFromMidList(tweetId: MimeiId) {
+        // 1. Delete the CachedTweet
+        deleteCachedTweet(tweetId)
+
+        // 2. Remove the tweetId from TweetMidList
+        val tweetMidList = getCachedTweetMidList(appUser.mid) // Assuming appUser.mid is the userId
+        if (tweetMidList != null) {
+            val updatedMidList = tweetMidList.toMutableList().apply { remove(tweetId) }
+            insertOrUpdateTweetMidList(TweetMidList(appUser.mid, updatedMidList))
+        }
+    }
 }
 
 @Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 2)

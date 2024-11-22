@@ -651,7 +651,7 @@ object HproseInstance {
 
     /**
      * Retrieve cached tweet from Mimei DB. User info is not cached,
-     * which changes frequently.
+     * which changes frequently, so user data need to be loaded alive every time.
      * */
     private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? { return withRetry {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return@withRetry null
@@ -703,11 +703,7 @@ object HproseInstance {
                     request = Request.Builder().url(url).build()
                     response = httpClient.newCall(request).execute()
                     if (response.isSuccessful) {
-                        val updateOriginTweet =
-                            Gson().fromJson(response.body?.string(), Tweet::class.java)
-                        tweetCache.tweetDao().updateCachedTweet(
-                            CachedTweet(updateOriginTweet.mid, Gson().toJson(updateOriginTweet))
-                        )
+                        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
                         callback(tweet.mid)
                     }
                 } else

@@ -182,7 +182,7 @@ class TweetViewModel @AssistedInject constructor(
                                 Timber.tag("UploadComment").d("Updated tweet: $newTweet")
                                 _tweetState.value = newTweet
 
-                                // the comment also posted as tweet.
+                                // the comment is also posted as another tweet, if retweet is not null.
                                 val retweet =
                                     map["retweet"]?.let { gson.fromJson(it.toString(), Tweet::class.java) }
                                 if (retweet != null) {
