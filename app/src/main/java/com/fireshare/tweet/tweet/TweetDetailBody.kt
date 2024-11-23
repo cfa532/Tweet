@@ -1,6 +1,7 @@
 package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -336,24 +338,24 @@ fun SelectableText(text: String,
             text = annotatedText,
             style = MaterialTheme.typography.bodyLarge,
             maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
-            modifier = modifier.clickable {
-                layoutResult?.let { textLayoutResult ->
-                    val position = textLayoutResult.getOffsetForPosition(
-                        Offset(0f, 0f)
-                    )
-                    // Get the annotations at the clicked position
-                    val annotations = annotatedText.getStringAnnotations(
-                        tag = "USERNAME_CLICK",
-                        start = position,
-                        end = position
-                    )
-                    // If we have an annotation, it means a username was clicked
-                    if (annotations.isNotEmpty()) {
-                        val username = annotations[0].item
-                        callback(username)
+            modifier = modifier
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        layoutResult?.let { textLayoutResult ->
+                            val position = textLayoutResult.getOffsetForPosition(offset)
+                            val annotations = annotatedText.getStringAnnotations(
+                                tag = "USERNAME_CLICK",
+                                start = position,
+                                end = position
+                            )
+                            if (annotations.isNotEmpty()) {
+                                val username = annotations[0].item
+                                callback(username)
+                            }
+                        }
                     }
-                }
-            },
+                },
+
             onTextLayout = { textLayoutResult ->
                 lineCount = textLayoutResult.lineCount
                 layoutResult = textLayoutResult
