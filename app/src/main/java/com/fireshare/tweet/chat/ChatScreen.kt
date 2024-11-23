@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -48,6 +50,7 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
+import com.fireshare.tweet.widget.Gadget.buildText
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
 import kotlin.concurrent.timer
@@ -191,11 +194,13 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
             shape = ChatBubbleShape(isSentByCurrentUser),
             modifier = Modifier.padding(4.dp)
         ) {
-            Text(
-                text = message.content,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(8.dp)
-            )
+            SelectionContainer {
+                BasicText(
+                    text = buildText(message.content),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
         }
         if (isSentByCurrentUser) {
             Spacer(modifier = Modifier.width(8.dp))

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,17 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.getMediaUrl
@@ -46,7 +37,6 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import kotlin.text.append
 
 @Composable
 fun TweetItemBody(
@@ -90,17 +80,16 @@ fun TweetItemBody(
                     if (!tweet.content.isNullOrEmpty()) {
                         val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                         var lineCount by remember { mutableIntStateOf(0) }
-                        val annotatedString = buildText(tweet.content!!)
-
-                        BasicText(
-                            text = annotatedString,
-                            onTextLayout = { textLayoutResult ->
-                                lineCount = textLayoutResult.lineCount
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = maxLines,
-                        )
-
+                        SelectionContainer {
+                            BasicText(
+                                text = buildText(tweet.content!!),
+                                onTextLayout = { textLayoutResult ->
+                                    lineCount = textLayoutResult.lineCount
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = maxLines,
+                            )
+                        }
                         if (!isExpanded && lineCount > 8) {
                             Text(
                                 text = stringResource(R.string.show_more),

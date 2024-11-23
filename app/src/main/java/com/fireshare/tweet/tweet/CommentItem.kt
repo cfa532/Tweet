@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -123,15 +124,16 @@ fun CommentItem(
                 if (comment.content != null && comment.content!!.isNotEmpty()) {
                     val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                     var lineCount by remember { mutableIntStateOf(0) }
-                    val annotatedString = buildText(comment.content!!)
-
-                    BasicText(text = annotatedString,
-                        onTextLayout = { textLayoutResult ->
-                            lineCount = textLayoutResult.lineCount
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = maxLines,
-                    )
+                    SelectionContainer {
+                        BasicText(
+                            text = buildText(comment.content!!),
+                            onTextLayout = { textLayoutResult ->
+                                lineCount = textLayoutResult.lineCount
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = maxLines,
+                        )
+                    }
                     if (!isExpanded && lineCount > 8) {
                         Text(
                             text = stringResource(R.string.show_more),

@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
@@ -41,9 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -112,12 +110,13 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             ) {
                 Column {
                     if (!tweet.content.isNullOrEmpty()) {
-                        val annotatedString = buildText(tweet.content!!)
-
-                        BasicText(text = annotatedString,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        SelectionContainer {
+                            BasicText(
+                                text = buildText(tweet.content!!),
+                                modifier = Modifier.padding(bottom = 8.dp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
                         tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
@@ -125,13 +124,15 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     }
                     mediaItems?.let {
                         LazyColumn(
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
                                 .heightIn(max = 800.dp) // Set a specific height for the grid
                         ) {
                             itemsIndexed(it) { index, _ ->
                                 MediaItemPreview(
                                     it,
-                                    Modifier.fillMaxWidth()
+                                    Modifier
+                                        .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
                                             val params =
@@ -198,7 +199,10 @@ fun TweetDropdownMenu(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
-            modifier = Modifier.width(32.dp).alpha(0.8f).rotate(-90f)
+            modifier = Modifier
+                .width(32.dp)
+                .alpha(0.8f)
+                .rotate(-90f)
                 .padding(end = 12.dp),
             onClick = { expanded = !expanded }) {
             Icon(
