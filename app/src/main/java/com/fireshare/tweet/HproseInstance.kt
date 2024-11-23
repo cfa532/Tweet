@@ -288,6 +288,23 @@ object HproseInstance {
         }
     } }
 
+    suspend fun getUserId(username: String): MimeiId? { return withRetry {
+        try {
+            val entry = "get_userid"
+            val json = """
+                {"aid": $appId, "ver": "last", "username": $username}
+            """.trimIndent()
+            val gson = Gson()
+            val request = gson.fromJson(json, Map::class.java)
+            hproseClient?.runMApp<String?>(entry, request)?.let {
+                    return@withRetry it
+            }
+        } catch (e: Exception) {
+            Timber.tag("GetUserId").e("${e.message}")
+            null
+        }
+    } }
+
     /**
      * There are two steps for a guest user to login.
      * First, find the true UserID given its key phrase, using the IP address of the serving node.
@@ -295,24 +312,10 @@ object HproseInstance {
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
     suspend fun login(username: String, password: String): Pair<User?, String?> { return withRetry {
-        return@withRetry try {
-            val reason = Pair(null, "Login failed")
-            val userId = try {
-                val url =
-                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=get_userid&username=$username"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    response.body?.string() ?: return@withRetry reason
-                } else {
-                    return@withRetry reason
-                }
-            } catch (e: Exception) {
-                Timber.tag("GetUserId").e("Login failed. ${e.message}")
-                return@withRetry reason
-            }
-
-            val user = getUserBase(userId) ?: return@withRetry reason
+        try {
+            val reason = Pair(null, "Wrong username or password")
+            val userId = getUserId(username) ?: return@withRetry reason
+            val user = getUserBase(userId) ?: return@withRetry Pair(null, "Cannot find user")
             val url =
                 "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
             val request = Request.Builder().url(url).build()
@@ -342,46 +345,28 @@ object HproseInstance {
      * Get baseUrl where user data can be accessed. Each user may has a different node.
      * Therefore it is indispensable to acquire base url for each user.
      * */
-    suspend fun getUserBase(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
-        return withRetry {
-            // check if user data has been cached
-            cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
-
-            try {
-                val url = "$baseUrl/getvar?name=mmprovsips&arg0=$userId"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    var string = response.body?.string()?.trim()?.removeSurrounding("\"")
-                        ?.replace("\\", "")
-                    val pattern =
-                        Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-                    string = """
-                    window.setParam({
-                        addrs: $string,
-                        aid: ""
-                    })]
-                """.trimIndent()
-                    val matcher = pattern.matcher(string as CharSequence)
-                    if (matcher.find()) {
-                        matcher.group(1)?.let {
-                            val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                            val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                            getFirstReachableUser(hostIPs, userId)?.let { user: User ->
-                                cachedUsers.add(user)
-                                return@withRetry user
-                            }
-                        }
-                    }
+    suspend fun getUserBase(userId: MimeiId): User? { return withRetry {
+        // check if user data has been cached
+        cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
+        try {
+            val entry = "get_provider"
+            val json = """
+                {"aid": $appId, "ver": "last", "mid": $userId}
+            """.trimIndent()
+            val gson = Gson()
+            val request = gson.fromJson(json, Map::class.java)
+            hproseClient?.runMApp<List<String>?>(entry, request)?.let { hostIPs ->
+                getFirstReachableUser(hostIPs, userId)?.let { user: User ->
+                    cachedUsers.add(user)
+                    return@withRetry user
                 }
-                null
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Timber.tag("getUserBase()").e("${appUser.baseUrl} $userId $e")
-                null
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Timber.tag("getUserBase()").e("${appUser.baseUrl} $userId $e")
+            null
         }
-    }
+    } }
 
     suspend fun getNodeIP(nodeId: MimeiId): String?  { return withRetry {
         val entry = "get_node_ip"
