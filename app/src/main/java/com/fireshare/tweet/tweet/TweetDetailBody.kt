@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +69,9 @@ import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
@@ -121,9 +124,11 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                         SelectableText(tweet.content!!,
                             modifier = Modifier.padding(bottom = 8.dp)
                         ) { username ->
-                            viewModel.viewModelScope.launch {
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 HproseInstance.getUserId(username)?.let {
-                                    navController.navigate(NavTweet.UserProfile(it))
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(NavTweet.UserProfile(it))
+                                    }
                                 }
                             }
                         }
@@ -336,6 +341,10 @@ fun SelectableText(text: String,
     SelectionContainer {
         Text(
             text = annotatedText,
+            onTextLayout = { textLayoutResult ->
+                lineCount = textLayoutResult.lineCount
+                layoutResult = textLayoutResult
+            },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.primary,
             maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
@@ -356,11 +365,7 @@ fun SelectableText(text: String,
                         }
                     }
                 },
-
-            onTextLayout = { textLayoutResult ->
-                lineCount = textLayoutResult.lineCount
-                layoutResult = textLayoutResult
-            },)
+        )
     }
     if (!isExpanded && lineCount > maxLines) {
         Text(

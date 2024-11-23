@@ -59,7 +59,9 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun CommentItem(
@@ -128,9 +130,11 @@ fun CommentItem(
 
                 if (!comment.content.isNullOrEmpty()) {
                     SelectableText(comment.content!!, maxLines = 10) { username ->
-                        viewModel.viewModelScope.launch {
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {
-                                navController.navigate(NavTweet.UserProfile(it))
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate(NavTweet.UserProfile(it))
+                                }
                             }
                         }
                     }

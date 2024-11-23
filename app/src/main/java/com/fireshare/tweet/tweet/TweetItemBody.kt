@@ -86,9 +86,11 @@ fun TweetItemBody(
                     // Text content of the tweet
                     if (!tweet.content.isNullOrEmpty()) {
                         SelectableText(tweet.content!!, maxLines = 10) { username ->
-                            viewModel.viewModelScope.launch {
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 HproseInstance.getUserId(username)?.let {
-                                    navController.navigate(NavTweet.UserProfile(it))
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(NavTweet.UserProfile(it))
+                                    }
                                 }
                             }
                         }

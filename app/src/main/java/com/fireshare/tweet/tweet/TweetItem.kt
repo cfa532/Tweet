@@ -42,8 +42,10 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TweetItem(
@@ -141,9 +143,11 @@ fun TweetItem(
                             SelectableText(tweet.content!!, maxLines = 10,
                                 modifier = Modifier.padding(start = 16.dp)
                             ) { username ->
-                                viewModel.viewModelScope.launch {
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     HproseInstance.getUserId(username)?.let {
-                                        navController.navigate(NavTweet.UserProfile(it))
+                                        withContext(Dispatchers.Main) {
+                                            navController.navigate(NavTweet.UserProfile(it))
+                                        }
                                     }
                                 }
                             }
