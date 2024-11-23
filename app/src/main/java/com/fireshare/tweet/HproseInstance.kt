@@ -300,7 +300,8 @@ object HproseInstance {
                     return@withRetry it
             }
         } catch (e: Exception) {
-            Timber.tag("GetUserId").e("${e.message}")
+            e.printStackTrace()
+            Timber.tag("GetUserId").e("$e")
             null
         }
     } }
