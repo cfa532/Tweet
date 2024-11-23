@@ -323,8 +323,7 @@ fun TweetDropdownMenuItems(
 fun SelectableText(text: String,
                    maxLines: Int = Int.MAX_VALUE,
                    modifier: Modifier = Modifier,
-                   callback: (String)->Unit = {})
-{
+                   callback: (String)->Unit = {}) {
     // fold text content up to 10 lines. Open it upon user click.
     var isExpanded by remember { mutableStateOf(false) }
     var lineCount by remember { mutableIntStateOf(0) }
@@ -334,10 +333,6 @@ fun SelectableText(text: String,
     SelectionContainer {
         BasicText(
             text = annotatedText,
-            onTextLayout = { textLayoutResult ->
-                lineCount = textLayoutResult.lineCount
-                layoutResult = textLayoutResult
-            },
             style = MaterialTheme.typography.bodyLarge,
             maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
             modifier = modifier.clickable {
@@ -357,7 +352,11 @@ fun SelectableText(text: String,
                         callback(username)
                     }
                 }
-            }
+            },
+            onTextLayout = { textLayoutResult ->
+                lineCount = textLayoutResult.lineCount
+                layoutResult = textLayoutResult
+            },
         )
     }
     if (!isExpanded && lineCount > 8) {

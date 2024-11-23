@@ -52,6 +52,7 @@ object Gadget {
         mentionRegex.findAll(text.substring(lastIndex)).forEach { matchResult ->
             val username = matchResult.groupValues[1]
             val start = lastIndex + matchResult.range.first
+            val originalMentionText = matchResult.value // Get the original mention text
 
             append(text.substring(lastIndex, start))
 
@@ -62,8 +63,10 @@ object Gadget {
             }
             pop()
 
-            lastIndex = start + matchResult.range.last + 1
+            // Update lastIndex to the start of the mention plus the length of the original mention text
+            lastIndex = start + originalMentionText.length
         }
+
         // Append any remaining text after the last URL
         if (lastIndex < text.length) {
             append(text.substring(lastIndex))
