@@ -334,9 +334,10 @@ fun SelectableText(text: String,
     val annotatedText = buildAnnotatedText(text)
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     SelectionContainer {
-        BasicText(
+        Text(
             text = annotatedText,
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
             maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
             modifier = modifier
                 .pointerInput(Unit) {
