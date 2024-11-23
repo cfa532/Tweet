@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,43 +116,14 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             ) {
                 Column {
                     if (!tweet.content.isNullOrEmpty()) {
-                        val annotatedText = buildAnnotatedText(tweet.content!!)
-                        var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-                        SelectionContainer {
-                            BasicText(
-                                text = annotatedText,
-                                onTextLayout = { textLayoutResult ->
-                                    layoutResult = textLayoutResult
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                                    .clickable {
-                                        layoutResult?.let { textLayoutResult ->
-                                            val position = textLayoutResult.getOffsetForPosition(
-                                                Offset(0f, 0f)
-                                            )
-                                            // Get the annotations at the clicked position
-                                            val annotations = annotatedText.getStringAnnotations(
-                                                tag = "USERNAME_CLICK",
-                                                start = position,
-                                                end = position
-                                            )
-                                            // If we have an annotation, it means a username was clicked
-                                            if (annotations.isNotEmpty()) {
-                                                val username = annotations[0].item
-                                                viewModel.viewModelScope.launch {
-                                                    HproseInstance.getUserId(username)?.let {
-                                                        navController.navigate(
-                                                            NavTweet.UserProfile(
-                                                                it
-                                                            )
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                            )
+                        SelectableText(tweet.content!!,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) { username ->
+                            viewModel.viewModelScope.launch {
+                                HproseInstance.getUserId(username)?.let {
+                                    navController.navigate(NavTweet.UserProfile(it))
+                                }
+                            }
                         }
                     }
                     val mediaItems = tweet.attachments?.mapNotNull {
@@ -342,6 +314,58 @@ fun TweetDropdownMenuItems(
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
                 }
+            }
+        )
+    }
+}
+
+@Composable
+fun SelectableText(text: String,
+                   maxLines: Int = Int.MAX_VALUE,
+                   modifier: Modifier = Modifier,
+                   callback: (String)->Unit = {})
+{
+    // fold text content up to 10 lines. Open it upon user click.
+    var isExpanded by remember { mutableStateOf(false) }
+    var lineCount by remember { mutableIntStateOf(0) }
+
+    val annotatedText = buildAnnotatedText(text)
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    SelectionContainer {
+        BasicText(
+            text = annotatedText,
+            onTextLayout = { textLayoutResult ->
+                lineCount = textLayoutResult.lineCount
+                layoutResult = textLayoutResult
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
+            modifier = modifier.clickable {
+                layoutResult?.let { textLayoutResult ->
+                    val position = textLayoutResult.getOffsetForPosition(
+                        Offset(0f, 0f)
+                    )
+                    // Get the annotations at the clicked position
+                    val annotations = annotatedText.getStringAnnotations(
+                        tag = "USERNAME_CLICK",
+                        start = position,
+                        end = position
+                    )
+                    // If we have an annotation, it means a username was clicked
+                    if (annotations.isNotEmpty()) {
+                        val username = annotations[0].item
+                        callback(username)
+                    }
+                }
+            }
+        )
+    }
+    if (!isExpanded && lineCount > 8) {
+        Text(
+            text = stringResource(R.string.show_more),
+            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
+            modifier = modifier.clickable {
+                isExpanded = true
             }
         )
     }

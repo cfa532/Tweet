@@ -28,7 +28,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
@@ -41,6 +43,7 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun TweetItem(
@@ -135,11 +138,15 @@ fun TweetItem(
                         TweetItemHeader(viewModel, parentEntry)
 
                         if (!tweet.content.isNullOrEmpty()) {
-                            Text(
-                                modifier = Modifier.padding(start = 16.dp),
-                                text = tweet.content!!,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            SelectableText(tweet.content!!, maxLines = 10,
+                                modifier = Modifier.padding(start = 16.dp)
+                            ) { username ->
+                                viewModel.viewModelScope.launch {
+                                    HproseInstance.getUserId(username)?.let {
+                                        navController.navigate(NavTweet.UserProfile(it))
+                                    }
+                                }
+                            }
                         }
                         Box(
                             modifier = Modifier

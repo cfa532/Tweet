@@ -56,7 +56,6 @@ fun TweetItemBody(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
     // fold text content up to 9 lines. Open it upon user click.
-    var isExpanded by remember { mutableStateOf(false) }
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -86,49 +85,12 @@ fun TweetItemBody(
                 Column {
                     // Text content of the tweet
                     if (!tweet.content.isNullOrEmpty()) {
-                        val maxLines = if (isExpanded) Int.MAX_VALUE else 9
-                        var lineCount by remember { mutableIntStateOf(0) }
-                        val annotatedText = buildAnnotatedText(tweet.content!!)
-                        var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-                        SelectionContainer {
-                            BasicText(
-                                text = annotatedText,
-                                onTextLayout = { textLayoutResult ->
-                                    lineCount = textLayoutResult.lineCount
-                                    layoutResult = textLayoutResult
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = maxLines,
-                                modifier = Modifier.clickable {
-                                    layoutResult?.let { textLayoutResult ->
-                                        val position = textLayoutResult.getOffsetForPosition(
-                                            Offset(0f, 0f)
-                                        )
-                                        // Get the annotations at the clicked position
-                                        val annotations = annotatedText.getStringAnnotations(
-                                            tag = "USERNAME_CLICK", start = position, end = position
-                                        )
-                                        // If we have an annotation, it means a username was clicked
-                                        if (annotations.isNotEmpty()) {
-                                            val username = annotations[0].item
-                                            viewModel.viewModelScope.launch {
-                                                HproseInstance.getUserId(username)?.let {
-                                                    navController.navigate(NavTweet.UserProfile(it))
-                                                }
-                                            }
-                                        }
-                                    }
+                        SelectableText(tweet.content!!, maxLines = 10) { username ->
+                            viewModel.viewModelScope.launch {
+                                HproseInstance.getUserId(username)?.let {
+                                    navController.navigate(NavTweet.UserProfile(it))
                                 }
-                            )
-                        }
-                        if (!isExpanded && lineCount > 8) {
-                            Text(
-                                text = stringResource(R.string.show_more),
-                                style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.clickable {
-                                    isExpanded = true
-                                }
-                            )
+                            }
                         }
                     }
                     // there are attached media files
