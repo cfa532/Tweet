@@ -323,7 +323,8 @@ fun TweetDropdownMenuItems(
 fun SelectableText(text: String,
                    maxLines: Int = Int.MAX_VALUE,
                    modifier: Modifier = Modifier,
-                   callback: (String)->Unit = {}) {
+                   callback: (String)->Unit = {})
+{
     // fold text content up to 10 lines. Open it upon user click.
     var isExpanded by remember { mutableStateOf(false) }
     var lineCount by remember { mutableIntStateOf(0) }
@@ -356,10 +357,9 @@ fun SelectableText(text: String,
             onTextLayout = { textLayoutResult ->
                 lineCount = textLayoutResult.lineCount
                 layoutResult = textLayoutResult
-            },
-        )
+            },)
     }
-    if (!isExpanded && lineCount > 8) {
+    if (!isExpanded && lineCount > maxLines) {
         Text(
             text = stringResource(R.string.show_more),
             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
