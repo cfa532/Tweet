@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
@@ -40,6 +41,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -55,6 +59,7 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.Gadget.buildText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
@@ -106,8 +111,10 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 0.dp)
             ) {
                 Column {
-                    if (tweet.content?.isNotEmpty() == true) {
-                        Text(text = tweet.content!!,
+                    if (!tweet.content.isNullOrEmpty()) {
+                        val annotatedString = buildText(tweet.content!!)
+
+                        BasicText(text = annotatedString,
                             modifier = Modifier.padding(bottom = 8.dp),
                             style = MaterialTheme.typography.bodyLarge
                         )

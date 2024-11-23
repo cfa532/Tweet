@@ -68,18 +68,11 @@ object HproseInstance {
         tweetCache = TweetCacheDatabase.getInstance(context.applicationContext)
 
         initAppEntry()
-
-//        chatDatabase = Room.databaseBuilder(
-//            context.applicationContext,
-//            ChatDatabase::class.java,
-//            "chat_database"
-//        ).build()
-
-//        tweetCache.tweetDao().clearAllCachedTweets()
     }
 
-    // Find network entrance of the App
-    // Given entry URL, initiate appId, and BASE_URL.
+    /**
+     * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
+     * */
     private suspend fun initAppEntry() {
         cachedUsers.clear()     // make sure no stale data during retry init.
         val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
@@ -110,7 +103,7 @@ object HproseInstance {
 
                         /**
                          * The code above makes a call to base URL of the app, get a html page
-                         * and tries to extract host IP addresses from source code.
+                         * and tries to extract appId and host IP addresses from source code.
                          * */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         Timber.tag("initAppEntry").d("$paramMap $hostIPs")
@@ -391,46 +384,61 @@ object HproseInstance {
         }
     }
 
+    suspend fun getNodeIP(nodeId: MimeiId): String?  { return withRetry {
+        val entry = "get_node_ip"
+        val json = """
+            {"aid": $appId, "ver": "last", "nodeid": $nodeId}
+        """.trimIndent()
+        val gson = Gson()
+        val request = gson.fromJson(json, Map::class.java)
+        try {
+            val str = hproseClient?.runMApp(entry, request) as String?
+            val ip = str?.split(",")?.get(0)
+            return@withRetry ip
+        } catch (e: Exception) {
+            Timber.tag("setUserAvatar").e(e.toString())
+        }
+        return@withRetry null
+    } }
+
     /**
      * Register or update user data.
      * */
-    suspend fun setUserData(user: User): Map<*, *>? {
-        return withRetry {
-            val url: String
-            if (user.mid == TW_CONST.GUEST_ID) {
-                // register a new User account
-                val method = "register"
-                url =
-                    "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
-                        Json.encodeToString(user)
-                    }"
-            } else {
-                // update existing account
-                val method = "set_author_core_data"
-                url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
+    suspend fun setUserData(user: User): Map<*, *>? { return withRetry {
+        val url: String
+        if (user.mid == TW_CONST.GUEST_ID) {
+            // register a new User account, with default followings.
+            user.followingList = BuildConfig.ALPHA_ID.split(",")
+            url =
+                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
                     Json.encodeToString(user)
                 }"
-            }
-            val request = Request.Builder().url(url).build()
-            return@withRetry try {
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = response.body?.string()
-                    val gson = Gson()
-                    val updatedUser =
-//                        gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
-                        gson.fromJson(json, Map::class.java)
-                    return@withRetry updatedUser
-                }
-                Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
-                null
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Timber.tag("setUserData").e(e.toString())
-                null
-            }
+        } else {
+            // update existing account
+            val method = "set_author_core_data"
+            url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
+                Json.encodeToString(user)
+            }"
         }
-    }
+        val request = Request.Builder().url(url).build()
+        return@withRetry try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val gson = Gson()
+                val updatedUser =
+//                        gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
+                    gson.fromJson(json, Map::class.java)
+                return@withRetry updatedUser
+            }
+            Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Timber.tag("setUserData").e(e.toString())
+            null
+        }
+    } }
 
     suspend fun setUserAvatar(userId: MimeiId, avatar: MimeiId) {
         return withRetry {

@@ -67,9 +67,10 @@ fun EditProfileScreen(
     val password by viewModel.password
     val name by viewModel.name
     val profile by viewModel.profile
+    val nodeId by viewModel.nodeId
+
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
-
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -110,18 +111,18 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = username ?: "",
                     onValueChange = { viewModel.onUsernameChange(it) },
-                    label = { Text(stringResource(R.string.usename)) },
+                    label = { Text(stringResource(R.string.username)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.onPasswordChange(it) },
                     label = { Text(stringResource(R.string.password)) },
                     modifier = Modifier
+                        .padding(top = 8.dp)
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -133,22 +134,32 @@ fun EditProfileScreen(
                     },
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = name ?: "",
                     onValueChange = { viewModel.onNameChange(it) },
                     label = { Text(stringResource(R.string.name)) },
                     modifier = Modifier
+                        .padding(top = 8.dp)
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = profile ?: "",
                     onValueChange = { viewModel.onProfileChange(it) },
                     label = { Text(stringResource(R.string.profile)) },
                     modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = false
+                )
+                OutlinedTextField(
+                    value = nodeId,
+                    onValueChange = { viewModel.onNodeIdChange(it) },
+                    label = { Text("Node ID") },
+                    modifier = Modifier
+                        .padding(top = 8.dp)
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     singleLine = false
@@ -156,7 +167,9 @@ fun EditProfileScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { viewModel.register(context) { navController.popBackStack() } },
+                onClick = { viewModel.register(context) {
+                    navController.popBackStack()
+                } },
                 enabled = !isLoading,
                 modifier = Modifier
                     .width(intrinsicSize = IntrinsicSize.Max)

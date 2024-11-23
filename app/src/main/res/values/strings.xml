@@ -4,8 +4,8 @@
     <string name="delete">Delete</string>
     <string name="login">Login</string>
     <string name="register">Register</string>
-    <string name="usename">Username</string>
-    <string name="password">Password</string>
+    <string name="username">Username (required)</string>
+    <string name="password">Password (required)</string>
     <string name="no_account">Don\'t have an account?</string>
     <string name="name">Alias</string>
     <string name="profile">Profile</string>
@@ -56,4 +56,5 @@
     <string name="unpin">Unpin</string>
     <string name="registration_failed">Registration failed. Try again later.</string>
     <string name="username_taken">Username is taken</string>
+    <string name="node_not_found">Node not found</string>
 </resources>

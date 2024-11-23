@@ -1,6 +1,12 @@
 package com.fireshare.tweet.widget
 
 import android.media.MediaMetadataRetriever
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -12,6 +18,40 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 object Gadget {
+
+    fun buildText(text: String) = buildAnnotatedString {
+        val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
+        var lastIndex = 0
+
+        urlRegex.findAll(text).forEach { matchResult ->
+            val url = matchResult.value
+            val start = matchResult.range.first
+
+            // Append text before the URL
+            append(text.substring(lastIndex, start))
+
+            // Apply URL span
+            pushStringAnnotation(tag = "URL", annotation = url)
+            withLink(
+                LinkAnnotation.Url(
+                    url,
+                    TextLinkStyles(style = SpanStyle(color = Color.Blue))
+                )
+            ) {
+                append(url)
+            }
+            pop()
+
+            // Update lastIndex to the end of the current URL
+            lastIndex = matchResult.range.last + 1
+        }
+
+        // Append any remaining text after the last URL
+        if (lastIndex < text.length) {
+            append(text.substring(lastIndex))
+        }
+    }
+
     fun splitJson(arrJson: List<MimeiId>): List<MimeiId>? {
         /**
          * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
@@ -26,24 +66,6 @@ object Gadget {
         }
         return null
     }
-    /**
-     * NodeList format:
-     * [
-     *   [["183.159.17.7:8081", 3080655111],["[240e:391:e00:169:a04c:d387:95d:a689]:8081", 39642842857833],["192.168.0.94:8081", 281478208946270]],    // node 1
-     *   [["183.159.17.7:8082", 3080655111],["[240e:391:e00:169:2e0:1dff:feed:3d1]:8082", 39642842857833]]     // node 2
-     * ]
-     * Get the IP with the smallest response time, from a list of nodes and each node has
-     * multiple IP addresses.
-     * */
-    fun getBestIPAddress(nodeList: ArrayList<*>) =
-         nodeList.map {
-            (it as ArrayList<*>).associate { it1 ->
-                val pair = it1 as ArrayList<*>;
-                pair[0] to pair[1]
-            }.minByOrNull { it2 -> it2.value as Double }
-        }.associate {
-            it?.key to it?.value
-        }.minByOrNull { it2 -> it2.value as Double }?.key as String
 
     /**
      * Return an array of IPs, each from a different server.
@@ -86,7 +108,6 @@ object Gadget {
                     null
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 Timber.tag("GetVideoDimensions").e(e)
                 null
             }

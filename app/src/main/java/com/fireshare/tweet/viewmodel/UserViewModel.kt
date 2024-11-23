@@ -72,6 +72,8 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
+    var nodeId = mutableStateOf(if (user.value.nodeIds != null) user.value.nodeIds!![0] else "")
+
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
@@ -269,57 +271,12 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Handle both register and update of user profile. Username, password
-     * and key phrase are all required.
+     * Handle both register and update of user profile. Username, password are required.
      * */
     fun register(context: Context, popBack: () -> Unit) {
-        if (username.value?.isNotEmpty() == true
-            && password.value.isNotEmpty()
+        if (username.value?.isEmpty() == true
+            || password.value.isEmpty()
         ) {
-            isLoading.value = true
-            val user = User( mid = appUser.mid, name = name.value,
-                username = username.value, password = password.value,
-                profile = profile.value, avatar = appUser.avatar
-            )
-            viewModelScope.launch(Dispatchers.IO) {
-                val ret = HproseInstance.setUserData(user)
-                if (ret != null) {
-                    if (ret["status"] == "success") {
-                        val gson = Gson()
-                        val type = object : TypeToken<User>() {}.type
-                        val u: User = gson.fromJson(ret["user"].toString(), type)
-                        if (appUser.mid == TW_CONST.GUEST_ID) {
-                            // register new user. Do not update appUser, wait for
-                            // new user to login.
-                            val event = SnackbarEvent(
-                                message = context.getString(R.string.registration_ok)
-                            )
-                            showSnackbar(event)
-                            viewModelScope.launch(Dispatchers.Main) {
-                                popBack()
-                            }
-                        } else {
-                            // update user profile
-                            appUser = appUser.copy(
-                                name = u.name, profile = u.profile, username = u.username)
-                            _user.value = appUser
-                            u.name?.let { preferenceHelper.saveName(it) }
-                            u.profile?.let { preferenceHelper.saveProfile(it) }
-
-                            val event = SnackbarEvent(
-                                message = context.getString(R.string.profile_update_ok)
-                            )
-                            showSnackbar(event)
-                        }
-                    } else {
-                        showSnackbar(SnackbarEvent(message = context.getString(R.string.username_taken)))
-                    }
-                } else {
-                    showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
-                }
-                isLoading.value = false
-            }
-        } else {
             var message = ""
             if (username.value?.isEmpty() == true) {
                 message = context.getString(R.string.username_required)
@@ -330,6 +287,67 @@ class UserViewModel @AssistedInject constructor(
                 message = message
             )
             showSnackbar(event)
+            return
+        }
+
+        isLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            if (nodeId.value.isNotEmpty()) {
+                // Find IP of desired node.
+                val ip = HproseInstance.getNodeIP(nodeId.value)
+                if (ip == null) {
+                    showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
+                    isLoading.value = false
+                    return@launch
+                } else {
+                    appUser = appUser.copy(baseUrl = "http://$ip")
+                    hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                        .useService(HproseService::class.java)
+                }
+            }
+            val user = User(
+                mid = appUser.mid, name = name.value,
+                username = username.value, password = password.value,
+                profile = profile.value, avatar = appUser.avatar
+            )
+            val ret = HproseInstance.setUserData(user)
+            if (ret != null) {
+                if (ret["status"] == "success") {
+                    val gson = Gson()
+                    val type = object : TypeToken<User>() {}.type
+                    val u: User = gson.fromJson(ret["user"].toString(), type)
+                    if (appUser.mid == TW_CONST.GUEST_ID) {
+                        // register new user. Do not update appUser, wait for
+                        // new user to login.
+                        val event = SnackbarEvent(
+                            message = context.getString(R.string.registration_ok)
+                        )
+                        showSnackbar(event)
+                        viewModelScope.launch(Dispatchers.Main) {
+                            popBack()
+                        }
+                    } else {
+                        // update user profile
+                        appUser = appUser.copy(
+                            name = u.name, profile = u.profile, username = u.username
+                        )
+                        _user.value = appUser
+                        u.name?.let { preferenceHelper.saveName(it) }
+                        u.profile?.let { preferenceHelper.saveProfile(it) }
+
+                        val event = SnackbarEvent(
+                            message = context.getString(R.string.profile_update_ok)
+                        )
+                        showSnackbar(event)
+                    }
+                } else {
+                    showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
+                }
+            } else {
+                showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
+            }
+            isLoading.value = false
+
         }
     }
 
@@ -345,6 +363,11 @@ class UserViewModel @AssistedInject constructor(
     }
     fun onProfileChange(value: String) {
         profile.value = value
+        isLoading.value = false
+        loginError.value = ""
+    }
+    fun onNodeIdChange(value: String) {
+        nodeId.value = value
         isLoading.value = false
         loginError.value = ""
     }

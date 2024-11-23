@@ -95,7 +95,7 @@ fun LoginScreen(viewModel: UserViewModel) {
         OutlinedTextField(
             value = username ?: "",
             onValueChange = { viewModel.onUsernameChange(it)},
-            label = { Text(stringResource(R.string.usename)) },
+            label = { Text(stringResource(R.string.username)) },
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions.Default.copy(

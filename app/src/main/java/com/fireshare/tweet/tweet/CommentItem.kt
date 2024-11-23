@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -48,6 +49,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.Gadget.buildText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
@@ -121,7 +123,9 @@ fun CommentItem(
                 if (comment.content != null && comment.content!!.isNotEmpty()) {
                     val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                     var lineCount by remember { mutableIntStateOf(0) }
-                    Text(text = comment.content!!,
+                    val annotatedString = buildText(comment.content!!)
+
+                    BasicText(text = annotatedString,
                         onTextLayout = { textLayoutResult ->
                             lineCount = textLayoutResult.lineCount
                         },

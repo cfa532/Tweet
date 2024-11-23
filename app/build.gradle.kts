@@ -18,7 +18,7 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 7
+        versionCode = 8
         versionName = "1"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -56,7 +56,7 @@ android {
             }
             buildConfigField("String", "BASE_URL", "\"tweet1.fireshare.uk\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
-            buildConfigField("String", "ALPHA_ID", "\"yrzVzrGB8Te5mBbm4kUVKjxEoTx\"")
+            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
         }
     }
     compileOptions {
