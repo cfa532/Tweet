@@ -291,14 +291,15 @@ object HproseInstance {
     suspend fun getUserId(username: String): MimeiId? { return withRetry {
         try {
             val entry = "get_userid"
-            val json = """
-                {"aid": $appId, "ver": "last", "username": $username}
-            """.trimIndent()
-            val gson = Gson()
-            val request = gson.fromJson(json, Map::class.java)
-            hproseClient?.runMApp<String?>(entry, request)?.let {
-                    return@withRetry it
+            val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&username=$username"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                val id = Gson().fromJson(json, String::class.java)
+                return@withRetry id
             }
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("GetUserId").e("$e")
@@ -956,7 +957,7 @@ object HproseInstance {
      * Upload media file to node and return its IPFS cid with its media type.
      * */
     suspend fun uploadToIPFS(context: Context, uri: Uri): MimeiFileType? { return withRetry {
-        return@withRetry withContext(Dispatchers.IO) { // Execute in IO dispatcher
+        withContext(Dispatchers.IO) { // Execute in IO dispatcher
             try {
                 val method = "open_temp_file"
                 val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method"
