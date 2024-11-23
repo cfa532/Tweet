@@ -40,11 +40,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
@@ -61,6 +65,7 @@ import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.launch
 
 @Composable
 fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
@@ -110,11 +115,42 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             ) {
                 Column {
                     if (!tweet.content.isNullOrEmpty()) {
+                        val annotatedText = buildAnnotatedText(tweet.content!!)
+                        var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
                         SelectionContainer {
                             BasicText(
-                                text = buildAnnotatedText(tweet.content!!),
-                                modifier = Modifier.padding(bottom = 8.dp),
-                                style = MaterialTheme.typography.bodyLarge
+                                text = annotatedText,
+                                onTextLayout = { textLayoutResult ->
+                                    layoutResult = textLayoutResult
+                                },
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                                    .clickable {
+                                        layoutResult?.let { textLayoutResult ->
+                                            val position = textLayoutResult.getOffsetForPosition(
+                                                Offset(0f, 0f)
+                                            )
+                                            // Get the annotations at the clicked position
+                                            val annotations = annotatedText.getStringAnnotations(
+                                                tag = "USERNAME_CLICK",
+                                                start = position,
+                                                end = position
+                                            )
+                                            // If we have an annotation, it means a username was clicked
+                                            if (annotations.isNotEmpty()) {
+                                                val username = annotations[0].item
+                                                viewModel.viewModelScope.launch {
+                                                    HproseInstance.getUserId(username)?.let {
+                                                        navController.navigate(
+                                                            NavTweet.UserProfile(
+                                                                it
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                             )
                         }
                     }
