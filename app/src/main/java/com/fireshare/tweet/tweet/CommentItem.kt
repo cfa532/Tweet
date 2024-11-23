@@ -50,7 +50,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.Gadget.buildText
+import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
@@ -126,7 +126,7 @@ fun CommentItem(
                     var lineCount by remember { mutableIntStateOf(0) }
                     SelectionContainer {
                         BasicText(
-                            text = buildText(comment.content!!),
+                            text = buildAnnotatedText(comment.content!!),
                             onTextLayout = { textLayoutResult ->
                                 lineCount = textLayoutResult.lineCount
                             },

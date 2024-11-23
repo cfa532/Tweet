@@ -299,6 +299,7 @@ class UserViewModel @AssistedInject constructor(
                     isLoading.value = false
                     return@launch
                 } else {
+                    // register user on desired node, and use it henceforth.
                     appUser = appUser.copy(baseUrl = "http://$ip")
                     hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
                         .useService(HproseService::class.java)
@@ -348,6 +349,30 @@ class UserViewModel @AssistedInject constructor(
             isLoading.value = false
 
         }
+    }
+
+    suspend fun getSuggestions(query: String): List<String> {
+        val suggestions = mutableListOf<String>()
+
+        // Check fans
+        fans.value.forEach { fanId ->
+            getUserBase(fanId)?.let { fan ->
+                if (fan.username?.startsWith(query, ignoreCase = true) == true) {
+                    suggestions.add(fan.username!!)
+                }
+            }
+        }
+
+        // Check followings
+        followings.value.forEach { followingId ->
+            getUserBase(followingId)?.let { following ->
+                if (following.username?.startsWith(query, ignoreCase = true) == true) {
+                    suggestions.add(following.username!!)
+                }
+            }
+        }
+
+        return suggestions.distinct()
     }
 
     fun onUsernameChange(value: String) {

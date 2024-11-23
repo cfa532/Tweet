@@ -34,7 +34,7 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.Gadget.buildText
+import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 
@@ -80,14 +80,24 @@ fun TweetItemBody(
                     if (!tweet.content.isNullOrEmpty()) {
                         val maxLines = if (isExpanded) Int.MAX_VALUE else 9
                         var lineCount by remember { mutableIntStateOf(0) }
+                        val annotatedText = buildAnnotatedText(tweet.content!!)
                         SelectionContainer {
                             BasicText(
-                                text = buildText(tweet.content!!),
+                                text = annotatedText,
                                 onTextLayout = { textLayoutResult ->
                                     lineCount = textLayoutResult.lineCount
                                 },
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = maxLines,
+//                                modifier = Modifier.clickable {
+//                                    annotatedText
+//                                        .getStringAnnotations("USERNAME_CLICK", offset.selectionStart, offset.selectionEnd)
+//                                        .firstOrNull()?.let { annotation ->
+//                                            // Extract the username from the annotation and navigate
+//                                            navController.navigate("profile/${annotation.item}")
+//                                        }
+//                                    // existing URL click handling...
+//                                }
                             )
                         }
                         if (!isExpanded && lineCount > 8) {

@@ -57,7 +57,7 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.Gadget.buildText
+import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
@@ -112,7 +112,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     if (!tweet.content.isNullOrEmpty()) {
                         SelectionContainer {
                             BasicText(
-                                text = buildText(tweet.content!!),
+                                text = buildAnnotatedText(tweet.content!!),
                                 modifier = Modifier.padding(bottom = 8.dp),
                                 style = MaterialTheme.typography.bodyLarge
                             )

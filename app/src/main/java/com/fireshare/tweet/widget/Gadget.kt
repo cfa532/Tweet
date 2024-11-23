@@ -6,7 +6,9 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -19,8 +21,9 @@ import timber.log.Timber
 
 object Gadget {
 
-    fun buildText(text: String) = buildAnnotatedString {
+    fun buildAnnotatedText(text: String) = buildAnnotatedString {
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
+        val mentionRegex = "@([\\w_]+)".toRegex()
         var lastIndex = 0
 
         urlRegex.findAll(text).forEach { matchResult ->
@@ -45,7 +48,22 @@ object Gadget {
             // Update lastIndex to the end of the current URL
             lastIndex = matchResult.range.last + 1
         }
+        // Process mentions (@username)
+        mentionRegex.findAll(text.substring(lastIndex)).forEach { matchResult ->
+            val username = matchResult.groupValues[1]
+            val start = lastIndex + matchResult.range.first
 
+            append(text.substring(lastIndex, start))
+
+            // Apply style and annotation for all mentions
+            pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
+            withStyle(style = SpanStyle(color = Color.Blue, textDecoration = TextDecoration.None)) {
+                append("@$username")
+            }
+            pop()
+
+            lastIndex = start + matchResult.range.last + 1
+        }
         // Append any remaining text after the last URL
         if (lastIndex < text.length) {
             append(text.substring(lastIndex))

@@ -50,7 +50,7 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
-import com.fireshare.tweet.widget.Gadget.buildText
+import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
 import kotlin.concurrent.timer
@@ -196,7 +196,7 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
         ) {
             SelectionContainer {
                 BasicText(
-                    text = buildText(message.content),
+                    text = buildAnnotatedText(message.content),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(8.dp)
                 )

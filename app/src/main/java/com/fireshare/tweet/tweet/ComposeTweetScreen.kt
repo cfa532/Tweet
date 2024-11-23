@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -53,8 +56,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -63,10 +69,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.navigation.LocalViewModelProvider
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 import java.io.File
@@ -74,6 +83,8 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.text.substringAfterLast
+import kotlin.text.substringBeforeLast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +94,7 @@ fun ComposeTweetScreen(
 ) {
     val context = LocalContext.current
     var tweetContent by remember { mutableStateOf("") }
+
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     var isPrivate by remember { mutableStateOf(false) }
 
@@ -108,7 +120,7 @@ fun ComposeTweetScreen(
         }
     }
 
-    // take a picture at attachment
+    // take a picture as attachment
     val takeAShot = {
         val photoFile = createImageFile(context)
         photoFile?.also {
@@ -146,7 +158,7 @@ fun ComposeTweetScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
                             val event = SnackbarEvent(
                                 message = "Are you sure to quit?",
                                 action = SnackbarAction(name = "Quit",
@@ -200,12 +212,31 @@ fun ComposeTweetScreen(
             {
                 val focusRequester = remember { FocusRequester() }
                 val keyboardController = LocalSoftwareKeyboardController.current
+                val viewModelProvider = LocalViewModelProvider.current
+                val appUserViewModel = viewModelProvider?.get(SharedViewModel::class)?.sharedAppUserViewModel
+                var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+                var isSearching by remember { mutableStateOf(false) } // Track search state
+                val focusManager = LocalFocusManager.current
+
                 LaunchedEffect(Unit) {
                     focusRequester.requestFocus() // Request focus on composable launch
                 }
+
                 OutlinedTextField(
                     value = tweetContent,
-                    onValueChange = { tweetContent = it },
+                    onValueChange = {
+                        tweetContent = it
+                        if (it.contains("@") && !isSearching) {
+                            isSearching = true  // start search for suggestions
+                            val query = it.substringAfterLast("@")
+                            viewModel.viewModelScope.launch {
+                                suggestions = appUserViewModel?.getSuggestions(query) ?: emptyList()
+                                isSearching = false
+                            }
+                        } else {
+                            suggestions = emptyList()
+                            isSearching = false
+                        } },
                     label = { Text("What's happening?") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -218,7 +249,42 @@ fun ComposeTweetScreen(
                                 keyboardController?.show()
                             }
                         },
+                    trailingIcon = {
+                        if (suggestions.isNotEmpty()) {
+                            IconButton(onClick = {
+                                suggestions = emptyList()
+                                isSearching = false
+                                focusManager.clearFocus()
+                            }) {
+                                Icon(Icons.Filled.Close,
+                                    contentDescription = "Close suggestions")
+                            }
+                        }
+                    }
                 )
+                if (suggestions.isNotEmpty()) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = {
+                            suggestions = emptyList()
+                            isSearching = false
+                        }
+                    ) {
+                        suggestions.forEach { suggestion ->
+                            DropdownMenuItem(
+                                onClick = {
+                                    tweetContent =
+                                        tweetContent.substringBeforeLast("@") + "@$suggestion "
+                                    suggestions = emptyList()
+                                    isSearching = false
+                                    focusManager.clearFocus()
+                                },
+                                text = { Text(suggestion) },
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
