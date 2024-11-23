@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -32,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -113,7 +110,6 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                 TweetDropdownMenu(tweet, parentEntry)
             }
             // Tweet detail's content
-//            Spacer(modifier = Modifier.padding(2.dp))
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
@@ -171,8 +167,6 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     if (tweet.originalTweet != null) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-//                            border = BorderStroke(0.4.dp,
-//                                color = MaterialTheme.colorScheme.surfaceTint),
                             tonalElevation = 2.dp,
                             modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
                         ) {
@@ -341,13 +335,13 @@ fun SelectableText(text: String,
     SelectionContainer {
         Text(
             text = annotatedText,
+            maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
             onTextLayout = { textLayoutResult ->
                 lineCount = textLayoutResult.lineCount
                 layoutResult = textLayoutResult
             },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.primary,
-            maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
             modifier = modifier
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
@@ -367,7 +361,7 @@ fun SelectableText(text: String,
                 },
         )
     }
-    if (!isExpanded && lineCount > maxLines) {
+    if (!isExpanded && lineCount >= maxLines) {
         Text(
             text = stringResource(R.string.show_more),
             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
