@@ -81,7 +81,7 @@ class UserViewModel @AssistedInject constructor(
     var loginError = mutableStateOf("")
     var hasLogon = mutableStateOf(false)
 
-    suspend fun loadNewerTweets() {
+    fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
@@ -91,7 +91,7 @@ class UserViewModel @AssistedInject constructor(
         getTweets()
         _isRefreshing.value = false
     }
-    suspend fun loadOlderTweets() {
+    fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
@@ -188,41 +188,44 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun getTweets() {
-        // 1. Fetch all tweets of the author and update _tweets
-        val tweetsByUser = MutableStateFlow<List<Tweet>>(emptyList())
-        HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
+    fun getTweets() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Fetch all tweets of the author and update _tweets
+            val tweetsByUser = MutableStateFlow<List<Tweet>>(emptyList())
+            HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
 
-        // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-        HproseInstance.getTopList(user.value)?.forEach { mid ->
-            val tweet = tweetsByUser.value.find { it.mid == mid }
-            if (tweet != null) {
-                // Remove from all tweets and add to topTweets
-                tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
+            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
+            HproseInstance.getTopList(user.value)?.forEach { mid ->
+                val tweet = tweetsByUser.value.find { it.mid == mid }
+                if (tweet != null) {
+                    // Remove from all tweets and add to topTweets
+                    tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
 
-                // Only add to _topTweets if not already present
-                if (!topTweets.value.any { it.mid == mid }) {
-                    _topTweets.update { ts -> ts + tweet }
-                }
-            } else {
-                HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
-                    tweet1.originalTweetId?.let {
-                        tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                    // Only add to _topTweets if not already present
+                    if (!topTweets.value.any { it.mid == mid }) {
+                        _topTweets.update { ts -> ts + tweet }
+                    }
+                } else {
+                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
+                        tweet1.originalTweetId?.let {
+                            tweet1.originalAuthorId?.let { it1 ->
+                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                            }
+                        } ?: tweet1
+                        if (!_topTweets.value.any { it.mid == tweet1.mid }) {
+                            _topTweets.update { ts -> ts + tweet1 }
                         }
-                    } ?: tweet1
-                    if (!_topTweets.value.any { it.mid == tweet1.mid }) {
-                        _topTweets.update { ts -> ts + tweet1 }
                     }
                 }
             }
-        }
 
-        // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-        _tweets.update { currentTweets ->
-            (currentTweets + tweetsByUser.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+            _tweets.update { currentTweets ->
+                (currentTweets + tweetsByUser.value).distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+            }
+            initState.value = false
         }
-        initState.value = false
     }
 
     fun showSnackbar(event: SnackbarEvent) {

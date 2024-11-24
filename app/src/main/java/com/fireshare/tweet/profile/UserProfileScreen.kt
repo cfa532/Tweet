@@ -75,12 +75,9 @@ fun UserProfileScreen(
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-    val pullRefreshState =
-        rememberPullRefreshState(refreshingAtTop, {
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.loadNewerTweets()
-            }
-        } )
+    val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
+        viewModel.loadNewerTweets()
+    } )
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()
