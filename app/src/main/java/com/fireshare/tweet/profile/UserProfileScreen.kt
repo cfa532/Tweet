@@ -213,7 +213,7 @@ fun ProfileDetail(
         tonalElevation = 100.dp,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
         ) {
             Text(

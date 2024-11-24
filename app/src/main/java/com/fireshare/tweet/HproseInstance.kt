@@ -1065,14 +1065,16 @@ object HproseInstance {
      * */
     suspend fun toggleTopList(tweetId: MimeiId): List<MimeiId>? { return withRetry {
         val entry = "toggle_top_tweets"
-        val json = """
-            {"aid": $appId, "ver": "last", "userid": ${appUser.mid}, "tweetid": $tweetId}
-        """.trimIndent()
-        val gson = Gson()
-        val request = gson.fromJson(json, Map::class.java)
+        val url =  "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&userid=${appUser.mid}&tweetid=$tweetId"
+        val request = Request.Builder().url(url).build()
         try {
-            val list = hproseClient?.runMApp(entry, request) as List<MimeiId>?
-            return@withRetry list
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                val gson = Gson()
+                return@withRetry gson.fromJson(responseBody, object : TypeToken<List<MimeiId>>() {}.type) as List<MimeiId>?
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("toggleTopList").e("$e")

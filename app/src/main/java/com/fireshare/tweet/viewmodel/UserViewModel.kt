@@ -113,7 +113,7 @@ class UserViewModel @AssistedInject constructor(
      * User can pin or unpin any tweet, including quoted or retweet by this user.
      * */
     fun pinToTop(tweet: Tweet) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             HproseInstance.toggleTopList(tweet.mid)
 
             // Check if tweet is already in topTweets
@@ -191,6 +191,7 @@ class UserViewModel @AssistedInject constructor(
     fun getTweets() {
         viewModelScope.launch(Dispatchers.IO) {
             // 1. Fetch all tweets of the author and update _tweets
+            val pinnedTweets = mutableSetOf<Tweet>()
             val tweetsByUser = MutableStateFlow<List<Tweet>>(emptyList())
             HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
 
@@ -200,21 +201,15 @@ class UserViewModel @AssistedInject constructor(
                 if (tweet != null) {
                     // Remove from all tweets and add to topTweets
                     tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
-
-                    // Only add to _topTweets if not already present
-                    if (!topTweets.value.any { it.mid == mid }) {
-                        _topTweets.update { ts -> ts + tweet }
-                    }
+                    pinnedTweets.add(tweet)
                 } else {
                     HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
                         tweet1.originalTweetId?.let {
                             tweet1.originalAuthorId?.let { it1 ->
                                 tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                             }
-                        } ?: tweet1
-                        if (!_topTweets.value.any { it.mid == tweet1.mid }) {
-                            _topTweets.update { ts -> ts + tweet1 }
                         }
+                        pinnedTweets.add(tweet1)
                     }
                 }
             }
@@ -222,6 +217,10 @@ class UserViewModel @AssistedInject constructor(
             // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
             _tweets.update { currentTweets ->
                 (currentTweets + tweetsByUser.value).distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+            }
+            _topTweets.update {currentTweets ->
+                (currentTweets + pinnedTweets.toList()).distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
             }
             initState.value = false
