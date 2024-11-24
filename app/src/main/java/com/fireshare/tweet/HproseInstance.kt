@@ -371,20 +371,21 @@ object HproseInstance {
     } }
 
     suspend fun getNodeIP(nodeId: MimeiId): String?  { return withRetry {
-        val entry = "get_node_ip"
-        val json = """
-            {"aid": $appId, "ver": "last", "nodeid": $nodeId}
-        """.trimIndent()
-        val gson = Gson()
-        val request = gson.fromJson(json, Map::class.java)
+        val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
+        val request = Request.Builder().url(url).build()
         try {
-            val str = hproseClient?.runMApp(entry, request) as String?
-            val ip = str?.split(",")?.get(0)
-            return@withRetry ip
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                response.body?.string()?.trim('"')?.split(",").let {ips ->
+                    if (!ips.isNullOrEmpty()) {
+                        return@withRetry findFirstReachableAddress(ips)
+                    }
+                }
+            }
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e.toString())
         }
-        return@withRetry null
+        null
     } }
 
     /**
@@ -407,7 +408,7 @@ object HproseInstance {
             }"
         }
         val request = Request.Builder().url(url).build()
-        return@withRetry try {
+        try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val json = response.body?.string()
@@ -1043,16 +1044,21 @@ object HproseInstance {
         return@withRetry null
     }}
 
+    /**
+     * @param ip
+     * Check the versions of AppId on the given IP. It shall return a list of versions.
+     * */
     suspend fun isReachable(ip: String): String? { return withRetry {
         return@withRetry try {
-            val method = "get_userid"
-            val url = "http://$ip/entry?aid=$appId&ver=last&entry=$method&phrase=hello"
+            val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return@withRetry null
+                val responseBody = response.body?.string()
                 val gson = Gson()
-                gson.fromJson(responseBody, String::class.java)
+                gson.fromJson<List<String>?>(responseBody, object : TypeToken<List<String>>() {}.type)?.let { ips ->
+                    if (ips.isNotEmpty()) ip else null
+                }
             } else null
         } catch (e: Exception) {
             Timber.tag("isReachable").e("No reachable. $ip $e")

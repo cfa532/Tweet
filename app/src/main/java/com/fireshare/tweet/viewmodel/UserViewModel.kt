@@ -284,7 +284,7 @@ class UserViewModel @AssistedInject constructor(
 
         isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            if (nodeId.value.isNotEmpty()) {
+            if (nodeId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
                 // Find IP of desired node.
                 val ip = HproseInstance.getNodeIP(nodeId.value)
                 if (ip == null) {

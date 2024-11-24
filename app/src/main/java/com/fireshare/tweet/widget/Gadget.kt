@@ -150,7 +150,7 @@ object Gadget {
         val ips = ipList.map { ip ->
             Timber.tag("getFirstReachableUser").d("trying $ip")
             async {
-                if (HproseInstance.isReachable(ip) != null)
+                if (ip.isNotEmpty() && HproseInstance.isReachable(ip) != null)
                     ip
                 else null
             }

@@ -121,7 +121,6 @@ fun ComposeCommentScreen(
             cameraLauncher.launch(photoURI)
         }
     }
-
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
