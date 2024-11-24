@@ -376,7 +376,7 @@ object HproseInstance {
         try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                response.body?.string()?.trim('"')?.split(",").let {ips ->
+                response.body?.string()?.trim()?.trim('"')?.split(",").let {ips ->
                     if (!ips.isNullOrEmpty()) {
                         return@withRetry findFirstReachableAddress(ips)
                     }

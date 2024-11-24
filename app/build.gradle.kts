@@ -44,9 +44,9 @@ android {
             buildConfigField("String", "ALPHA_ID", "\"GeNHEVHl-WXJUpssflXF2JRruNa\"")
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-//            isDebuggable = false
+//            isMinifyEnabled = true
+//            isShrinkResources = true
+            isDebuggable = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
