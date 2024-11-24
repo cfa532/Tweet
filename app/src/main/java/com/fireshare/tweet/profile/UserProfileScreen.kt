@@ -111,7 +111,7 @@ fun UserProfileScreen(
                 .padding(innerPadding),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxWidth()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 state = listState
             ) {
@@ -208,8 +208,7 @@ fun ProfileDetail(
 
     // go to list of followings of the user
     Surface(
-        modifier = Modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         tonalElevation = 100.dp,
     ) {
         Column(
