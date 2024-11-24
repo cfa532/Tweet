@@ -240,7 +240,7 @@ fun ComposeTweetScreen(
                     label = { Text("What's happening?") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 200.dp)
+                        .heightIn(min = 200.dp, max = 600.dp)
                         .alpha(0.7f)
                         .focusRequester(focusRequester)
                         .onFocusChanged {
