@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
@@ -51,6 +52,8 @@ import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -73,8 +76,11 @@ fun UserProfileScreen(
 
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
     val pullRefreshState =
-        rememberPullRefreshState(refreshingAtTop, { viewModel.loadNewerTweets() })
-
+        rememberPullRefreshState(refreshingAtTop, {
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.loadNewerTweets()
+            }
+        } )
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()

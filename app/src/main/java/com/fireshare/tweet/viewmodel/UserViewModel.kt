@@ -42,8 +42,11 @@ class UserViewModel @AssistedInject constructor(
     private var _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
 
+    // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
+
+    // pinned tweets
     private val _topTweets = MutableStateFlow<List<Tweet>>(emptyList())
     val topTweets: StateFlow<List<Tweet>> get() = _topTweets.asStateFlow()
 
@@ -78,7 +81,7 @@ class UserViewModel @AssistedInject constructor(
     var loginError = mutableStateOf("")
     var hasLogon = mutableStateOf(false)
 
-    fun loadNewerTweets() {
+    suspend fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
@@ -88,7 +91,7 @@ class UserViewModel @AssistedInject constructor(
         getTweets()
         _isRefreshing.value = false
     }
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
@@ -185,53 +188,41 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun getTweets() {
-        viewModelScope.launch(Dispatchers.IO) {
-            // 1. Fetch all tweets of the author and update _tweets
-//            _tweets.value = emptyList()
-            HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
+    suspend fun getTweets() {
+        // 1. Fetch all tweets of the author and update _tweets
+        val tweetsByUser = MutableStateFlow<List<Tweet>>(emptyList())
+        HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
 
-            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-            val pinnedTweets = mutableListOf<Tweet>()
-            val pinnedMidList = HproseInstance.getTopList(user.value)
-            pinnedMidList?.forEach { mid ->
-                val tweet = tweets.value.find { it.mid == mid }
-                if (tweet != null) {
-                    // Remove from _tweets, add to topTweets
-                    _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
-                    if (!_topTweets.value.any { it.mid == mid }) {
-                        pinnedTweets.add(tweet)
-                    }
-                } else {
-                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
-                        tweet1.originalTweetId?.let {
-                            tweet1.originalAuthorId?.let { it1 ->
-                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
-                            }
-                        } ?: tweet1
-                        // Always try to remove from _tweets first
-                        _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet1.mid } }
+        // 2. Get pinned tweets and update _topTweets, while avoiding duplication
+        HproseInstance.getTopList(user.value)?.forEach { mid ->
+            val tweet = tweetsByUser.value.find { it.mid == mid }
+            if (tweet != null) {
+                // Remove from all tweets and add to topTweets
+                tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
 
-                        // Only add to _topTweets if not already present
-                        if (!_topTweets.value.any { it.mid == tweet1.mid }) {
-                            pinnedTweets.add(tweet1)
+                // Only add to _topTweets if not already present
+                if (!topTweets.value.any { it.mid == mid }) {
+                    _topTweets.update { ts -> ts + tweet }
+                }
+            } else {
+                HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
+                    tweet1.originalTweetId?.let {
+                        tweet1.originalAuthorId?.let { it1 ->
+                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                         }
+                    } ?: tweet1
+                    if (!_topTweets.value.any { it.mid == tweet1.mid }) {
+                        _topTweets.update { ts -> ts + tweet1 }
                     }
                 }
             }
-            _topTweets.update { currentTopTweets ->
-                (currentTopTweets + pinnedTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-            }
-
-            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            val filteredTweets = tweets.value.filterNot { tweet ->
-                topTweets.value.any { it.mid == tweet.mid } || _tweets.value.any { it.mid == tweet.mid }
-            }
-            _tweets.update { currentTweets ->
-                (currentTweets + filteredTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
-            }
-            initState.value = false
         }
+
+        // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+        _tweets.update { currentTweets ->
+            (currentTweets + tweetsByUser.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        initState.value = false
     }
 
     fun showSnackbar(event: SnackbarEvent) {
