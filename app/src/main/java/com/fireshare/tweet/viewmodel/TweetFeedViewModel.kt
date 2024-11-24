@@ -197,7 +197,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     _tweets.update { currentTweets ->
                         currentTweets.filterNot { it.mid == tid }
                     }
-                    tweetActionListener.onTweetDeleted(tweet.mid)  // remove from userViewModel's feed
+                    // remove from userViewModel's feed
+                    tweetActionListener.onTweetDeleted(tweet.mid)
 
                     // If there is an original tweet, update its viewModel.
                     updateOriginTweet()

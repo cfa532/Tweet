@@ -58,13 +58,14 @@ fun TweetNavGraph(
     val context = LocalContext.current
     // Initialize the AppUser's userViewModel, which is a singleton needed in many UI states.
     // do it here to survive configuration changes.
-    val appUserViewModel: UserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        context as TweetActivity, key = appUser.mid
-    ) { factory ->
-        factory.create(appUser.mid)
-    }
+    val appUserViewModel: UserViewModel =
+        hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+            context as TweetActivity, key = appUser.mid
+        ) { factory ->
+            factory.create(appUser.mid)
+        }
     val viewModelProvider = LocalViewModelProvider.current
-    viewModelProvider?.get(SharedViewModel::class.java)?.let {shareViewModel ->
+    viewModelProvider?.get(SharedViewModel::class.java)?.let { shareViewModel ->
         shareViewModel.sharedAppUserViewModel = appUserViewModel
     }
 

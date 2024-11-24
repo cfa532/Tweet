@@ -270,7 +270,6 @@ fun TweetDropdownMenuItems(
                 }
                 // if current route is TweetDetail. Go to TweetFeed
                 if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-//                    navController.navigate(NavTweet.TweetFeed)
                     navController.popBackStack()
                 } else {
                     // close the dropdown menu

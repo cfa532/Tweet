@@ -409,6 +409,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {
+        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
     }
 }
