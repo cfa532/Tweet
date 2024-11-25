@@ -1069,7 +1069,7 @@ object HproseInstance {
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    suspend fun toggleTopList(tweetId: MimeiId): List<MimeiId>? { return withRetry {
+    suspend fun toggleTopList(tweetId: MimeiId): List<Map<*,*>>? { return withRetry {
         val entry = "toggle_top_tweets"
         val url =  "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&userid=${appUser.mid}&tweetid=$tweetId"
@@ -1079,10 +1079,9 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
                 val gson = Gson()
-                return@withRetry gson.fromJson(responseBody, object : TypeToken<List<MimeiId>>() {}.type) as List<MimeiId>?
+                return@withRetry gson.fromJson(responseBody, object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>?
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Timber.tag("toggleTopList").e("$e")
         }
         return@withRetry null

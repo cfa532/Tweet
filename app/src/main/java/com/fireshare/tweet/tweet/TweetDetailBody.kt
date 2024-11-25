@@ -297,7 +297,7 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
-                appUserViewModel.pinToTop(tweet)
+                appUserViewModel.pinToTop(tweet.mid)
                 onDismissRequest()
             },
             text = {

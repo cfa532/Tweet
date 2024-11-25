@@ -109,27 +109,6 @@ class UserViewModel @AssistedInject constructor(
         return topTweets.value.any { it.mid == tweet.mid }
     }
 
-    /**
-     * User can pin or unpin any tweet, including quoted or retweet by this user.
-     * */
-    fun pinToTop(tweet: Tweet) {
-        viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.toggleTopList(tweet.mid)
-
-            // Check if tweet is already in topTweets
-            val isInTopTweets = topTweets.value.any { it.mid == tweet.mid }
-            if (isInTopTweets) {
-                // Remove from topTweets, add to tweets
-                _topTweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
-                _tweets.update { (it + tweet).sortedByDescending {t-> t.timestamp } }
-            } else {
-                // Remove from tweets, add to topTweets
-                _tweets.update { it.filterNot { existingTweet -> existingTweet.mid == tweet.mid } }
-                _topTweets.update { (it + tweet).sortedByDescending {t-> t.timestamp } }
-            }
-        }
-    }
-
     fun updateAvatar(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             isLoading.value = true
@@ -192,17 +171,14 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             // 1. Fetch all tweets of the author and update _tweets
             val pinnedTweets = mutableSetOf<Tweet>()
-            val tweetsByUser = MutableStateFlow<List<Tweet>>(emptyList())
-            HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
+            HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
 
             // 2. Get pinned tweets and update _topTweets, while avoiding duplication
             HproseInstance.getTopList(user.value)?.forEach { map ->
-                val tweet = tweetsByUser.value.find { it.mid == map["tweetId"] }
+                val tweet = tweets.value.find { it.mid == map["tweetId"] }
                 if (tweet != null) {
-                    // Remove from all tweets and add to topTweets
-                    tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == map["tweetId"] } }
-                    tweet.timestamp = map["timestamp"].toString().toLong()
-                    pinnedTweets.add(tweet)
+                    // add tweet to topTweets, update its timestamp to when it is pinned.
+                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
                 } else {
                     HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
                         tweet1.originalTweetId?.let {
@@ -210,22 +186,45 @@ class UserViewModel @AssistedInject constructor(
                                 tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                             }
                         }
-                        tweet1.timestamp = map["timestamp"].toString().toLong()
-                        pinnedTweets.add(tweet1)
+                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                     }
                 }
             }
-
             // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            _tweets.update {
-                tweetsByUser.value.distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
-            }
             _topTweets.update {
                 pinnedTweets.toList().distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
             }
             initState.value = false
+        }
+    }
+
+    /**
+     * User can pin or unpin any tweet, including quoted or retweet by this user.
+     * */
+    fun pinToTop(tweetId: MimeiId) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pinnedTweets = mutableSetOf<Tweet>()
+            HproseInstance.toggleTopList(tweetId)?.forEach {map ->
+                val tweet = tweets.value.find { it.mid == map["tweetId"] }
+                if (tweet != null) {
+                    // add tweet to topTweets, update its timestamp to when it is pinned.
+                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
+                } else {
+                    HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
+                        tweet1.originalTweetId?.let {
+                            tweet1.originalAuthorId?.let { it1 ->
+                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                            }
+                        }
+                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
+                    }
+                }
+            }
+            _topTweets.update {
+                pinnedTweets.toList().distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+            }
         }
     }
 
