@@ -255,9 +255,7 @@ fun TweetDropdownMenuItems(
         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
             parentEntry, key = tweet.originalTweetId
         ) { factory -> factory.create(tweet.originalTweet!!) }
-    } else {
-        null
-    }
+    } else null
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.

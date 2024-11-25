@@ -171,7 +171,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     private fun getTweets(userId: MimeiId) {
-        ioScope.launch {
+        viewModelScope.launch {
             try {
                 getUserBase(userId)?.let {
                     HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
@@ -191,20 +191,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
-        ioScope.launch(Dispatchers.IO) {
-            try {
-                HproseInstance.delTweet(tweet) { tid ->
-                    _tweets.update { currentTweets ->
-                        currentTweets.filterNot { it.mid == tid }
-                    }
-                    // remove from userViewModel's feed
-                    tweetActionListener.onTweetDeleted(tweet.mid)
-
-                    // If there is an original tweet, update its viewModel.
-                    updateOriginTweet()
+        viewModelScope.launch(Dispatchers.IO) {
+            HproseInstance.delTweet(tweet) { tid ->
+                _tweets.update { currentTweets ->
+                    currentTweets.filterNot { it.mid == tid }
                 }
-            } catch (e: Exception) {
-                Timber.tag("DelTweet").e("Error deleting tweet. $e")
+                // remove from userViewModel's feed
+                tweetActionListener.onTweetDeleted(tweet.mid)
+
+                // If there is an original tweet, update its viewModel.
+                updateOriginTweet()
             }
         }
     }
@@ -232,10 +228,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * If original tweet is not null, retweet the original tweet, otherwise the tweet itself.
+     * If original tweet is not null, retweet the original tweet,
+     * otherwise retweet the tweet itself.
      * */
     fun addRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
-        ioScope.launch {
+        viewModelScope.launch {
             val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
             HproseInstance.retweet(t, addTweetToFeed = { addTweet(it) }) {
                 updateTweet(it)

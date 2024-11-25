@@ -625,16 +625,17 @@ object HproseInstance {
             if (response.isSuccessful) {
                 response.body?.string()?.let { json ->
                     val gson = Gson()
-                    val tweet = gson.fromJson(json, Tweet::class.java)
-                    tweet.author = author
-                    /**
-                     * update the tweet in the cache database.
-                     * */
-                    tweetCache.tweetDao().updateCachedTweet(
-                        CachedTweet(tweet.mid, gson.toJson(tweet))
-                    )
-                    Timber.tag("refreshTweet").d("$tweet")
-                    return@withRetry tweet
+                    gson.fromJson(json, Tweet::class.java)?.let { tweet ->
+                        tweet.author = author
+                        /**
+                         * update the tweet in the cache database.
+                         * */
+                        tweetCache.tweetDao().updateCachedTweet(
+                            CachedTweet(tweet.mid, gson.toJson(tweet))
+                        )
+                        Timber.tag("refreshTweet").d("$tweet")
+                        return@withRetry tweet
+                    }
                 }
             }
             return@withRetry null
@@ -683,13 +684,13 @@ object HproseInstance {
 
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
         var method = "delete_tweet"
-        var url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&authorid=${appUser.mid}"
+        var url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
         var request = Request.Builder().url(url).build()
         try {
             var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-
+                tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
                 // if the originalTweet is not null, also decrease its quote count
                 if (tweet.originalTweetId != null) {
                     method = "retweet_remove"
@@ -698,7 +699,6 @@ object HproseInstance {
                     request = Request.Builder().url(url).build()
                     response = httpClient.newCall(request).execute()
                     if (response.isSuccessful) {
-                        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
                         callback(tweet.mid)
                     }
                 } else
