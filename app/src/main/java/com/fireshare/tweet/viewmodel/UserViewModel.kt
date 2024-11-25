@@ -196,31 +196,33 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getTweetList(user.value, tweetsByUser, startTimestamp, endTimestamp)
 
             // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-            HproseInstance.getTopList(user.value)?.forEach { mid ->
-                val tweet = tweetsByUser.value.find { it.mid == mid }
+            HproseInstance.getTopList(user.value)?.forEach { map ->
+                val tweet = tweetsByUser.value.find { it.mid == map["tweetId"] }
                 if (tweet != null) {
                     // Remove from all tweets and add to topTweets
-                    tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == mid } }
+                    tweetsByUser.update { it.filterNot { existingTweet -> existingTweet.mid == map["tweetId"] } }
+                    tweet.timestamp = map["timestamp"].toString().toLong()
                     pinnedTweets.add(tweet)
                 } else {
-                    HproseInstance.getTweet(mid, user.value.mid)?.let { tweet1 ->
+                    HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
                         tweet1.originalTweetId?.let {
                             tweet1.originalAuthorId?.let { it1 ->
                                 tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                             }
                         }
+                        tweet1.timestamp = map["timestamp"].toString().toLong()
                         pinnedTweets.add(tweet1)
                     }
                 }
             }
 
             // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            _tweets.update { currentTweets ->
-                (currentTweets + tweetsByUser.value).distinctBy { it.mid }
+            _tweets.update {
+                tweetsByUser.value.distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
             }
-            _topTweets.update {currentTweets ->
-                (currentTweets + pinnedTweets.toList()).distinctBy { it.mid }
+            _topTweets.update {
+                pinnedTweets.toList().distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
             }
             initState.value = false

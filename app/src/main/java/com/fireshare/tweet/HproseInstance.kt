@@ -1088,7 +1088,11 @@ object HproseInstance {
         return@withRetry null
     }}
 
-    suspend fun getTopList(user: User): List<MimeiId>? { return withRetry {
+    /**
+     * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
+     * the tweet is pinned.
+     * */
+    suspend fun getTopList(user: User): List<Map<*,*>>? { return withRetry {
         val entry = "get_top_tweets"
         val url =
             "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
@@ -1098,7 +1102,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: return@withRetry null
                 val gson = Gson()
-                return@withRetry gson.fromJson(responseBody, object : TypeToken<List<MimeiId>>() {}.type) as List<MimeiId>?
+                return@withRetry gson.fromJson(responseBody, object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>?
             }
         } catch (e: Exception) {
             Timber.tag("getTopList").e("$e")

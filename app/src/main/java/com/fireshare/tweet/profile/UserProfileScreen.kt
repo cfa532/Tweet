@@ -138,7 +138,7 @@ fun UserProfileScreen(
                         }
                     }
 
-                    items(topTweets, key = { it.mid }) { tweet ->
+                    items(topTweets, key = { it.timestamp }) { tweet ->
                         TweetItem(tweet, parentEntry)
                     }
                     item {
@@ -150,7 +150,7 @@ fun UserProfileScreen(
                     }
                 }
 
-                items(tweets, key = { it.mid }) { tweet ->
+                items(tweets, key = { it.timestamp }) { tweet ->
                     TweetItem(tweet, parentEntry)
                 }
 
