@@ -308,8 +308,7 @@ class UserViewModel @AssistedInject constructor(
                         .useService(HproseService::class.java)
                 }
             }
-            val user = User(
-                mid = appUser.mid, name = name.value,
+            val user = appUser.copy(name = name.value,
                 username = username.value, password = password.value,
                 profile = profile.value, avatar = appUser.avatar
             )
@@ -325,6 +324,7 @@ class UserViewModel @AssistedInject constructor(
                         user.followingList?.forEach {
                             HproseInstance.toggleFollower(it, true, newUser.mid)
                         }
+                        password.value = ""
                         val event = SnackbarEvent(
                             message = context.getString(R.string.registration_ok)
                         )
