@@ -257,10 +257,18 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout() {
+    fun logout(context: Context) {
         hasLogon.value = false
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
+        _user.value = appUser
+        _fans.value = emptyList()
+        _followings.value = emptyList()
+        username.value = ""
+        password.value = ""
+        profile.value = ""
+        name.value = ""
+        nodeId.value = ""
     }
 
     /**
@@ -345,6 +353,9 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * When user input @, show suggestions of fans and followings' username.
+     * */
     suspend fun getSuggestions(query: String): List<String> {
         val suggestions = mutableListOf<String>()
 

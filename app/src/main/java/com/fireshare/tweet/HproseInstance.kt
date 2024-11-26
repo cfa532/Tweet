@@ -364,7 +364,6 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Timber.tag("getUserBase()").e("${appUser.baseUrl} $userId $e")
             null
         }

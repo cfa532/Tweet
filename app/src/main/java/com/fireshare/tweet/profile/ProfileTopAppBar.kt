@@ -156,10 +156,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             .height(IntrinsicSize.Min)
                     ) {
                         if (user.mid == appUser.mid) {
+                            val context = LocalContext.current
                             DropdownMenuItem(onClick = {
-                                viewModel.logout()
-                                tweetFeedViewModel.clearTweets()
-                                navController.navigate(NavTweet.TweetFeed)
+                                viewModel.viewModelScope.launch {
+                                    viewModel.logout(context)
+                                    tweetFeedViewModel.clearTweets()
+                                    navController.navigate(NavTweet.TweetFeed)
+                                }
                             },
                                 text = {
                                     Text(

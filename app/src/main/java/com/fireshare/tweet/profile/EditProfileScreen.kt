@@ -81,6 +81,7 @@ fun EditProfileScreen(
 
     LaunchedEffect(Unit) {
         keyboardController?.show()
+        viewModel.onPasswordChange("")
     }
 
     Box(
@@ -102,7 +103,9 @@ fun EditProfileScreen(
                     contentDescription = "Cancel"
                 )
             }
+            // AppUser avatar
             AvatarSection(launcher, viewModel)
+
             Spacer(modifier = Modifier.height(16.dp))
             Column {
                 OutlinedTextField(
