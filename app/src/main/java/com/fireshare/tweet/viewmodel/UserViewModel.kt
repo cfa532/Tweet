@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
@@ -124,10 +125,10 @@ class UserViewModel @AssistedInject constructor(
 
     fun toggleFollow(userId: MimeiId, updateTweetFeed: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            // toggle the Following status on the given UserId
+            // toggle the Following status on the given UserId, to follow or unfollow
             HproseInstance.toggleFollowing(userId)?.let { isFollowing ->
-                // toggle following succeed, now it is the other party's turn
-                // to update its follower.
+                // Succeed. Now it is the other party's turn
+                // to update its followers.
                 HproseInstance.toggleFollower(userId, isFollowing)
                 _followings.update { list ->
                     if (isFollowing) {
@@ -317,10 +318,13 @@ class UserViewModel @AssistedInject constructor(
                 if (ret["status"] == "success") {
                     val gson = Gson()
                     val type = object : TypeToken<User>() {}.type
-                    val u: User = gson.fromJson(ret["user"].toString(), type)
+                    val newUser: User = gson.fromJson(ret["user"].toString(), type)
                     if (appUser.mid == TW_CONST.GUEST_ID) {
-                        // register new user. Do not update appUser, wait for
-                        // new user to login.
+                        // register new user. Do NOT update appUser, wait for
+                        // new user to login. Add it to Admin's fans list.
+                        user.followingList?.forEach {
+                            HproseInstance.toggleFollower(it, true, newUser.mid)
+                        }
                         val event = SnackbarEvent(
                             message = context.getString(R.string.registration_ok)
                         )
@@ -331,11 +335,11 @@ class UserViewModel @AssistedInject constructor(
                     } else {
                         // update user profile
                         appUser = appUser.copy(
-                            name = u.name, profile = u.profile, username = u.username
+                            name = newUser.name, profile = newUser.profile, username = newUser.username
                         )
                         _user.value = appUser
-                        u.name?.let { preferenceHelper.saveName(it) }
-                        u.profile?.let { preferenceHelper.saveProfile(it) }
+                        newUser.name?.let { preferenceHelper.saveName(it) }
+                        newUser.profile?.let { preferenceHelper.saveProfile(it) }
 
                         val event = SnackbarEvent(
                             message = context.getString(R.string.profile_update_ok)

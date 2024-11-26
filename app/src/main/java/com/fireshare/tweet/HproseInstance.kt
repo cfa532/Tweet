@@ -370,13 +370,13 @@ object HproseInstance {
             // register a new User account, with default followings.
             user.followingList = BuildConfig.ALPHA_ID.split(",")
             url =
-                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
+                "${user.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
                     Json.encodeToString(user)
                 }"
         } else {
             // update existing account
             val method = "set_author_core_data"
-            url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
+            url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
                 Json.encodeToString(user)
             }"
         }
@@ -387,7 +387,6 @@ object HproseInstance {
                 val json = response.body?.string()
                 val gson = Gson()
                 val updatedUser =
-//                        gson.fromJson(json, object : TypeToken<User>() {}.type) as User?
                     gson.fromJson(json, Map::class.java)
                 return@withRetry updatedUser
             }
@@ -723,13 +722,14 @@ object HproseInstance {
     /**
      * @param isFollowing indicates if the appUser is following this userId. Passing an argument
      * instead of toggling the status of a follower because this way will not introduce a
-     * persistent inconsistency, which happens easily with the toggle method.
+     * persistent inconsistency when something went wrong, which happens easily with the toggle method.
      * */
-    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean) { return withRetry {
+    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean,
+                               followerId: MimeiId = appUser.mid) { return withRetry {
         val user = getUser(userId)
         val method = "toggle_follower"
         val url =
-            "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}" +
+            "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=$followerId" +
                     "&userid=${userId}&isfollower=$isFollowing"
         val request = Request.Builder().url(url).build()
         try {
@@ -737,7 +737,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("toggleFollower()").e(e.toString())
         }
-    }}
+    } }
 
     /**
      * Send a retweet request to backend and get a new tweet object back.
