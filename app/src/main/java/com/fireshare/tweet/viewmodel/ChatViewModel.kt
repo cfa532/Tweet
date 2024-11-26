@@ -39,7 +39,7 @@ class ChatViewModel @AssistedInject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _receipt.value = HproseInstance.getUserBase(receiptId)
+            _receipt.value = HproseInstance.getUser(receiptId)
 
             // get messages stored at local database
             _chatMessages.value = loadChatMessages(receiptId).sortedBy { it.timestamp }

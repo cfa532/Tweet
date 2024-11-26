@@ -193,7 +193,7 @@ object HproseInstance {
             var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 // write message to receipt's Mimei db on the receipt's node
-                val receipt = getUserBase(receiptId)
+                val receipt = getUser(receiptId)
                 entry = "message_incoming"
                 url =
                     "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
@@ -317,7 +317,7 @@ object HproseInstance {
         try {
             val reason = Pair(null, "Wrong username or password")
             val userId = getUserId(username) ?: return@withRetry reason
-            val user = getUserBase(userId) ?: return@withRetry Pair(null, "Cannot find user")
+            val user = getUser(userId) ?: return@withRetry Pair(null, "Cannot find user")
             val url =
                 "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
             val request = Request.Builder().url(url).build()
@@ -340,32 +340,6 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("Hprose.Login").e("${e.message}")
             return@withRetry Pair(null, "Login failed")
-        }
-    } }
-
-    /**
-     * Get baseUrl where user data can be accessed. Each user may has a different node.
-     * Therefore it is indispensable to acquire base url for each user.
-     * */
-    suspend fun getUserBase(userId: MimeiId): User? { return withRetry {
-        // check if user data has been cached
-        cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
-        try {
-            val entry = "get_provider"
-            val json = """
-                {"aid": $appId, "ver": "last", "mid": $userId}
-            """.trimIndent()
-            val gson = Gson()
-            val request = gson.fromJson(json, Map::class.java)
-            hproseClient?.runMApp<List<String>?>(entry, request)?.let { hostIPs ->
-                getFirstReachableUser(hostIPs, userId)?.let { user: User ->
-                    cachedUsers.add(user)
-                    return@withRetry user
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("getUserBase()").e("${appUser.baseUrl} $userId $e")
-            null
         }
     } }
 
@@ -572,7 +546,7 @@ object HproseInstance {
                 return@withRetry cachedTweet
             }
             val author =
-                getUserBase(authorId) ?: return@withRetry null   // cannot get author data, return null
+                getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
             val method = "get_tweet"
             val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
                 .append("&tweetid=$tweetId")
@@ -613,7 +587,7 @@ object HproseInstance {
     ): Tweet? { return withRetry {
         try {
             val author =
-                getUserBase(authorId) ?: return@withRetry null   // cannot get author data, return null
+                getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
             val method = "get_tweet"
             val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
                 .append("&tweetid=$tweetId")
@@ -653,7 +627,7 @@ object HproseInstance {
         val gson = Gson()
         val tweet = gson.fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
         Timber.tag("restoreTweet").d("$tweet")
-        tweet.author = getUserBase(tweet.authorId)
+        tweet.author = getUser(tweet.authorId)
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =
                 getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
@@ -752,7 +726,7 @@ object HproseInstance {
      * persistent inconsistency, which happens easily with the toggle method.
      * */
     suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean) { return withRetry {
-        val user = getUserBase(userId)
+        val user = getUser(userId)
         val method = "toggle_follower"
         val url =
             "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=${appUser.mid}" +
@@ -894,7 +868,7 @@ object HproseInstance {
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? { return withRetry {
         try {
             if (tweet.author == null)
-                tweet.author = getUserBase(tweet.authorId) ?: return@withRetry null
+                tweet.author = getUser(tweet.authorId) ?: return@withRetry null
 
             val pageSize = 50
             val method = "get_comments"
@@ -1021,7 +995,49 @@ object HproseInstance {
         return null
     }
 
-    suspend fun getUserData(mid: MimeiId, ip: String, timeout: Int = 1000): User? { return withRetry {
+    /**
+     * Get baseUrl where user data can be accessed. Each user may has a different node.
+     * Therefore it is indispensable to acquire base url for each user.
+     * */
+    suspend fun getUser(userId: MimeiId): User? { return withRetry {
+        // check if user data has been cached
+        cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
+        try {
+            val url = "${appUser.baseUrl}/getvar?name=mmprovsips&arg0=$userId"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                var string = response.body?.string()?.trim()?.removeSurrounding("\"")
+                    ?.replace("\\", "")
+                val pattern =
+                    Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
+                string = """
+                    window.setParam({
+                        addrs: $string,
+                        aid: ""
+                    })]
+                """.trimIndent()
+                val matcher = pattern.matcher(string as CharSequence)
+                if (matcher.find()) {
+                    matcher.group(1)?.let {
+                        val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
+                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        getFirstReachableUser(hostIPs, userId)?.let { user: User ->
+                            cachedUsers.add(user)
+                            return@withRetry user
+                        }
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Timber.tag("getUser").e("${appUser.baseUrl} $userId $e")
+            null
+        }
+    } }
+
+    suspend fun getUserData(mid: MimeiId, ip: String): User? { return withRetry {
         try {
             val entry = "get_user_core_data"
             val url =

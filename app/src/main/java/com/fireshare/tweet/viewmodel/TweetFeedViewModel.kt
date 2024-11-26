@@ -13,7 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getUserBase
+import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -150,7 +150,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     batch.forEach { userId ->
                         async {
                             try {
-                                getUserBase(userId)?.let {
+                                getUser(userId)?.let {
                                     HproseInstance.getTweetList(it, _tweets, startTimestamp, sinceTimestamp)
                                 }
                             } catch (e: Exception) {
@@ -173,7 +173,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private fun getTweets(userId: MimeiId) {
         viewModelScope.launch {
             try {
-                getUserBase(userId)?.let {
+                getUser(userId)?.let {
                     HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
                 }
             } catch (e: Exception) {

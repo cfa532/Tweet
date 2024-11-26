@@ -127,7 +127,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
 
     LaunchedEffect(userId) {
         withContext(Dispatchers.IO) {
-            user.value = HproseInstance.getUserBase(userId)
+            user.value = HproseInstance.getUser(userId)
         }
     }
 

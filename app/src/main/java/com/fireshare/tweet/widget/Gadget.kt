@@ -15,7 +15,10 @@ import com.fireshare.tweet.datamodel.User
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -137,24 +140,52 @@ object Gadget {
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getFirstReachableUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
-        val ips = ipList.map { ip ->
-            Timber.tag("getFirstReachableUser").d("trying $ip")
+        val deferreds = ipList.map { ip ->
             async {
                 HproseInstance.getUserData(mid, ip)
             }
         }
-        ips.awaitAll().firstOrNull { it != null }
+        // Custom select clause to cancel remaining deferred values
+        val fastestResult = select<User?> {
+            deferreds.forEach { deferred ->
+                deferred.onAwait { result ->
+                    if (result != null) {
+                        // Cancel remaining deferred values
+                        deferreds.filter { it != deferred }.forEach { it.cancel() }
+                        // Return the result
+                        return@onAwait result
+                    } else {
+                        // Continue waiting for other deferreds
+                        null
+                    }
+                }
+            }
+        }
+        fastestResult
     }
 
     suspend fun findFirstReachableAddress(ipList: List<String>): String? = coroutineScope {
-        val ips = ipList.map { ip ->
-            Timber.tag("getFirstReachableUser").d("trying $ip")
+        val deferreds = ipList.map { ip ->
+            Timber.tag("getFirstReachableAddress").d("trying $ip")
             async {
-                if (ip.isNotEmpty() && HproseInstance.isReachable(ip) != null)
-                    ip
-                else null
+                if (ip.isNotEmpty() && HproseInstance.isReachable(ip) != null) ip else null
             }
         }
-        ips.awaitAll().firstOrNull { it != null }
+        val fastestResult = select<String?> {
+            deferreds.forEach { deferred ->
+                deferred.onAwait { result ->
+                    if (result != null) {
+                        // Cancel remaining deferred values
+                        deferreds.filter { it != deferred }.forEach { it.cancel() }
+                        // Return the result
+                        return@onAwait result
+                    } else {
+                        // Continue waiting for other deferreds
+                        null
+                    }
+                }
+            }
+        }
+        fastestResult
     }
 }

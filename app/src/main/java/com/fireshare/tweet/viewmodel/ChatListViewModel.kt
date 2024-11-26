@@ -32,7 +32,7 @@ class ChatListViewModel @Inject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             chatSessionRepository.getAllSessions().forEach { chatSession ->
-                val user = HproseInstance.getUserBase(chatSession.receiptId)
+                val user = HproseInstance.getUser(chatSession.receiptId)
                 _userMap.update { it + (chatSession.receiptId to user) }
                 _chatSessions.update { it + chatSession }
             }
@@ -90,7 +90,7 @@ class ChatListViewModel @Inject constructor(
     }
 
     suspend fun updateUser(userId: MimeiId) {
-        val user = HproseInstance.getUserBase(userId) ?: return
+        val user = HproseInstance.getUser(userId) ?: return
         _userMap.update { it + (user.mid to user) }
     }
 }

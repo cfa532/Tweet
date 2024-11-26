@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getUserBase
+import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.hproseClient
 import com.fireshare.tweet.HproseService
 import com.fireshare.tweet.R
@@ -156,7 +156,7 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value = getUserBase(userId) ?: return@launch
+                _user.value = getUser(userId) ?: return@launch
                 if (userId == appUser.mid) {
                     // By default NOT to update fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -361,7 +361,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check fans
         fans.value.forEach { fanId ->
-            getUserBase(fanId)?.let { fan ->
+            getUser(fanId)?.let { fan ->
                 if (fan.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(fan.username!!)
                 }
@@ -370,7 +370,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check followings
         followings.value.forEach { followingId ->
-            getUserBase(followingId)?.let { following ->
+            getUser(followingId)?.let { following ->
                 if (following.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(following.username!!)
                 }

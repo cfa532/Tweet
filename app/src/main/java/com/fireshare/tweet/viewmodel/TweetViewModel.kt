@@ -116,7 +116,7 @@ class TweetViewModel @AssistedInject constructor(
     fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
         viewModelScope.launch(Dispatchers.IO) {
             _comments.value = HproseInstance.getComments(tweet)?.map {
-                it.author = HproseInstance.getUserBase(it.authorId)
+                it.author = HproseInstance.getUser(it.authorId)
                 it
             } ?: emptyList()
             _comments.update { list ->
