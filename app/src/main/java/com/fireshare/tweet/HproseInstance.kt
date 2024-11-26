@@ -1077,7 +1077,7 @@ object HproseInstance {
             } else null
         } catch (e: Exception) {
             Timber.tag("isReachable").e("No reachable. $ip $e")
-            this.preferenceHelper.getAppUrl()
+            null
         }
     }}
 

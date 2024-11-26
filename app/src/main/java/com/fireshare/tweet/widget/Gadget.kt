@@ -17,9 +17,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 object Gadget {
@@ -141,51 +144,67 @@ object Gadget {
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getFirstReachableUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
         val deferreds = ipList.map { ip ->
+            Timber.tag("getFirstUser").d("trying $ip")
             async {
-                HproseInstance.getUserData(mid, ip)
-            }
-        }
-        // Custom select clause to cancel remaining deferred values
-        val fastestResult = select<User?> {
-            deferreds.forEach { deferred ->
-                deferred.onAwait { result ->
-                    if (result != null) {
-                        // Cancel remaining deferred values
-                        deferreds.filter { it != deferred }.forEach { it.cancel() }
-                        // Return the result
-                        return@onAwait result
-                    } else {
-                        // Continue waiting for other deferreds
-                        null
-                    }
+                try {
+                    HproseInstance.getUserData(mid, ip)
+                } catch (e: Exception) {
+                    null // Handle exceptions and return null if an error occurs
                 }
             }
         }
-        fastestResult
+        try {
+            withTimeoutOrNull(2000L) { // Set a timeout of 5000 milliseconds (5 seconds)
+                select<User?> {
+                    deferreds.forEach { deferred ->
+                        deferred.onAwait { res ->
+                            if (res != null) {
+                                // Cancel remaining deferred values
+                                deferreds.forEach { it.cancel() }
+                                res
+                            } else {
+                                null
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            // Ensure all coroutines are cancelled if the function exits
+            deferreds.forEach { it.cancel() }
+        }
     }
 
     suspend fun findFirstReachableAddress(ipList: List<String>): String? = coroutineScope {
         val deferreds = ipList.map { ip ->
-            Timber.tag("getFirstReachableAddress").d("trying $ip")
+            Timber.tag("getFirstIP").d("trying $ip")
             async {
-                if (ip.isNotEmpty() && HproseInstance.isReachable(ip) != null) ip else null
-            }
-        }
-        val fastestResult = select<String?> {
-            deferreds.forEach { deferred ->
-                deferred.onAwait { result ->
-                    if (result != null) {
-                        // Cancel remaining deferred values
-                        deferreds.filter { it != deferred }.forEach { it.cancel() }
-                        // Return the result
-                        return@onAwait result
-                    } else {
-                        // Continue waiting for other deferreds
-                        null
-                    }
+                try {
+                    HproseInstance.isReachable(ip)
+                } catch (e: Exception) {
+                    null // Handle exceptions and return null if an error occurs
                 }
             }
         }
-        fastestResult
+        try {
+            withTimeoutOrNull(2000L) { // Set a timeout of 5000 milliseconds (5 seconds)
+                select<String?> {
+                    deferreds.forEach { deferred ->
+                        deferred.onAwait { res ->
+                            if (res != null) {
+                                // Cancel remaining deferred values
+                                deferreds.forEach { it.cancel() }
+                                res
+                            } else {
+                                null
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            // Ensure all coroutines are cancelled if the function exits
+            deferreds.forEach { it.cancel() }
+        }
     }
 }
