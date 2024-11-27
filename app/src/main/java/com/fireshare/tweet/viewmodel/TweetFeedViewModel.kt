@@ -226,6 +226,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun reset() {
         initState.value = false
         _tweets.value = emptyList()
+        _followings.value = emptyList()
         startTimestamp = mutableLongStateOf(System.currentTimeMillis())
         endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
 

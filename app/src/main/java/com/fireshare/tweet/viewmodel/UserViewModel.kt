@@ -258,7 +258,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout(context: Context) {
+    fun logout() {
         hasLogon.value = false
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
