@@ -31,6 +31,7 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.io.IOException
+import java.lang.ref.Reference
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.regex.Pattern
@@ -52,13 +53,13 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
-    var hproseClient: HproseService? = null
+    lateinit var hproseClient: HproseService
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
     private val httpClient = OkHttpClient.Builder()
-//        .addInterceptor(loggingInterceptor)
+        .addInterceptor(loggingInterceptor)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
@@ -195,8 +196,7 @@ object HproseInstance {
                 // write message to receipt's Mimei db on the receipt's node
                 val receipt = getUser(receiptId)
                 entry = "message_incoming"
-                url =
-                    "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                url = "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                             "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
                                 Json.encodeToString(msg)
                             }"
@@ -408,7 +408,7 @@ object HproseInstance {
             val gson = Gson()
             val request = gson.fromJson(json, Map::class.java)
             try {
-                hproseClient?.runMApp(entry, request) as Unit?
+                hproseClient.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
             }
@@ -927,63 +927,6 @@ object HproseInstance {
         }
     }}
 
-    /**
-     * Upload media file to node and return its IPFS cid with its media type.
-     * */
-    suspend fun uploadToIPFS(context: Context, uri: Uri): MimeiFileType? { return withRetry {
-        withContext(Dispatchers.IO) { // Execute in IO dispatcher
-            try {
-                val method = "open_temp_file"
-                val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val fsid = response.body?.string()
-                    var offset = 0L
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        inputStream.use { stream ->
-                            val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
-                            var bytesRead: Int
-                            while (stream.read(buffer).also { bytesRead = it } != -1) {
-                                if (fsid != null) {
-                                    hproseClient?.mfSetData(fsid, buffer, offset)
-                                }
-                                offset += bytesRead
-                            }
-                        }
-                    }
-                    val cid = fsid?.let {
-                        // Do not know the tweet mid yet, cannot add reference.
-                        // Do it later when uploading tweet.
-                        hproseClient?.mfTemp2Ipfs(it)
-                    }
-
-                    // Determine MediaType based on MIME type
-                    val mimeType = context.contentResolver.getType(uri)
-                    Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
-                    val mediaType = when {
-                        mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
-                        mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
-                        mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
-                        mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
-                        mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
-                        mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
-                        // ... add more mappings for other MediaType values ...
-                        else -> com.fireshare.tweet.widget.MediaType.Unknown
-                    }
-                    // Return MimeiFileType
-                    if (cid != null) {
-                        MimeiFileType(cid, mediaType, offset)
-                    } else null
-                } else null
-            } catch (e: Exception) {
-                Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
-                e.printStackTrace()
-                null
-            }
-        }
-    }}
-
     fun getMediaUrl(mid: MimeiId?, baseUrl: String?): String? {
         if (mid != null && baseUrl != null) {
             return if (mid.length > 27) {
@@ -1145,6 +1088,62 @@ object HproseInstance {
             httpClient.newCall(request).execute()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }}
+
+    /**
+     * Upload media file to node and return its IPFS cid with its media type.
+     * */
+    suspend fun uploadToIPFS(context: Context, uri: Uri,
+                             referenceId: MimeiId? = null): MimeiFileType?
+    { return withRetry {
+        withContext(Dispatchers.IO) { // Execute in IO dispatcher
+            try {
+                var fsid: String? = null
+                var offset = 0L
+                var byteRead = 0
+                val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
+                val json = """
+                           {"aid": $appId, "ver": "last", "offset": 0}
+                     """.trimIndent()
+                val request = Gson().fromJson(json, Map::class.java).toMutableMap()
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.use { stream ->
+                        while (stream.read(buffer).also { byteRead = it } != -1) {
+                            fsid = hproseClient.runMApp("upload_ipfs",
+                                request.toMap(), listOf(buffer))
+                            request["fsid"] = fsid
+                            offset += byteRead
+                            request["offset"] = offset
+                        }
+                    }
+                }
+                // Do not know the tweet mid yet, cannot add reference as 2nd argument.
+                // Do it later when uploading tweet.
+                val cid = fsid?.let { hproseClient.mfTemp2Ipfs(it, referenceId) }
+
+                // Determine MediaType based on MIME type
+                val mimeType = context.contentResolver.getType(uri)
+                Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
+                val mediaType = when {
+                    mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
+                    mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
+                    mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
+                    mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
+                    mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
+                    mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
+                    // ... add more mappings for other MediaType values ...
+                    else -> com.fireshare.tweet.widget.MediaType.Unknown
+                }
+                // Return MimeiFileType
+                if (cid != null) {
+                    MimeiFileType(cid, mediaType, offset)
+                } else null
+            } catch (e: Exception) {
+                Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
+                e.printStackTrace()
+                null
+            }
         }
     }}
 }
