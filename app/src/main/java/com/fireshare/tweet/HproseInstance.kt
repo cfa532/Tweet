@@ -34,6 +34,7 @@ import java.io.IOException
 import java.lang.ref.Reference
 import java.net.ProtocolException
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -60,6 +61,7 @@ object HproseInstance {
     }
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
+        .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
@@ -201,20 +203,16 @@ object HproseInstance {
                                 Json.encodeToString(msg)
                             }"
                 request = Request.Builder().url(url).build()
-                response = httpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    return@withRetry
-                }
+                httpClient.newCall(request).execute()
             }
         } catch (e: Exception) {
             Timber.tag("sendMessage").e(e.toString())
-            return@withRetry
         }
     }}
 
     // get the recent unread message from a sender.
     suspend fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage>? { return withRetry {
-        return@withRetry try {
+        try {
             val gson = Gson()
             val entry = "message_fetch"
             val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
@@ -230,12 +228,11 @@ object HproseInstance {
                     ) as List<ChatMessage>?
                     return@withRetry list
                 }
-                null
             } catch (e: Exception) {
                 e.printStackTrace()
                 Timber.tag("fetchMessages").e(e.toString())
-                null
             }
+        null
         }
     }
 
@@ -244,7 +241,7 @@ object HproseInstance {
      * */
     suspend fun checkNewMessages(): List<ChatMessage>? { return withRetry {
         if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
-        return@withRetry try {
+        try {
             val gson = Gson()
             val url =
                 "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=message_check&userid=${appUser.mid}"
@@ -258,17 +255,16 @@ object HproseInstance {
                 ) as List<ChatMessage>?
                 return@withRetry list
             }
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("checkNewMessages").e(appUser.toString())
-            null
         }
+        null
     } }
 
     suspend fun checkUpgrade(): Map<String, String>? { return withRetry {
-        val gson = Gson()
-        return@withRetry try {
+        try {
+            val gson = Gson()
             val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=check_upgrade"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
@@ -280,12 +276,11 @@ object HproseInstance {
                 ) as Map<String, String>?
                 return@withRetry map
             }
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("checkUpgrade").e("$e")
-            null
         }
+        null
     } }
 
     suspend fun getUserId(username: String): MimeiId? { return withRetry {
@@ -299,12 +294,11 @@ object HproseInstance {
                 val id = Gson().fromJson(json, String::class.java)
                 return@withRetry id
             }
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("GetUserId").e("$e")
-            null
         }
+        null
     } }
 
     /**
@@ -391,12 +385,11 @@ object HproseInstance {
                 return@withRetry updatedUser
             }
             Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("setUserData").e(e.toString())
-            null
         }
+        null
     } }
 
     suspend fun setUserAvatar(userId: MimeiId, avatar: MimeiId) {
@@ -432,12 +425,11 @@ object HproseInstance {
                     return@withRetry user.followingList
                 }
             }
-            return@withRetry null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("Hprose.getFollowings").e(e.toString())
-            return@withRetry null
         }
+        null
     } }
 
     // get fans list of the user
@@ -457,11 +449,10 @@ object HproseInstance {
                     return@withRetry user.fansList
                 }
             }
-            return@withRetry null
         } catch (e: Exception) {
             Timber.tag("HproseInstance.getFollowings").e(e.toString())
-            return@withRetry null
         }
+        null
     }}
 
     /**
@@ -526,7 +517,6 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Timber.tag("getTweetList").e(e.toString())
         }
     }}
@@ -569,11 +559,10 @@ object HproseInstance {
                     }
                 }
             }
-            return@withRetry null
         } catch (e: Exception) {
             Timber.tag("getTweet").e("$tweetId $authorId $e")
-            return@withRetry null
         }
+        null
     }}
 
     /**
@@ -610,19 +599,18 @@ object HproseInstance {
                     }
                 }
             }
-            return@withRetry null
         } catch (e: Exception) {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
-            return@withRetry null
         }
+        null
     }}
 
     /**
      * Retrieve cached tweet from Mimei DB. User info is not cached,
      * which changes frequently, so user data need to be loaded alive every time.
      * */
-    private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? { return withRetry {
-        val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return@withRetry null
+    private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? {
+        val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
         val gson = Gson()
         val tweet = gson.fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
         Timber.tag("restoreTweet").d("$tweet")
@@ -631,8 +619,8 @@ object HproseInstance {
             tweet.originalTweet =
                 getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
         }
-        return@withRetry tweet
-    }}
+        return tweet
+    }
 
     // Store an object in a Mimei file and return its MimeiId.
     suspend fun uploadTweet(tweet: Tweet): Tweet? { return withRetry {
@@ -640,18 +628,18 @@ object HproseInstance {
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
         val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
-        return@withRetry try {
+        try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 tweet.mid = response.body?.string() ?: return@withRetry null
                 tweet.author = appUser
-                tweet
-            } else null
+                return@withRetry tweet
+            }
         } catch (e: Exception) {
             Timber.tag("uploadTweet").e(e.toString())
             e.printStackTrace()
-            null
         }
+        null
     }}
 
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
@@ -677,7 +665,7 @@ object HproseInstance {
                     callback(tweet.mid)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.tag("delTweet()").e(e.toString())
         }
     }}
 
@@ -692,7 +680,7 @@ object HproseInstance {
                 delComment(commentId)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.tag("delComment()").e(e.toString())
         }
     }}
 
@@ -704,19 +692,17 @@ object HproseInstance {
         val url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
         val request = Request.Builder().url(url).build()
-        return@withRetry try {
+        try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val json = response.body?.string()
                 val gson = Gson()
                 gson.fromJson(json, Boolean::class.java)
-            } else {
-                null
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            Timber.tag("toggleFollowing()").e(e.toString())
         }
+        null
     }}
 
     /**
@@ -794,7 +780,7 @@ object HproseInstance {
             val gson = Gson()
             return@withRetry gson.fromJson(responseBody, Tweet::class.java)
         }
-        return@withRetry null
+        null
     }}
 
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
@@ -830,7 +816,7 @@ object HproseInstance {
     }}
 
     suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
-        return@withRetry try {
+        try {
             val author = tweet.author ?: return@withRetry tweet
             val method = "toggle_bookmark"
             val url =
@@ -885,17 +871,15 @@ object HproseInstance {
         } catch (e: ProtocolException) {
             // handle network failure (e.g., show an error message)
             Timber.tag("getComments()").e(e, "Network failure: Unexpected status line")
-            return@withRetry null
         } catch (e: Exception) {
             Timber.tag("getComments()").e(e, "Error: ${e.message}")
-            return@withRetry null
         }
-        return@withRetry null
+        null
     }}
 
     // update input parameter "comment" with new mid, and return update parent Tweet
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
-        return@withRetry try {
+        try {
             // add the comment to tweetId
             val method = "add_comment"
             val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
@@ -972,12 +956,11 @@ object HproseInstance {
                     }
                 }
             }
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("getUser").e("${appUser.baseUrl} $userId $e")
-            null
         }
+        null
     } }
 
     suspend fun getUserData(mid: MimeiId, ip: String): User? { return withRetry {
@@ -997,9 +980,8 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("getUserData").e("No found. $ip $mid $e")
-            return@withRetry null
         }
-        return@withRetry null
+        null
     }}
 
     /**
@@ -1007,7 +989,7 @@ object HproseInstance {
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
     suspend fun isReachable(ip: String): String? { return withRetry {
-        return@withRetry try {
+        try {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
@@ -1042,7 +1024,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("toggleTopList").e("$e")
         }
-        return@withRetry null
+        null
     }}
 
     /**
@@ -1064,7 +1046,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("getTopList").e("$e")
         }
-        return@withRetry null
+        null
     }}
 
     /**
@@ -1099,20 +1081,18 @@ object HproseInstance {
     { return withRetry {
         withContext(Dispatchers.IO) { // Execute in IO dispatcher
             try {
-                var fsid: String? = null
-                var offset = 0L
+                var offset: Int = 0
                 var byteRead = 0
                 val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
                 val json = """
-                           {"aid": $appId, "ver": "last", "offset": 0}
+                           {"aid": $appId, "ver": "last", "offset": $offset}
                      """.trimIndent()
                 val request = Gson().fromJson(json, Map::class.java).toMutableMap()
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     inputStream.use { stream ->
                         while (stream.read(buffer).also { byteRead = it } != -1) {
-                            fsid = hproseClient.runMApp("upload_ipfs",
+                            request["fsid"] = hproseClient.runMApp("upload_ipfs",
                                 request.toMap(), listOf(buffer))
-                            request["fsid"] = fsid
                             offset += byteRead
                             request["offset"] = offset
                         }
@@ -1120,7 +1100,7 @@ object HproseInstance {
                 }
                 // Do not know the tweet mid yet, cannot add reference as 2nd argument.
                 // Do it later when uploading tweet.
-                val cid = fsid?.let { hproseClient.mfTemp2Ipfs(it, referenceId) }
+                val cid = request["fsid"]?.let { hproseClient.mfTemp2Ipfs(it.toString(), referenceId) }
 
                 // Determine MediaType based on MIME type
                 val mimeType = context.contentResolver.getType(uri)
@@ -1137,7 +1117,7 @@ object HproseInstance {
                 }
                 // Return MimeiFileType
                 if (cid != null) {
-                    MimeiFileType(cid, mediaType, offset)
+                    MimeiFileType(cid, mediaType, offset.toLong())
                 } else null
             } catch (e: Exception) {
                 Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
