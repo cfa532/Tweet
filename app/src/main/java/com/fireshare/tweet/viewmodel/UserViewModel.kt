@@ -265,6 +265,8 @@ class UserViewModel @AssistedInject constructor(
         _user.value = appUser
         _fans.value = emptyList()
         _followings.value = emptyList()
+        _tweets.value = emptyList()
+        _topTweets.value = emptyList()
         username.value = ""
         password.value = ""
         profile.value = ""
