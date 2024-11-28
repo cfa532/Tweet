@@ -61,7 +61,7 @@ object HproseInstance {
     }
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
-        .writeTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {

@@ -2,6 +2,8 @@ package com.fireshare.tweet.service
 
 import android.content.Context
 import android.net.Uri
+import android.os.PowerManager
+import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -90,38 +92,48 @@ class UploadTweetWorker @AssistedInject constructor(
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
             val isPrivate = inputData.getBoolean("isPrivate", false)
 
-            val attachments = withContext(Dispatchers.IO) {
-                attachmentUris.mapNotNull { uri ->
-                    try {
-                        uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
-                    } catch (e: Exception) {
-                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
-                        null // Return null in case of error
+            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Tweet:UploadWakeLockTag"
+            )
+            wakeLock.acquire(10*60*1000L /*10 minutes*/)
+            try {
+                val attachments = withContext(Dispatchers.IO) {
+                    attachmentUris.mapNotNull { uri ->
+                        try {
+                            uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                        } catch (e: Exception) {
+                            Timber.tag("UploadCommentWorker")
+                                .e(e, "Error uploading attachment: $uri")
+                            null // Return null in case of error
+                        }
                     }
                 }
-            }
-            if (attachmentUris.size != attachments.size) {
-                Timber.tag("UploadTweetWorker").e("Attachments upload failure")
-                return Result.failure()
-            }
-            val tweet = Tweet(
-                mid = System.currentTimeMillis().toString(),  // placeholder
-                authorId = appUser.mid,
-                content = tweetContent ?: " ",
-                attachments = attachments,
-                isPrivate = isPrivate
-            )
-            // might make the upload less error prone
-            withContext(Dispatchers.IO) {
-                HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
-                    Timber.tag("UploadTweetWorker").d(tweet.toString())
-                    val gson = Gson()
-                    val outputData = workDataOf("tweet" to gson.toJson(t))
-                    return@withContext Result.success(outputData)
+                if (attachmentUris.size != attachments.size) {
+                    Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                    return Result.failure()
                 }
-                return@withContext Result.failure()
+                val tweet = Tweet(
+                    mid = System.currentTimeMillis().toString(),  // placeholder
+                    authorId = appUser.mid,
+                    content = tweetContent ?: " ",
+                    attachments = attachments,
+                    isPrivate = isPrivate
+                )
+                // might make the upload less error prone
+                withContext(Dispatchers.IO) {
+                    HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
+                        Timber.tag("UploadTweetWorker").d(tweet.toString())
+                        val gson = Gson()
+                        val outputData = workDataOf("tweet" to gson.toJson(t))
+                        return@withContext Result.success(outputData)
+                    }
+                    return@withContext Result.failure()
+                }
+            } finally {
+                wakeLock.release()
             }
-
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
             Result.failure()
