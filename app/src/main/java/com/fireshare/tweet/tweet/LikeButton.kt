@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -104,16 +105,19 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.viewModelScope.launch {
+            scope.launch {
                 guestWarning(context, navController)
             }
             return@IconButton
         }
-        tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
-            viewModel.updateTweet(updatedTweet)
+        scope.launch {
+            tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
+                viewModel.updateTweet(updatedTweet)
+            }
         }
     } )
     {
@@ -205,6 +209,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
 fun ShareButton(viewModel: TweetViewModel) {
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
@@ -212,7 +217,9 @@ fun ShareButton(viewModel: TweetViewModel) {
                 guestWarning(context, navController)
             }
         } else
-            viewModel.shareTweet(context)
+            scope.launch {
+                viewModel.shareTweet(context)
+            }
     })
     {
         Row(horizontalArrangement = Arrangement.Center) {

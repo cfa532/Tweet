@@ -35,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.ImageViewer
 import com.fireshare.tweet.widget.UserAvatar
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -210,6 +212,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
         // hide the Follow/Unfollow button when header is collapsed.
         if (scrollBehavior?.state?.collapsedFraction == 1f)
             return
+        val scope = rememberCoroutineScope()
         Text(
             text = buttonText.value,
             style = MaterialTheme.typography.labelMedium,
@@ -226,7 +229,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         else -> {
                             if (appUser.mid != TW_CONST.GUEST_ID)
                                 appUserViewModel.toggleFollow(user.mid) {
-                                    tweetFeedViewModel.updateFollowings(user.mid, it)
+                                    scope.launch(Dispatchers.IO) {
+                                        tweetFeedViewModel.updateFollowings(user.mid, it)
+                                    }
                                 }
                             else {
                                 val event = SnackbarEvent(

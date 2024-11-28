@@ -224,25 +224,22 @@ class TweetViewModel @AssistedInject constructor(
             }
     }
 
-//    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    fun shareTweet(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            /**
-             * Call to checkUpgrade() also returns a map of environmental variables,
-             * which includes environment variables of the App.
-             * */
-            val map = HproseInstance.checkUpgrade() ?: return@launch
-            val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+    suspend fun shareTweet(context: Context) {
+        /**
+         * Call to checkUpgrade() also returns a map of environmental variables,
+         * which includes environment variables of the App.
+         * */
+        val map = HproseInstance.checkUpgrade() ?: return
+        val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
 //            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
 //                    "${tweet.mid}/${tweet.authorId}"
-            val sendIntent: Intent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, deepLink)
-                type = "text/plain"
-            }
-            val shareIntent = Intent.createChooser(sendIntent, null)
-            context.startActivity(shareIntent, null)
+        val sendIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, deepLink)
+            type = "text/plain"
         }
+        val shareIntent = Intent.createChooser(sendIntent, null)
+        context.startActivity(shareIntent, null)
     }
 
     fun likeTweet() {

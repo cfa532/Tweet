@@ -31,10 +31,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -260,18 +262,21 @@ fun TweetDropdownMenuItems(
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.
     if (tweet.authorId == appUser.mid && !appUserViewModel.hasPinned(tweet)) {
+        val scope = rememberCoroutineScope()
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                tweetFeedViewModel.delTweet(tweet) {
-                    originTweetViewModel?.refreshTweet()
-                }
-                // if current route is TweetDetail. Go to TweetFeed
-                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                    navController.popBackStack()
-                } else {
-                    // close the dropdown menu
-                    onDismissRequest()
+                scope.launch(Dispatchers.IO) {
+                    tweetFeedViewModel.delTweet(tweet) {
+                        originTweetViewModel?.refreshTweet()
+                    }
+                    // if current route is TweetDetail. Go to TweetFeed
+                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                        navController.popBackStack()
+                    } else {
+                        // close the dropdown menu
+                        onDismissRequest()
+                    }
                 }
             },
             text = {

@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -49,6 +50,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -184,6 +186,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
+        val scope = rememberCoroutineScope()
         Text(
             text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             color = MaterialTheme.colorScheme.primary,
@@ -191,7 +194,9 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             modifier = Modifier
                 .clickable(onClick = {
                     appUserViewModel.toggleFollow(userId) {
-                        tweetFeedViewModel.updateFollowings(userId, it)
+                        scope.launch(Dispatchers.IO) {
+                            tweetFeedViewModel.updateFollowings(userId, it)
+                        }
                     }
                 })
                 .border(

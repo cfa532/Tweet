@@ -208,7 +208,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("sendMessage").e(e.toString())
         }
-    }}
+    } }
 
     // get the recent unread message from a sender.
     suspend fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage>? { return withRetry {
@@ -453,7 +453,7 @@ object HproseInstance {
             Timber.tag("HproseInstance.getFollowings").e(e.toString())
         }
         null
-    }}
+    } }
 
     /**
      * Get tweets of a given author in a given span of time. if end is null, get all tweets.
@@ -519,7 +519,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
         }
-    }}
+    } }
 
     /**
      * Get only layer one data of the tweet. Do Not fetch its original tweet if there is any.
@@ -640,7 +640,7 @@ object HproseInstance {
             e.printStackTrace()
         }
         null
-    }}
+    } }
 
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
         var method = "delete_tweet"
@@ -667,7 +667,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("delTweet()").e(e.toString())
         }
-    }}
+    } }
 
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) { return withRetry {
         val method = "delete_comment"
@@ -682,7 +682,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("delComment()").e(e.toString())
         }
-    }}
+    } }
 
     /**
      * @param userId is the user that appUser is following or unfollowing.
@@ -703,7 +703,7 @@ object HproseInstance {
             Timber.tag("toggleFollowing()").e(e.toString())
         }
         null
-    }}
+    } }
 
     /**
      * @param isFollowing indicates if the appUser is following this userId. Passing an argument
@@ -760,7 +760,7 @@ object HproseInstance {
             e.printStackTrace()
             Timber.e("toggleRetweet()", e.toString())
         }
-    }}
+    } }
 
     /**
      * Increase the retweet count of a tweet.
@@ -781,7 +781,7 @@ object HproseInstance {
             return@withRetry gson.fromJson(responseBody, Tweet::class.java)
         }
         null
-    }}
+    } }
 
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
         return@withRetry try {
@@ -813,7 +813,7 @@ object HproseInstance {
             Timber.tag("likeTweet()").e(e, "Error: ${e.message}")
             tweet
         }
-    }}
+    } }
 
     suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
         try {
@@ -845,7 +845,7 @@ object HproseInstance {
             Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message}")
             tweet
         }
-    }}
+    } }
 
     /**
      * Load all comments on a tweet.
@@ -875,7 +875,7 @@ object HproseInstance {
             Timber.tag("getComments()").e(e, "Error: ${e.message}")
         }
         null
-    }}
+    } }
 
     // update input parameter "comment" with new mid, and return update parent Tweet
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
@@ -909,7 +909,7 @@ object HproseInstance {
             Timber.tag("uploadComment()").e(e, "Error: ${e.message}")
             tweet
         }
-    }}
+    } }
 
     fun getMediaUrl(mid: MimeiId?, baseUrl: String?): String? {
         if (mid != null && baseUrl != null) {
@@ -982,7 +982,7 @@ object HproseInstance {
             Timber.tag("getUserData").e("No found. $ip $mid $e")
         }
         null
-    }}
+    } }
 
     /**
      * @param ip
@@ -1004,7 +1004,7 @@ object HproseInstance {
             Timber.tag("isReachable").e("No reachable. $ip $e")
             null
         }
-    }}
+    } }
 
     /**
      * Return the current tweet list that is pinned to top.
@@ -1025,7 +1025,7 @@ object HproseInstance {
             Timber.tag("toggleTopList").e("$e")
         }
         null
-    }}
+    } }
 
     /**
      * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
@@ -1047,7 +1047,7 @@ object HproseInstance {
             Timber.tag("getTopList").e("$e")
         }
         null
-    }}
+    } }
 
     /**
      * Remove user from cachedUsers list.
@@ -1071,7 +1071,7 @@ object HproseInstance {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }}
+    } }
 
     /**
      * Upload media file to node and return its IPFS cid with its media type.
@@ -1125,7 +1125,7 @@ object HproseInstance {
                 null
             }
         }
-    }}
+    } }
 }
 
 interface ScorePair {

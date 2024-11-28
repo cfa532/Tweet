@@ -136,6 +136,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtBottom.value = false
     }
 
+    // Define a custom scope to ensure tweet deletion job not cancelled.
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private fun getTweets(
         startTimestamp: Long,
@@ -145,7 +147,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val batchSize = 10 // Adjust batch size as needed
 
         followings.chunked(batchSize).forEach { batch ->
-            viewModelScope.launch(networkDispatcher) {
+            ioScope.launch(networkDispatcher) {
                 try {
                     batch.forEach { userId ->
                         async {
@@ -170,15 +172,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    private fun getTweets(userId: MimeiId) {
-        viewModelScope.launch {
-            try {
-                getUser(userId)?.let {
-                    HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
-                }
-            } catch (e: Exception) {
-                Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
+    private suspend fun getTweets(userId: MimeiId) {
+        try {
+            getUser(userId)?.let {
+                HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
             }
+        } catch (e: Exception) {
+            Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
         }
     }
 
@@ -187,21 +187,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweetActionListener.onTweetAdded(newTweet)
     }
 
-    // Define a custom scope to ensure tweet deletion job not cancelled.
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-    fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.delTweet(tweet) { tid ->
-                _tweets.update { currentTweets ->
-                    currentTweets.filterNot { it.mid == tid }
-                }
-                // remove from userViewModel's feed
-                tweetActionListener.onTweetDeleted(tweet.mid)
-
-                // If there is an original tweet, update its viewModel.
-                updateOriginTweet()
+    suspend fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
+        HproseInstance.delTweet(tweet) { tid ->
+            _tweets.update { currentTweets ->
+                currentTweets.filterNot { it.mid == tid }
             }
+            // remove from userViewModel's feed
+            tweetActionListener.onTweetDeleted(tweet.mid)
+
+            // If there is an original tweet, update its viewModel.
+            updateOriginTweet()
         }
     }
 
@@ -209,7 +204,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When appUser toggles following state on a User, update followings list.
      * Remove it if unfollowing, add it if following. Update tweet feed list at the same time.
      * */
-    fun updateFollowings(userId: MimeiId, isFollowing: Boolean) {
+    suspend fun updateFollowings(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
             // Get the tweets of a user after following it.
             _followings.update { list -> list + userId }
@@ -236,12 +231,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * If original tweet is not null, retweet the original tweet,
      * otherwise retweet the tweet itself.
      * */
-    fun addRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
-        viewModelScope.launch {
-            val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
-            HproseInstance.retweet(t, addTweetToFeed = { addTweet(it) }) {
-                updateTweet(it)
-            }
+    suspend fun addRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
+        val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
+        HproseInstance.retweet(t, addTweetToFeed = { addTweet(it) }) {
+            updateTweet(it)
         }
     }
 
@@ -276,8 +269,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 Timber.tag("UploadTweet").d("Tweet uploaded successfully: $tweet")
                                 if (tweet != null) {
                                     tweet.author = appUser
-                                    // to add tweet in background involves problem with viewModel
-                                    // in tweet list. Do NOT update tweet list, just inform user.
+                                    // add tweet to TweetFeedViewModel's list
                                     addTweet(tweet)
                                     (context as? LifecycleOwner)?.lifecycleScope?.launch {
                                         SnackbarController.sendEvent(
