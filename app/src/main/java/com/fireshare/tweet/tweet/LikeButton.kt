@@ -43,6 +43,7 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 suspend fun guestWarning(context: Context, navController: NavController? = null) {
@@ -217,7 +218,7 @@ fun ShareButton(viewModel: TweetViewModel) {
                 guestWarning(context, navController)
             }
         } else
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 viewModel.shareTweet(context)
             }
     })

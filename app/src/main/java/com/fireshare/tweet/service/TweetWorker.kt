@@ -111,13 +111,16 @@ class UploadTweetWorker @AssistedInject constructor(
                 attachments = attachments,
                 isPrivate = isPrivate
             )
-            HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
-                Timber.tag("UploadTweetWorker").d(tweet.toString())
-                val gson = Gson()
-                val outputData = workDataOf("tweet" to gson.toJson(t))
-                return Result.success(outputData)
+            // might make the upload less error prone
+            withContext(Dispatchers.IO) {
+                HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
+                    Timber.tag("UploadTweetWorker").d(tweet.toString())
+                    val gson = Gson()
+                    val outputData = workDataOf("tweet" to gson.toJson(t))
+                    return@withContext Result.success(outputData)
+                }
+                return@withContext Result.failure()
             }
-            Result.failure()
 
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
