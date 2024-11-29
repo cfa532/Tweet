@@ -58,6 +58,7 @@ data class Tweet(
     val authorId: MimeiId,        // mid of the author, is also the mimei database Id
     var content: String? = null,   // content or attachments must have one.
     var timestamp: Long = System.currentTimeMillis(),
+    var title: String? = null,
 
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
     var originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet

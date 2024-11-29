@@ -4,12 +4,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,9 +111,12 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
                         )
                     }
                 }
-                items(followersOfProfile, key = { it })
-                { userId ->
-                    FollowerItem(userId, navController, appUserViewModel) }
+                items(followersOfProfile, key = { it }) { userId ->
+                    FollowerItem(userId, navController, appUserViewModel)
+                }
+                item {
+                    Spacer(modifier = Modifier.heightIn(16.dp))
+                }
             }
         }
     }
@@ -131,41 +137,43 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
         thickness = 1.dp,
         color = MaterialTheme.colorScheme.tertiary
     )
-    Row(
-        modifier = Modifier
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
-            .heightIn(max = 200.dp)
-            .fillMaxWidth()
-    ) {
-        IconButton(onClick = {
-            user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
-        }) {
-            UserAvatar(user.value, 40)
-        }
+    Column {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
+            modifier = Modifier
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .fillMaxWidth()
         ) {
-            Column {
-                Text(
-                    text = "${user.value?.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "@${user.value?.username}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
+            IconButton(onClick = {
+                user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
+            }) {
+                UserAvatar(user.value, 40)
             }
-            ToggleFollowerButton(userId, appUserViewModel)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    Text(
+                        text = "${user.value?.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "@${user.value?.username}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+                ToggleFollowerButton(userId, appUserViewModel)
+            }
+            Text(
+                text = "${user.value?.profile}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
-        Text(
-            text = "${user.value?.profile}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
     }
 }
 
@@ -179,13 +187,14 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     LaunchedEffect(followings) {
         followState.value = isFollower
     }
-
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
         Text(
-            text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
+            text = if (followState.value) stringResource(R.string.unfollow) else stringResource(
+                R.string.follow
+            ),
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
@@ -197,7 +206,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                             }
                         }
                     }
-                } )
+                })
                 .border(
                     width = 1.dp,
                     color = Color.DarkGray,
