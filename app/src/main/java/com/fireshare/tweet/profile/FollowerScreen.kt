@@ -31,7 +31,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -196,7 +195,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         appUserViewModel.toggleFollow(userId) {
                             tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                tweetFeedViewModel.updateFollowings(userId, it)
+                                tweetFeedViewModel.updateFollowingsTweets(userId, it)
                             }
                         }
                     }

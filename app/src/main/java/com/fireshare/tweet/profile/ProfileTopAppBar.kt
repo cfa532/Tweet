@@ -35,7 +35,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -212,6 +211,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
         // hide the Follow/Unfollow button when header is collapsed.
         if (scrollBehavior?.state?.collapsedFraction == 1f)
             return
+
         Text(
             text = buttonText.value,
             style = MaterialTheme.typography.labelMedium,
@@ -228,9 +228,11 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         else -> {
                             if (appUser.mid != TW_CONST.GUEST_ID)
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    // update this user's followers list
+                                    viewModel.updateFollowingsAndFans()
                                     appUserViewModel.toggleFollow(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                            tweetFeedViewModel.updateFollowings(user.mid, it)
+                                            tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
                                         }
                                     }
                                 }

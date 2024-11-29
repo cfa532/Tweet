@@ -711,7 +711,8 @@ object HproseInstance {
      * persistent inconsistency when something went wrong, which happens easily with the toggle method.
      * */
     suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean,
-                               followerId: MimeiId = appUser.mid) { return withRetry {
+                               followerId: MimeiId = appUser.mid    // default follower is appUser
+    ) { return withRetry {
         val user = getUser(userId)
         val method = "toggle_follower"
         val url =

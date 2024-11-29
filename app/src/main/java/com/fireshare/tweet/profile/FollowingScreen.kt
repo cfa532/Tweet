@@ -42,6 +42,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -60,10 +61,12 @@ import kotlinx.coroutines.withContext
 fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
-    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(parentEntry, key = userId) {
-            factory -> factory.create(userId)
+    val viewModel = if (userId == appUser.mid) appUserViewModel
+    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = userId
+    ) { factory ->
+        factory.create(userId)
     }
-
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -204,7 +207,7 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         appUserViewModel.toggleFollow(userId) {
                             tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                tweetFeedViewModel.updateFollowings(userId, it)
+                                tweetFeedViewModel.updateFollowingsTweets(userId, it)
                             }
                         }
                     }
