@@ -81,7 +81,8 @@ fun ChatScreen(
     LaunchedEffect(Unit) {
         // Upon opening of ChatBox, set current chat session's new message flag to false.
         // assume user read new message when opening this chat screen.
-        viewModel.chatListViewModel?.updateSession(null, sessionId = viewModel.receiptId)
+        viewModel.chatListViewModel?.updateSession(null,
+            hasNews = false, sessionId = viewModel.receiptId)
 
         // fetch new messages every 10s when on chat screen.
         timer(period = 15000, action = {
@@ -103,7 +104,8 @@ fun ChatScreen(
         if (chatMessages.isNotEmpty()) {
             snapshotFlow {
                 listState.layoutInfo.visibleItemsInfo.lastOrNull()?.offset?.let { offset ->
-                    offset + (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.size ?: 0) > listState.layoutInfo.viewportEndOffset
+                    offset + (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.size
+                        ?: 0) > listState.layoutInfo.viewportEndOffset
                 } ?: false
             }
                 .collect { isLastItemVisible ->

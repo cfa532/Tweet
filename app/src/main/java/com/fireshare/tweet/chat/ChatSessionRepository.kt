@@ -118,19 +118,4 @@ class ChatSessionRepository(
         }
         return updatedSessions.toList()
     }
-
-    /**
-     * If there is new message from a certain user, indicate it in the ChatSession
-     * A mail badge will be displayed on that user's avatar
-     * */
-    private fun hasNews(newMessages: List<ChatMessage>, receiptId: MimeiId): Boolean {
-        val gson = Gson()
-        for (i in newMessages.indices) {
-            val json = gson.toJson(newMessages[i])
-            val msg = gson.fromJson(json, ChatMessage::class.java)
-            if (msg.authorId == receiptId)
-                return true
-        }
-        return false
-    }
 }

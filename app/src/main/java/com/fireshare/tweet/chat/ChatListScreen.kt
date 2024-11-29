@@ -107,7 +107,8 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                 item {
                     if (chatSessions.isEmpty()) {
                         Text("No chat sessions found. Click the envelop icon on user" +
-                                " profile page to start a chat.")
+                                " profile page to start a chat.",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
             }
@@ -132,7 +133,6 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
         Box(
             modifier = Modifier
                 .size(40.dp)
-//            .clip(CircleShape)
                 .clickable(onClick = {
                     user?.mid?.let {
                         navController.navigate(NavTweet.UserProfile(it))

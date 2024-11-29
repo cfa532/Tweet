@@ -44,43 +44,44 @@ class ChatListViewModel @Inject constructor(
      * If a session id is given, update its hasNews message flag to false.
      * */
     fun updateSession(msg: ChatMessage?, hasNews: Boolean = false, sessionId: MimeiId? = null) {
-        if (sessionId != null) {
-            // update given chat session's new message flag to false upon opening it.
-            // No message is sent or received.
-            val session = _chatSessions.value.find { it.receiptId == sessionId }
-            if (session != null) {
-                _chatSessions.update { it - session }   // force recompose
-                _chatSessions.update { (it + session.copy(hasNews = false))
-                    .sortedByDescending {s -> s.timestamp } }
+        val targetReceiptId =
+            sessionId ?: if (msg?.receiptId == appUser.mid) msg.authorId else msg?.receiptId
+
+        val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
+
+        if (existingSession != null) {
+            val updatedSession = existingSession.copy(
+                hasNews = if (sessionId != null) false else hasNews,
+                lastMessage = msg ?: existingSession.lastMessage,
+                timestamp = msg?.timestamp ?: existingSession.timestamp
+            )
+            _chatSessions.update { sessions ->
+                (sessions - existingSession + updatedSession).sortedByDescending { it.timestamp }
             }
-            return
-        } else {
-            // a message is sent or received in the opened chat session
-            val session = _chatSessions.value.find { it.receiptId == msg?.receiptId }
-            if (session != null) {
-                _chatSessions.update { it - session }   // force recompose
-                _chatSessions.update {
-                    (it + session.copy(hasNews = hasNews, lastMessage = msg!!))
-                        .sortedByDescending { s -> s.timestamp }
-                }
-            } else {
-                _chatSessions.update {
-                    it + ChatSession(
-                        userId = appUser.mid,
-                        receiptId = msg!!.receiptId,
-                        hasNews = hasNews,
-                        lastMessage = msg
-                    )
-                }
+        } else if (msg != null) { // Only create a new session if a message is provided
+            _chatSessions.update { sessions ->
+                sessions + ChatSession(
+                    userId = appUser.mid,
+                    receiptId = msg.receiptId,
+                    hasNews = hasNews,
+                    lastMessage = msg
+                )
             }
         }
 
-        if (msg == null) return
-        val receiptId = if (msg.authorId==appUser.mid) msg.receiptId else msg.authorId
-        chatSessions.value.find { it.receiptId == receiptId }?.let {
-            val updatedSessions = it.copy(hasNews = false, lastMessage = msg, timestamp = msg.timestamp)
-            _chatSessions.update { sessions -> sessions - it }
-            _chatSessions.update { sessions -> sessions + updatedSessions }
+        // Update 'hasNews' for the sender/receiver session if msg is not null
+        if (msg != null) {
+            val receiptIdForNewsUpdate =
+                if (msg.authorId == appUser.mid) msg.receiptId else msg.authorId
+            _chatSessions.value.find { it.receiptId == receiptIdForNewsUpdate }
+                ?.let { sessionForNewsUpdate ->
+                    val updatedSessionForNewsUpdate = sessionForNewsUpdate.copy(
+                        hasNews = false,
+                        lastMessage = msg,
+                        timestamp = msg.timestamp
+                    )
+                    _chatSessions.update { sessions -> (sessions - sessionForNewsUpdate + updatedSessionForNewsUpdate).sortedByDescending { it.timestamp } }
+                }
         }
     }
 
@@ -91,22 +92,24 @@ class ChatListViewModel @Inject constructor(
 
         // Do not update chat session database, only show new sessions on UI
         // Update chat session database only when user opens chat screen.
+        val existingSessionsMap = _chatSessions.value.associateBy { it.receiptId }
+        val updatedChatSessions = _chatSessions.value.toMutableList()
         updatedSessions.forEach { chatSession ->
-            val existingSession =
-                _chatSessions.value.find { it.receiptId == chatSession.receiptId }
+            val existingSession = existingSessionsMap[chatSession.receiptId]
             if (existingSession != null) {
-                val updatedSession = existingSession.copy(
+                // Update existing session directly
+                val index = updatedChatSessions.indexOf(existingSession)
+                updatedChatSessions[index] = existingSession.copy(
                     hasNews = chatSession.hasNews,
                     lastMessage = chatSession.lastMessage,
                     timestamp = chatSession.timestamp
                 )
-                // create a new Session object to force recomposition of session list
-                _chatSessions.update { it - existingSession }
-                _chatSessions.update { it + updatedSession }
             } else {
-                _chatSessions.update { it + chatSession }
+                // Add new session
+                updatedChatSessions.add(chatSession)
             }
         }
+        _chatSessions.value = updatedChatSessions
     }
 
     suspend fun updateUser(userId: MimeiId) {
