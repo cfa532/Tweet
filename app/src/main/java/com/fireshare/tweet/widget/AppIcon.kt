@@ -57,7 +57,7 @@ fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
                 .clip(CircleShape)
                 .background(Color.Gray),
             isPreview = true,
-            imageSize = 50
+            imageSize = size
         )
     }
 }

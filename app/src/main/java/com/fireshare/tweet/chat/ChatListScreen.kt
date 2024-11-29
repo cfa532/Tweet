@@ -104,6 +104,12 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                         color = MaterialTheme.colorScheme.tertiary
                     )
                 }
+                item {
+                    if (chatSessions.isEmpty()) {
+                        Text("No chat sessions found. Click the envelop icon on user" +
+                                " profile page to start a chat.")
+                    }
+                }
             }
         }
     }

@@ -108,9 +108,9 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
                         )
                     }
                 }
-                items(followersOfProfile, key = { it }) { userId ->
-                    FollowerItem(userId, navController, appUserViewModel)
-                }
+                items(followersOfProfile, key = { it })
+                { userId ->
+                    FollowerItem(userId, navController, appUserViewModel) }
             }
         }
     }
@@ -131,43 +131,41 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
         thickness = 1.dp,
         color = MaterialTheme.colorScheme.tertiary
     )
-    Row(modifier = Modifier
-        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
-        .heightIn(max = 200.dp)
-        .fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .heightIn(max = 200.dp)
+            .fillMaxWidth()
     ) {
-        IconButton( onClick = {
-            user.value?.let{ navController.navigate(NavTweet.UserProfile(it.mid)) }
+        IconButton(onClick = {
+            user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
         }) {
-            UserAvatar(user.value,40)
+            UserAvatar(user.value, 40)
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    Text(
-                        text = "${user.value?.name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "@${user.value?.username}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-                ToggleFollowerButton(userId, appUserViewModel)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Column {
+                Text(
+                    text = "${user.value?.name}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "@${user.value?.username}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
             }
-            Text(
-                text = "${user.value?.profile}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
+            ToggleFollowerButton(userId, appUserViewModel)
         }
+        Text(
+            text = "${user.value?.profile}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary
+        )
     }
 }
 

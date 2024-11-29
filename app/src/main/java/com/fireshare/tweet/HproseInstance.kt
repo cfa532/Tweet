@@ -303,9 +303,10 @@ object HproseInstance {
     } }
 
     /**
+     * @return a pair. The first is User object, the second is error message.
      * There are two steps for a guest user to login.
-     * First, find the true UserID given its key phrase, using the IP address of the serving node.
-     * Second, find the node which has this user's data, and use it to login.
+     * First, find UserID given username.
+     * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
     suspend fun login(username: String, password: String): Pair<User?, String?> { return withRetry {
