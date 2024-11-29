@@ -143,7 +143,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
-        color = Color.LightGray
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     )
     Row(
         modifier = Modifier
@@ -156,30 +156,32 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
         }) {
             UserAvatar(user.value, 40)
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Column {
-                Text(
-                    text = "${user.value?.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "@${user.value?.username}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    Text(
+                        text = "${user.value?.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "@${user.value?.username}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+                ToggleFollowingButton(userId, appUserViewModel)
             }
-            ToggleFollowingButton(userId, appUserViewModel)
+            Text(
+                text = "${user.value?.profile}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
-        Text(
-            text = "${user.value?.profile}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
     }
 }
 
@@ -198,7 +200,6 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
-        val scope = rememberCoroutineScope()
         Text(
             text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             color = MaterialTheme.colorScheme.primary,
@@ -215,7 +216,7 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                 })
                 .border(
                     width = 1.dp,
-                    color = Color.DarkGray,
+                    color = Color.LightGray,
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(horizontal = 12.dp, vertical = 4.dp)

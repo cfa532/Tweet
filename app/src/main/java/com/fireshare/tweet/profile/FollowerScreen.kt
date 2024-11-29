@@ -114,9 +114,6 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
                 items(followersOfProfile, key = { it }) { userId ->
                     FollowerItem(userId, navController, appUserViewModel)
                 }
-                item {
-                    Spacer(modifier = Modifier.heightIn(16.dp))
-                }
             }
         }
     }
@@ -135,20 +132,20 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
-        color = MaterialTheme.colorScheme.tertiary
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     )
-    Column {
-        Row(
-            modifier = Modifier
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
-                .wrapContentHeight(Alignment.CenterVertically)
-                .fillMaxWidth()
-        ) {
-            IconButton(onClick = {
-                user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
-            }) {
-                UserAvatar(user.value, 40)
-            }
+    Row(
+        modifier = Modifier
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
+            .fillMaxWidth()
+    ) {
+        IconButton(onClick = {
+            user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
+        }) {
+            UserAvatar(user.value, 40)
+        }
+        Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -209,7 +206,7 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                 })
                 .border(
                     width = 1.dp,
-                    color = Color.DarkGray,
+                    color = Color.LightGray,
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(horizontal = 12.dp, vertical = 4.dp)
