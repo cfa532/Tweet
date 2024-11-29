@@ -46,10 +46,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(viewModel: UserViewModel) {
@@ -133,7 +136,9 @@ fun LoginScreen(viewModel: UserViewModel) {
 
         val context = LocalContext.current
         Button(
-            onClick = { viewModel.login(context) },
+            onClick = { viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.login(context)
+            } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading    // disable Login button during uploading.
         ) {

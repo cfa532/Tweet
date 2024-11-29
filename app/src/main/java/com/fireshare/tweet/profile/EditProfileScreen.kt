@@ -48,10 +48,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
+import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun EditProfileScreen(
@@ -72,7 +76,9 @@ fun EditProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            viewModel.updateAvatar(context, uri)
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.updateAvatar(context, uri)
+            }
         }
     }
     val scrollState = rememberScrollState()
@@ -167,9 +173,18 @@ fun EditProfileScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { viewModel.register(context) {
-                    navController.popBackStack()
-                } },
+                onClick = {
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        viewModel.register(context) {
+                            val event = SnackbarEvent(
+                                message = context.getString(R.string.registration_ok)
+                            )
+                            viewModel.viewModelScope.launch(Dispatchers.Main) {
+                                viewModel.showSnackbar(event)
+                                navController.popBackStack()
+                            }
+                        }
+                    } },
                 enabled = !isLoading,
                 modifier = Modifier
                     .width(intrinsicSize = IntrinsicSize.Max)

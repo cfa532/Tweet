@@ -54,6 +54,7 @@ import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -76,7 +77,9 @@ fun UserProfileScreen(
 
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
-        viewModel.loadNewerTweets()
+        viewModel.viewModelScope.launch(Dispatchers.IO) {
+            viewModel.loadNewerTweets()
+        }
     } )
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
@@ -91,12 +94,16 @@ fun UserProfileScreen(
 
     LaunchedEffect(isAtBottom) {
         if (isAtBottom && tweets.isNotEmpty()) {
-            viewModel.loadOlderTweets()
+            withContext(Dispatchers.IO) {
+                viewModel.loadOlderTweets()
+            }
         }
     }
     LaunchedEffect(Unit) {
         // load tweets only when user profile screen is opened.
-        viewModel.getTweets()
+        withContext(Dispatchers.IO) {
+            viewModel.getTweets()
+        }
     }
 
     Scaffold(
@@ -203,7 +210,9 @@ fun ProfileDetail(
     val followingsList by viewModel.followings.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
-        viewModel.updateFollowingsAndFans()
+        withContext(Dispatchers.IO) {
+            viewModel.updateFollowingsAndFans()
+        }
     }
 
     // go to list of followings of the user

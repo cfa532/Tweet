@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
@@ -82,7 +81,7 @@ class UserViewModel @AssistedInject constructor(
     var loginError = mutableStateOf("")
     var hasLogon = mutableStateOf(false)
 
-    fun loadNewerTweets() {
+    suspend fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
         startTimestamp = System.currentTimeMillis()
@@ -92,7 +91,7 @@ class UserViewModel @AssistedInject constructor(
         getTweets()
         _isRefreshing.value = false
     }
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
         val startTimestamp = endTimestamp
@@ -110,43 +109,37 @@ class UserViewModel @AssistedInject constructor(
         return topTweets.value.any { it.mid == tweet.mid }
     }
 
-    fun updateAvatar(context: Context, uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            isLoading.value = true
-            // For now, user avatar can only be image.
-            HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
-                HproseInstance.setUserAvatar(userId, it)   // Update database value
-                _user.value = user.value.copy(avatar = it)
-                appUser = appUser.copy(avatar = it)
-            }
-            isLoading.value = false
+    suspend fun updateAvatar(context: Context, uri: Uri) {
+        isLoading.value = true
+        // For now, user avatar can only be image.
+        HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
+            HproseInstance.setUserAvatar(userId, it)   // Update database value
+            _user.value = user.value.copy(avatar = it)
+            appUser = appUser.copy(avatar = it)
         }
+        isLoading.value = false
     }
 
-    fun toggleFollow(userId: MimeiId, updateTweetFeed: (Boolean) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // toggle the Following status on the given UserId, to follow or unfollow
-            HproseInstance.toggleFollowing(userId)?.let { isFollowing ->
-                // Succeed. Now it is the other party's turn
-                // to update its followers.
-                HproseInstance.toggleFollower(userId, isFollowing)
-                _followings.update { list ->
-                    if (isFollowing) {
-                        if (!list.contains(userId)) list + userId else list
-                    } else {
-                        list.filter { id -> id != userId }
-                    }
+    suspend fun toggleFollow(userId: MimeiId, updateTweetFeed: (Boolean) -> Unit) {
+        // toggle the Following status on the given UserId, to follow or unfollow
+        HproseInstance.toggleFollowing(userId)?.let { isFollowing ->
+            // Succeed. Now it is the other party's turn
+            // to update its followers.
+            HproseInstance.toggleFollower(userId, isFollowing)
+            _followings.update { list ->
+                if (isFollowing) {
+                    if (!list.contains(userId)) list + userId else list
+                } else {
+                    list.filter { id -> id != userId }
                 }
-                updateTweetFeed(isFollowing)
             }
+            updateTweetFeed(isFollowing)
         }
     }
 
-    fun updateFollowingsAndFans() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
-            _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-        }
+    suspend fun updateFollowingsAndFans() {
+        _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
+        _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
     }
 
     @AssistedFactory
@@ -168,93 +161,87 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun getTweets() {
-        viewModelScope.launch(Dispatchers.IO) {
-            // 1. Fetch all tweets of the author and update _tweets
-            val pinnedTweets = mutableSetOf<Tweet>()
-            HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
+    suspend fun getTweets() {
+        // 1. Fetch all tweets of the author and update _tweets
+        val pinnedTweets = mutableSetOf<Tweet>()
+        HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
 
-            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-            HproseInstance.getTopList(user.value)?.forEach { map ->
-                val tweet = tweets.value.find { it.mid == map["tweetId"] }
-                if (tweet != null) {
-                    // add tweet to topTweets, update its timestamp to when it is pinned.
-                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
-                } else {
-                    HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
-                        tweet1.originalTweetId?.let {
-                            tweet1.originalAuthorId?.let { it1 ->
-                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
-                            }
+        // 2. Get pinned tweets and update _topTweets, while avoiding duplication
+        HproseInstance.getTopList(user.value)?.forEach { map ->
+            val tweet = tweets.value.find { it.mid == map["tweetId"] }
+            if (tweet != null) {
+                // add tweet to topTweets, update its timestamp to when it is pinned.
+                pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
+            } else {
+                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
+                    tweet1.originalTweetId?.let {
+                        tweet1.originalAuthorId?.let { it1 ->
+                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                         }
-                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                     }
+                    pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                 }
             }
-            // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-            _topTweets.update {
-                pinnedTweets.toList().distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
-            }
-            initState.value = false
         }
+        // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
+        _topTweets.update {
+            pinnedTweets.toList().distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+        }
+        initState.value = false
     }
 
     /**
      * User can pin or unpin any tweet, including quoted or retweet by this user.
      * */
-    fun pinToTop(tweetId: MimeiId) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val pinnedTweets = mutableSetOf<Tweet>()
-            HproseInstance.toggleTopList(tweetId)?.forEach {map ->
-                val tweet = tweets.value.find { it.mid == map["tweetId"] }
-                if (tweet != null) {
-                    // add tweet to topTweets, update its timestamp to when it is pinned.
-                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
-                } else {
-                    HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
-                        tweet1.originalTweetId?.let {
-                            tweet1.originalAuthorId?.let { it1 ->
-                                tweet1.originalTweet = HproseInstance.getTweet(it, it1)
-                            }
+    suspend fun pinToTop(tweetId: MimeiId) {
+        val pinnedTweets = mutableSetOf<Tweet>()
+        HproseInstance.toggleTopList(tweetId)?.forEach { map ->
+            val tweet = tweets.value.find { it.mid == map["tweetId"] }
+            if (tweet != null) {
+                // add tweet to topTweets, update its timestamp to when it is pinned.
+                pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
+            } else {
+                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
+                    tweet1.originalTweetId?.let {
+                        tweet1.originalAuthorId?.let { it1 ->
+                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
                         }
-                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                     }
+                    pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                 }
             }
-            _topTweets.update {
-                pinnedTweets.toList().distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
-            }
+        }
+        _topTweets.update {
+            pinnedTweets.toList().distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
         }
     }
 
-    fun showSnackbar(event: SnackbarEvent) {
-        viewModelScope.launch { SnackbarController.sendEvent(event) }
+    suspend fun showSnackbar(event: SnackbarEvent) {
+        SnackbarController.sendEvent(event)
     }
 
-    fun login(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            isLoading.value = true
-            if (username.value?.isNotEmpty() == true
-                && password.value.isNotEmpty()
-            ) {
-                val ret = HproseInstance.login(username.value!!, password.value)
-                isLoading.value = false
+    suspend fun login(context: Context) {
+        isLoading.value = true
+        if (username.value?.isNotEmpty() == true
+            && password.value.isNotEmpty()
+        ) {
+            val ret = HproseInstance.login(username.value!!, password.value)
+            isLoading.value = false
 
-                if (ret.second != null) {
-                    loginError.value = ret.second.toString()
-                } else {
-                    val u = ret.first as User
-                    preferencesHelper.setUserId(u.mid)
-                    appUser = u
-                    _user.value = u
-                    hasLogon.value = true
-                }
+            if (ret.second != null) {
+                loginError.value = ret.second.toString()
             } else {
-                loginError.value = context.getString(R.string.username_required)
-                isLoading.value = false
+                val u = ret.first as User
+                preferencesHelper.setUserId(u.mid)
+                appUser = u
+                _user.value = u
+                hasLogon.value = true
             }
+        } else {
+            loginError.value = context.getString(R.string.username_required)
+            isLoading.value = false
         }
     }
 
@@ -277,7 +264,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Handle both register and update of user profile. Username, password are required.
      * */
-    fun register(context: Context, popBack: () -> Unit) {
+    suspend fun register(context: Context, popBack: () -> Unit) {
         if (username.value?.isEmpty() == true
             || password.value.isEmpty()
         ) {
@@ -295,68 +282,60 @@ class UserViewModel @AssistedInject constructor(
         }
 
         isLoading.value = true
-        viewModelScope.launch(Dispatchers.IO) {
-            if (nodeId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-                // Find IP of desired node.
-                val ip = HproseInstance.getNodeIP(nodeId.value)
-                if (ip == null) {
-                    showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
-                    isLoading.value = false
-                    return@launch
-                } else {
-                    // register user on desired node, and use it henceforth.
-                    appUser = appUser.copy(baseUrl = "http://$ip")
-                    hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                        .useService(HproseService::class.java)
-                }
+        if (nodeId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
+            // Find IP of desired node.
+            val ip = HproseInstance.getNodeIP(nodeId.value)
+            if (ip == null) {
+                showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
+                isLoading.value = false
+                return
+            } else {
+                // register user on desired node, and use it henceforth.
+                appUser = appUser.copy(baseUrl = "http://$ip")
+                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                    .useService(HproseService::class.java)
             }
-            val user = appUser.copy(name = name.value,
-                username = username.value, password = password.value,
-                profile = profile.value, avatar = appUser.avatar
-            )
-            val ret = HproseInstance.setUserData(user)
-            if (ret != null) {
-                if (ret["status"] == "success") {
-                    val gson = Gson()
-                    val type = object : TypeToken<User>() {}.type
-                    val newUser: User = gson.fromJson(ret["user"].toString(), type)
-                    if (appUser.mid == TW_CONST.GUEST_ID) {
-                        // register new user. Do NOT update appUser, wait for
-                        // new user to login. Add it to Admin's fans list.
-                        user.followingList?.forEach {
-                            HproseInstance.toggleFollower(it, true, newUser.mid)
-                        }
-                        password.value = ""
-                        val event = SnackbarEvent(
-                            message = context.getString(R.string.registration_ok)
-                        )
-                        showSnackbar(event)
-                        viewModelScope.launch(Dispatchers.Main) {
-                            popBack()
-                        }
-                    } else {
-                        // update user profile
-                        appUser = appUser.copy(
-                            name = newUser.name, profile = newUser.profile, username = newUser.username
-                        )
-                        _user.value = appUser
-                        newUser.name?.let { preferenceHelper.saveName(it) }
-                        newUser.profile?.let { preferenceHelper.saveProfile(it) }
-
-                        val event = SnackbarEvent(
-                            message = context.getString(R.string.profile_update_ok)
-                        )
-                        showSnackbar(event)
+        }
+        val user = appUser.copy(
+            name = name.value,
+            username = username.value, password = password.value,
+            profile = profile.value, avatar = appUser.avatar
+        )
+        val ret = HproseInstance.setUserData(user)
+        if (ret != null) {
+            if (ret["status"] == "success") {
+                val gson = Gson()
+                val type = object : TypeToken<User>() {}.type
+                val newUser: User = gson.fromJson(ret["user"].toString(), type)
+                if (appUser.mid == TW_CONST.GUEST_ID) {
+                    // register new user. Do NOT update appUser, wait for
+                    // new user to login. Add it to Admin's fans list.
+                    user.followingList?.forEach {
+                        HproseInstance.toggleFollower(it, true, newUser.mid)
                     }
+                    password.value = ""
+                    popBack()
                 } else {
-                    showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
+                    // update user profile
+                    appUser = appUser.copy(
+                        name = newUser.name, profile = newUser.profile, username = newUser.username
+                    )
+                    _user.value = appUser
+                    newUser.name?.let { preferenceHelper.saveName(it) }
+                    newUser.profile?.let { preferenceHelper.saveProfile(it) }
+
+                    val event = SnackbarEvent(
+                        message = context.getString(R.string.profile_update_ok)
+                    )
+                    showSnackbar(event)
                 }
             } else {
-                showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
+                showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
             }
-            isLoading.value = false
-
+        } else {
+            showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
         }
+        isLoading.value = false
     }
 
     /**

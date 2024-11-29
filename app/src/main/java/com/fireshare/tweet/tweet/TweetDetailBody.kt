@@ -300,8 +300,10 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
-                appUserViewModel.pinToTop(tweet.mid)
-                onDismissRequest()
+                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                    appUserViewModel.pinToTop(tweet.mid)
+                    onDismissRequest()
+                }
             },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -212,7 +212,6 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
         // hide the Follow/Unfollow button when header is collapsed.
         if (scrollBehavior?.state?.collapsedFraction == 1f)
             return
-        val scope = rememberCoroutineScope()
         Text(
             text = buttonText.value,
             style = MaterialTheme.typography.labelMedium,
@@ -228,9 +227,11 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                         else -> {
                             if (appUser.mid != TW_CONST.GUEST_ID)
-                                appUserViewModel.toggleFollow(user.mid) {
-                                    scope.launch(Dispatchers.IO) {
-                                        tweetFeedViewModel.updateFollowings(user.mid, it)
+                                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    appUserViewModel.toggleFollow(user.mid) {
+                                        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                            tweetFeedViewModel.updateFollowings(user.mid, it)
+                                        }
                                     }
                                 }
                             else {
@@ -241,7 +242,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                                         action = { navController.navigate(NavTweet.Login) }
                                     )
                                 )
-                                viewModel.showSnackbar(event)
+                                viewModel.viewModelScope.launch {
+                                    viewModel.showSnackbar(event)
+                                }
                             }
                         }
                     }

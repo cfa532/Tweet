@@ -697,7 +697,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val json = response.body?.string()
                 val gson = Gson()
-                gson.fromJson(json, Boolean::class.java)
+                return@withRetry gson.fromJson(json, Boolean::class.java)
             }
         } catch (e: Exception) {
             Timber.tag("toggleFollowing()").e(e.toString())

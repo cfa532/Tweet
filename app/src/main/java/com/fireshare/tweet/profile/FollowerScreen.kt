@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.R
@@ -186,19 +187,20 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
-        val scope = rememberCoroutineScope()
         Text(
             text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId) {
-                        scope.launch(Dispatchers.IO) {
-                            tweetFeedViewModel.updateFollowings(userId, it)
+                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                        appUserViewModel.toggleFollow(userId) {
+                            tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                tweetFeedViewModel.updateFollowings(userId, it)
+                            }
                         }
                     }
-                })
+                } )
                 .border(
                     width = 1.dp,
                     color = Color.DarkGray,

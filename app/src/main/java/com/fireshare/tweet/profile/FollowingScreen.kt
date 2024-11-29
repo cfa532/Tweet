@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
@@ -200,9 +201,11 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
-                    appUserViewModel.toggleFollow(userId) {
-                        scope.launch(Dispatchers.IO) {
-                            tweetFeedViewModel.updateFollowings(userId, it)
+                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                        appUserViewModel.toggleFollow(userId) {
+                            tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                tweetFeedViewModel.updateFollowings(userId, it)
+                            }
                         }
                     }
                 })
