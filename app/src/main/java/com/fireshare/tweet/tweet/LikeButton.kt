@@ -115,7 +115,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
             return@IconButton
         }
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
                 viewModel.updateTweet(updatedTweet)
             }
@@ -149,7 +149,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.viewModelScope.launch {
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
                 guestWarning(context, navController)
             }
         } else viewModel.likeTweet()
