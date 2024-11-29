@@ -49,48 +49,45 @@ class ChatViewModel @AssistedInject constructor(
         }
     }
 
-    fun sendMessage() {
+    suspend fun sendMessage() {
         val message = ChatMessage(
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
             content = textState.value.trim()
         )
-        _chatMessages.value += message  // update message list in memory
-        viewModelScope.launch(Dispatchers.IO) {
-            chatRepository.insertMessage(message)   // update chat records in Room
-            HproseInstance.sendMessage(receiptId, message)  // send it to network
-            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)  // update session in Room
-
-            chatListViewModel?.updateSession(message)  // update session list in memory
-        }
+        _chatMessages.value += message
+        // update message list in memory
+        chatRepository.insertMessage(message)       // update chat records in Room
+        HproseInstance.sendMessage(receiptId, message)  // send it out on network
+        chatSessionRepository.updateChatSession(    // update session in Room
+            appUser.mid,
+            receiptId,
+            hasNews = false
+        )
+        chatListViewModel?.updateSession(message, hasNews = false)  // update session list in memory
     }
 
-    fun fetchNewMessage(numOfMsgs: Int = 500) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val gson = Gson()
-            val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs) ?: return@launch
-            val news = mutableListOf<ChatMessage>()
-            for(i in fetchedMessages.indices){
-                val str = gson.toJson(fetchedMessages[i])
-                news.add(gson.fromJson(str, ChatMessage::class.java))
-            }
-            if (news.isNotEmpty()) {
-                chatRepository.insertMessages(news.filter { it.authorId != appUser.mid })
-                /**
-                 * All outgoing and incoming messages are stored at user's mimei database.
-                 * When fetching new messages, all messages during the last waiting period
-                 * are read. Have to filter out messages sent by appUser, which have been
-                 * inserted into Room database when sending out.
-                 * */
-                _chatMessages.update { it.plus(news.filter { m ->
+    suspend fun fetchNewMessage(numOfMsgs: Int = 500) {
+        val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs) ?: return
+        val news = fetchedMessages.toMutableList()
+        if (news.isNotEmpty()) {
+            chatRepository.insertMessages(news.filter { it.authorId != appUser.mid })
+            /**
+             * All outgoing and incoming messages are stored at user's mimei database.
+             * When fetching new messages, all messages during the last waiting period
+             * are read. Have to filter out messages sent by appUser, which have been
+             * inserted into Room database when sending out.
+             * */
+            _chatMessages.update {
+                it.plus(news.filter { m ->
                     m.authorId != appUser.mid   // only count incoming messages
-                }) }
-                // update session in database
-                chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = true)
-                // update session in memory
-                chatListViewModel?.updateSession(news.last())
+                })
             }
+            // update session in database
+            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
+            // update session in memory
+            chatListViewModel?.updateSession(news.last(), hasNews = false)
         }
     }
 

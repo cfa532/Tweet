@@ -24,7 +24,7 @@ data class ChatMessage(
 
 @Serializable
 data class ChatSession(
-    var timestamp: Long,    // last time the chat screen is opened
+    var timestamp: Long = System.currentTimeMillis(),    // last time the chat screen is opened
     val userId: MimeiId,    // always the appUser
     val receiptId: MimeiId, // whom the app user is chatting with
     var hasNews: Boolean,   // new message hasn't been read.

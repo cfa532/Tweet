@@ -46,12 +46,14 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.concurrent.timer
 
@@ -77,12 +79,15 @@ fun ChatScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Upon opening of ChatBox, set corresponding chat session new message flag to false.
-        viewModel.chatListViewModel?.updateSession(null, viewModel.receiptId)
+        // Upon opening of ChatBox, set current chat session's new message flag to false.
+        // assume user read new message when opening this chat screen.
+        viewModel.chatListViewModel?.updateSession(null, sessionId = viewModel.receiptId)
 
         // fetch new messages every 10s when on chat screen.
         timer(period = 15000, action = {
-            viewModel.fetchNewMessage()
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.fetchNewMessage()
+            }
         }, initialDelay = 100)
     }
 
@@ -231,15 +236,19 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             ),
             keyboardActions = KeyboardActions(
                 onSend = {
-                    viewModel.sendMessage()
-                    viewModel.textState.value = ""
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        viewModel.sendMessage()
+                        viewModel.textState.value = ""
+                    }
                 }
             ),
             trailingIcon = {
                 IconButton(onClick = {
                     if (textState.isNotBlank()) {
-                        viewModel.sendMessage()
-                        viewModel.textState.value = ""
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            viewModel.sendMessage()
+                            viewModel.textState.value = ""
+                        }
                     }
                 }) {
                     Icon(imageVector = Icons.AutoMirrored.Filled.Send,

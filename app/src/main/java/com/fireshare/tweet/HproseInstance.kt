@@ -187,9 +187,10 @@ object HproseInstance {
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) { return withRetry {
         var entry = "message_outgoing"
+        val encodedMsg = URLEncoder.encode(Json.encodeToString(msg), "utf-8")
         var url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
-                    "&receiptid=$receiptId&msg=${Json.encodeToString(msg)}"
+                    "&receiptid=$receiptId&msg=$encodedMsg"
         // write outgoing message to user's Mimei db
         var request = Request.Builder().url(url).build()
         try {

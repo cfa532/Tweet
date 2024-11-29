@@ -53,10 +53,9 @@ class ChatSessionRepository(
 
     /**
      * Update existing chat sessions with incoming chat message.
-     * Chat message is identified by its pair of authorId and receiptId. Depending on
-     * the direction of message flow, the pair change switch. Whereas the session's
-     * author is always the current app user, and its receipt is the one engaging in
-     * conversation with the appUser.
+     * Chat message is identified by its Normalized pair of authorId and receiptId.
+     * The session's author is always the current app user, and its receipt is the one
+     * engaging in conversation with the appUser.
      * */
     fun mergeMessagesWithSessions(
         existingSessions: List<ChatSession>,
@@ -79,35 +78,41 @@ class ChatSessionRepository(
             messageMap[key] = message
         }
 
-        // Merge new messages into the map
-        val gson = Gson()
-        for (i in newMessages.indices) {
-            val json = gson.toJson(newMessages[i])
-            val msg = gson.fromJson(json, ChatMessage::class.java)
-            val key = normalizedKey(msg)
+        // Merge new messages into the map, by replacing old last messages.
+        newMessages.forEach { message ->
+            val key = normalizedKey(message)
             val existingMessage = messageMap[key]
-            if (existingMessage == null || msg.timestamp > existingMessage.timestamp) {
-                messageMap[key] = msg
+            if (existingMessage == null || message.timestamp > existingMessage.timestamp) {
+                messageMap[key] = message
             }
         }
+
         val updatedSessions = existingSessions.toMutableList()
         messageMap.forEach { (key, msg) ->
-            val es = existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
+            val es =
+                existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
             if (es == null) {
                 // a new session is created.
                 updatedSessions.add(
-                ChatSession(
-                    timestamp = msg.timestamp,
-                    userId = appUser.mid,
-                    receiptId = if (key.first == appUser.mid) key.second else key.first,
-                    hasNews = true,
-                    lastMessage = msg
-                ))
+                    ChatSession(
+                        timestamp = msg.timestamp,
+                        userId = appUser.mid,
+                        receiptId = if (key.first == appUser.mid) key.second else key.first,
+                        hasNews = true,
+                        lastMessage = msg
+                    )
+                )
             } else {
                 if (msg.timestamp > es.lastMessage.timestamp) {
                     // existing session is updated with new message.
                     updatedSessions.remove(es)
-                    updatedSessions.add(es.copy(lastMessage = msg, timestamp = msg.timestamp, hasNews = true))
+                    updatedSessions.add(
+                        es.copy(
+                            lastMessage = msg,
+                            timestamp = msg.timestamp,
+                            hasNews = true
+                        )
+                    )
                 }
             }
         }

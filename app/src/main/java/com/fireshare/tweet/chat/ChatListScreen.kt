@@ -55,7 +55,12 @@ fun ChatListScreen(viewModel: ChatListViewModel)
 {
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
-    viewModel.previewMessages()
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            viewModel.previewMessages()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -118,11 +123,15 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
     }
 
     Row(modifier = Modifier.padding(8.dp)) {
-        Box(modifier = Modifier
-            .size(40.dp)
+        Box(
+            modifier = Modifier
+                .size(40.dp)
 //            .clip(CircleShape)
-            .clickable(onClick = { user?.mid?.let { navController.navigate(NavTweet.UserProfile(it))
-            }})
+                .clickable(onClick = {
+                    user?.mid?.let {
+                        navController.navigate(NavTweet.UserProfile(it))
+                    }
+                })
         ) {
             UserAvatar(user)
 
@@ -141,10 +150,11 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
                 }
             }
         }
-        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-        Column(modifier = Modifier
-            .clickable( onClick = { user?.mid?.let { navController.navigate(NavTweet.ChatBox(it))}
-            })) {
+        Column(modifier = Modifier.padding(start = 4.dp)
+            .clickable(onClick = {
+                user?.mid?.let { navController.navigate(NavTweet.ChatBox(it)) }
+            })
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -155,23 +165,19 @@ fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navContr
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(chatMessage.timestamp)),
+                    text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(
+                        Date(
+                            chatMessage.timestamp
+                        )
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
             }
-
-            if (chatMessage.authorId == appUser.mid) {
-                Text(
-                    text = chatMessage.content,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            } else {
-                Text(
-                    text = chatMessage.content,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
+            Text(
+                text = chatMessage.content,
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
     }
 }
