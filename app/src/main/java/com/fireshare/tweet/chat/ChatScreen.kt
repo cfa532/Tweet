@@ -79,8 +79,8 @@ fun ChatScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Upon opening of ChatBox, set current chat session's new message flag to false.
-        // assume user read new message when opening this chat screen.
+        // Assume user read new message when opening this chat screen.
+        // Upon opening of ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, sessionId = viewModel.receiptId)
 

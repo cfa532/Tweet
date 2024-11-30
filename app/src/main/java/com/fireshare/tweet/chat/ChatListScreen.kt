@@ -34,9 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
@@ -106,9 +108,8 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                 }
                 item {
                     if (chatSessions.isEmpty()) {
-                        Text("No chat sessions found. Click the envelop icon on user" +
-                                " profile page to start a chat.",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Text(stringResource(R.string.no_chat),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                 }
             }

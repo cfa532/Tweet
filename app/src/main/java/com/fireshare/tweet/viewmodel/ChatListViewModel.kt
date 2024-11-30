@@ -80,7 +80,9 @@ class ChatListViewModel @Inject constructor(
                         lastMessage = msg,
                         timestamp = msg.timestamp
                     )
-                    _chatSessions.update { sessions -> (sessions - sessionForNewsUpdate + updatedSessionForNewsUpdate).sortedByDescending { it.timestamp } }
+                    _chatSessions.update { sessions ->
+                        (sessions - sessionForNewsUpdate + updatedSessionForNewsUpdate)
+                            .sortedByDescending { it.timestamp } }
                 }
         }
     }

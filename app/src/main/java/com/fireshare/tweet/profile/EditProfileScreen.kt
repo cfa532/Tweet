@@ -207,18 +207,6 @@ fun EditProfileScreen(
                 color = MaterialTheme.colorScheme.secondary,
             )
         }
-
-        if (showDialog.value) {
-            AlertDialog(
-                onDismissRequest = { showDialog.value = false },
-                confirmButton = {
-                    TextButton(onClick = { showDialog.value = false }) {
-                        Text("OK")
-                    }
-                },
-                text = { Text(stringResource(R.string.key_phrase_warning)) }
-            )
-        }
     }
 }
 
