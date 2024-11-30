@@ -53,6 +53,7 @@ import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LoginScreen(viewModel: UserViewModel) {
@@ -63,14 +64,8 @@ fun LoginScreen(viewModel: UserViewModel) {
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
     val loginError by viewModel.loginError
-    val hasLogon by viewModel.hasLogon
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(hasLogon) {
-        if (hasLogon) {
-            navController.navigate(NavTweet.TweetFeed)
-        }
-    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -137,7 +132,12 @@ fun LoginScreen(viewModel: UserViewModel) {
         val context = LocalContext.current
         Button(
             onClick = { viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.login(context)
+                viewModel.login(context) {
+                    viewModel.viewModelScope.launch(Dispatchers.Main) {
+//                        navController.navigate(NavTweet.TweetFeed)
+                        navController.popBackStack()
+                    }
+                }
             } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading    // disable Login button during uploading.

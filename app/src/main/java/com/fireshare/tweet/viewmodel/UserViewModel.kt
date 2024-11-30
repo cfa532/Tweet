@@ -79,7 +79,6 @@ class UserViewModel @AssistedInject constructor(
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
-    var hasLogon = mutableStateOf(false)
 
     suspend fun loadNewerTweets() {
         if (initState.value) return
@@ -229,7 +228,7 @@ class UserViewModel @AssistedInject constructor(
         SnackbarController.sendEvent(event)
     }
 
-    suspend fun login(context: Context) {
+    suspend fun login(context: Context, popBack: () -> Unit) {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
@@ -244,7 +243,7 @@ class UserViewModel @AssistedInject constructor(
                 preferencesHelper.setUserId(u.mid)
                 appUser = u
                 user.value = u
-                hasLogon.value = true
+                popBack()
             }
         } else {
             loginError.value = context.getString(R.string.username_required)
@@ -252,8 +251,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout() {
-        hasLogon.value = false
+    fun logout(popBack: () -> Unit) {
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
         user.value = appUser
@@ -266,6 +264,7 @@ class UserViewModel @AssistedInject constructor(
         profile.value = ""
         name.value = ""
         hostId.value = ""
+        popBack()
     }
 
     /**
@@ -330,8 +329,8 @@ class UserViewModel @AssistedInject constructor(
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
                     this.user.value = appUser
-                    updatedUser.name?.let { preferenceHelper.saveName(it) }
-                    updatedUser.profile?.let { preferenceHelper.saveProfile(it) }
+                    appUser.name?.let { preferenceHelper.saveName(it) }
+                    appUser.profile?.let { preferenceHelper.saveProfile(it) }
 
                     val event = SnackbarEvent(
                         message = context.getString(R.string.profile_update_ok)
