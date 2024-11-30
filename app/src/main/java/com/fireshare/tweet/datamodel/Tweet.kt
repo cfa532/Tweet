@@ -100,6 +100,7 @@ data class User(
     var tweetCount: Int = 0,
 
     // List of nodes authorized to the user to write tweets on.
+    // Only first one is used now.
     var nodeIds: List<MimeiId>? = null,
     var publicKey: String? = null,
 
