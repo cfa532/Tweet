@@ -291,7 +291,7 @@ class UserViewModel @AssistedInject constructor(
         if (hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             // Find IP of desired node. User can change its value to appoint
             // a different host node.
-            val ip = HproseInstance.getNodeIP(hostId.value)
+            val ip = HproseInstance.getHostIP(hostId.value)
             if (ip == null) {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
                 isLoading.value = false

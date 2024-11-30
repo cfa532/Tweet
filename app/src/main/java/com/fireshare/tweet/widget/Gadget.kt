@@ -14,13 +14,8 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -142,7 +137,7 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getFirstReachableUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
+    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
         val deferreds = ipList.map { ip ->
             Timber.tag("getFirstUser").d("trying $ip")
             async {
@@ -175,12 +170,12 @@ object Gadget {
         }
     }
 
-    suspend fun findFirstReachableAddress(ipList: List<String>): String? = coroutineScope {
+    suspend fun getAccessibleIP(ipList: List<String>): String? = coroutineScope {
         val deferreds = ipList.map { ip ->
-            Timber.tag("getFirstIP").d("trying $ip")
+            Timber.tag("getAccessibleIP").d("trying $ip")
             async {
                 try {
-                    HproseInstance.isReachable(ip)
+                    HproseInstance.isAccessible(ip)
                 } catch (e: Exception) {
                     null // Handle exceptions and return null if an error occurs
                 }

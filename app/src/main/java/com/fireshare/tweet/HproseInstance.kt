@@ -13,8 +13,9 @@ import com.fireshare.tweet.datamodel.TweetCacheDatabase
 import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.widget.Gadget.findFirstReachableAddress
-import com.fireshare.tweet.widget.Gadget.getFirstReachableUser
+import com.fireshare.tweet.datamodel.writableUrl
+import com.fireshare.tweet.widget.Gadget.getAccessibleIP
+import com.fireshare.tweet.widget.Gadget.getAccessibleUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
@@ -31,7 +32,6 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.io.IOException
-import java.lang.ref.Reference
 import java.net.ProtocolException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -98,7 +98,7 @@ object HproseInstance {
                 val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
                 val matcher = pattern.matcher(htmlContent as CharSequence)
                 if (matcher.find()) {
-                    matcher.group(1)?.let {
+                    matcher.group(1)?.let { it ->
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         appId = paramMap["mid"].toString()
 
@@ -123,12 +123,14 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            getFirstReachableUser(hostIPs, userId) ?: User(
+                            val user = getAccessibleUser(hostIPs, userId) ?: User(
                                 mid = TW_CONST.GUEST_ID,
-                                baseUrl = "http://${hostIPs[0]}"
+                                baseUrl = "http://${hostIPs[0]}"    //shall never happen.
                             )
+                            user.writableUrl()
+                            user
                         } else {
-                            val firstIp = findFirstReachableAddress(hostIPs)
+                            val firstIp = getAccessibleIP(hostIPs)
                             User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         }
                         cachedUsers.add(appUser)
@@ -183,26 +185,12 @@ object HproseInstance {
         Timber.tag("HproseInstance").e("Network error: All retries failed.")
         throw Exception("Network error: All retries failed.")
     }
-    suspend fun getHostId(): MimeiId? { return withRetry {
-        val url = "${appUser.baseUrl}/getvar?name=hostid"
-        val request = Request.Builder().url(url).build()
-        try {
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = response.body?.string()
-                return@withRetry json?.trim()?.trim('"')
-            }
-        } catch (e: Exception) {
-            Timber.tag("getHostId").e(e.toString())
-        }
-        null
-    } }
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) { return withRetry {
         var entry = "message_outgoing"
         val encodedMsg = URLEncoder.encode(Json.encodeToString(msg), "utf-8")
         var url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
+            "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
                     "&receiptid=$receiptId&msg=$encodedMsg"
         // write outgoing message to user's Mimei db
         var request = Request.Builder().url(url).build()
@@ -212,7 +200,7 @@ object HproseInstance {
                 // write message to receipt's Mimei db on the receipt's node
                 val receipt = getUser(receiptId)
                 entry = "message_incoming"
-                url = "${receipt?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                url = "${receipt?.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
                             "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
                                 Json.encodeToString(msg)
                             }"
@@ -229,7 +217,7 @@ object HproseInstance {
         try {
             val gson = Gson()
             val entry = "message_fetch"
-            val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
                     "&userid=${appUser.mid}&senderid=$senderId"
             val request = Request.Builder().url(url).build()
                 // write outgoing message to user's Mimei db
@@ -352,15 +340,32 @@ object HproseInstance {
         }
     } }
 
-    suspend fun getNodeIP(nodeId: MimeiId): String?  { return withRetry {
+    suspend fun getHostId(): MimeiId? { return withRetry {
+        val url = "${appUser.baseUrl}/getvar?name=hostid"
+        val request = Request.Builder().url(url).build()
+        try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                return@withRetry json?.trim()?.trim('"')?.trim(',')
+            }
+        } catch (e: Exception) {
+            Timber.tag("getHostId").e(e.toString())
+        }
+        null
+    } }
+
+    suspend fun getHostIP(nodeId: MimeiId): String?  { return withRetry {
         val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                response.body?.string()?.trim()?.trim('"')?.split(",").let {ips ->
-                    if (!ips.isNullOrEmpty()) {
-                        return@withRetry findFirstReachableAddress(ips)
+                val str = response.body?.string() ?: return@withRetry null
+                str.trim().trim('"').trim(',').split(',').let {ips ->
+                    if (ips.isNotEmpty()) {
+                        val ip = getAccessibleIP(ips)
+                        return@withRetry ip
                     }
                 }
             }
@@ -380,13 +385,13 @@ object HproseInstance {
             // register a new User account, with default followings.
             user.followingList = BuildConfig.ALPHA_ID.split(",")
             url =
-                "${user.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
+                "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
                     Json.encodeToString(user)
                 }"
         } else {
             // update existing account
             val method = "set_author_core_data"
-            url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&user=${
+            url = "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&user=${
                 Json.encodeToString(user)
             }"
         }
@@ -395,8 +400,7 @@ object HproseInstance {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val json = response.body?.string()
-                val gson = Gson()
-                val updatedUser = gson.fromJson(json, Map::class.java)
+                val updatedUser = Gson().fromJson(json, Map::class.java)
                 return@withRetry updatedUser
             }
             Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
@@ -416,7 +420,9 @@ object HproseInstance {
             val gson = Gson()
             val request = gson.fromJson(json, Map::class.java)
             try {
-                hproseClient.runMApp(entry, request) as Unit?
+                val client =
+                    HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
+                client.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
             }
@@ -641,7 +647,7 @@ object HproseInstance {
     suspend fun uploadTweet(tweet: Tweet): Tweet? { return withRetry {
         val method = "upload_tweet"
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
-        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweet=$json"
+        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&tweet=$json"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
@@ -659,7 +665,7 @@ object HproseInstance {
 
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
         var method = "delete_tweet"
-        var url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+        var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                     "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
         var request = Request.Builder().url(url).build()
         try {
@@ -669,7 +675,7 @@ object HproseInstance {
                 // if the originalTweet is not null, also decrease its quote count
                 if (tweet.originalTweetId != null) {
                     method = "retweet_remove"
-                    url = "${tweet.originalTweet!!.author?.baseUrl}/entry?aid=$appId&ver=last" +
+                    url = "${tweet.originalTweet!!.author?.writableUrl()}/entry?aid=$appId&ver=last" +
                             "&entry=$method&tweetid=${tweet.originalTweetId}&userid=${appUser.mid}"
                     request = Request.Builder().url(url).build()
                     response = httpClient.newCall(request).execute()
@@ -687,7 +693,8 @@ object HproseInstance {
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) { return withRetry {
         val method = "delete_comment"
         val url =
-            "${parentTweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${parentTweet.mid}&commentid=$commentId"
+            "${parentTweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&tweetid=${parentTweet.mid}&commentid=$commentId"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
@@ -705,7 +712,8 @@ object HproseInstance {
     suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {
         val method = "toggle_following"
         val url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=$appUserId&otherid=${userId}"
+            "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&userid=$appUserId&otherid=${userId}"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()
@@ -731,7 +739,7 @@ object HproseInstance {
         val user = getUser(userId)
         val method = "toggle_follower"
         val url =
-            "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&otherid=$followerId" +
+            "${user?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&otherid=$followerId" +
                     "&userid=${userId}&isfollower=$isFollowing"
         val request = Request.Builder().url(url).build()
         try {
@@ -785,7 +793,7 @@ object HproseInstance {
     suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
         val method = "retweet_add"
         val url =
-            StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+            StringBuilder("${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method")
                 .append("&tweetid=${tweet.mid}")
                 .append("&userid=${appUser.mid}")
                 .append("&retweetid=$retweetId")
@@ -804,7 +812,8 @@ object HproseInstance {
             val author = tweet.author ?: return@withRetry tweet
             val method = "toggle_likes"
             val url =
-                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+                "${author.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                        "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -836,7 +845,8 @@ object HproseInstance {
             val author = tweet.author ?: return@withRetry tweet
             val method = "toggle_bookmark"
             val url =
-                "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+                "${author.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                        "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -900,7 +910,8 @@ object HproseInstance {
             val method = "add_comment"
             val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
             val url =
-                "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method&tweetid=${tweet.mid}&comment=$json"
+                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                        "&tweetid=${tweet.mid}&comment=$json"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -945,6 +956,7 @@ object HproseInstance {
     suspend fun getUser(userId: MimeiId): User? { return withRetry {
         // check if user data has been cached
         cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
+
         try {
             val url = "${appUser.baseUrl}/getvar?name=mmprovsips&arg0=$userId"
             val request = Request.Builder().url(url).build()
@@ -965,7 +977,7 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        getFirstReachableUser(hostIPs, userId)?.let { user: User ->
+                        getAccessibleUser(hostIPs, userId)?.let { user: User ->
                             cachedUsers.add(user)
                             return@withRetry user
                         }
@@ -1004,22 +1016,22 @@ object HproseInstance {
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    suspend fun isReachable(ip: String): String? { return withRetry {
-        try {
+    suspend fun isAccessible(ip: String): String? { return withRetry {
+        runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
+
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
-                val gson = Gson()
-                gson.fromJson<List<String>?>(responseBody, object : TypeToken<List<String>>() {}.type)?.let { ips ->
-                    if (ips.isNotEmpty()) ip else null
-                }
-            } else null
-        } catch (e: Exception) {
-            Timber.tag("isReachable").e("No reachable. $ip $e")
-            null
-        }
+                val mmVersions = Gson().fromJson<List<String>?>(responseBody, object : TypeToken<List<String>>() {}.type)
+                if (mmVersions?.isNotEmpty() == true) ip else null // Check if list is not empty or null
+            } else {
+                null
+            }
+        }.onFailure { e ->
+            Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
+        }.getOrElse { null } //
     } }
 
     /**
@@ -1027,7 +1039,7 @@ object HproseInstance {
      * */
     suspend fun toggleTopList(tweetId: MimeiId): List<Map<*,*>>? { return withRetry {
         val entry = "toggle_top_tweets"
-        val url =  "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+        val url =  "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&userid=${appUser.mid}&tweetid=$tweetId"
         val request = Request.Builder().url(url).build()
         try {
@@ -1077,7 +1089,7 @@ object HproseInstance {
 //          = msg.toRequestBody("application/json; charset=utf-8".toMediaType())
         val entry = "logging"
         val url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&msg=$str"
+            "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry&msg=$str"
         val request = Request.Builder()
             .url(url)
 //            .post(requestBody)
@@ -1104,10 +1116,13 @@ object HproseInstance {
                            {"aid": $appId, "ver": "last", "offset": $offset}
                      """.trimIndent()
                 val request = Gson().fromJson(json, Map::class.java).toMutableMap()
+                val client =
+                    HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
+
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     inputStream.use { stream ->
                         while (stream.read(buffer).also { byteRead = it } != -1) {
-                            request["fsid"] = hproseClient.runMApp("upload_ipfs",
+                            request["fsid"] = client.runMApp("upload_ipfs",
                                 request.toMap(), listOf(buffer))
                             offset += byteRead
                             request["offset"] = offset
@@ -1116,7 +1131,7 @@ object HproseInstance {
                 }
                 // Do not know the tweet mid yet, cannot add reference as 2nd argument.
                 // Do it later when uploading tweet.
-                val cid = request["fsid"]?.let { hproseClient.mfTemp2Ipfs(it.toString(), referenceId) }
+                val cid = request["fsid"]?.let { client.mfTemp2Ipfs(it.toString(), referenceId) }
 
                 // Determine MediaType based on MIME type
                 val mimeType = context.contentResolver.getType(uri)

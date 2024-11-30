@@ -14,6 +14,7 @@ import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Update
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
 import com.google.gson.Gson
@@ -115,6 +116,22 @@ data class User(
     // List of top tweets liked by the user
     var topTweets: List<MimeiId>? = null,
 )
+
+/**
+ * IP address of the first node in HostIds, which the user is authorized to write data on.
+ * */
+suspend fun User.writableUrl(): String? {
+    if (writableUrl != null) return writableUrl
+    else {
+        hostIds?.get(0)?.let {
+            HproseInstance.getHostIP(it)?.let { hostIP ->
+                writableUrl = "http://$hostIP"
+                return writableUrl
+            }
+        }
+    }
+    return null
+}
 
 // cache for tweets
 @Entity
