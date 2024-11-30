@@ -202,7 +202,7 @@ fun ProfileDetail(
     appUserViewModel: UserViewModel
 ) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.user
     val profile by remember { derivedStateOf { user.profile } }
     val tweetCount =
         viewModel.tweets.collectAsState().value.size + viewModel.topTweets.collectAsState().value.size

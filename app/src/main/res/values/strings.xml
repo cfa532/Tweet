@@ -55,6 +55,6 @@
     <string name="unpin">Unpin</string>
     <string name="registration_failed">Registration failed. Try again later.</string>
     <string name="username_taken">Username is taken</string>
-    <string name="node_not_found">Node not found</string>
+    <string name="node_not_found">Host not found</string>
     <string name="no_chat">No chat sessions found. Click the ✉️ at top right corner on user profile page to start a chat.</string>
 </resources>

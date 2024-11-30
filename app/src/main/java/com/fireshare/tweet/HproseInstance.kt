@@ -48,7 +48,6 @@ object HproseInstance {
     fun getAlphaIds(): List<MimeiId> {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
-
     // A in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
 
@@ -120,7 +119,7 @@ object HproseInstance {
                         val userId = preferenceHelper.getUserId()
                         appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                             /**
-                             * If there is a valid userId  in preference, this is a login user.
+                             * If there is a valid userId in preference, this is a login user.
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
@@ -184,6 +183,20 @@ object HproseInstance {
         Timber.tag("HproseInstance").e("Network error: All retries failed.")
         throw Exception("Network error: All retries failed.")
     }
+    suspend fun getHostId(): MimeiId? { return withRetry {
+        val url = "${appUser.baseUrl}/getvar?name=hostid"
+        val request = Request.Builder().url(url).build()
+        try {
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string()
+                return@withRetry json?.trim()?.trim('"')
+            }
+        } catch (e: Exception) {
+            Timber.tag("getHostId").e(e.toString())
+        }
+        null
+    } }
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) { return withRetry {
         var entry = "message_outgoing"
@@ -194,7 +207,7 @@ object HproseInstance {
         // write outgoing message to user's Mimei db
         var request = Request.Builder().url(url).build()
         try {
-            var response = httpClient.newCall(request).execute()
+            val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 // write message to receipt's Mimei db on the receipt's node
                 val receipt = getUser(receiptId)
@@ -360,8 +373,9 @@ object HproseInstance {
     /**
      * Register or update user data.
      * */
-    suspend fun setUserData(user: User): Map<*, *>? { return withRetry {
+    suspend fun setUserData(userObj: User): Map<*, *>? { return withRetry {
         val url: String
+        val user = userObj.copy(fansList = null, followingList = null)
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account, with default followings.
             user.followingList = BuildConfig.ALPHA_ID.split(",")
@@ -382,8 +396,7 @@ object HproseInstance {
             if (response.isSuccessful) {
                 val json = response.body?.string()
                 val gson = Gson()
-                val updatedUser =
-                    gson.fromJson(json, Map::class.java)
+                val updatedUser = gson.fromJson(json, Map::class.java)
                 return@withRetry updatedUser
             }
             Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
@@ -689,10 +702,10 @@ object HproseInstance {
     /**
      * @param userId is the user that appUser is following or unfollowing.
      * */
-    suspend fun toggleFollowing(userId: MimeiId): Boolean? { return withRetry {
+    suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {
         val method = "toggle_following"
         val url =
-            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${appUser.mid}&otherid=${userId}"
+            "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=$appUserId&otherid=${userId}"
         val request = Request.Builder().url(url).build()
         try {
             val response = httpClient.newCall(request).execute()

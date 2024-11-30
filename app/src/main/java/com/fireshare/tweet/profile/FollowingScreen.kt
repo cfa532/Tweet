@@ -78,7 +78,7 @@ fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserView
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    val userOfProfile by viewModel.user.collectAsState()
+                    val userOfProfile by viewModel.user
                     Column {
                         UserAvatar(userOfProfile, 36)
                         Text(

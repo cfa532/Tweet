@@ -39,8 +39,9 @@ import timber.log.Timber
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
 ): ViewModel(), TweetActionListener {
-    private var _user = MutableStateFlow(appUser)
-    val user: StateFlow<User> get() = _user.asStateFlow()
+//    private var _user = MutableStateFlow(appUser)
+//    val user: StateFlow<User> get() = _user.asStateFlow()
+    val user = mutableStateOf(appUser)
 
     // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -74,8 +75,7 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    var nodeId = mutableStateOf(if (user.value.nodeIds != null) user.value.nodeIds!![0] else "")
-
+    var hostId = mutableStateOf<MimeiId>("")
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
@@ -108,29 +108,36 @@ class UserViewModel @AssistedInject constructor(
     fun hasPinned(tweet: Tweet): Boolean {
         return topTweets.value.any { it.mid == tweet.mid }
     }
+    suspend fun getHostId() {
+        hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
+            HproseInstance.getHostId() ?: ""
+        } else user.value.hostIds!![0]
+    }
 
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
         // For now, user avatar can only be image.
         HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
             HproseInstance.setUserAvatar(userId, it)   // Update database value
-            _user.value = user.value.copy(avatar = it)
+            user.value = user.value.copy(avatar = it)
             appUser = appUser.copy(avatar = it)
         }
         isLoading.value = false
     }
 
-    suspend fun toggleFollow(userId: MimeiId, updateTweetFeed: (Boolean) -> Unit) {
+    suspend fun toggleFollow(subjectUserId: MimeiId,
+                             appUserId: MimeiId = appUser.mid,
+                             updateTweetFeed: (Boolean) -> Unit) {
         // toggle the Following status on the given UserId, to follow or unfollow
-        HproseInstance.toggleFollowing(userId)?.let { isFollowing ->
+        HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
             // Succeed. Now it is the other party's turn
             // to update its followers.
-            HproseInstance.toggleFollower(userId, isFollowing)
+            HproseInstance.toggleFollower(subjectUserId, isFollowing, appUserId)
             _followings.update { list ->
                 if (isFollowing) {
-                    if (!list.contains(userId)) list + userId else list
+                    if (!list.contains(subjectUserId)) list + subjectUserId else list
                 } else {
-                    list.filter { id -> id != userId }
+                    list.filter { id -> id != subjectUserId }
                 }
             }
             updateTweetFeed(isFollowing)
@@ -150,7 +157,7 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value = getUser(userId) ?: return@launch
+                user.value = getUser(userId) ?: return@launch
                 if (userId == appUser.mid) {
                     // By default NOT to update fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -236,7 +243,7 @@ class UserViewModel @AssistedInject constructor(
                 val u = ret.first as User
                 preferencesHelper.setUserId(u.mid)
                 appUser = u
-                _user.value = u
+                user.value = u
                 hasLogon.value = true
             }
         } else {
@@ -249,7 +256,7 @@ class UserViewModel @AssistedInject constructor(
         hasLogon.value = false
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
-        _user.value = appUser
+        user.value = appUser
         _fans.value = emptyList()
         _followings.value = emptyList()
         _tweets.value = emptyList()
@@ -258,7 +265,7 @@ class UserViewModel @AssistedInject constructor(
         password.value = ""
         profile.value = ""
         name.value = ""
-        nodeId.value = ""
+        hostId.value = ""
     }
 
     /**
@@ -282,9 +289,10 @@ class UserViewModel @AssistedInject constructor(
         }
 
         isLoading.value = true
-        if (nodeId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-            // Find IP of desired node.
-            val ip = HproseInstance.getNodeIP(nodeId.value)
+        if (hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
+            // Find IP of desired node. User can change its value to appoint
+            // a different host node.
+            val ip = HproseInstance.getNodeIP(hostId.value)
             if (ip == null) {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
                 isLoading.value = false
@@ -297,7 +305,7 @@ class UserViewModel @AssistedInject constructor(
             }
         }
         val user = appUser.copy(
-            name = name.value,
+            name = name.value, hostIds = listOf(hostId.value),
             username = username.value, password = password.value,
             profile = profile.value, avatar = appUser.avatar
         )
@@ -306,23 +314,24 @@ class UserViewModel @AssistedInject constructor(
             if (ret["status"] == "success") {
                 val gson = Gson()
                 val type = object : TypeToken<User>() {}.type
-                val newUser: User = gson.fromJson(ret["user"].toString(), type)
                 if (appUser.mid == TW_CONST.GUEST_ID) {
-                    // register new user. Do NOT update appUser, wait for
+                    val newUser: User = gson.fromJson(ret["user"].toString(), type)
+                    // registering a new user. Do NOT update appUser, wait for
                     // new user to login. Add it to Admin's fans list.
                     user.followingList?.forEach {
-                        HproseInstance.toggleFollower(it, true, newUser.mid)
+                        this.toggleFollow(it, newUser.mid) {}
                     }
                     password.value = ""
                     popBack()
                 } else {
                     // update user profile
-                    appUser = appUser.copy(
-                        name = newUser.name, profile = newUser.profile, username = newUser.username
+                    val updatedUser: User = gson.fromJson(ret["user"].toString(), type)
+                    appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
+                        username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
-                    _user.value = appUser
-                    newUser.name?.let { preferenceHelper.saveName(it) }
-                    newUser.profile?.let { preferenceHelper.saveProfile(it) }
+                    this.user.value = appUser
+                    updatedUser.name?.let { preferenceHelper.saveName(it) }
+                    updatedUser.profile?.let { preferenceHelper.saveProfile(it) }
 
                     val event = SnackbarEvent(
                         message = context.getString(R.string.profile_update_ok)
@@ -381,7 +390,7 @@ class UserViewModel @AssistedInject constructor(
         loginError.value = ""
     }
     fun onNodeIdChange(value: String) {
-        nodeId.value = value
+        hostId.value = value
         isLoading.value = false
         loginError.value = ""
     }

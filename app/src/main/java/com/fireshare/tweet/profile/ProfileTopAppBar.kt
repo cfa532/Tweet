@@ -73,7 +73,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                      scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.user
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
 
@@ -194,7 +194,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
         factory.create(appUser.mid)
     }
     val followings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.user
     val buttonText = remember { mutableStateOf("Follow") }
     val context = LocalContext.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()

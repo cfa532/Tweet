@@ -70,7 +70,7 @@ fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    val userOfProfile by viewModel.user.collectAsState()
+                    val userOfProfile by viewModel.user
                     Column {
                         UserAvatar(userOfProfile, 36)
                         Text(

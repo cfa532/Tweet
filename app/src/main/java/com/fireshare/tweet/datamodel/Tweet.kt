@@ -89,6 +89,7 @@ data class Tweet(
 @Serializable
 data class User(
     var baseUrl: String? = null,        // most recent url used to access user data
+    var writableUrl: String? = null,    // url used to write user data on.
     var mid: MimeiId,                   // Unique identifier for the user, and the mimei database
     var name: String? = null,
     var username: String? = null,
@@ -101,7 +102,7 @@ data class User(
 
     // List of nodes authorized to the user to write tweets on.
     // Only first one is used now.
-    var nodeIds: List<MimeiId>? = null,
+    var hostIds: List<MimeiId>? = null,
     var publicKey: String? = null,
 
     // List of tweet MIDs bookmarked by the user

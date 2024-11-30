@@ -22,19 +22,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +54,11 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Register and edit user profile.
+ * */
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
@@ -68,8 +70,8 @@ fun EditProfileScreen(
     val password by viewModel.password
     val name by viewModel.name
     val profile by viewModel.profile
-    val nodeId by viewModel.nodeId
-
+    val hostId by viewModel.hostId
+    val user by viewModel.user
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
     val launcher = rememberLauncherForActivityResult(
@@ -82,12 +84,17 @@ fun EditProfileScreen(
         }
     }
     val scrollState = rememberScrollState()
-    val showDialog = remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
         keyboardController?.show()
         viewModel.onPasswordChange("")
+        // get hostId if not exists
+        if (hostId.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                viewModel.getHostId()
+            }
+        }
     }
 
     Box(
@@ -161,9 +168,9 @@ fun EditProfileScreen(
                     singleLine = false
                 )
                 OutlinedTextField(
-                    value = nodeId,
+                    value = hostId,
                     onValueChange = { viewModel.onNodeIdChange(it) },
-                    label = { Text("Node ID") },
+                    label = { Text("Host ID") },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
@@ -171,7 +178,6 @@ fun EditProfileScreen(
                     singleLine = false
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -187,21 +193,25 @@ fun EditProfileScreen(
                     } },
                 enabled = !isLoading,
                 modifier = Modifier
+                    .padding(top = 16.dp)
                     .width(intrinsicSize = IntrinsicSize.Max)
                     .align(Alignment.CenterHorizontally)
             ) {
                 Text(stringResource(R.string.save))
             }
         }
-
-        // Bottom section using Box
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+        // Display user mid and current base url
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 16.dp, bottom = 16.dp)
                 .alpha(0.2f)
         ) {
-            val user by viewModel.user.collectAsState()
             Text(
                 text = "uid: ${user.mid} ${user.baseUrl}",
                 color = MaterialTheme.colorScheme.secondary,
@@ -215,8 +225,7 @@ fun AvatarSection(
     launcher: ManagedActivityResultLauncher<String, Uri?>,
     viewModel: UserViewModel
 ) {
-    val user by  viewModel.user.collectAsState()
-
+    val user by  viewModel.user
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
