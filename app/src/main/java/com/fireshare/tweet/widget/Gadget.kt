@@ -228,7 +228,7 @@ object Gadget {
                         else -> true
                     }
                 } catch (e:Exception) {
-                    return false // Invalid IP address
+                    Timber.tag("isValidIP").e("${e.message}")
                 }
             }
             return false
