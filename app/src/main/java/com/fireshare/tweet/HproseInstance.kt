@@ -958,30 +958,13 @@ object HproseInstance {
         cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
 
         try {
-            val url = "${appUser.baseUrl}/getvar?name=mmprovsips&arg0=$userId"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                var string = response.body?.string()?.trim()?.removeSurrounding("\"")
-                    ?.replace("\\", "")
-                val pattern =
-                    Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-                string = """
-                    window.setParam({
-                        addrs: $string,
-                        aid: ""
-                    })]
-                """.trimIndent()
-                val matcher = pattern.matcher(string as CharSequence)
-                if (matcher.find()) {
-                    matcher.group(1)?.let {
-                        val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        getAccessibleUser(hostIPs, userId)?.let { user: User ->
-                            cachedUsers.add(user)
-                            return@withRetry user
-                        }
-                    }
+            val json = """{"aid": $appId, "ver": "last", "mid": $userId}
+                 """.trimIndent()
+            val request = Gson().fromJson(json, Map::class.java)
+            hproseClient.runMApp<List<String>?>("get_provider", request)?.let { hostIPs ->
+                getAccessibleUser(hostIPs, userId)?.let { user: User ->
+                    cachedUsers.add(user)
+                    return@withRetry user
                 }
             }
         } catch (e: Exception) {
