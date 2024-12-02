@@ -208,7 +208,7 @@ fun EditProfileScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 16.dp)
+                .padding(start = 32.dp, bottom = 16.dp)
                 .alpha(0.2f)
         ) {
             Text(

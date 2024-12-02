@@ -12,6 +12,7 @@ import androidx.compose.ui.text.withStyle
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
+import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -19,6 +20,8 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.net.Inet4Address
+import java.net.InetAddress
 
 object Gadget {
 
@@ -138,7 +141,7 @@ object Gadget {
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
-        val deferreds = ipList.map { ip ->
+        val deferreds = ipList.filter{ isValidPublicIpAddress(it) }.map { ip ->
             Timber.tag("getFirstUser").d("trying $ip")
             async {
                 try {
@@ -171,7 +174,7 @@ object Gadget {
     }
 
     suspend fun getAccessibleIP(ipList: List<String>): String? = coroutineScope {
-        val deferreds = ipList.map { ip ->
+        val deferreds = ipList.filter{ isValidPublicIpAddress(it) }.map { ip ->
             Timber.tag("getAccessibleIP").d("trying $ip")
             async {
                 try {
@@ -200,6 +203,35 @@ object Gadget {
         } finally {
             // Ensure all coroutines are cancelled if the function exits
             deferreds.forEach { it.cancel() }
+        }
+    }
+
+    private fun isValidPublicIpAddress(fullIp: String): Boolean {
+        val ip = fullIp.substringBeforeLast(":").trim('[').trim(']')
+        if (InetAddressUtils.isIPv6Address(ip))
+            return true
+        else {
+            // Check for invalid format using a regular expression
+            if (!ip.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
+                return false // Invalid IP format
+            }
+            if (InetAddressUtils.isIPv4Address(ip)) {
+                try {
+                    val address = InetAddress.getByName(ip) as Inet4Address
+                    val addressBytes = address.address
+
+                    // Check if the IP falls within the local IP ranges
+                    return when {
+                        addressBytes[0] == 10.toByte() -> false // 10.0.0.0/8
+                        addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> false // 172.16.0.0/12
+                        addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> false // 192.168.0.0/16
+                        else -> true
+                    }
+                } catch (e:Exception) {
+                    return false // Invalid IP address
+                }
+            }
+            return false
         }
     }
 }
