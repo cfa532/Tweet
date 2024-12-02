@@ -3,7 +3,6 @@ package com.fireshare.tweet.service
 import android.content.Context
 import android.net.Uri
 import android.os.PowerManager
-import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters

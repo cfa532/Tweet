@@ -11,7 +11,6 @@ import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.toChatMessage
-import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
