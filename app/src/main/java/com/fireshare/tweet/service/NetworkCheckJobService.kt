@@ -2,10 +2,13 @@ package com.fireshare.tweet.service
 
 import android.app.job.JobParameters
 import android.app.job.JobService
+import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -25,7 +28,9 @@ class NetworkCheckJobService : JobService() {
         val isNetworkAvailable = checkNetworkAvailability()
 
         bottomBarViewModel.updateBadgeCount()
-        tweetFeedViewModel.loadNewerTweets()
+        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+            tweetFeedViewModel.loadNewerTweets()
+        }
 
         // Job finished
         jobFinished(params, !isNetworkAvailable)

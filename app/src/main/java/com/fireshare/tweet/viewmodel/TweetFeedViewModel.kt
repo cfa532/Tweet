@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject
@@ -111,7 +112,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
-    fun loadNewerTweets() {
+    suspend fun loadNewerTweets() {
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
 
@@ -124,7 +125,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isRefreshingAtTop.value = false
     }
 
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         if (initState.value) return
 
         _isRefreshingAtBottom.value = true
@@ -139,7 +140,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // Define a custom scope to ensure tweet deletion job not cancelled.
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
-    private fun getTweets(
+    private suspend fun getTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
         followings: List<MimeiId> = this.followings.value
@@ -147,7 +148,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val batchSize = 10 // Adjust batch size as needed
 
         followings.chunked(batchSize).forEach { batch ->
-            ioScope.launch(networkDispatcher) {
+            withContext(networkDispatcher) {
                 try {
                     batch.forEach { userId ->
                         async {
