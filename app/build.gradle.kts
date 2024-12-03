@@ -18,7 +18,7 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 8
+        versionCode = 9
         versionName = "20"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
