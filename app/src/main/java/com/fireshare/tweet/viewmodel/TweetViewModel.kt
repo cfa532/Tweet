@@ -129,14 +129,12 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = tweet.copy()
     }
 
-    fun delComment(commentId: MimeiId) {
-        viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.delComment(tweetState.value, commentId) { tid ->
-                _comments.update { currentComments ->
-                    currentComments.filterNot { it.mid == tid }
-                }
-                updateTweet(tweet.copy(commentCount = _comments.value.size))
+    suspend fun delComment(commentId: MimeiId) {
+        HproseInstance.delComment(tweetState.value, commentId) { tid ->
+            _comments.update { currentComments ->
+                currentComments.filterNot { it.mid == tid }
             }
+            updateTweet(tweet.copy(commentCount = _comments.value.size))
         }
     }
     // add new Comment object to its parent Tweet

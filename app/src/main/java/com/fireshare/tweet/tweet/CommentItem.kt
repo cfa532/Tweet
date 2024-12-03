@@ -194,7 +194,11 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
         ) {
             if (parentTweet.authorId == appUser.mid || comment.authorId == appUser.mid) {
                 DropdownMenuItem( modifier = Modifier.alpha(0.9f),
-                    onClick = { parentTweetViewModel.delComment(comment.mid) },
+                    onClick = {
+                        parentTweetViewModel.viewModelScope.launch(Dispatchers.IO) {
+                            parentTweetViewModel.delComment(comment.mid)
+                        }
+                    },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(

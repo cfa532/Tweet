@@ -261,11 +261,10 @@ fun TweetDropdownMenuItems(
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.
     if (tweet.authorId == appUser.mid && !appUserViewModel.hasPinned(tweet)) {
-        val scope = rememberCoroutineScope()
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                scope.launch(Dispatchers.IO) {
+                tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
                     tweetFeedViewModel.delTweet(tweet) {
                         originTweetViewModel?.refreshTweet()
                     }
