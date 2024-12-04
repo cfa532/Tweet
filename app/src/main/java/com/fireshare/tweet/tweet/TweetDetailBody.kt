@@ -36,11 +36,13 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Dp
@@ -88,7 +91,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry) {
+fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry,
+                    gridColumns: Int, onGridColumnsChange: (Int) -> Unit)
+{
     val navController = LocalNavController.current
 
     Surface(
@@ -151,7 +156,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             ?.let { it2 -> MediaItem(it2, it.type) }
                     }
                     mediaItems?.let {
-                        MediaGrid(it, tweet, navController)
+                        MediaGrid(it, tweet, navController, gridColumns)
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
@@ -192,15 +197,13 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 
 @Composable
 fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavController,
-              containerWidth: Dp = 400.dp
+              gridColumns: Int, containerWidth: Dp = 400.dp
 ) {
-    var gridColumns by remember { mutableIntStateOf(2) }
     Box(
         modifier = Modifier
             .padding(top = 0.dp)
             .fillMaxWidth()
-    )
-    {
+    ) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(gridColumns),
             modifier = Modifier
@@ -233,21 +236,6 @@ fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavContr
                     tweet.mid
                 )
             }
-        }
-        FloatingActionButton(
-            onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },
-            modifier = Modifier
-                .offset(y = (-16).dp)
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-                .size(40.dp),
-            shape = CircleShape, // Make it round
-            containerColor = Color.White.copy(alpha = 0.6f)
-        ) {
-            Icon(
-                imageVector = if (gridColumns == 1) Icons.Filled.MoreVert else Icons.Filled.Add,
-                contentDescription = "Switch layout"
-            )
         }
     }
 }
