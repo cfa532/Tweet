@@ -93,11 +93,11 @@ fun ComposeTweetScreen(
     var isPrivate by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            if (selectedAttachments.find { u -> u == it } == null) {
-                selectedAttachments.add(it)
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
+            if (selectedAttachments.find { u -> u == uri } == null) {
+                selectedAttachments.add(uri)
             }
         }
     }
@@ -326,7 +326,7 @@ fun ComposeTweetScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = { filePickerLauncher.launch("*/*") },
+                    IconButton(onClick = { filePickerLauncher.launch(arrayOf("image/*", "video/*", "audio/*")) },
                         modifier = Modifier.size(48.dp)
                         ) {
                         Icon(

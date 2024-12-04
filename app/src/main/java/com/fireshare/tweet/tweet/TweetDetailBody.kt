@@ -1,5 +1,8 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -8,22 +11,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,10 +59,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
+import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
@@ -135,36 +151,10 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             ?.let { it2 -> MediaItem(it2, it.type) }
                     }
                     mediaItems?.let {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 800.dp) // Set a specific height for the grid
-                        ) {
-                            itemsIndexed(it) { index, _ ->
-                                MediaItemPreview(
-                                    it,
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            val params =
-                                                MediaViewerParams(mediaItems, index, tweet.mid)
-                                            navController.navigate(
-                                                NavTweet.MediaViewer(params)
-                                            )
-                                        },
-                                    false, index, false, tweet.mid
-                                )
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 1.dp),
-                                    thickness = 0.8.dp,
-                                    color = Color.LightGray
-                                )
-                            }
-                        }
+                        MediaGrid(it, tweet, navController)
                     }
 
-                    // This is a retweet
+                    // This is a retweet. Display the original tweet in quote box.
                     if (tweet.originalTweet != null) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -196,6 +186,68 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavController,
+              containerWidth: Dp = 400.dp
+) {
+    var gridColumns by remember { mutableIntStateOf(2) }
+    Box(
+        modifier = Modifier
+            .padding(top = 0.dp)
+            .fillMaxWidth()
+    )
+    {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(gridColumns),
+            modifier = Modifier
+                .padding(top = 0.dp)
+                .fillMaxWidth()
+                .background(Color.Black)
+                .border(1.dp, Color.Black)
+                .heightIn(max = 20000.dp),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            val modifier =
+                if (gridColumns == 1)
+                    Modifier.fillMaxWidth()
+                else Modifier.size(containerWidth / gridColumns)
+            itemsIndexed(mediaItems) { index, _ ->
+                MediaItemPreview(
+                    mediaItems,
+                    modifier
+                        .clickable {
+                            val params =
+                                MediaViewerParams(mediaItems, index, tweet.mid)
+                            navController.navigate(
+                                NavTweet.MediaViewer(params)
+                            )
+                        },
+                    false,
+                    index,
+                    false,
+                    tweet.mid
+                )
+            }
+        }
+        FloatingActionButton(
+            onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },
+            modifier = Modifier
+                .offset(y = (-16).dp)
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .size(40.dp),
+            shape = CircleShape, // Make it round
+            containerColor = Color.White.copy(alpha = 0.6f)
+        ) {
+            Icon(
+                imageVector = if (gridColumns == 1) Icons.Filled.MoreVert else Icons.Filled.Add,
+                contentDescription = "Switch layout"
+            )
         }
     }
 }
