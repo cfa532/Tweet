@@ -1,6 +1,10 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,8 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.R
@@ -60,8 +66,11 @@ fun TweetDetailScreen(
             viewModel.refreshTweet()
         }
     }
-    var gridColumns by remember { mutableIntStateOf(2) }
-
+    var gridColumns by remember { mutableIntStateOf(2) }    // # of columns to display in the grid
+    var fabOffset by remember { mutableStateOf(Offset(0f, -700f)) }   // position of float action button
+    fun Offset.toIntOffset(): IntOffset {
+        return IntOffset(x.toInt(), y.toInt())
+    }
     Scaffold(
         topBar = { TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
@@ -88,9 +97,17 @@ fun TweetDetailScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier
+                    .offset { fabOffset.toIntOffset() }
+                    .draggable(
+                        state = rememberDraggableState { delta ->
+                            fabOffset = fabOffset.copy(y = fabOffset.y + delta)
+                        },
+                        orientation = Orientation.Vertical
+                    )
+                    .size(40.dp),
                 shape = CircleShape,
-                containerColor = Color.White.copy(alpha = 0.6f)
+                containerColor = Color.White.copy(alpha = 0.7f)
             ) {
                 Icon(
                     painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout)
