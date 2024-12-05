@@ -100,6 +100,8 @@ data class User(
     var profile: String? = null,
     var timestamp: Long = System.currentTimeMillis(),
     var tweetCount: Int = 0,
+    var followingCount: Int? = null,
+    var followersCount: Int? = null,
 
     // List of nodes authorized to the user to write tweets on.
     // Only first one is used now.
