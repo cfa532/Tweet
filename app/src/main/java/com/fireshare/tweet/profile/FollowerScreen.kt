@@ -36,8 +36,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
@@ -55,10 +57,15 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowerScreen(viewModel: UserViewModel, appUserViewModel: UserViewModel)
+fun FollowerScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
-
+    val viewModel = if (userId == appUser.mid) appUserViewModel
+    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = userId
+    ) { factory ->
+        factory.create(userId)
+    }
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(

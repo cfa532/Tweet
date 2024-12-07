@@ -188,14 +188,7 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val user = it.toRoute<NavTweet.Following>()
-                val userViewModel =
-                    hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                        parentEntry,
-                        key = user.userId
-                    ) { factory ->
-                        factory.create(user.userId)
-                    }
-                FollowerScreen(userViewModel, appUserViewModel)
+                FollowerScreen(user.userId, parentEntry, appUserViewModel)
             }
             /**
              * Deeplink carries the tweetId and authorId only.
