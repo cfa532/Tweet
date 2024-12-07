@@ -33,6 +33,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.io.IOException
 import java.net.ProtocolException
+import java.net.SocketTimeoutException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -1019,20 +1020,24 @@ object HproseInstance {
      * */
     suspend fun isAccessible(ip: String): String? { return withRetry {
         runCatching {
-            val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
+            try {
+                val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
 
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                val mmVersions = Gson().fromJson<List<String>?>(responseBody, object : TypeToken<List<String>>() {}.type)
-                if (mmVersions?.isNotEmpty() == true) ip else null // Check if list is not empty or null
-            } else {
+                response.body?.string()?.let { responseBody ->
+                    val appIds = Gson().fromJson(responseBody, Array<String>::class.java).toList()
+                    if (appIds.isNotEmpty()) ip else null
+                }
+            } catch (e: SocketTimeoutException) {
+                Timber.tag("isAccessible").e(e, "SocketTimeoutException: $ip")
                 null
             }
         }.onFailure { e ->
-            Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
-        }.getOrElse { null } //
+            if (e is IOException) {
+                Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
+            }
+        }.getOrNull()
     } }
 
     /**

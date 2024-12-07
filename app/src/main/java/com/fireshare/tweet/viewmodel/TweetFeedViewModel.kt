@@ -98,7 +98,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // get followings from server and load tweets not cached.
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
         // add default system users' tweets and remember to watch oneself.
-        _followings.update { list -> (list + HproseInstance.getAlphaIds() + appUser.mid).toSet().toList() }
+        _followings.update { list -> (list + HproseInstance.getAlphaIds() +
+                (if (appUser.mid !== TW_CONST.GUEST_ID) appUser.mid else HproseInstance.getAlphaIds()[0]) ).toSet().toList() }
         getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
 
         // update cached following list of the user
