@@ -193,9 +193,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user
     val buttonText = remember { mutableStateOf("Follow") }
-    val context = LocalContext.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
+    val context = LocalContext.current
     LaunchedEffect(followings) {
         buttonText.value = when {
             user.mid == appUser.mid -> context.getString(R.string.edit)
@@ -225,7 +225,6 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         else -> {
                             if (appUser.mid != TW_CONST.GUEST_ID)
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    // update this user's followers list
                                     appUserViewModel.toggleFollow(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
                                             tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
