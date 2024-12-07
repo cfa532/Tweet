@@ -83,7 +83,7 @@ fun ComposeCommentScreen(
 
     val viewModelProvider = LocalViewModelProvider.current
     val sharedViewModel = viewModelProvider?.get(SharedViewModel::class)
-    val viewModel = sharedViewModel?.sharedTweetViewModel ?: return
+    val viewModel = sharedViewModel?.tweetViewModel ?: return
     val tweet by viewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by viewModel.isCheckedToTweet

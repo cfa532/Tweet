@@ -127,7 +127,7 @@ class UserViewModel @AssistedInject constructor(
     suspend fun toggleFollow(subjectUserId: MimeiId,
                              appUserId: MimeiId = appUser.mid,
                              updateTweetFeed: (Boolean) -> Unit) {
-        // toggle the Following status on the given UserId, to follow or unfollow
+        // toggle the Following status on the given UserId
         HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
             // Succeed. Now it is the other party's turn
             // to update its followers.
@@ -139,11 +139,12 @@ class UserViewModel @AssistedInject constructor(
                     list.filter { id -> id != subjectUserId }
                 }
             }
+            refreshFollowingsAndFans()
             updateTweetFeed(isFollowing)
         }
     }
 
-    suspend fun updateFollowingsAndFans() {
+    suspend fun refreshFollowingsAndFans() {
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
     }
@@ -161,7 +162,7 @@ class UserViewModel @AssistedInject constructor(
                     // By default NOT to update fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
                     // Only get current user's fans list when opening the app.
-                    updateFollowingsAndFans()
+                    refreshFollowingsAndFans()
                 }
             }
         }
@@ -269,6 +270,7 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Handle both register and update of user profile. Username, password are required.
+     * Do NOT update appUser, wait for the new user to login.
      * */
     suspend fun register(context: Context, popBack: () -> Unit) {
         if (username.value?.isEmpty() == true
@@ -290,7 +292,7 @@ class UserViewModel @AssistedInject constructor(
         isLoading.value = true
         if (hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             // Find IP of desired node. User can change its value to appoint
-            // a different host node.
+            // a different host node later.
             val ip = HproseInstance.getHostIP(hostId.value)
             if (ip == null) {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
@@ -315,8 +317,9 @@ class UserViewModel @AssistedInject constructor(
                 val type = object : TypeToken<User>() {}.type
                 if (appUser.mid == TW_CONST.GUEST_ID) {
                     val newUser: User = gson.fromJson(ret["user"].toString(), type)
-                    // registering a new user. Do NOT update appUser, wait for
-                    // new user to login. Add it to Admin's fans list.
+                    /**
+                     * Set the newly created user
+                     * */
                     user.followingList?.forEach {
                         this.toggleFollow(it, newUser.mid) {}
                     }

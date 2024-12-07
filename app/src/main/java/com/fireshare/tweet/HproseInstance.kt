@@ -553,7 +553,10 @@ object HproseInstance {
         try {
             val cachedTweet = retrieveCachedTweet(tweetId)
             if (cachedTweet != null) {
-                return@withRetry cachedTweet
+                if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
+                    return@withRetry null
+                else
+                    return@withRetry cachedTweet
             }
             val author =
                 getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
@@ -1078,7 +1081,7 @@ object HproseInstance {
     /**
      * Remove user from cachedUsers list.
      * */
-    fun removeUser(userId: MimeiId) {
+    fun removeCachedUser(userId: MimeiId) {
         cachedUsers.removeIf { it.mid == userId }
     }
 

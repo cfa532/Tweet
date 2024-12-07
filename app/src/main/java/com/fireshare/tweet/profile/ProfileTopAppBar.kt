@@ -52,8 +52,10 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
+import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
@@ -188,12 +190,8 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         parentEntry: NavBackStackEntry,
                         scrollBehavior: TopAppBarScrollBehavior?
 ) {
-    val appUserViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry,
-        key = appUser.mid
-    ) { factory ->
-        factory.create(appUser.mid)
-    }
+    val sharedViewModel = LocalViewModelProvider.current?.get(SharedViewModel::class)
+    val appUserViewModel = sharedViewModel?.appUserViewModel ?: return
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user
     val buttonText = remember { mutableStateOf("Follow") }
@@ -230,9 +228,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                             if (appUser.mid != TW_CONST.GUEST_ID)
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                     // update this user's followers list
-                                    viewModel.updateFollowingsAndFans()
                                     appUserViewModel.toggleFollow(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                            viewModel.refreshFollowingsAndFans()
                                             tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
                                         }
                                     }
@@ -257,7 +255,9 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Display large image of user avatar in a Modal Dialog.
+ * */
 @Composable
 fun ImageModalDialog(
     imageUrl: String,

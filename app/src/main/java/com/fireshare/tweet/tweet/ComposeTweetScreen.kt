@@ -207,7 +207,7 @@ fun ComposeTweetScreen(
                 val focusRequester = remember { FocusRequester() }
                 val keyboardController = LocalSoftwareKeyboardController.current
                 val viewModelProvider = LocalViewModelProvider.current
-                val appUserViewModel = viewModelProvider?.get(SharedViewModel::class)?.sharedAppUserViewModel
+                val appUserViewModel = viewModelProvider?.get(SharedViewModel::class)?.appUserViewModel
                 var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
                 var isSearching by remember { mutableStateOf(false) } // Track search state
                 val focusManager = LocalFocusManager.current

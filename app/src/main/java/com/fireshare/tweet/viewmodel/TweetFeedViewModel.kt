@@ -86,25 +86,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     suspend fun refresh() {
         // get cached followings and load cached tweets.
-        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()
-        if (cachedFollowings!!.isNotEmpty()) {
-            startTimestamp.longValue = System.currentTimeMillis()
-            endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
+        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()?: return
+        if (cachedFollowings.isNotEmpty()) {
             splitJson(cachedFollowings)?.let {
+                startTimestamp.longValue = System.currentTimeMillis()
+                endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
                 getTweets(startTimestamp.longValue, endTimestamp.longValue, it)
             }
         }
 
         // get followings from server and load tweets not cached.
-        _followings.value = emptyList()
-        // get current user's following list
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
-        // add default public tweets
-        _followings.update { list -> (list + HproseInstance.getAlphaIds()).toSet().toList() }
-        // remember to watch oneself.
-        if (appUser.mid != TW_CONST.GUEST_ID && !_followings.value.contains(appUser.mid))
-            _followings.update { list -> list + appUser.mid }
-
+        // add default system users' tweets and remember to watch oneself.
+        _followings.update { list -> (list + HproseInstance.getAlphaIds() + appUser.mid).toSet().toList() }
         getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
 
         // update cached following list of the user
@@ -138,7 +132,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     // Define a custom scope to ensure tweet deletion job not cancelled.
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private suspend fun getTweets(
         startTimestamp: Long,
@@ -161,7 +154,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                     .e(e, "Error fetching tweets for user: $userId")
                                 // remove the userId from cached user list, the app will try to
                                 // reacquire the user information.
-                                HproseInstance.removeUser(userId)
+                                HproseInstance.removeCachedUser(userId)
                             }
                         }.await()
                     }
@@ -217,6 +210,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 currentTweets.filterNot { it.author?.mid == userId }
             }
         }
+        val userData = UserData(userId = appUser.mid, followings = followings.value)
+        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     fun reset() {

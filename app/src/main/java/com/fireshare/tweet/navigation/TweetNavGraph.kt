@@ -44,8 +44,8 @@ val LocalNavController = compositionLocalOf<NavController> {
 val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
 class SharedViewModel : ViewModel() {
-    lateinit var sharedTweetViewModel: TweetViewModel
-    lateinit var sharedAppUserViewModel: UserViewModel      // AppUserViewModel
+    lateinit var tweetViewModel: TweetViewModel
+    lateinit var appUserViewModel: UserViewModel      // AppUserViewModel
 }
 
 @Composable
@@ -66,7 +66,7 @@ fun TweetNavGraph(
         }
     val viewModelProvider = LocalViewModelProvider.current
     viewModelProvider?.get(SharedViewModel::class.java)?.let { shareViewModel ->
-        shareViewModel.sharedAppUserViewModel = appUserViewModel
+        shareViewModel.appUserViewModel = appUserViewModel
     }
 
     // Handle deeplink

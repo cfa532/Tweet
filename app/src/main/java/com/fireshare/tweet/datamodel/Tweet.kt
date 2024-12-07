@@ -180,6 +180,8 @@ class MimeiIdListConverter {
     }
 }
 
+
+
 @Dao
 interface CachedTweetDao {
     /**
@@ -188,12 +190,12 @@ interface CachedTweetDao {
     @Query("SELECT followings FROM UserData WHERE userId = :userId")
     suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>?
 
-    /**
-     * Cache of tweet mid list per user.
-     * */
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
     suspend fun insertOrUpdateUserData(userData: UserData)
 
+    /**
+     * Cache of tweet's mid list of a given user.
+     * */
     @Query("SELECT tweetMidList FROM TweetMidList WHERE userId = :userId")
     suspend fun getCachedTweetMidList(userId: MimeiId): List<MimeiId>?
 

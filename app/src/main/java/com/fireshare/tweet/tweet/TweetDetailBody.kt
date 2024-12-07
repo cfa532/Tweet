@@ -70,15 +70,13 @@ import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemPreview
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry,
-                    gridColumns: Int, onGridColumnsChange: (Int) -> Unit)
+                    gridColumns: Int)
 {
     val navController = LocalNavController.current
 
@@ -272,9 +270,8 @@ fun TweetDropdownMenuItems(
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
 ) {
-    val viewModelProvider = LocalViewModelProvider.current
-    val sharedViewModel = viewModelProvider?.get(SharedViewModel::class)
-    val appUserViewModel = sharedViewModel?.sharedAppUserViewModel ?: return
+    val sharedViewModel = LocalViewModelProvider.current?.get(SharedViewModel::class)
+    val appUserViewModel = sharedViewModel?.appUserViewModel ?: return
     val navController = LocalNavController.current
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
@@ -286,12 +283,11 @@ fun TweetDropdownMenuItems(
                 parentEntry, key = tweet.originalTweetId
             ) { factory -> factory.create(tweet.originalTweet!!) }
         } else null
-        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
+//        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                applicationScope.launch(Dispatchers.IO) {
+                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     tweetFeedViewModel.delTweet(tweet) {
                         // if this a re-tweet, refresh the original tweet after deletion.
                         originTweetViewModel?.refreshTweet()

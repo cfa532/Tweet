@@ -66,8 +66,12 @@ fun TweetDetailScreen(
             viewModel.refreshTweet()
         }
     }
-    var gridColumns by remember { mutableIntStateOf(2) }    // # of columns to display in the grid
-    var fabOffset by remember { mutableStateOf(Offset(0f, -700f)) }   // position of float action button
+    var gridColumns by remember { mutableIntStateOf(
+        tweet.attachments?.let{
+            if (it.size>4) 2 else 1
+        } ?: 1
+    ) }    // # of columns to display in the grid
+    var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }   // position of float action button
     fun Offset.toIntOffset(): IntOffset {
         return IntOffset(x.toInt(), y.toInt())
     }
@@ -110,8 +114,7 @@ fun TweetDetailScreen(
                 containerColor = Color.White.copy(alpha = 0.7f)
             ) {
                 Icon(
-                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout)
-                    else painterResource(R.drawable.ic_grid_layout),
+                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(R.drawable.ic_grid_layout),
                     contentDescription = "Switch layout",
                     modifier = Modifier.size(20.dp)
                 )
@@ -129,9 +132,7 @@ fun TweetDetailScreen(
                 /**
                  * Tweet content and attachments. This is the main body.
                  * */
-                TweetDetailBody(tweet, viewModel, parentEntry, gridColumns) { newGridColumns ->
-                    gridColumns = newGridColumns
-                }
+                TweetDetailBody(tweet, viewModel, parentEntry, gridColumns)
 
                 // divider between tweet and its comment list
                 HorizontalDivider(

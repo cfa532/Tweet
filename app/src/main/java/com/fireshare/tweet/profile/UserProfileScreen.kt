@@ -211,7 +211,7 @@ fun ProfileDetail(
 
     LaunchedEffect(appUserFollowings) {
         withContext(Dispatchers.IO) {
-            viewModel.updateFollowingsAndFans()
+            viewModel.refreshFollowingsAndFans()
         }
     }
 
