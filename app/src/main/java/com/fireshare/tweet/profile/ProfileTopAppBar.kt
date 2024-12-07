@@ -230,7 +230,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                                     // update this user's followers list
                                     appUserViewModel.toggleFollow(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                            viewModel.refreshFollowingsAndFans()
+//                                            viewModel.refreshFollowingsAndFans()
                                             tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
                                         }
                                     }

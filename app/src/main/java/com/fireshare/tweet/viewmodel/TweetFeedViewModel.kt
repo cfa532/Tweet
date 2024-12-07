@@ -115,7 +115,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
         Timber.tag("loadNewerTweets")
             .d("startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp")
-        getTweets(startTimestamp.longValue, endTimestamp)
+        getTweets(startTimestamp.longValue, endTimestamp, followings.value)
         _isRefreshingAtTop.value = false
     }
 
@@ -127,7 +127,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
         Timber.tag("loadOlderTweets")
             .d("startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
-        getTweets(startTimestamp, endTimestamp.longValue)
+        getTweets(startTimestamp, endTimestamp.longValue, followings.value)
         _isRefreshingAtBottom.value = false
     }
 
@@ -136,7 +136,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private suspend fun getTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
-        followings: List<MimeiId> = this.followings.value
+        followings: List<MimeiId>
     ) {
         val batchSize = 10 // Adjust batch size as needed
 
