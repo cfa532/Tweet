@@ -107,7 +107,7 @@ fun UserProfileScreen(
     }
 
     Scaffold(
-        topBar = { ProfileTopAppBar(viewModel, navController, parentEntry, scrollBehavior) },
+        topBar = { ProfileTopAppBar(viewModel, navController, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
         Box(

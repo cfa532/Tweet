@@ -71,7 +71,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileTopAppBar(viewModel: UserViewModel,
                      navController: NavHostController,
-                     parentEntry: NavBackStackEntry,
                      scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -113,7 +112,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         )
                     }
                 }
-                ProfileTopBarButton(viewModel, navController, parentEntry, scrollBehavior)
+                ProfileTopBarButton(viewModel, navController, scrollBehavior)
             }
         },
         navigationIcon = {
@@ -187,7 +186,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
 @Composable
 fun ProfileTopBarButton(viewModel: UserViewModel,
                         navController: NavHostController,
-                        parentEntry: NavBackStackEntry,
                         scrollBehavior: TopAppBarScrollBehavior?
 ) {
     val sharedViewModel = LocalViewModelProvider.current?.get(SharedViewModel::class)
@@ -230,7 +228,6 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                                     // update this user's followers list
                                     appUserViewModel.toggleFollow(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-//                                            viewModel.refreshFollowingsAndFans()
                                             tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
                                         }
                                     }
