@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,12 +43,14 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
+import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
@@ -184,6 +187,8 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     val isFollower = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollower) }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val navController = LocalNavController.current
+    val context = LocalContext.current
 
     LaunchedEffect(followings) {
         followState.value = isFollower
@@ -200,6 +205,12 @@ fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clickable(onClick = {
+                    if (appUser.mid == TW_CONST.GUEST_ID) {
+                        appUserViewModel.viewModelScope.launch {
+                            guestWarning(context, navController)
+                        }
+                        return@clickable
+                    }
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         appUserViewModel.toggleFollow(userId) {
                             tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
