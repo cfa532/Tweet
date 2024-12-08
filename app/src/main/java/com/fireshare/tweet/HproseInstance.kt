@@ -42,7 +42,7 @@ import java.util.regex.Pattern
 object HproseInstance {
 
     private lateinit var preferenceHelper: PreferenceHelper
-    var appUser: User = User(mid = TW_CONST.GUEST_ID)    // current user object
+    lateinit var appUser: User    // current user object
     private var appId: MimeiId = BuildConfig.APP_ID     // placeholder, overwritten later
 
     // get the first user account, or a list of accounts.
@@ -108,6 +108,7 @@ object HproseInstance {
                          * and tries to extract appId and host IP addresses from source code.
                          * */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
                         Timber.tag("initAppEntry").d("$paramMap $hostIPs")
 
                         /**
@@ -118,26 +119,30 @@ object HproseInstance {
                          * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
                         val userId = preferenceHelper.getUserId()
-                        appUser = if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
+                        if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                             /**
                              * If there is a valid userId in preference, this is a login user.
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            val user = getAccessibleUser(hostIPs, userId) ?: User(
-                                mid = TW_CONST.GUEST_ID,
-                                baseUrl = "http://${hostIPs[0]}"    //shall never happen.
-                            )
-                            user.writableUrl()
-                            user
+                            getAccessibleUser(hostIPs, userId) { user ->
+                                appUser = user
+                                cachedUsers.add(appUser)
+                                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                                    .useService(HproseService::class.java)
+                                Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
+                                user
+                            }
                         } else {
-                            val firstIp = getAccessibleIP(hostIPs)
-                            User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                            getAccessibleIP(hostIPs) { firstIp ->
+                                appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                                cachedUsers.add(appUser)
+                                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                                    .useService(HproseService::class.java)
+                                Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
+                                firstIp
+                            }
                         }
-                        cachedUsers.add(appUser)
-                        hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                            .useService(HproseService::class.java)
-                        Timber.tag("initAppEntry").d("Init succeed. $appId, $appUser")
                     }
                 } else {
                     Timber.tag("initAppEntry").e("No data found within window.setParam()")
@@ -365,7 +370,9 @@ object HproseInstance {
                 val str = response.body?.string() ?: return@withRetry null
                 str.trim().trim('"').trim(',').split(',').let {ips ->
                     if (ips.isNotEmpty()) {
-                        return@withRetry getAccessibleIP(ips)
+                       getAccessibleIP(ips) {
+                           return@getAccessibleIP it
+                       }
                     }
                 }
             }
@@ -980,9 +987,9 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        getAccessibleUser(hostIPs, userId)?.let { user: User ->
+                        getAccessibleUser(hostIPs, userId) { user ->
                             cachedUsers.add(user)
-                            return@withRetry user
+                            user
                         }
                     }
                 }
@@ -1029,7 +1036,7 @@ object HproseInstance {
                     if (appIds.isNotEmpty()) ip else null
                 }
             } catch (e: SocketTimeoutException) {
-                Timber.tag("isAccessible").e(e, "SocketTimeoutException: $ip")
+//                Timber.tag("isAccessible").e(e, "SocketTimeoutException: $ip")
                 null
             }
         }.onFailure { e ->

@@ -139,8 +139,8 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
-        withTimeoutOrNull(2000L) {
+    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId, callback: (User) -> User?) :User? {
+        return withTimeoutOrNull<User?>(2000L) {
             val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
                 async {
                     try {
@@ -155,12 +155,12 @@ object Gadget {
             }?.await()
             accessibleUser?.let {
                 Timber.tag("getAccessibleUser").d("get user from $it")
+                return@withTimeoutOrNull it.also { callback(it) }
             }
-            accessibleUser
         }
     }
 
-    suspend fun getAccessibleIP(ipList: List<String>): String? = coroutineScope {
+    suspend fun getAccessibleIP(ipList: List<String>, callback: (String) -> String) = coroutineScope {
         withTimeoutOrNull(2000L) {
             val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
                 async {
@@ -176,8 +176,8 @@ object Gadget {
             }?.await()
             accessibleIp?.let {
                 Timber.tag("getAccessibleIP").d("get from $it")
+                callback(it)
             }
-            accessibleIp
         }
     }
 
