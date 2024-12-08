@@ -133,7 +133,7 @@ fun TweetItem(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .clickable(onClick = {
-                                navController.navigate(NavTweet.TweetDetail(tweet.mid))
+                                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions

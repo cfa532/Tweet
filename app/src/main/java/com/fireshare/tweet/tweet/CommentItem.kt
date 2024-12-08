@@ -78,7 +78,7 @@ fun CommentItem(
 
     Column(
         modifier = Modifier
-            .clickable { navController.navigate(NavTweet.TweetDetail(comment.mid)) }
+            .clickable { navController.navigate(NavTweet.TweetDetail(comment.authorId, comment.mid)) }
             .padding(horizontal = 4.dp)
     ) {
         Row(

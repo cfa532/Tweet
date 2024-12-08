@@ -120,8 +120,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
                 viewModel.updateTweet(updatedTweet)
             }
         }
-    } )
-    {
+    } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
@@ -153,8 +152,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 guestWarning(context, navController)
             }
         } else viewModel.likeTweet()
-    })
-    {
+    } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasLiked) R.drawable.ic_heart_fill else R.drawable.ic_heart),

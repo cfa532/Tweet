@@ -94,7 +94,7 @@ fun MediaBrowser(
         parentEntry,
         key = tweetId
     ) { factory ->
-        factory.create(Tweet(mid = "", authorId = "default", content = "nothing"))
+        factory.create(Tweet(mid = tweetId!!, authorId = "default"))
     }
     val mediaItems = viewModel.tweetAttachments!!.map {
         MediaItem(HproseInstance.getMediaUrl(it.mid, HproseInstance.appUser.baseUrl)!!, it.type)

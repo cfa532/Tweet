@@ -28,7 +28,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,15 +95,13 @@ class TweetViewModel @AssistedInject constructor(
             }
         }
     }
-    fun refreshTweet() {
-        viewModelScope.launch(Dispatchers.IO) {
-            HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
-                if (tweet.originalTweetId != null)
-                    HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)?.let {
-                        tweet.originalTweet = it
-                    }
-                _tweetState.value = tweet
-            }
+    suspend fun refreshTweet() {
+        HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
+            if (tweet.originalTweetId != null)
+                HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)?.let {
+                    tweet.originalTweet = it
+                }
+            _tweetState.value = tweet
         }
     }
 
@@ -113,15 +113,13 @@ class TweetViewModel @AssistedInject constructor(
         isCheckedToTweet.value = value
     }
 
-    fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _comments.value = HproseInstance.getComments(tweet)?.map {
-                it.author = HproseInstance.getUser(it.authorId)
-                it
-            } ?: emptyList()
-            _comments.update { list ->
-                list.sortedByDescending { it.timestamp }
-            }
+    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
+        _comments.value = HproseInstance.getComments(tweet)?.map {
+            it.author = HproseInstance.getUser(it.authorId)
+            it
+        } ?: emptyList()
+        _comments.update { list ->
+            list.sortedByDescending { it.timestamp }
         }
     }
 
@@ -187,8 +185,8 @@ class TweetViewModel @AssistedInject constructor(
                                     retweet.originalTweet = newTweet
                                     retweet.originalTweet!!.author = newTweet.author
                                     tweetFeedViewModel.addTweet(retweet)
-
-                                    viewModelScope.launch(Dispatchers.IO) {
+                                    val uploadCommentScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+                                    uploadCommentScope.launch(Dispatchers.IO) {
                                         increaseRetweetCount(tweet, retweet.mid)?.let { t ->
                                             updateTweet(t.copy(author = tweetState.value.author))
 

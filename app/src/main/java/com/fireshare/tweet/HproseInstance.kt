@@ -365,8 +365,7 @@ object HproseInstance {
                 val str = response.body?.string() ?: return@withRetry null
                 str.trim().trim('"').trim(',').split(',').let {ips ->
                     if (ips.isNotEmpty()) {
-                        val ip = getAccessibleIP(ips)
-                        return@withRetry ip
+                        return@withRetry getAccessibleIP(ips)
                     }
                 }
             }

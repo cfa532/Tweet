@@ -25,7 +25,10 @@ sealed interface NavTweet {
     data object TweetFeed : NavTweet
 
     @Serializable
-    data class TweetDetail(val tweetId: MimeiId) : NavTweet
+    data class TweetDetail(
+        val authorId: MimeiId,
+        val tweetId: MimeiId
+    ) : NavTweet
 
     @Serializable
     data object ComposeTweet : NavTweet

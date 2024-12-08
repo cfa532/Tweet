@@ -180,8 +180,6 @@ class MimeiIdListConverter {
     }
 }
 
-
-
 @Dao
 interface CachedTweetDao {
     /**

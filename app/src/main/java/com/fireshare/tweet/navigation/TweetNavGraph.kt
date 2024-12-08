@@ -111,9 +111,8 @@ fun TweetNavGraph(
                             // The tweet is surely created. The right key will locate it.
                             // so the init value do not matter here.
                             Tweet(
-                                mid = "",
-                                authorId = "default",
-                                content = "Placeholder"
+                                mid = args.tweetId,
+                                authorId = args.authorId,
                             )
                         )
                     }
@@ -204,7 +203,7 @@ fun TweetNavGraph(
                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                         parentEntry, key = tweetId
                     ) { factory ->
-                        factory.create(Tweet(authorId = authorId, content = "", mid = tweetId))
+                        factory.create(Tweet(authorId = authorId, mid = tweetId))
                     }
                 TweetDetailScreen(viewModel, parentEntry)
             }

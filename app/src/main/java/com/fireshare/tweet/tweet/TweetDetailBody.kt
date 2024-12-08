@@ -290,7 +290,9 @@ fun TweetDropdownMenuItems(
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     tweetFeedViewModel.delTweet(tweet) {
                         // if this a re-tweet, refresh the original tweet after deletion.
-                        originTweetViewModel?.refreshTweet()
+                        originTweetViewModel?.viewModelScope?.launch(Dispatchers.IO) {
+                            originTweetViewModel.refreshTweet()
+                        }
                     }
                     // if current route is TweetDetail. Go to TweetFeed
                     if (navController.currentDestination?.route?.contains("TweetDetail") == true) {

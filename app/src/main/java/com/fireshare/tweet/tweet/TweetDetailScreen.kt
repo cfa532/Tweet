@@ -42,7 +42,9 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,14 +58,18 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.refreshTweet()
-        viewModel.loadComments( tweet )
-        Timber.tag("TweetDetailScreen").d("$tweet")
+        withContext(Dispatchers.IO) {
+            viewModel.refreshTweet()
+            viewModel.loadComments(tweet)
+            Timber.tag("TweetDetailScreen").d("$tweet")
+        }
     }
     LaunchedEffect(Unit) {
         while (true) {
             delay(5 * 60 * 1000) // Delay for 5 minutes
-            viewModel.refreshTweet()
+            withContext(Dispatchers.IO) {
+                viewModel.refreshTweet()
+            }
         }
     }
     var gridColumns by remember { mutableIntStateOf(
