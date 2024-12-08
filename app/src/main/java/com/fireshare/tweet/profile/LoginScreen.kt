@@ -129,14 +129,14 @@ fun LoginScreen(viewModel: UserViewModel) {
 
         val context = LocalContext.current
         Button(
-            onClick = { viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.login(context) {
-                    viewModel.viewModelScope.launch(Dispatchers.Main) {
-//                        navController.navigate(NavTweet.TweetFeed)
-                        navController.popBackStack()
+            onClick = {
+                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                    viewModel.login(context) {
+                        viewModel.viewModelScope.launch(Dispatchers.Main) {
+                            navController.popBackStack()
+                        }
                     }
-                }
-            } },
+                } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading    // disable Login button during uploading.
         ) {
