@@ -16,8 +16,6 @@ import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.uti
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -142,78 +140,45 @@ object Gadget {
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? = coroutineScope {
-        val deferreds = ipList.filter{ isValidPublicIpAddress(it) }.map { ip ->
-            Timber.tag("getFirstUser").d("trying $ip")
-            async {
-                try {
-                    HproseInstance.getUserData(mid, ip)
-                } catch (e: Exception) {
-                    null // Handle exceptions and return null if an error occurs
-                }
-            }
-        }
-        try {
-            withTimeoutOrNull(2000L) { // Set a timeout of 5000 milliseconds (5 seconds)
-                select<User?> {
-                    deferreds.forEach { deferred ->
-                        deferred.onAwait { res ->
-                            if (res != null) {
-                                // Cancel remaining deferred values
-                                deferreds.forEach { it.cancel() }
-                                res
-                            } else {
-                                null
-                            }
-                        }
+        withTimeoutOrNull(2000L) {
+            val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
+                async {
+                    try {
+                        HproseInstance.getUserData(mid, ip)
+                    } catch (e: Exception) {
+                        null // Or handle specific exceptions here
                     }
                 }
             }
-        } finally {
-            // Ensure all coroutines are cancelled if the function exits
-            deferreds.forEach { it.cancel() }
+            val accessibleUser = deferreds.firstOrNull { deferred ->
+                deferred.await() != null
+            }?.await()
+            accessibleUser?.let {
+                Timber.tag("getAccessibleUser").d("get user from $it")
+            }
+            accessibleUser
         }
     }
 
     suspend fun getAccessibleIP(ipList: List<String>): String? = coroutineScope {
-        val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
-            async {
-                try {
-                    HproseInstance.isAccessible(ip)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-        }
-        try {
-//            runBlocking {
-                deferreds.forEach { deferred ->
-                    deferred.await()?.let {ip ->
-                        Timber.tag("getAccessibleIP").d("get from $ip")
-                        deferreds.forEach { it.cancel() }
-                        return@forEach
+        withTimeoutOrNull(2000L) {
+            val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
+                async {
+                    try {
+                        HproseInstance.isAccessible(ip)
+                    } catch (e: Exception) {
+                        null // Or handle specific exceptions here
                     }
                 }
-//            }
-//            withTimeoutOrNull(2000L) {
-//                select<String?> {
-//                    deferreds.forEach { deferred ->
-//                        deferred.onAwait { res ->
-//                            if (res != null) {
-//                                // Cancel remaining deferred values and return the result
-//                                deferreds.forEach { it.cancel() }
-//                                return@coroutineScope res // Exit coroutineScope and return res
-//                            } else {
-//                                null
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-        } finally {
-            // Ensure all coroutines are cancelled if the function exits
-            deferreds.forEach { it.cancel() }
+            }
+            val accessibleIp = deferreds.firstOrNull { deferred ->
+                deferred.await() != null
+            }?.await()
+            accessibleIp?.let {
+                Timber.tag("getAccessibleIP").d("get from $it")
+            }
+            accessibleIp
         }
-        return@coroutineScope null
     }
 
     private fun isValidPublicIpAddress(fullIp: String): Boolean {
