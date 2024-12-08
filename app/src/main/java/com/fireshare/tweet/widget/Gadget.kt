@@ -16,6 +16,7 @@ import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.uti
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -174,36 +175,45 @@ object Gadget {
     }
 
     suspend fun getAccessibleIP(ipList: List<String>): String? = coroutineScope {
-        val deferreds = ipList.filter{ isValidPublicIpAddress(it) }.map { ip ->
-            Timber.tag("getAccessibleIP").d("trying $ip")
+        val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
             async {
                 try {
                     HproseInstance.isAccessible(ip)
                 } catch (e: Exception) {
-                    null // Handle exceptions and return null if an error occurs
+                    null
                 }
             }
         }
         try {
-            withTimeoutOrNull(2000L) { // Set a timeout of 5000 milliseconds (5 seconds)
-                select<String?> {
-                    deferreds.forEach { deferred ->
-                        deferred.onAwait { res ->
-                            if (res != null) {
-                                // Cancel remaining deferred values
-                                deferreds.forEach { it.cancel() }
-                                res
-                            } else {
-                                null
-                            }
-                        }
+//            runBlocking {
+                deferreds.forEach { deferred ->
+                    deferred.await()?.let {ip ->
+                        Timber.tag("getAccessibleIP").d("get from $ip")
+                        deferreds.forEach { it.cancel() }
+                        return@forEach
                     }
                 }
-            }
+//            }
+//            withTimeoutOrNull(2000L) {
+//                select<String?> {
+//                    deferreds.forEach { deferred ->
+//                        deferred.onAwait { res ->
+//                            if (res != null) {
+//                                // Cancel remaining deferred values and return the result
+//                                deferreds.forEach { it.cancel() }
+//                                return@coroutineScope res // Exit coroutineScope and return res
+//                            } else {
+//                                null
+//                            }
+//                        }
+//                    }
+//                }
+//            }
         } finally {
             // Ensure all coroutines are cancelled if the function exits
             deferreds.forEach { it.cancel() }
         }
+        return@coroutineScope null
     }
 
     private fun isValidPublicIpAddress(fullIp: String): Boolean {
