@@ -19,6 +19,7 @@ import com.fireshare.tweet.widget.Gadget.getAccessibleUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
 import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
@@ -125,23 +126,18 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            getAccessibleUser(hostIPs, userId) { user ->
-                                appUser = user
-                                cachedUsers.add(appUser)
-                                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                                    .useService(HproseService::class.java)
-                                Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
-                                user
-                            }
+                            appUser = getAccessibleUser(hostIPs, userId) { it } ?: appUser
+                            cachedUsers.add(appUser)
+                            hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                                .useService(HproseService::class.java)
+                            Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
                         } else {
-                            getAccessibleIP(hostIPs) { firstIp ->
-                                appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
-                                cachedUsers.add(appUser)
-                                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                                    .useService(HproseService::class.java)
-                                Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
-                                firstIp
-                            }
+                            val firstIp = getAccessibleIP(hostIPs) { it }
+                            appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                            cachedUsers.add(appUser)
+                            hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                                .useService(HproseService::class.java)
+                            Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
                         }
                     }
                 } else {
@@ -363,21 +359,21 @@ object HproseInstance {
 
     suspend fun getHostIP(nodeId: MimeiId): String?  { return withRetry {
         val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
-        val request = Request.Builder().url(url).build()
         try {
+            val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val str = response.body?.string() ?: return@withRetry null
                 str.trim().trim('"').trim(',').split(',').let {ips ->
                     if (ips.isNotEmpty()) {
-                       getAccessibleIP(ips) {
-                           return@getAccessibleIP it
+                        return@withRetry getAccessibleIP(ips) { accessibleIp ->
+                            accessibleIp
                        }
                     }
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("setUserAvatar").e(e.toString())
+            Timber.tag("getHostIP").e("$e $url")
         }
         null
     } }
@@ -987,10 +983,11 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        getAccessibleUser(hostIPs, userId) { user ->
+                        val accessibleUser = getAccessibleUser(hostIPs, userId) { user ->
                             cachedUsers.add(user)
-                            user
+                            user // Return the user from the callback
                         }
+                        return@withRetry accessibleUser
                     }
                 }
             }
@@ -1014,8 +1011,12 @@ object HproseInstance {
                 user.baseUrl = "http://$ip"
                 return@withRetry user
             }
+        } catch (e: IOException) {
+//            Timber.tag("getUser").e(e, "Network error while retrieving user data")
+        } catch (e: JsonSyntaxException) {
+//            Timber.tag("getUser").e(e, "Error parsing user data from JSON")
         } catch (e: Exception) {
-            Timber.tag("getUserData").e("No found. $ip $mid $e")
+            Timber.tag("getUser").e(e, "Error retrieving user data")
         }
         null
     } }
@@ -1026,22 +1027,20 @@ object HproseInstance {
      * */
     suspend fun isAccessible(ip: String): String? { return withRetry {
         runCatching {
-            try {
-                val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
+            val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
 
-                response.body?.string()?.let { responseBody ->
-                    val appIds = Gson().fromJson(responseBody, Array<String>::class.java).toList()
-                    if (appIds.isNotEmpty()) ip else null
-                }
-            } catch (e: SocketTimeoutException) {
-//                Timber.tag("isAccessible").e(e, "SocketTimeoutException: $ip")
-                null
+            response.body?.string()?.let { responseBody ->
+                val appIds = Gson().fromJson(responseBody, Array<String>::class.java).toList()
+                if (appIds.isNotEmpty()) ip else null
             }
         }.onFailure { e ->
             if (e is IOException) {
-                Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
+//                Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
+            }
+            if (e is SocketTimeoutException) {
+//                Timber.tag("isAccessible").e(e, "Timeout accessing appId for IP: $ip")
             }
         }.getOrNull()
     } }

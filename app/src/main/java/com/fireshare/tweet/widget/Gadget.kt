@@ -13,12 +13,14 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
+import hprose.common.HproseException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -139,8 +141,8 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId, callback: (User) -> User?) :User? {
-        return withTimeoutOrNull<User?>(2000L) {
+    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId, callback: (User) -> User): User? {
+        return withTimeoutOrNull(2000L) {
             val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
                 async {
                     try {
@@ -155,12 +157,14 @@ object Gadget {
             }?.await()
             accessibleUser?.let {
                 Timber.tag("getAccessibleUser").d("get user from $it")
-                return@withTimeoutOrNull it.also { callback(it) }
+                callback(it)
+                return@withTimeoutOrNull it
             }
+            null
         }
     }
 
-    suspend fun getAccessibleIP(ipList: List<String>, callback: (String) -> String) = coroutineScope {
+    suspend fun getAccessibleIP(ipList: List<String>, callback: (String) -> String): String? = coroutineScope {
         withTimeoutOrNull(2000L) {
             val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
                 async {
@@ -177,7 +181,9 @@ object Gadget {
             accessibleIp?.let {
                 Timber.tag("getAccessibleIP").d("get from $it")
                 callback(it)
+                return@withTimeoutOrNull it
             }
+            null
         }
     }
 

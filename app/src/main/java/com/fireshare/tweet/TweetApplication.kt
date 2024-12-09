@@ -25,7 +25,7 @@ class TweetApplication : Application(){
     override fun onCreate() {
         super.onCreate()
         preferenceHelper = PreferenceHelper(this)
-        initJob = CoroutineScope(Dispatchers.IO).async {
+        initJob = CoroutineScope(IO).async {
             HproseInstance.init(this@TweetApplication, preferenceHelper)
         }
         if (BuildConfig.DEBUG) {
@@ -80,8 +80,7 @@ class ReleaseTree : Timber.Tree() {
             put("message", message)
             t?.let { put("exception", it.toString()) }
         }
-        val scope = CoroutineScope(IO)
-        scope.launch {
+        CoroutineScope(IO).launch {
             HproseInstance.logging(logEntry.toString())
         }
 
