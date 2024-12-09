@@ -814,10 +814,10 @@ object HproseInstance {
 
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
         try {
-            val author = tweet.author ?: return@withRetry tweet
+            val author = tweet.author
             val method = "toggle_likes"
             val url =
-                "${author.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                "${author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                         "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
@@ -832,6 +832,7 @@ object HproseInstance {
                 val ret = tweet.copy(
                     likeCount = (res["count"] as Double).toInt()
                 )
+                // update cached tweet
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
@@ -983,6 +984,7 @@ object HproseInstance {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         val accessibleUser = getAccessibleUser(hostIPs, userId) { user ->
+                            user.writableUrl = null
                             cachedUsers.add(user)
                             user // Return the user from the callback
                         }

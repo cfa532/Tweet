@@ -125,7 +125,10 @@ data class User(
 suspend fun User.writableUrl(): String? {
     return writableUrl ?: hostIds?.firstOrNull()?.let { hostId ->
         HproseInstance.getHostIP(hostId)?.let { hostIP ->
-            "http://$hostIP".also { writableUrl = it }
+            "http://$hostIP".also { newUrl ->
+                writableUrl = newUrl
+                baseUrl = newUrl
+            }
         }
     }
 }
