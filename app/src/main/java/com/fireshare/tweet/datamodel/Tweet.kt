@@ -129,7 +129,7 @@ suspend fun User.writableUrl(): String? {
                 writableUrl = newUrl
                 baseUrl = newUrl
             }
-        }
+        } ?: baseUrl    // if writableUrl is not available, return baseUrl
     }
 }
 

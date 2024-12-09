@@ -17,6 +17,9 @@ import hprose.common.HproseException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -141,49 +144,46 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId, callback: (User) -> User): User? {
+    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? {
         return withTimeoutOrNull(2000L) {
-            val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
-                async {
-                    try {
-                        HproseInstance.getUserData(mid, ip)
-                    } catch (e: Exception) {
-                        null // Or handle specific exceptions here
+            channelFlow {
+                ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
+                    launch {
+                        try {
+                            HproseInstance.getUserData(mid, ip)?.let {
+                                send(it) // Emit the user if found
+                            }
+                        } catch (e: Exception) {
+                            // Handle exceptions, e.g., log or rethrow
+                        }
                     }
                 }
+            }.firstOrNull()?.also { user -> // Apply firstOrNull() to the flow
+                Timber.tag("getAccessibleUser").d("get user from $user")
             }
-            val accessibleUser = deferreds.firstOrNull { deferred ->
-                deferred.await() != null
-            }?.await()
-            accessibleUser?.let {
-                Timber.tag("getAccessibleUser").d("get user from $it")
-                callback(it)
-                return@withTimeoutOrNull it
-            }
-            null
         }
     }
 
-    suspend fun getAccessibleIP(ipList: List<String>, callback: (String) -> String): String? = coroutineScope {
-        withTimeoutOrNull(2000L) {
-            val deferreds = ipList.filter { isValidPublicIpAddress(it) }.map { ip ->
-                async {
-                    try {
-                        HproseInstance.isAccessible(ip)
-                    } catch (e: Exception) {
-                        null // Or handle specific exceptions here
+    suspend fun getAccessibleIP(ipList: List<String>): String? {
+        return withTimeoutOrNull(2000L) {
+            channelFlow {
+                for (ip in ipList) {
+                    if (isValidPublicIpAddress(ip)) {
+                        Timber.tag("getAccessibleIP").d("Trying $ip")
+                        launch {
+                            try {
+                                HproseInstance.isAccessible(ip)?.let {
+                                    send(ip)
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("getAccessibleIP").e(e, "Error checking $ip")
+                            }
+                        }
                     }
                 }
+            }.firstOrNull()?.also { ip ->
+                Timber.tag("getAccessibleIP").d("get $ip")
             }
-            val accessibleIp = deferreds.firstOrNull { deferred ->
-                deferred.await() != null
-            }?.await()
-            accessibleIp?.let {
-                Timber.tag("getAccessibleIP").d("get from $it")
-                callback(it)
-                return@withTimeoutOrNull it
-            }
-            null
         }
     }
 
