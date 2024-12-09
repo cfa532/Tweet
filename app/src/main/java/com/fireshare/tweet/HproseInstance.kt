@@ -109,7 +109,7 @@ object HproseInstance {
                          * and tries to extract appId and host IP addresses from source code.
                          * */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs[0]}")
+                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs.firstOrNull()}")
                         Timber.tag("initAppEntry").d("$paramMap $hostIPs")
 
                         /**
@@ -366,9 +366,8 @@ object HproseInstance {
                 val str = response.body?.string() ?: return@withRetry null
                 str.trim().trim('"').trim(',').split(',').let {ips ->
                     if (ips.isNotEmpty()) {
-                        return@withRetry getAccessibleIP(ips) { accessibleIp ->
-                            accessibleIp
-                       }
+                        val accessibleIp = getAccessibleIP(ips) { it }
+                        return@withRetry accessibleIp
                     }
                 }
             }
@@ -814,7 +813,7 @@ object HproseInstance {
     } }
 
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
-        return@withRetry try {
+        try {
             val author = tweet.author ?: return@withRetry tweet
             val method = "toggle_likes"
             val url =

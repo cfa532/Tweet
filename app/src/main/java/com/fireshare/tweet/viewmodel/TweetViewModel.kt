@@ -238,17 +238,13 @@ class TweetViewModel @AssistedInject constructor(
         context.startActivity(shareIntent, null)
     }
 
-    fun likeTweet() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val tweet = HproseInstance.likeTweet(tweetState.value)
-            _tweetState.value = tweet
-        }
+    suspend fun likeTweet() {
+        val tweet = HproseInstance.likeTweet(tweetState.value)
+        _tweetState.value = tweet
     }
 
-    fun bookmarkTweet() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val tweet = HproseInstance.bookmarkTweet(tweetState.value)
-            _tweetState.value = tweet
-        }
+    suspend fun bookmarkTweet() {
+        val tweet = HproseInstance.bookmarkTweet(tweetState.value)
+        _tweetState.value = tweet
     }
 }

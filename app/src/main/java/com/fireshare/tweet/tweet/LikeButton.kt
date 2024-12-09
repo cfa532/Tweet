@@ -147,11 +147,13 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
+        viewModel.viewModelScope.launch(Dispatchers.IO) {
+            if (appUser.mid == TW_CONST.GUEST_ID) {
                 guestWarning(context, navController)
+            } else {
+                viewModel.likeTweet()
             }
-        } else viewModel.likeTweet()
+        }
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -179,11 +181,11 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
-            viewModel.viewModelScope.launch {
+        viewModel.viewModelScope.launch {
+            if (appUser.mid == TW_CONST.GUEST_ID) {
                 guestWarning(context, navController)
-            }
-        } else viewModel.bookmarkTweet()
+            } else viewModel.bookmarkTweet()
+        }
     })
     {
         Row(horizontalArrangement = Arrangement.Center) {
