@@ -591,7 +591,7 @@ object HproseInstance {
     }}
 
     /**
-     * Get tweet from Mimei DB to refresh cached tweet.
+     * Get tweet from node Mimei DB to refresh cached tweet.
      * Called when the given tweet is visible.
      * */
     suspend fun refreshTweet(
@@ -784,6 +784,8 @@ object HproseInstance {
                     CachedTweet(tweet.mid, Gson().toJson(t))
                 )
             }
+            // become a provider for the original tweet
+            provide(tweet.author!!, tweet.mid)
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.e("toggleRetweet()", e.toString())
@@ -857,12 +859,11 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
-                CoroutineScope(Dispatchers.IO).launch {
-                    if (hasLiked)
-                        provide(tweet.author!!, tweet.mid)
-                    else
-                        tweet.author?.let { unprovide(it, tweet.mid) }
-                }
+                // become a provider of the tweet if like it.
+                if (hasLiked)
+                    provide(tweet.author!!, tweet.mid)
+                else
+                    tweet.author?.let { unprovide(it, tweet.mid) }
                 ret
             } else {
                 tweet
@@ -888,13 +889,19 @@ object HproseInstance {
                     responseBody,
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any?>
-                tweet.favorites?.set(UserFavorites.BOOKMARK, res["hasBookmarked"] as Boolean)
+                val hasBookmarked = res["hasBookmarked"] as Boolean
+                tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
                 val ret = tweet.copy(
                     bookmarkCount = (res["count"] as Double).toInt()
                 )
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
+                // become a provider of the tweet if like it.
+                if (hasBookmarked)
+                    provide(tweet.author!!, tweet.mid)
+                else
+                    tweet.author?.let { unprovide(it, tweet.mid) }
                 ret
             } else {
                 tweet
@@ -913,7 +920,6 @@ object HproseInstance {
         try {
             if (tweet.author == null)
                 tweet.author = getUser(tweet.authorId)  // deep link
-
             val pageSize = 50
             val method = "get_comments"
             val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last")
@@ -926,9 +932,6 @@ object HproseInstance {
                 val gson = Gson()
                 return@withRetry gson.fromJson(responseBody, object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>?
             }
-        } catch (e: ProtocolException) {
-            // handle network failure (e.g., show an error message)
-            Timber.tag("getComments()").e(e, "Network failure: Unexpected status line")
         } catch (e: Exception) {
             Timber.tag("getComments()").e(e, "Error: ${e.message}")
         }
@@ -960,6 +963,7 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(ret.mid, gson.toJson(ret))
                 )
+                provide(tweet.author!!, tweet.mid)
                 ret
             } else {
                 tweet

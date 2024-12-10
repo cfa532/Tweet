@@ -75,7 +75,6 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
             }
             return@IconButton
         }
-
         // save the current tweetViewModel in sharedViewModel
         viewModelProvider?.get(SharedViewModel::class)?.let { sharedViewModel ->
             sharedViewModel.tweetViewModel = viewModel
@@ -110,17 +109,18 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            scope.launch {
+            tweetFeedViewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
-            return@IconButton
-        }
-        scope.launch(Dispatchers.IO) {
-            tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
-                viewModel.updateTweet(updatedTweet)
-            }
-        }
-    } ) {
+        } else
+            tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.updateRetweetCount()  // update retweet count in viewModel right away
+                tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
+                    // update the original tweet's retweet count
+                    viewModel.updateTweet(updatedTweet)
+                }
+            } }
+    ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
@@ -147,13 +147,14 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
 
     IconButton(onClick = {
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
-            if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
-            } else {
+            }
+        } else
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
                 viewModel.likeTweet()
             }
-        }
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -181,12 +182,15 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
 
     IconButton(onClick = {
-        viewModel.viewModelScope.launch {
-            if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.mid == TW_CONST.GUEST_ID) {
+            viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
-            } else viewModel.bookmarkTweet()
-        }
-    })
+            }
+        } else
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.bookmarkTweet()
+            }
+    } )
     {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(

@@ -183,7 +183,7 @@ object Gadget {
                                     send(ip)
                                 }
                             } catch (e: Exception) {
-                                Timber.tag("getAccessibleIP").e(e, "Error checking $ip")
+                                // Timber.tag("getAccessibleIP").e(e, "Error checking $ip")
                             }
                         }
                     }

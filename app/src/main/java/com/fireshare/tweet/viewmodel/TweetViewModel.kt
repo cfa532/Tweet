@@ -21,6 +21,7 @@ import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.service.UploadCommentWorker
 import com.fireshare.tweet.widget.createExoPlayer
 import com.google.gson.Gson
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.lang.Integer.max
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -50,6 +52,9 @@ class TweetViewModel @AssistedInject constructor(
     }
     private val _tweetState = MutableStateFlow(tweet)
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
+    val hasLiked: Boolean get() = _tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+    val likeCount: Int get() = _tweetState.value.likeCount
+    val hasBookmarked: Boolean get() = _tweetState.value.favorites?.get(UserFavorites.BOOKMARK) ?: false
 
     private val _attachments = MutableStateFlow(tweet.attachments)
     val attachments: StateFlow<List<MimeiFileType>?> get() = _attachments.asStateFlow()
@@ -59,6 +64,7 @@ class TweetViewModel @AssistedInject constructor(
     val tweetAttachments = tweet.attachments
 
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
+    // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
 
     fun getExoPlayer(url: String, context: Context): ExoPlayer {
@@ -239,12 +245,32 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     suspend fun likeTweet() {
-        val tweet = HproseInstance.likeTweet(tweetState.value)
-        _tweetState.value = tweet
+        if (tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) == true) {
+            _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, false)
+        } else {
+            _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, true)
+        }
+        _tweetState.value = tweetState.value.copy(
+            likeCount = if (tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) == false)
+                max(0, tweetState.value.likeCount - 1) else tweetState.value.likeCount + 1,
+        )
+        _tweetState.value = HproseInstance.likeTweet(tweetState.value)
     }
 
     suspend fun bookmarkTweet() {
-        val tweet = HproseInstance.bookmarkTweet(tweetState.value)
-        _tweetState.value = tweet
+        if (tweetState.value.favorites?.get(UserFavorites.BOOKMARK) == true) {
+            _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, false)
+        } else {
+            _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, true)
+        }
+        _tweetState.value = tweetState.value.copy(
+            bookmarkCount = if (tweetState.value.favorites?.get(UserFavorites.BOOKMARK) == false)
+                max(0, tweetState.value.bookmarkCount - 1) else tweetState.value.bookmarkCount + 1,
+        )
+        _tweetState.value = HproseInstance.bookmarkTweet(tweetState.value)
+    }
+
+    fun updateRetweetCount() {
+        _tweetState.value = tweetState.value.copy(retweetCount = tweetState.value.retweetCount + 1)
     }
 }
