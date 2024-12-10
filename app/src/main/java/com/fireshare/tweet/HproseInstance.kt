@@ -811,10 +811,10 @@ object HproseInstance {
         null
     } }
 
-    private suspend fun provide(userId: MimeiId, tweetId: MimeiId? = null) { return withRetry {
+    private suspend fun provide(user: User, tweetId: MimeiId? = null) { return withRetry {
         try {
             val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
-                    "&userid=$userId&tweetid=$tweetId"
+                    "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
             val request = Request.Builder().url(url).build()
             httpClient.newCall(request).execute()
         } catch (e: Exception) {
@@ -859,7 +859,7 @@ object HproseInstance {
                 )
                 CoroutineScope(Dispatchers.IO).launch {
                     if (hasLiked)
-                        provide(tweet.authorId, tweet.mid)
+                        provide(tweet.author!!, tweet.mid)
                     else
                         tweet.author?.let { unprovide(it, tweet.mid) }
                 }
