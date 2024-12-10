@@ -153,12 +153,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 batch.forEach { userId ->
                     try {
                         getUser(userId)?.let { user ->
-                            HproseInstance.getTweetList(user, tweets.value, startTimestamp, sinceTimestamp)
-                                .collect { tweet ->
-                                    _tweets.update { list -> (list + tweet)
+                            HproseInstance.getTweetList(
+                                user,
+                                tweets.value,
+                                startTimestamp,
+                                sinceTimestamp
+                            ).collect { tweets ->
+                                _tweets.update { list -> (list + tweets)
                                         .distinctBy { it.mid }
-                                        .sortedByDescending { it.timestamp } }
+                                        .sortedByDescending { it.timestamp }
                                 }
+                            }
                         }
                     } catch (e: Exception) {
                         Timber.tag("GetTweets in TFVM")
@@ -173,8 +178,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     private suspend fun getTweets(userId: MimeiId) {
         try {
-            getUser(userId)?.let {
-                HproseInstance.getTweetList(it, tweets.value, startTimestamp.longValue, endTimestamp.longValue)
+            getUser(userId)?.let { uid ->
+                HproseInstance.getTweetList(uid, tweets.value, startTimestamp.longValue, endTimestamp.longValue)
+                    .collect { tweets ->
+                        _tweets.update { list -> (list + tweets)
+                            .distinctBy { it.mid }
+                            .sortedByDescending { it.timestamp } }
+                    }
             }
         } catch (e: Exception) {
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
