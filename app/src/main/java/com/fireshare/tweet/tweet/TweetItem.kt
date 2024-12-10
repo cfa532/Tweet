@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -43,6 +44,7 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,9 +59,10 @@ fun TweetItem(
     ) { factory ->
         factory.create(tweet)
     }
-    var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()-180001L) }
     var isVisible by remember { mutableStateOf(false) }
     var visibilityStartTime by remember { mutableLongStateOf(0L) }
+    val scope = rememberCoroutineScope()
 
     /**
      * If the composable stays visible for more than 1 second, refresh tweet.
@@ -67,16 +70,31 @@ fun TweetItem(
      * */
     LaunchedEffect(isVisible) {
         if (isVisible) {
-            visibilityStartTime = System.currentTimeMillis() // Record visibility start time
-            delay(500) // Wait for 1 second
+            visibilityStartTime = System.currentTimeMillis()
+            delay(1000)
 
             val currentTime = System.currentTimeMillis()
             if (currentTime - visibilityStartTime >= 500 && currentTime - lastRefreshTime >= 3 * 60 * 1000) {
-                viewModel.refreshTweet()
-                lastRefreshTime = currentTime
+                withContext(Dispatchers.IO) {
+                    viewModel.refreshTweet()
+                    lastRefreshTime = currentTime
+                }
             }
+
+            // Start periodic refresh after initial refresh
+            scope.launch(Dispatchers.IO) {
+                while (true) {
+                    delay(5 * 60 * 1000) // Refresh every 5 minutes
+                    viewModel.refreshTweet()
+                    lastRefreshTime = System.currentTimeMillis()
+                }
+            }
+        } else {
+            // Cancel the periodic refresh when the composable becomes invisible
+            scope.cancel()
         }
     }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()

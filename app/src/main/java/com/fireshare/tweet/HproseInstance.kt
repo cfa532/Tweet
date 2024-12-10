@@ -2,7 +2,6 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.net.Uri
-import androidx.activity.result.launch
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -23,14 +22,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -44,7 +38,6 @@ import java.net.SocketTimeoutException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
-import kotlin.coroutines.coroutineContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -676,6 +669,7 @@ object HproseInstance {
             var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
+
                 // if the originalTweet is not null, also decrease its quote count
                 if (tweet.originalTweetId != null) {
                     method = "retweet_remove"
@@ -723,8 +717,14 @@ object HproseInstance {
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val json = response.body?.string()
-                val gson = Gson()
-                return@withRetry gson.fromJson(json, Boolean::class.java)
+                val isFollowing = Gson().fromJson(json, Boolean::class.java)
+                getUser(userId)?.let { user ->
+                    if (isFollowing)
+                        provide(user)
+                    else
+                        unprovide(user)
+                }
+                return@withRetry isFollowing
             }
         } catch (e: Exception) {
             Timber.tag("toggleFollowing()").e(e.toString())
@@ -758,11 +758,11 @@ object HproseInstance {
      * */
     suspend fun retweet(
         tweet: Tweet,                       // original tweet to be retweeted
-        addTweetToFeed: (Tweet) -> Unit,    // add tweet to user's feed
-        updateTweet: (Tweet) -> Unit        // update viewModel of original tweet
+        addTweetToFeed: (Tweet) -> Unit,    // add retweet to user's feed
+        updateOriginalTweet: (Tweet) -> Unit        // update viewModel of original tweet
     ) { return withRetry {
         try {
-            // upload the retweet
+            // upload the retweet, simply a few dozen bytes.
             val retweet = uploadTweet(
                 Tweet(
                     mid = System.currentTimeMillis().toString(),    // placeholder
@@ -777,7 +777,7 @@ object HproseInstance {
             addTweetToFeed(retweet)
 
             increaseRetweetCount(tweet, retweet.mid)?.let { t ->
-                updateTweet(t.copy(author = tweet.author))
+                updateOriginalTweet(t.copy(author = tweet.author))
 
                 // update cached tweet in the database.
                 tweetCache.tweetDao().updateCachedTweet(
@@ -793,17 +793,14 @@ object HproseInstance {
     } }
 
     /**
-     * Increase the retweet count of a tweet.
+     * Increase the retweet count in the original tweet mimei.
      * @return updated tweet object.
      * */
     suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
         val method = "retweet_add"
-        val url =
-            StringBuilder("${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method")
-                .append("&tweetid=${tweet.mid}")
-                .append("&userid=${appUser.mid}")
-                .append("&retweetid=$retweetId")
-        val request = Request.Builder().url(url.toString()).build()
+        val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+            "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
+        val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (response.isSuccessful) {
             val responseBody = response.body?.string() ?: return@withRetry null

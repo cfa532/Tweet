@@ -129,8 +129,7 @@ class UserViewModel @AssistedInject constructor(
                              updateTweetFeed: (Boolean) -> Unit) {
         // toggle the Following status on the given UserId
         HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
-            // Succeed. Now it is the other party's turn
-            // to update its followers.
+            // Succeed. Now it is the other party's turn to update its followers.
             HproseInstance.toggleFollower(subjectUserId, isFollowing, appUserId)
             _followings.update { list ->
                 if (isFollowing) {

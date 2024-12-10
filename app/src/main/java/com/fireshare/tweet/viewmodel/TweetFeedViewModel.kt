@@ -197,13 +197,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     suspend fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
-        HproseInstance.delTweet(tweet) { tid ->
-            _tweets.update { currentTweets ->
-                currentTweets.filterNot { it.mid == tid }
-            }
-            // remove from userViewModel's feed
-            tweetActionListener.onTweetDeleted(tweet.mid)
-
+        // remove from userViewModel's feed
+        tweetActionListener.onTweetDeleted(tweet.mid)
+        _tweets.update { currentTweets ->
+            currentTweets.filterNot { it.mid == tweet.mid }
+        }
+        HproseInstance.delTweet(tweet) {
             // If there is an original tweet, update its viewModel.
             updateOriginTweet()
         }

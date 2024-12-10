@@ -109,11 +109,11 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
-            tweetFeedViewModel.viewModelScope.launch {
+            viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
         } else
-            tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
                 viewModel.updateRetweetCount()  // update retweet count in viewModel right away
                 tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
                     // update the original tweet's retweet count

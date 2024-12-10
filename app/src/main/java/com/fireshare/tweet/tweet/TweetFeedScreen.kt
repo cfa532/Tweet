@@ -130,7 +130,7 @@ fun TweetFeedScreen(
                      .nestedScroll(scrollBehavior.nestedScrollConnection),
                  state = listState
              ) {
-                 items(tweets, key = { it.mid.toString() } ) { tweet ->
+                 items(tweets, key = { it.mid } ) { tweet ->
                      if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
                  }
                  item {
