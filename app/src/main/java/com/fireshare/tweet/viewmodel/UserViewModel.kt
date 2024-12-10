@@ -171,7 +171,7 @@ class UserViewModel @AssistedInject constructor(
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getTweetList(user.value, _tweets, startTimestamp, endTimestamp)
+        HproseInstance.getTweetList(user.value, _tweets.value, startTimestamp, endTimestamp)
 
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         HproseInstance.getTopList(user.value)?.forEach { map ->

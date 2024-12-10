@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
@@ -27,11 +28,17 @@ import com.fireshare.tweet.widget.Gadget.splitJson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -142,35 +149,32 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val batchSize = 10 // Adjust batch size as needed
 
         followings.chunked(batchSize).forEach { batch ->
-            withContext(networkDispatcher) {
-                try {
-                    batch.forEach { userId ->
-                        async {
-                            try {
-                                getUser(userId)?.let {
-                                    HproseInstance.getTweetList(it, _tweets, startTimestamp, sinceTimestamp)
+            withContext(viewModelScope.coroutineContext + networkDispatcher) {
+                batch.forEach { userId ->
+                    try {
+                        getUser(userId)?.let { user ->
+                            HproseInstance.getTweetList(user, tweets.value, startTimestamp, sinceTimestamp)
+                                .collect { tweet ->
+                                    _tweets.update { list -> (list + tweet)
+                                        .distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp } }
                                 }
-                            } catch (e: Exception) {
-                                Timber.tag("GetTweets in TweetFeedVM")
-                                    .e(e, "Error fetching tweets for user: $userId")
-                                // remove the userId from cached user list, the app will try to
-                                // reacquire the user information.
-                                HproseInstance.removeCachedUser(userId)
-                            }
-                        }.await()
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("GetTweets in TFVM")
+                            .e(e, "Error fetching tweets for user: $userId")
+                        HproseInstance.removeCachedUser(userId)
                     }
-                    initState.value = false
-                } catch (e: Exception) {
-                    Timber.tag("GetTweets").e(e, "Error fetching tweets. $appUser")
                 }
             }
         }
+        initState.value = false
     }
 
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let {
-                HproseInstance.getTweetList(it, _tweets, startTimestamp.longValue, endTimestamp.longValue)
+                HproseInstance.getTweetList(it, tweets.value, startTimestamp.longValue, endTimestamp.longValue)
             }
         } catch (e: Exception) {
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")

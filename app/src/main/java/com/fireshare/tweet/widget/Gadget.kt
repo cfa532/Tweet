@@ -166,7 +166,7 @@ object Gadget {
                  * can be consistent.
                  * */
                 user.writableUrl = null
-                Timber.tag("getAccessibleUser").d("get user from $user")
+                Timber.tag("getAccessibleUser").d("get $user")
             }
         }
     }
@@ -189,7 +189,7 @@ object Gadget {
                     }
                 }
             }.firstOrNull()?.also { ip ->
-                Timber.tag("getAccessibleIP").d("get $ip")
+                Timber.tag("getAccessibleIP").d("Fastest ip: $ip")
             }
         }
     }

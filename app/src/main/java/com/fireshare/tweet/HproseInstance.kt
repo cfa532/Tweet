@@ -26,7 +26,9 @@ import hprose.client.HproseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -487,26 +489,21 @@ object HproseInstance {
      * Get tweets of a given author in a given span of time. if end is null, get all tweets.
      * Update tweets state flow directly.
      * */
-    suspend fun getTweetList(
+    fun getTweetList(
         user: User,
-        tweets: MutableStateFlow<List<Tweet>>,
+        tweets: List<Tweet>,
         startTimestamp: Long,
         endTimestamp: Long?
-    ) { return withRetry {
+    ): Flow<List<Tweet>> = channelFlow {
         try {
             // 1. Retrieve cached tweet mid list for the user. In case of no network, the
             // user can still see cached ones.
             val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
             if (cachedTweetIdList!!.isNotEmpty()) {
-
                 // 2. Retrieve tweets from cache using cached mid list
-                splitJson(cachedTweetIdList)?.mapNotNull { retrieveCachedTweet(it) }?.also { cachedTweets ->
-                    tweets.update { currentTweets ->
-                        (currentTweets + cachedTweets)
-                            .distinctBy { it.mid }
-                            .sortedByDescending { it.timestamp }
-                    }
-                }
+                val cachedTweets = splitJson(cachedTweetIdList)
+                    ?.mapNotNull { retrieveCachedTweet(it) } ?: emptyList()
+                send(cachedTweets)
             }
             // 3. Make network call to get mid list from server
             val method = "get_tweet_list"
@@ -523,31 +520,28 @@ object HproseInstance {
                     object : TypeToken<List<MimeiId>?>() {}.type
                 ) as List<MimeiId>?
 
-                // 4. Overwrite cached mid list with the new list
+                // 4. Overwrite cached mid list of the user with a updated list
                 midList?.let {
                     tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
                 }
 
                 // 5. Retrieve any tweets not in the cached list and add them to tweets list.
                 val unCachedTweetIdList = midList?.filterNot {mid->
-                    tweets.value.any { it.mid == mid }
+                    tweets.any { it.mid == mid }
                 }
-                unCachedTweetIdList?.forEach { tweetId ->
-                    getTweet(tweetId, user.mid)?.let { tweet ->
+                val networkTweets = unCachedTweetIdList?.mapNotNull { tweetId ->
+                    getTweet(tweetId, user.mid)?.also { tweet ->
                         if (tweet.originalTweetId != null) {
                             tweet.originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
                         }
-                        tweets.update { currentTweets -> (currentTweets + tweet)
-                            .sortedByDescending { it.timestamp }
-                            .distinctBy { it.mid }
-                        }
                     }
-                }
+                } ?: emptyList()
+                send(networkTweets)
             }
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
         }
-    } }
+    }
 
     /**
      * Get only layer one data of the tweet. Do Not fetch its original tweet if there is any.
