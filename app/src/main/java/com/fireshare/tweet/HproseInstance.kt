@@ -2,6 +2,7 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.result.launch
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -22,9 +23,12 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -38,6 +42,7 @@ import java.net.SocketTimeoutException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import kotlin.coroutines.coroutineContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -126,13 +131,13 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            appUser = getAccessibleUser(hostIPs, userId) { it } ?: appUser
+                            appUser = getAccessibleUser(hostIPs, userId) ?: appUser
                             cachedUsers.add(appUser)
                             hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
                                 .useService(HproseService::class.java)
                             Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
                         } else {
-                            val firstIp = getAccessibleIP(hostIPs) { it }
+                            val firstIp = getAccessibleIP(hostIPs)
                             appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                             cachedUsers.add(appUser)
                             hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
@@ -366,7 +371,7 @@ object HproseInstance {
                 val str = response.body?.string() ?: return@withRetry null
                 str.trim().trim('"').trim(',').split(',').let {ips ->
                     if (ips.isNotEmpty()) {
-                        val accessibleIp = getAccessibleIP(ips) { it }
+                        val accessibleIp = getAccessibleIP(ips)
                         return@withRetry accessibleIp
                     }
                 }
@@ -523,7 +528,7 @@ object HproseInstance {
                     tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
                 }
 
-                // 5. Retrieve any tweets not in the cached list
+                // 5. Retrieve any tweets not in the cached list and add them to tweets list.
                 val unCachedTweetIdList = midList?.filterNot {mid->
                     tweets.value.any { it.mid == mid }
                 }
@@ -812,23 +817,45 @@ object HproseInstance {
         null
     } }
 
+    private suspend fun provide(userId: MimeiId, tweetId: MimeiId? = null) { return withRetry {
+        try {
+            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
+                    "&userid=$userId&tweetid=$tweetId"
+            val request = Request.Builder().url(url).build()
+            httpClient.newCall(request).execute()
+        } catch (e: Exception) {
+            Timber.tag("provide()").e(e.toString())
+        }
+    } }
+
+    private suspend fun unprovide(user: User, tweetId: MimeiId? = null) { return withRetry {
+        try {
+            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_unprovide" +
+                    "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
+            val request = Request.Builder().url(url).build()
+            httpClient.newCall(request).execute()
+        } catch (e: Exception) {
+            Timber.tag("provide()").e(e.toString())
+        }
+    } }
+
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
         try {
-            val author = tweet.author
             val method = "toggle_likes"
             val url =
-                "${author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                         "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return@withRetry tweet
+                val responseBody = response.body?.string()
                 val gson = Gson()
                 val res = gson.fromJson(
                     responseBody,
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any?>
-                tweet.favorites?.set(UserFavorites.LIKE_TWEET, res["hasLiked"] as Boolean)
+                val hasLiked = res["hasLiked"] as Boolean
+                tweet.favorites?.set(UserFavorites.LIKE_TWEET, hasLiked)
                 val ret = tweet.copy(
                     likeCount = (res["count"] as Double).toInt()
                 )
@@ -836,6 +863,12 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
+                CoroutineScope(Dispatchers.IO).launch {
+                    if (hasLiked)
+                        provide(tweet.authorId, tweet.mid)
+                    else
+                        tweet.author?.let { unprovide(it, tweet.mid) }
+                }
                 ret
             } else {
                 tweet
@@ -848,15 +881,14 @@ object HproseInstance {
 
     suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
         try {
-            val author = tweet.author ?: return@withRetry tweet
             val method = "toggle_bookmark"
             val url =
-                "${author.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                         "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return@withRetry tweet
+                val responseBody = response.body?.string()
                 val gson = Gson()
                 val res = gson.fromJson(
                     responseBody,
@@ -886,7 +918,7 @@ object HproseInstance {
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? { return withRetry {
         try {
             if (tweet.author == null)
-                tweet.author = getUser(tweet.authorId) ?: return@withRetry null
+                tweet.author = getUser(tweet.authorId)  // deep link
 
             val pageSize = 50
             val method = "get_comments"
@@ -983,12 +1015,10 @@ object HproseInstance {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        val accessibleUser = getAccessibleUser(hostIPs, userId) { user ->
-                            user.writableUrl = null
+                        getAccessibleUser(hostIPs, userId)?.let { user ->
                             cachedUsers.add(user)
-                            user // Return the user from the callback
+                            return@withRetry user
                         }
-                        return@withRetry accessibleUser
                     }
                 }
             }

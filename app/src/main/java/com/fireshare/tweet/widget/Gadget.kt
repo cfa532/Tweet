@@ -12,6 +12,7 @@ import androidx.compose.ui.text.withStyle
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.datamodel.writableUrl
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import hprose.common.HproseException
 import kotlinx.coroutines.Dispatchers.IO
@@ -151,14 +152,20 @@ object Gadget {
                     launch {
                         try {
                             HproseInstance.getUserData(mid, ip)?.let {
-                                send(it) // Emit the user if found
+                               send(it) // Emit the user if found
                             }
                         } catch (e: Exception) {
                             // Handle exceptions, e.g., log or rethrow
                         }
                     }
                 }
-            }.firstOrNull()?.also { user -> // Apply firstOrNull() to the flow
+            }.firstOrNull()?.also { user ->
+                /**
+                 * Init writableUrl to null, when user makes any data changes,
+                 * enforce its baseUrl to writableUrl, so that in memory tweet
+                 * can be consistent.
+                 * */
+                user.writableUrl = null
                 Timber.tag("getAccessibleUser").d("get user from $user")
             }
         }
