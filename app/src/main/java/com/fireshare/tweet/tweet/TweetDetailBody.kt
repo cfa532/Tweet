@@ -119,7 +119,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 0.dp, bottom = 0.dp, end = 0.dp)
+                    .padding(start = 0.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
                     if (!tweet.content.isNullOrEmpty()) {

@@ -219,7 +219,7 @@ fun TweetItem(
                 }
             }
         } else {
-            // original tweet by current user.
+            // original tweet by user.
             TweetItemBody(viewModel, parentEntry)
         }
     }
