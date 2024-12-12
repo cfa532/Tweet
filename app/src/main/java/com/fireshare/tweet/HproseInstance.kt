@@ -935,7 +935,9 @@ object HproseInstance {
         null
     } }
 
-    // update input parameter "comment" with new mid, and return update parent Tweet
+    /**
+     * The mid of "comment" tweet is updated here. Return the updated parent tweet.
+     * */
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
         try {
             // add the comment to tweetId
