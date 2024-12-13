@@ -264,9 +264,9 @@ class UserViewModel @AssistedInject constructor(
         preferencesHelper.setUserId(null)
         user.value = appUser
         _fans.value = emptyList()
-        _followings.value = emptyList()
         _tweets.value = emptyList()
         _topTweets.value = emptyList()
+        _followings.value = emptyList()
         username.value = ""
         password.value = ""
         profile.value = ""

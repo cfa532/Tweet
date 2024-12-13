@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
@@ -26,19 +25,10 @@ import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
 import com.fireshare.tweet.widget.Gadget.splitJson
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.flatMapConcat
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -229,7 +219,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun reset() {
-        initState.value = true
         _tweets.value = emptyList()
         _followings.value = HproseInstance.getAlphaIds()
         startTimestamp = mutableLongStateOf(System.currentTimeMillis())
