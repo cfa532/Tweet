@@ -15,10 +15,10 @@
       </SelectionState>
       <SelectionState runConfigName="Sharp">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2024-12-08T02:05:26.237750Z">
+        <DropdownSelection timestamp="2024-12-12T16:31:58.599676Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=/Users/cfa532/.android/avd/Pixel_9_Pro_API_35.avd" />
+              <DeviceId pluginId="LocalEmulator" identifier="path=/Users/cfa532/.android/avd/Pixel_8a_API_35.avd" />
             </handle>
           </Target>
         </DropdownSelection>

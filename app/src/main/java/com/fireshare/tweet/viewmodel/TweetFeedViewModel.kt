@@ -108,26 +108,30 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     suspend fun loadNewerTweets() {
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
-
         _isRefreshingAtTop.value = true
-        startTimestamp.longValue = System.currentTimeMillis()
-        val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
-        Timber.tag("loadNewerTweets")
-            .d("startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp")
-        getTweets(startTimestamp.longValue, endTimestamp, followings.value)
-        _isRefreshingAtTop.value = false
+        try {
+            startTimestamp.longValue = System.currentTimeMillis()
+            val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
+            Timber.tag("loadNewerTweets")
+                .d("startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp")
+            getTweets(startTimestamp.longValue, endTimestamp, followings.value)
+        } finally {
+            _isRefreshingAtTop.value = false
+        }
     }
 
     suspend fun loadOlderTweets() {
         if (initState.value) return
-
         _isRefreshingAtBottom.value = true
-        val startTimestamp = endTimestamp.longValue
-        endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
-        Timber.tag("loadOlderTweets")
-            .d("startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
-        getTweets(startTimestamp, endTimestamp.longValue, followings.value)
-        _isRefreshingAtBottom.value = false
+        try {
+            val startTimestamp = endTimestamp.longValue
+            endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
+            Timber.tag("loadOlderTweets")
+                .d("startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
+            getTweets(startTimestamp, endTimestamp.longValue, followings.value)
+        } finally {
+            _isRefreshingAtBottom.value = false // Ensure state is reset
+        }
     }
 
     // Define a custom scope to ensure tweet deletion job not cancelled.

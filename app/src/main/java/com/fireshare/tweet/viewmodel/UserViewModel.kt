@@ -39,9 +39,7 @@ import timber.log.Timber
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
 ): ViewModel(), TweetActionListener {
-//    private var _user = MutableStateFlow(appUser)
-//    val user: StateFlow<User> get() = _user.asStateFlow()
-    val user = mutableStateOf(appUser)
+    var user = mutableStateOf(appUser)
 
     // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -75,7 +73,7 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
     var profile = mutableStateOf(user.value.profile)
-    var hostId = mutableStateOf<MimeiId>("")
+    var hostId = mutableStateOf("")
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
@@ -166,6 +164,8 @@ class UserViewModel @AssistedInject constructor(
                     refreshFollowingsAndFans()
                 }
             }
+        } else {
+            user.value = appUser.copy()
         }
     }
 
@@ -245,12 +245,18 @@ class UserViewModel @AssistedInject constructor(
             isLoading.value = false
 
             if (ret.second != null) {
+                // something wrong
                 loginError.value = ret.second.toString()
             } else {
                 val u = ret.first as User
                 preferencesHelper.setUserId(u.mid)
                 appUser = u
                 user.value = u
+                username.value = user.value.username
+                name.value = u.name ?: ""
+                profile.value = u.profile ?: ""
+                hostId.value = u.hostIds?.firstOrNull() ?: ""
+                refreshFollowingsAndFans()
                 popBack()
             }
         } else {
@@ -260,13 +266,13 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun logout(popBack: () -> Unit) {
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         preferencesHelper.setUserId(null)
-        user.value = appUser
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        user.value = appUser.copy()
         _fans.value = emptyList()
+        _followings.value = emptyList()
         _tweets.value = emptyList()
         _topTweets.value = emptyList()
-        _followings.value = emptyList()
         username.value = ""
         password.value = ""
         profile.value = ""
