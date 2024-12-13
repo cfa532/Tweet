@@ -205,8 +205,8 @@ interface CachedTweetDao {
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
      * */
-    @Insert
-    fun insertCachedTweet(cachedTweet: CachedTweet)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy
+    fun insertOrUpdateCachedTweet(cachedTweet: CachedTweet)
 
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?

@@ -492,7 +492,7 @@ object HproseInstance {
             // 1. Retrieve cached tweet mid list for the user. In case of no network, the
             // user can still see cached ones.
             val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
-            if (cachedTweetIdList!!.isNotEmpty()) {
+            if (!cachedTweetIdList.isNullOrEmpty()) {
                 // 2. Retrieve tweets from cache using cached mid list
                 val cachedTweets = splitJson(cachedTweetIdList)
                     ?.mapNotNull { retrieveCachedTweet(it) } ?: emptyList()
@@ -526,6 +526,7 @@ object HproseInstance {
                     getTweet(tweetId, user.mid)?.also { tweet ->
                         if (tweet.originalTweetId != null) {
                             tweet.originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                                ?: return@mapNotNull null
                         }
                     }
                 } ?: emptyList()
@@ -545,13 +546,15 @@ object HproseInstance {
         authorId: MimeiId
     ): Tweet? { return withRetry {
         try {
+            // if there is a cached tweet, return it.
             val cachedTweet = retrieveCachedTweet(tweetId)
             if (cachedTweet != null) {
                 if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
-                    return@withRetry null
+                    return@withRetry null   // private tweet viewable only by author at profile screen.
                 else
                     return@withRetry cachedTweet
             }
+
             val author =
                 getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
             val method = "get_tweet"
@@ -569,7 +572,7 @@ object HproseInstance {
                         /**
                          * Insert the tweet into the cache database.
                          * */
-                        tweetCache.tweetDao().insertCachedTweet(
+                        tweetCache.tweetDao().insertOrUpdateCachedTweet(
                             CachedTweet(tweet.mid, gson.toJson(tweet))
                         )
                         Timber.tag("getTweet").d("$tweet")
@@ -622,13 +625,16 @@ object HproseInstance {
     }}
 
     /**
-     * Retrieve cached tweet from Mimei DB. User info is not cached,
+     * Retrieve cached tweet from Mimei DB. User info is not cached in Room,
      * which changes frequently, so user data need to be loaded alive every time.
      * */
     private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
-        val gson = Gson()
-        val tweet = gson.fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
+        val tweet = Gson().fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
+        if (tweet.originalTweetId != null) {
+            tweet.originalTweet =
+                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: return null
+        }
         Timber.tag("restoreTweet").d("$tweet")
         tweet.author = getUser(tweet.authorId)
         if (tweet.originalTweetId != null) {
