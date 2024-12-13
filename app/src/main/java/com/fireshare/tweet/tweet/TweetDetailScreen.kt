@@ -69,6 +69,7 @@ fun TweetDetailScreen(
             delay(5 * 60 * 1000) // Delay for 5 minutes
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweet()
+                viewModel.loadComments(tweet)
             }
         }
     }

@@ -592,13 +592,9 @@ object HproseInstance {
         authorId: MimeiId
     ): Tweet? { return withRetry {
         try {
-            val author =
-                getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
-            val method = "get_tweet"
-            val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-                .append("&tweetid=$tweetId")
-                // appUser is passed to sever, to check if the current user has liked or bookmarked.
-                .append("&userid=${appUser.mid}").toString()
+            val author = getUser(authorId) ?: return@withRetry null
+            val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=get_tweet" +
+                "&tweetid=$tweetId&userid=${appUser.mid}"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
@@ -620,6 +616,8 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
         }
+        // if cannot get tweet from node, delete it from cache.
+        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweetId)
         null
     }}
 
@@ -661,6 +659,8 @@ object HproseInstance {
     } }
 
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
+        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
+
         var method = "delete_tweet"
         var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                     "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
@@ -668,8 +668,6 @@ object HproseInstance {
         try {
             var response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
-                tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
-
                 // if the originalTweet is not null, also decrease its quote count
                 if (tweet.originalTweetId != null) {
                     method = "retweet_remove"

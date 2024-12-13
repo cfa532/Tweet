@@ -84,6 +84,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             refresh()
+            initState.value = false
         }
     }
 
@@ -173,7 +174,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 }
             }
         }
-        initState.value = false
     }
 
     private suspend fun getTweets(userId: MimeiId) {
