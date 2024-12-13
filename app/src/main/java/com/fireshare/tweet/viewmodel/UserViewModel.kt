@@ -127,17 +127,19 @@ class UserViewModel @AssistedInject constructor(
     suspend fun toggleFollow(subjectUserId: MimeiId,
                              appUserId: MimeiId = appUser.mid,
                              updateTweetFeed: (Boolean) -> Unit) {
+        // update the interface without waiting for the server to respond.
+        _followings.update { list ->
+            if (list.contains(subjectUserId)) {
+                list.filter { id -> id != subjectUserId }
+            } else {
+                list + subjectUserId
+            }
+        }
+
         // toggle the Following status on the given UserId
         HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
             // Succeed. Now it is the other party's turn to update its followers.
             HproseInstance.toggleFollower(subjectUserId, isFollowing, appUserId)
-            _followings.update { list ->
-                if (isFollowing) {
-                    if (!list.contains(subjectUserId)) list + subjectUserId else list
-                } else {
-                    list.filter { id -> id != subjectUserId }
-                }
-            }
             refreshFollowingsAndFans()
             updateTweetFeed(isFollowing)
         }
@@ -295,7 +297,7 @@ class UserViewModel @AssistedInject constructor(
         }
 
         isLoading.value = true
-        if (hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
+        if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             // Find IP of desired node. User can change its value to appoint
             // a different host node later.
             val ip = HproseInstance.getHostIP(hostId.value)

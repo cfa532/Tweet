@@ -123,13 +123,17 @@ data class User(
  * IP address of the first node in HostIds, which the user is authorized to write data on.
  * */
 suspend fun User.writableUrl(): String? {
-    return writableUrl ?: hostIds?.firstOrNull()?.let { hostId ->
-        HproseInstance.getHostIP(hostId)?.let { hostIP ->
-            "http://$hostIP".also { newUrl ->
-                writableUrl = newUrl
-                baseUrl = newUrl
-            }
-        } ?: baseUrl    // if writableUrl is not available, return baseUrl
+    return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
+        writableUrl
+    } else {
+        hostIds?.firstOrNull()?.let { hostId ->
+            HproseInstance.getHostIP(hostId)?.let { hostIP ->
+                "http://$hostIP".also { newUrl ->
+                    this.writableUrl = newUrl
+                    this.baseUrl = newUrl
+                }
+            } ?: baseUrl
+        }
     }
 }
 
