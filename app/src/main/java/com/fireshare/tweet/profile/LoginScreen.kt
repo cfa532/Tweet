@@ -150,11 +150,8 @@ fun LoginScreen(viewModel: UserViewModel) {
             }
         }
 
-//        if (loginError.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = loginError, color = Color.Red)
-//        }
-
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = loginError, color = Color.Red)
         Spacer(modifier = Modifier.height(32.dp))
 
         val annotatedText = buildAnnotatedString {
