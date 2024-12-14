@@ -236,7 +236,7 @@ class UserViewModel @AssistedInject constructor(
         SnackbarController.sendEvent(event)
     }
 
-    suspend fun login(context: Context, popBack: () -> Unit) {
+    suspend fun login(context: Context, callback: () -> Unit) {
         isLoading.value = true
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
@@ -257,7 +257,7 @@ class UserViewModel @AssistedInject constructor(
                 profile.value = u.profile ?: ""
                 hostId.value = u.hostIds?.firstOrNull() ?: ""
                 refreshFollowingsAndFans()
-                popBack()
+                callback()
             }
         } else {
             loginError.value = context.getString(R.string.username_required)
