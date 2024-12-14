@@ -18,6 +18,7 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
+import com.fireshare.tweet.datamodel.UserData
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.google.gson.Gson
@@ -146,6 +147,9 @@ class UserViewModel @AssistedInject constructor(
     suspend fun refreshFollowingsAndFans() {
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
+        //
+        val userData = UserData(userId = appUser.mid, followings = followings.value)
+        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     @AssistedFactory
