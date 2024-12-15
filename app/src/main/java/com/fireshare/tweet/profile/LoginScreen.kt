@@ -45,7 +45,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
@@ -54,9 +56,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(viewModel: UserViewModel) {
+fun LoginScreen(register: ()->Unit, login: ()->Unit) {
     val navController = LocalNavController.current
     val focusManager = LocalFocusManager.current
+    val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory> { factory ->
+        factory.create(appUser.mid)
+    }
     val username by viewModel.username
     val password by viewModel.password
     val isPasswordVisible by viewModel.isPasswordVisible
@@ -132,9 +137,7 @@ fun LoginScreen(viewModel: UserViewModel) {
             onClick = {
                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                     viewModel.login(context) {
-                        viewModel.viewModelScope.launch(Dispatchers.Main) {
-                            navController.popBackStack()
-                        }
+                        login()
                     }
                 } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
@@ -168,7 +171,8 @@ fun LoginScreen(viewModel: UserViewModel) {
             color = MaterialTheme.colorScheme.primary,
             text = annotatedText,
             modifier = Modifier.clickable {
-                navController.navigate(NavTweet.Registration)
+                register()
+//                navController.navigate(NavTweet.Registration)
             }
         )
     }

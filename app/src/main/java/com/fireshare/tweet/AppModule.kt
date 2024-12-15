@@ -7,6 +7,7 @@ import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSessionDao
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
@@ -20,11 +21,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-//    @Provides
-//    @Singleton
-//    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
-//        return context.getSharedPreferences("my_preferences", Context.MODE_PRIVATE)
-//    }
+    @Provides
+    fun provideShareViewModel(): SharedViewModel {
+        return SharedViewModel(
+            tweetFeedViewModel = TweetFeedViewModel()
+        )
+    }
 
     @Provides
     @Singleton
@@ -95,15 +97,3 @@ object AppModule {
 //        }
 //    }
 
-//    @Singleton
-//    class TweetViewModelFactory @Inject constructor(
-//        private val tweet: Tweet
-//    ) : ViewModelProvider.Factory {
-//        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-//            if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
-//                @Suppress("UNCHECKED_CAST")
-//                return TweetViewModel(tweet) as T
-//            }
-//            throw IllegalArgumentException("Unknown ViewModel class")
-//        }
-//    }

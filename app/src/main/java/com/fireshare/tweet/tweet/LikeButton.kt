@@ -35,7 +35,6 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.navigation.ComposeComment
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
@@ -65,8 +64,8 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
         derivedStateOf { tweet.commentCount }
     }
     val navController = LocalNavController.current
-    val viewModelProvider = LocalViewModelProvider.current
     val context = LocalContext.current
+    val sharedViewModel = hiltViewModel<SharedViewModel>()
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
@@ -76,10 +75,8 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
             return@IconButton
         }
         // save the current tweetViewModel in sharedViewModel
-        viewModelProvider?.get(SharedViewModel::class)?.let { sharedViewModel ->
-            sharedViewModel.tweetViewModel = viewModel
-            navController.navigate(ComposeComment(tweet.mid))
-        }
+        sharedViewModel.tweetViewModel = viewModel
+        navController.navigate(ComposeComment(tweet.mid))
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
@@ -105,7 +102,6 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {

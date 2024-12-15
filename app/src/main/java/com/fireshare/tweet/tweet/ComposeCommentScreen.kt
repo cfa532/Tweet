@@ -62,7 +62,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
@@ -81,9 +80,8 @@ fun ComposeCommentScreen(
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
 
-    val viewModelProvider = LocalViewModelProvider.current
-    val sharedViewModel = viewModelProvider?.get(SharedViewModel::class)
-    val viewModel = sharedViewModel?.tweetViewModel ?: return
+    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val viewModel = sharedViewModel.tweetViewModel
     val tweet by viewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by viewModel.isCheckedToTweet
