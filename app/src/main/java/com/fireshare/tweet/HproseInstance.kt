@@ -33,9 +33,11 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.io.IOException
+import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
@@ -1057,24 +1059,30 @@ object HproseInstance {
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    suspend fun isAccessible(ip: String): String? { return withRetry {
+    suspend fun isAccessible(ip: String): Result<String> { return withRetry {
         runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
 
             response.body?.string()?.let { responseBody ->
-                val appIds = Gson().fromJson(responseBody, Array<String>::class.java).toList()
-                if (appIds.isNotEmpty()) ip else null
-            }
+                val responseValues = Gson().fromJson(responseBody, Array<String>::class.java)
+                responseValues.firstOrNull()?.let { Result.success(ip) }
+                    ?: Result.failure(Exception("App ID not found"))
+            } ?: Result.failure(Exception("Empty response body"))
         }.onFailure { e ->
-            if (e is IOException) {
-//                Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
+            when (e) {
+                is ConnectException -> Timber.tag("isAccessible")
+                    .e(e, "Connection error for IP: $ip")
+
+                is UnknownHostException -> Timber.tag("isAccessible").e(e, "Unknown host: $ip")
+                is SocketTimeoutException -> Timber.tag("isAccessible")
+                    .e(e, "Timeout accessing appId for IP: $ip")
+
+                else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }
-            if (e is SocketTimeoutException) {
-//                Timber.tag("isAccessible").e(e, "Timeout accessing appId for IP: $ip")
-            }
-        }.getOrNull()
+            Result.failure<Exception>(e)
+        }.getOrThrow() // Re-throw the exception if Result is a failure
     } }
 
     /**

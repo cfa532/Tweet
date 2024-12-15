@@ -50,14 +50,12 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(register: ()->Unit, login: ()->Unit) {
-    val navController = LocalNavController.current
+fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
     val focusManager = LocalFocusManager.current
     val viewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory> { factory ->
         factory.create(appUser.mid)
@@ -79,7 +77,7 @@ fun LoginScreen(register: ()->Unit, login: ()->Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(32.dp))
-        IconButton(onClick = { navController.popBackStack() },
+        IconButton(onClick = { popBack() },
             modifier = Modifier
                 .align(Alignment.Start)
                 .padding(16.dp)
@@ -137,7 +135,7 @@ fun LoginScreen(register: ()->Unit, login: ()->Unit) {
             onClick = {
                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                     viewModel.login(context) {
-                        login()
+                        popBack()
                     }
                 } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
@@ -172,7 +170,6 @@ fun LoginScreen(register: ()->Unit, login: ()->Unit) {
             text = annotatedText,
             modifier = Modifier.clickable {
                 register()
-//                navController.navigate(NavTweet.Registration)
             }
         )
     }

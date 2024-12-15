@@ -50,7 +50,7 @@ val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
-    private val tweetFeedViewModel: TweetFeedViewModel
+    private val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel
@@ -107,12 +107,7 @@ fun TweetNavGraph(
                     )
                     { factory ->
                         factory.create(
-                            // The tweet is surely created. The right key will locate it.
-                            // so the init value do not matter here.
-                            Tweet(
-                                mid = args.tweetId,
-                                authorId = args.authorId,
-                            )
+                            Tweet(mid = args.tweetId, authorId = args.authorId)
                         )
                     }
                 TweetDetailScreen(viewModel, parentEntry)
@@ -121,18 +116,20 @@ fun TweetNavGraph(
                 ComposeTweetScreen(navController)
             }
             composable<ComposeComment> {
-                ComposeCommentScreen(navController)
+                ComposeCommentScreen {
+                    navController.popBackStack()
+                }
             }
             composable<NavTweet.UserProfile> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                val profile = it.toRoute<NavTweet.UserProfile>()
+                val userId = it.toRoute<NavTweet.UserProfile>().userId
                 sharedViewModel.appUserViewModel =
                     hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>{ factory ->
                         factory.create(appUser.mid)
                     }
-                UserProfileScreen(navController, profile.userId, parentEntry, sharedViewModel.appUserViewModel)
+                UserProfileScreen(navController, userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<ProfileEditor> {
                 EditProfileScreen(navController, sharedViewModel.appUserViewModel)

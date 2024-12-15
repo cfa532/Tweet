@@ -1,6 +1,7 @@
 package com.fireshare.tweet.tweet
 
 import android.content.Context
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -65,7 +66,7 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
     }
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {

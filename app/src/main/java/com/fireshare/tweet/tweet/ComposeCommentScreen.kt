@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -74,13 +75,13 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposeCommentScreen(
-    navController: NavHostController,
+    popBack: () -> Unit,
 ) {
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
 
-    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
     val viewModel = sharedViewModel.tweetViewModel
     val tweet by viewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
@@ -146,13 +147,13 @@ fun ComposeCommentScreen(
                             val event = SnackbarEvent(
                                 message = "Are you sure to quit?",
                                 action = SnackbarAction(name = "Quit",
-                                    action = { navController.popBackStack() })
+                                    action = { popBack() })
                             )
                             viewModel.viewModelScope.launch {
                                 SnackbarController.sendEvent(event)
                             }
                         } else
-                            navController.popBackStack()
+                            popBack()
                     }) {
                         Icon(
                             imageVector = Icons.Filled.Close,
@@ -162,8 +163,11 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
-                    IconButton(onClick = {
+                    val isLoading = remember { mutableStateOf(false) }
+                    IconButton(enabled = !isLoading.value,
+                        onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                            isLoading.value = true
                             viewModel.uploadComment(
                                 context,
                                 tweetContent.trim(),
@@ -173,7 +177,7 @@ fun ComposeCommentScreen(
                             // clear and return to previous screen
                             selectedAttachments.clear()
                             tweetContent = ""
-                            navController.popBackStack()
+                            popBack()
                         } })
                     {
                         Icon(
