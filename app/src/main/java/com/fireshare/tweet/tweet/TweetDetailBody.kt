@@ -371,7 +371,7 @@ fun SelectableText(text: String,
                 layoutResult = textLayoutResult
             },
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = modifier
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
