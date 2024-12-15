@@ -1,6 +1,8 @@
 package com.fireshare.tweet.datamodel
 
 import android.content.Context
+import android.os.Parcel
+import android.os.Parcelable
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -19,6 +21,8 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.widget.MediaType
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.parcelize.Parceler
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import java.util.Date
 
@@ -87,6 +91,7 @@ data class Tweet(
     var isPrivate: Boolean = false,     // Viewable by the author only if true.
 )
 
+@Parcelize
 @Serializable
 data class User(
     var baseUrl: String? = null,        // most recent url used to access user data
@@ -117,7 +122,63 @@ data class User(
 
     // List of top tweets liked by the user
     var topTweets: List<MimeiId>? = null,
-)
+): Parcelable {
+    constructor(parcel: Parcel) : this(
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString().toString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readLong(),
+        parcel.readInt(),
+        parcel.readValue(Int::class.java.classLoader) as? Int,
+        parcel.readValue(Int::class.java.classLoader) as? Int,
+        parcel.createStringArrayList(),
+        parcel.readString(),
+        parcel.createStringArrayList(),
+        parcel.createStringArrayList(),
+        parcel.createStringArrayList(),
+        parcel.createStringArrayList(),
+        parcel.createStringArrayList(),
+        parcel.createStringArrayList()
+    ) {
+    }
+
+    companion object : Parceler<User> {
+
+        override fun User.write(parcel: Parcel, flags: Int) {
+            parcel.writeString(baseUrl)
+            parcel.writeString(writableUrl)
+            parcel.writeString(mid)
+            parcel.writeString(name)
+            parcel.writeString(username)
+            parcel.writeString(password)
+            parcel.writeString(avatar)
+            parcel.writeString(email)
+            parcel.writeString(profile)
+            parcel.writeLong(timestamp)
+            parcel.writeInt(tweetCount)
+            parcel.writeValue(followingCount)
+            parcel.writeValue(followersCount)
+            parcel.writeStringList(hostIds)
+            parcel.writeString(publicKey)
+            parcel.writeStringList(fansList)
+            parcel.writeStringList(followingList)
+            parcel.writeStringList(bookmarkedTweets)
+            parcel.writeStringList(likedTweets)
+            parcel.writeStringList(repliedTweets)
+            parcel.writeStringList(topTweets)
+        }
+
+        override fun create(parcel: Parcel): User {
+            return User(parcel)
+        }
+    }
+}
 
 /**
  * IP address of the first node in HostIds, which the user is authorized to write data on.

@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
@@ -39,8 +40,9 @@ import timber.log.Timber
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
+    private val savedStateHandle: SavedStateHandle
 ): ViewModel(), TweetActionListener {
-    var user = mutableStateOf(appUser)
+    var user = savedStateHandle.getStateFlow("user", appUser)
 
     // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -117,8 +119,8 @@ class UserViewModel @AssistedInject constructor(
         // For now, user avatar can only be image.
         HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
             HproseInstance.setUserAvatar(userId, it)   // Update database value
-            user.value = user.value.copy(avatar = it)
-            appUser = appUser.copy(avatar = it)
+            appUser = user.value.copy(avatar = it)
+            savedStateHandle["user"] = appUser
         }
         isLoading.value = false
     }
@@ -160,7 +162,7 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                user.value = getUser(userId) ?: return@launch
+                savedStateHandle["user"] = getUser(userId)
                 if (userId == appUser.mid) {
                     // By default NOT to update fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -169,7 +171,7 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         } else {
-            user.value = appUser.copy()
+            savedStateHandle["user"] = appUser
         }
     }
 
@@ -252,14 +254,13 @@ class UserViewModel @AssistedInject constructor(
                 // something wrong
                 loginError.value = ret.second.toString()
             } else {
-                val u = ret.first as User
-                preferencesHelper.setUserId(u.mid)
-                appUser = u
-                user.value = u
+                appUser = ret.first as User
+                preferencesHelper.setUserId(appUser.mid)
+                savedStateHandle["user"] = appUser
                 username.value = user.value.username
-                name.value = u.name ?: ""
-                profile.value = u.profile ?: ""
-                hostId.value = u.hostIds?.firstOrNull() ?: ""
+                name.value = appUser.name ?: ""
+                profile.value = appUser.profile ?: ""
+                hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 refreshFollowingsAndFans()
                 callback()
             }
@@ -272,16 +273,16 @@ class UserViewModel @AssistedInject constructor(
     fun logout(popBack: () -> Unit) {
         preferencesHelper.setUserId(null)
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-        user.value = appUser.copy()
-        _fans.value = emptyList()
-        _followings.value = emptyList()
-        _tweets.value = emptyList()
-        _topTweets.value = emptyList()
-        username.value = ""
-        password.value = ""
-        profile.value = ""
-        name.value = ""
-        hostId.value = ""
+//        savedStateHandle["user"] = appUser
+//        _fans.value = emptyList()
+//        _followings.value = emptyList()
+//        _tweets.value = emptyList()
+//        _topTweets.value = emptyList()
+//        username.value = ""
+//        password.value = ""
+//        profile.value = ""
+//        name.value = ""
+//        hostId.value = ""
         popBack()
     }
 
@@ -348,7 +349,7 @@ class UserViewModel @AssistedInject constructor(
                     appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
-                    this.user.value = appUser
+                    savedStateHandle["user"] = appUser
                     appUser.name?.let { preferenceHelper.saveName(it) }
                     appUser.profile?.let { preferenceHelper.saveProfile(it) }
 

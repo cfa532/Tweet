@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,7 +52,6 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.navigation.SharedViewModel
@@ -73,7 +73,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                      scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val user by viewModel.user
+    val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
 
@@ -187,10 +187,10 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         navController: NavHostController,
                         scrollBehavior: TopAppBarScrollBehavior?
 ) {
-    val sharedViewModel = LocalViewModelProvider.current?.get(SharedViewModel::class)
-    val appUserViewModel = sharedViewModel?.appUserViewModel ?: return
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user
+    val user by viewModel.user.collectAsState()
     val buttonText = remember { mutableStateOf("Follow") }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 

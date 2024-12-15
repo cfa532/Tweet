@@ -37,7 +37,6 @@ import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
@@ -1075,7 +1074,7 @@ object HproseInstance {
             when (e) {
                 is ConnectException, is SocketTimeoutException -> {
                     // Ignore these exceptions and continue
-                    Timber.tag("isAccessible").w(e, "Ignoring error for IP: $ip")
+                    Timber.tag("isAccessible").w(e, "Timeout for IP: $ip")
                 }
                 else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }

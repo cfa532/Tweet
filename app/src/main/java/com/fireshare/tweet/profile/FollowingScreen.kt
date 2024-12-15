@@ -38,7 +38,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
@@ -77,7 +76,7 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    val userOfProfile by viewModel.user
+                    val userOfProfile by viewModel.user.collectAsState()
                     Column {
                         UserAvatar(userOfProfile, 36)
                         Text(

@@ -50,7 +50,7 @@ val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
-//    private val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
+    private val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel
@@ -63,13 +63,16 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
-    val sharedViewModel: SharedViewModel = hiltViewModel()
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
             LocalContext.current as ComponentActivity, key = appUser.mid
         ){ factory ->
             factory.create(appUser.mid)
     }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(LocalContext.current as ComponentActivity)
+    tweetFeedViewModel.tweetActionListener = sharedViewModel.appUserViewModel
+
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
         val appLinkData = appLinkIntent.data
@@ -93,9 +96,7 @@ fun TweetNavGraph(
                 val parentEntry = remember(navController) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                val viewModel = hiltViewModel<TweetFeedViewModel>()
-                viewModel.tweetActionListener = sharedViewModel.appUserViewModel
-                TweetFeedScreen(navController, parentEntry, 0, viewModel)
+                TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()

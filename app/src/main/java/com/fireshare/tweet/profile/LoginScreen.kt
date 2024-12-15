@@ -49,7 +49,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
-import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

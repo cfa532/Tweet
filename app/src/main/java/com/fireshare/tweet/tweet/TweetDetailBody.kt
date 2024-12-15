@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Dp
@@ -59,7 +61,6 @@ import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
@@ -270,7 +271,7 @@ fun TweetDropdownMenuItems(
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
 ) {
-    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
     val appUserViewModel = sharedViewModel.appUserViewModel
     val navController = LocalNavController.current
 

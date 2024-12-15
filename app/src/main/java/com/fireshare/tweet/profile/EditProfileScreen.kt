@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -70,7 +71,7 @@ fun EditProfileScreen(
     val name by viewModel.name
     val profile by viewModel.profile
     val hostId by viewModel.hostId
-    val user by viewModel.user
+    val user by viewModel.user.collectAsState()
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
     val launcher = rememberLauncherForActivityResult(
@@ -224,7 +225,7 @@ fun AvatarSection(
     launcher: ManagedActivityResultLauncher<String, Uri?>,
     viewModel: UserViewModel
 ) {
-    val user by  viewModel.user
+    val user by viewModel.user.collectAsState()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()

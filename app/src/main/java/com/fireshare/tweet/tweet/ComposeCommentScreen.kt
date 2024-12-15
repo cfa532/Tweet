@@ -61,7 +61,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
