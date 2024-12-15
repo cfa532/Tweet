@@ -273,6 +273,9 @@ class UserViewModel @AssistedInject constructor(
     fun logout(popBack: () -> Unit) {
         preferencesHelper.setUserId(null)
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        /**
+         * Do NOT clear the UserViewModel object. It will be reused by other users.
+         * */
 //        savedStateHandle["user"] = appUser
 //        _fans.value = emptyList()
 //        _followings.value = emptyList()
