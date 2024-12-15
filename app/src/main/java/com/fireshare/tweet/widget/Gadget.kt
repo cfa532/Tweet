@@ -174,11 +174,16 @@ object Gadget {
                         Timber.tag("getAccessibleIP").d("Trying $ip")
                         launch {
                             try {
-                                HproseInstance.isAccessible(ip)?.let {
-                                    send(ip)
+                                val result = HproseInstance.isAccessible(ip)
+                                result.onSuccess { accessibleIp ->
+                                    send(accessibleIp)
+                                }.onFailure { e ->
+                                    // Optionally log the error if needed
+                                    // Timber.tag("getAccessibleIP").e(e, "Error checking $ip")
                                 }
                             } catch (e: Exception) {
-                                // Timber.tag("getAccessibleIP").e(e, "Error checking $ip")
+                                // Handle any unexpected exceptions
+                                // Timber.tag("getAccessibleIP").e(e, "Unexpected error checking $ip")
                             }
                         }
                     }

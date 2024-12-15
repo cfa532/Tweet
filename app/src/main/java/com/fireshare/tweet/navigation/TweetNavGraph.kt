@@ -1,16 +1,17 @@
 package com.fireshare.tweet.navigation
 
 import android.content.Intent
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -39,7 +40,6 @@ import com.fireshare.tweet.widget.MediaBrowser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.reflect.typeOf
 
@@ -50,7 +50,7 @@ val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
-    private val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
+//    private val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel
@@ -65,7 +65,9 @@ fun TweetNavGraph(
     var startDestination: NavTweet = NavTweet.TweetFeed
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
-        hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>{ factory ->
+        hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+            LocalContext.current as ComponentActivity, key = appUser.mid
+        ){ factory ->
             factory.create(appUser.mid)
     }
     // Handle deeplink
@@ -125,8 +127,12 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
+                // reassign the appUserViewModel here. It maybe after the user login with
+                // a different username.
                 sharedViewModel.appUserViewModel =
-                    hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>{ factory ->
+                    hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                        LocalContext.current as ComponentActivity, key = appUser.mid
+                    ) { factory ->
                         factory.create(appUser.mid)
                     }
                 UserProfileScreen(navController, userId, parentEntry, sharedViewModel.appUserViewModel)
@@ -184,18 +190,12 @@ fun TweetNavGraph(
                 EditProfileScreen(navController, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Following> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
                 val user = it.toRoute<NavTweet.Following>()
-                FollowingScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
+                FollowingScreen(user.userId, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Follower> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
                 val user = it.toRoute<NavTweet.Following>()
-                FollowerScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
+                FollowerScreen(user.userId, sharedViewModel.appUserViewModel)
             }
             /**
              * Deeplink carries the tweetId and authorId only.

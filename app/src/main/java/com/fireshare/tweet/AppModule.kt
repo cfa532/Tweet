@@ -24,7 +24,7 @@ object AppModule {
     @Provides
     fun provideShareViewModel(): SharedViewModel {
         return SharedViewModel(
-            tweetFeedViewModel = TweetFeedViewModel()
+//            tweetFeedViewModel = TweetFeedViewModel()
         )
     }
 

@@ -2,6 +2,7 @@ package com.fireshare.tweet.profile
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -64,9 +65,10 @@ fun UserProfileScreen(
     parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel,
 ) {
+    val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
     else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
+        context as ComponentActivity, key = userId
     ) { factory ->
         factory.create(userId)
     }
@@ -88,7 +90,6 @@ fun UserProfileScreen(
     val isAtBottom =
         layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
-    val context = LocalContext.current
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 

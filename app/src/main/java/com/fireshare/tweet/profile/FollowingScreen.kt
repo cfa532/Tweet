@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,12 +59,13 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(userId: MimeiId, parentEntry: NavBackStackEntry, appUserViewModel: UserViewModel)
+fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
+    val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
     else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
+        context as ComponentActivity, key = userId
     ) { factory ->
         factory.create(userId)
     }

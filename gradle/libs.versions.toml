@@ -6,7 +6,7 @@ assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
 core = "3.5.3"
 coreSplashscreen = "1.2.0-alpha02"
-firebaseBom = "33.6.0"
+firebaseBom = "33.7.0"
 hiltAndroid = "2.52"
 hiltNavigationCompose = "1.2.0"
 kotlin = "2.0.0"
@@ -18,10 +18,10 @@ kotlinxCoroutinesCore = "1.9.0"
 kotlinxSerializationJson = "1.7.3"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
-composeBom = "2024.11.00"
-materialIconsCore = "1.7.5"
-navigationRuntimeKtx = "2.8.4"
-navigationCompose = "2.8.4"
+composeBom = "2024.12.01"
+materialIconsCore = "1.7.6"
+navigationRuntimeKtx = "2.8.5"
+navigationCompose = "2.8.5"
 okhttpBom = "4.12.0"
 hproseJava = "2.0.38"
 loggingInterceptor = "4.12.0"
@@ -54,7 +54,7 @@ androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref =
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-material = { module = "androidx.compose.material:material", version.ref = "materialIconsCore" }
 androidx-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIconsCore" }
-androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version = "2.8.3" }
+androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version = "2.8.5" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
@@ -85,7 +85,7 @@ androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest", version = "1.7.5" }
+androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest", version = "1.7.6" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-navigation-runtime-ktx = { group = "androidx.navigation", name = "navigation-runtime-ktx", version.ref = "navigationRuntimeKtx" }

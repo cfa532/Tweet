@@ -64,6 +64,8 @@ object HproseInstance {
     }
     private val httpClient = OkHttpClient.Builder()
 //        .addInterceptor(loggingInterceptor)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
@@ -1059,8 +1061,8 @@ object HproseInstance {
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    suspend fun isAccessible(ip: String): Result<String> { return withRetry {
-        runCatching {
+    fun isAccessible(ip: String): Result<String> {
+        return runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
@@ -1074,16 +1076,13 @@ object HproseInstance {
             when (e) {
                 is ConnectException -> Timber.tag("isAccessible")
                     .e(e, "Connection error for IP: $ip")
-
-                is UnknownHostException -> Timber.tag("isAccessible").e(e, "Unknown host: $ip")
                 is SocketTimeoutException -> Timber.tag("isAccessible")
                     .e(e, "Timeout accessing appId for IP: $ip")
-
                 else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }
             Result.failure<Exception>(e)
         }.getOrThrow() // Re-throw the exception if Result is a failure
-    } }
+    }
 
     /**
      * Return the current tweet list that is pinned to top.
