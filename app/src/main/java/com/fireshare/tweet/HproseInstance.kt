@@ -1061,7 +1061,7 @@ object HproseInstance {
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    fun isAccessible(ip: String): Result<String> {
+    fun isAccessible(ip: String): String? {
         return runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val request = Request.Builder().url(url).build()
@@ -1069,19 +1069,17 @@ object HproseInstance {
 
             response.body?.string()?.let { responseBody ->
                 val responseValues = Gson().fromJson(responseBody, Array<String>::class.java)
-                responseValues.firstOrNull()?.let { Result.success(ip) }
-                    ?: Result.failure(Exception("App ID not found"))
-            } ?: Result.failure(Exception("Empty response body"))
+                responseValues.firstOrNull()?.let { ip } // Return IP if found
+            }
         }.onFailure { e ->
             when (e) {
-                is ConnectException -> Timber.tag("isAccessible")
-                    .e(e, "Connection error for IP: $ip")
-                is SocketTimeoutException -> Timber.tag("isAccessible")
-                    .e(e, "Timeout accessing appId for IP: $ip")
+                is ConnectException, is SocketTimeoutException -> {
+                    // Ignore these exceptions and continue
+                    Timber.tag("isAccessible").w(e, "Ignoring error for IP: $ip")
+                }
                 else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }
-            Result.failure<Exception>(e)
-        }.getOrThrow() // Re-throw the exception if Result is a failure
+        }.getOrNull()
     }
 
     /**
