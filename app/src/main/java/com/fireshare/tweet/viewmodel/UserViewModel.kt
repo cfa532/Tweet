@@ -2,10 +2,7 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,7 +20,6 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserData
-import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.google.gson.Gson

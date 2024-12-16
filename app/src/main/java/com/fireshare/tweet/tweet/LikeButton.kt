@@ -41,7 +41,6 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -102,7 +101,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val sharedViewModel: SharedViewModel = hiltViewModel(context as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
     IconButton(onClick = {

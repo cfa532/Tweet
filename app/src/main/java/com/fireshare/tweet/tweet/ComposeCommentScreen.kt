@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -79,7 +78,7 @@ fun ComposeCommentScreen(
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
 
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetViewModel = sharedViewModel.tweetViewModel
     val tweet by tweetViewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }

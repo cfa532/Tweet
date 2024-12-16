@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -46,15 +45,6 @@ import kotlin.reflect.typeOf
 val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")
 }
-val LocalViewModelProvider = compositionLocalOf<ViewModelProvider?> { null }
-
-@HiltViewModel
-class SharedViewModel @Inject constructor(
-    val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
-) : ViewModel() {
-    lateinit var appUserViewModel: UserViewModel
-    lateinit var tweetViewModel: TweetViewModel
-}
 
 @Composable
 fun TweetNavGraph(
@@ -63,7 +53,7 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController(),
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
             LocalContext.current as ComponentActivity, key = appUser.mid
@@ -115,7 +105,7 @@ fun TweetNavGraph(
                 TweetDetailScreen(viewModel, parentEntry)
             }
             composable<NavTweet.ComposeTweet> {
-                ComposeTweetScreen(navController, sharedViewModel.tweetFeedViewModel)
+                ComposeTweetScreen(navController)
             }
             composable<ComposeComment> {
                 ComposeCommentScreen {
@@ -217,4 +207,12 @@ fun TweetNavGraph(
             }
         }
     }
+}
+
+@HiltViewModel
+class SharedViewModel @Inject constructor(
+    val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
+) : ViewModel() {
+    lateinit var appUserViewModel: UserViewModel
+    lateinit var tweetViewModel: TweetViewModel
 }

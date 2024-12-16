@@ -25,7 +25,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -34,12 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
@@ -86,7 +82,7 @@ class TweetActivity : ComponentActivity() {
                         flow = SnackbarController.events,
                         snackbarHostState
                     ) { event ->
-                         activityViewModel.viewModelScope.launch {
+                        activityViewModel.viewModelScope.launch {
                             snackbarHostState.currentSnackbarData?.dismiss()    // dismiss old message
                             // show new snackbar
                             val result = snackbarHostState.showSnackbar(
@@ -100,26 +96,21 @@ class TweetActivity : ComponentActivity() {
                         }
                     }
 
-                    val viewModelStoreOwner =
-                        LocalViewModelStoreOwner.current ?: (this@TweetActivity)
-                    val viewModelProvider: ViewModelProvider =
-                        remember { ViewModelProvider(viewModelStoreOwner) }
-
-                    CompositionLocalProvider(LocalViewModelProvider provides viewModelProvider) {
-                        Scaffold(
-                            snackbarHost = {
-                                CustomSnackbarHost(
-                                    hostState = snackbarHostState
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { innerPadding ->
-                            TweetNavGraph(intent)
-                            Row(modifier = Modifier
+                    Scaffold(
+                        snackbarHost = {
+                            CustomSnackbarHost(
+                                hostState = snackbarHostState
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { innerPadding ->
+                        TweetNavGraph(intent)
+                        Row(
+                            modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(innerPadding))
-                            {
-                            }
+                                .padding(innerPadding)
+                        )
+                        {
                         }
                     }
                 }

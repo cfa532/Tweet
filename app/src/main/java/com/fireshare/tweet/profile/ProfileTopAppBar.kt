@@ -1,6 +1,5 @@
 package com.fireshare.tweet.profile
 
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,7 +75,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
     LargeTopAppBar(
@@ -188,7 +187,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         navController: NavHostController,
                         scrollBehavior: TopAppBarScrollBehavior?
 ) {
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()

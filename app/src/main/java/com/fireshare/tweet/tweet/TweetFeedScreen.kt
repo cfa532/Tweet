@@ -2,7 +2,6 @@
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,21 +64,20 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+ @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
     selectedBottomBarItemIndex: Int,
 ) {
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     val viewModel = sharedViewModel.tweetFeedViewModel
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior =

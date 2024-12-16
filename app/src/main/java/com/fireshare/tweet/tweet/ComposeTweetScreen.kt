@@ -62,15 +62,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
-import com.fireshare.tweet.navigation.LocalViewModelProvider
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 import java.io.File
@@ -83,9 +82,10 @@ import java.util.Locale
 @Composable
 fun ComposeTweetScreen(
     navController: NavHostController,
-    tweetFeedViewModel: TweetFeedViewModel
 ) {
     val context = LocalContext.current
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
     var tweetContent by remember { mutableStateOf("") }
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     var isPrivate by remember { mutableStateOf(false) }
@@ -203,8 +203,6 @@ fun ComposeTweetScreen(
             {
                 val focusRequester = remember { FocusRequester() }
                 val keyboardController = LocalSoftwareKeyboardController.current
-                val viewModelProvider = LocalViewModelProvider.current
-                val appUserViewModel = viewModelProvider?.get(SharedViewModel::class)?.appUserViewModel
                 var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
                 var isSearching by remember { mutableStateOf(false) } // Track search state
                 val focusManager = LocalFocusManager.current
@@ -221,7 +219,7 @@ fun ComposeTweetScreen(
                             isSearching = true  // start search for suggestions
                             val query = it.substringAfterLast("@")
                             tweetFeedViewModel.viewModelScope.launch {
-                                suggestions = appUserViewModel?.getSuggestions(query) ?: emptyList()
+                                suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
                                 isSearching = false
                             }
                         } else {
