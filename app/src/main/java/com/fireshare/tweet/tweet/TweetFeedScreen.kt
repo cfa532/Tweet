@@ -2,6 +2,7 @@
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -62,6 +64,7 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
@@ -75,97 +78,98 @@ fun TweetFeedScreen(
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
     selectedBottomBarItemIndex: Int,
-    viewModel: TweetFeedViewModel
 ) {
-     val tweets by viewModel.tweets.collectAsState()
-     val scrollBehavior =
-         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val viewModel = sharedViewModel.tweetFeedViewModel
+    val tweets by viewModel.tweets.collectAsState()
+    val scrollBehavior =
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-     val pullRefreshState =
-         rememberPullRefreshState(refreshingAtTop, {
-             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                 viewModel.loadNewerTweets()
-             }
-         })
-     // for pulling up at the bottom of the list
-     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
-     val listState = rememberLazyListState()
-     val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
-     val isAtBottom =
-         layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
+    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
+    val pullRefreshState =
+        rememberPullRefreshState(refreshingAtTop, {
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.loadNewerTweets()
+            }
+        })
+    // for pulling up at the bottom of the list
+    val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
+    val listState = rememberLazyListState()
+    val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
+    val isAtBottom =
+        layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
-     val context = LocalContext.current
-     val activity = context as? Activity
-     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    val context = LocalContext.current
+    val activity = context as? Activity
+    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
-     LaunchedEffect(appUser.mid) {
-         // reload page when user login or out
-         if (!viewModel.initState.value)
-             withContext(Dispatchers.IO) {
-                 viewModel.refresh()
-             }
-     }
-     LaunchedEffect(isAtBottom) {
-         if (isAtBottom) {
-             viewModel.loadOlderTweets()
-         }
-     }
+    LaunchedEffect(appUser.mid) {
+        // reload page when user login or out
+        if (!viewModel.initState.value)
+            withContext(Dispatchers.IO) {
+                viewModel.refresh()
+            }
+    }
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom) {
+            viewModel.loadOlderTweets()
+        }
+    }
 
-     Scaffold(
-         modifier = Modifier.fillMaxSize(),
-         topBar = { MainTopAppBar(navController, scrollBehavior) },
-         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
-     ) { innerPadding ->
-         Box(
-             modifier = Modifier
-                 .fillMaxSize()
-                 .background(color = Color.LightGray)
-                 .pullRefresh(pullRefreshState)
-                 .padding(innerPadding),
-         ) {
-             LazyColumn(
-                 modifier = Modifier
-                     .fillMaxSize()
-                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                 state = listState
-             ) {
-                 items(tweets, key = { it.mid } ) { tweet ->
-                     if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
-                 }
-                 item {
-                     if (refreshingAtTop) {
-                         CircularProgressIndicator(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .padding(top = 60.dp)
-                                 .wrapContentWidth(Alignment.CenterHorizontally)
-                                 .size(80.dp),
-                             color = Color.LightGray,
-                             strokeWidth = 8.dp
-                         )
-                     }
-                 }
-                 item {
-                     if (refreshingAtBottom) {
-                         CircularProgressIndicator(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .padding(16.dp)
-                                 .wrapContentWidth(Alignment.CenterHorizontally)
-                                 .align(Alignment.BottomCenter)
-                         )
-                     }
-                 }
-             }
-             PullRefreshIndicator(
-                 refreshingAtTop,
-                 state = pullRefreshState,
-                 Modifier.align(Alignment.TopCenter)
-             )
-         }
-     }
- }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = { MainTopAppBar(navController, scrollBehavior) },
+        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(color = Color.LightGray)
+                .pullRefresh(pullRefreshState)
+                .padding(innerPadding),
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                state = listState
+            ) {
+                items(tweets, key = { it.mid }) { tweet ->
+                    if (!tweet.isPrivate) TweetItem(tweet, parentEntry)
+                }
+                item {
+                    if (refreshingAtTop) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 60.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .size(80.dp),
+                            color = Color.LightGray,
+                            strokeWidth = 8.dp
+                        )
+                    }
+                }
+                item {
+                    if (refreshingAtBottom) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .align(Alignment.BottomCenter)
+                        )
+                    }
+                }
+            }
+            PullRefreshIndicator(
+                refreshingAtTop,
+                state = pullRefreshState,
+                Modifier.align(Alignment.TopCenter)
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

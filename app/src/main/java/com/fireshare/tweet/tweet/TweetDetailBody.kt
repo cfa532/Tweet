@@ -273,12 +273,12 @@ fun TweetDropdownMenuItems(
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
     val appUserViewModel = sharedViewModel.appUserViewModel
+    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
     val navController = LocalNavController.current
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.
     if (tweet.authorId == appUser.mid && !appUserViewModel.hasPinned(tweet)) {
-        val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
         val originTweetViewModel = if (tweet.originalTweetId != null) {
             hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                 parentEntry, key = tweet.originalTweetId

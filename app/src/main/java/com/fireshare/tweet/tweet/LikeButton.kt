@@ -97,12 +97,13 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
 
 @Composable
 fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.retweetCount
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val sharedViewModel: SharedViewModel = hiltViewModel(context as ComponentActivity)
+    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {

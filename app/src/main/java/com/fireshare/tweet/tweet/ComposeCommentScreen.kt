@@ -66,7 +66,6 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
-import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -81,10 +80,10 @@ fun ComposeCommentScreen(
     val context = LocalContext.current
 
     val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
-    val viewModel = sharedViewModel.tweetViewModel
-    val tweet by viewModel.tweetState.collectAsState()
+    val tweetViewModel = sharedViewModel.tweetViewModel
+    val tweet by tweetViewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
-    val isCheckedToTweet by viewModel.isCheckedToTweet
+    val isCheckedToTweet by tweetViewModel.isCheckedToTweet
 
     // Create a launcher for the file picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -148,7 +147,7 @@ fun ComposeCommentScreen(
                                 action = SnackbarAction(name = "Quit",
                                     action = { popBack() })
                             )
-                            viewModel.viewModelScope.launch {
+                            tweetViewModel.viewModelScope.launch {
                                 SnackbarController.sendEvent(event)
                             }
                         } else
@@ -161,17 +160,17 @@ fun ComposeCommentScreen(
                     }
                 },
                 actions = {
-                    val tweetViewModel = hiltViewModel<TweetFeedViewModel>()
                     val isLoading = remember { mutableStateOf(false) }
+                    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
                     IconButton(enabled = !isLoading.value,
                         onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
                             isLoading.value = true
-                            viewModel.uploadComment(
+                            tweetViewModel.uploadComment(
                                 context,
                                 tweetContent.trim(),
                                 selectedAttachments,
-                                tweetViewModel
+                                tweetFeedViewModel
                             )
                             // clear and return to previous screen
                             selectedAttachments.clear()
@@ -255,7 +254,7 @@ fun ComposeCommentScreen(
                     ) {
                         Checkbox(
                             checked = isCheckedToTweet,
-                            onCheckedChange = { viewModel.onCheckedChange(it) },
+                            onCheckedChange = { tweetViewModel.onCheckedChange(it) },
                             modifier = Modifier
                         )
                         Text(

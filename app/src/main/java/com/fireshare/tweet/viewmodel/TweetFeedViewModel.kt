@@ -227,7 +227,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _followings.value = HproseInstance.getAlphaIds()
         startTimestamp = mutableLongStateOf(System.currentTimeMillis())
         endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
-
     }
 
     /**

@@ -22,6 +22,7 @@ import javax.inject.Singleton
 object AppModule {
 
     @Provides
+    @Singleton
     fun provideShareViewModel(): SharedViewModel {
         return SharedViewModel(
             tweetFeedViewModel = TweetFeedViewModel()

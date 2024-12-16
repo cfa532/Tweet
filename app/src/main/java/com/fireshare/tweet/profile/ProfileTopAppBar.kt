@@ -76,6 +76,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
+    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
     LargeTopAppBar(
         title = {
@@ -142,7 +144,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     }
                 }
                 Box {
-                    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,

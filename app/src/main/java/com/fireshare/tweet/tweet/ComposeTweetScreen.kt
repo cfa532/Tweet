@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.R
@@ -84,14 +83,12 @@ import java.util.Locale
 @Composable
 fun ComposeTweetScreen(
     navController: NavHostController,
-    viewModel: TweetFeedViewModel = hiltViewModel(),
+    tweetFeedViewModel: TweetFeedViewModel
 ) {
     val context = LocalContext.current
     var tweetContent by remember { mutableStateOf("") }
-
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     var isPrivate by remember { mutableStateOf(false) }
-
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -158,7 +155,7 @@ fun ComposeTweetScreen(
                                 action = SnackbarAction(name = "Quit",
                                     action = { navController.popBackStack() })
                             )
-                            viewModel.viewModelScope.launch {
+                            tweetFeedViewModel.viewModelScope.launch {
                                 SnackbarController.sendEvent(event)
                             }
                         } else
@@ -174,7 +171,7 @@ fun ComposeTweetScreen(
                     IconButton(
                         onClick = {
                             if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-                                viewModel.uploadTweet(
+                                tweetFeedViewModel.uploadTweet(
                                     context,
                                     tweetContent.trim(),
                                     selectedAttachments,
@@ -223,7 +220,7 @@ fun ComposeTweetScreen(
                         if (it.contains("@") && !isSearching) {
                             isSearching = true  // start search for suggestions
                             val query = it.substringAfterLast("@")
-                            viewModel.viewModelScope.launch {
+                            tweetFeedViewModel.viewModelScope.launch {
                                 suggestions = appUserViewModel?.getSuggestions(query) ?: emptyList()
                                 isSearching = false
                             }
