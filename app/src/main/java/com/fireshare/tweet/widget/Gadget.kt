@@ -93,30 +93,21 @@ object Gadget {
     }
 
     /**
-     * Return an array of IPs, each from a different server.
+     * Return an array of valid IPs from different servers.
      * */
     fun getIpAddresses(nodeList: ArrayList<*>): List<String> {
         val ipAddresses = mutableListOf<String>()
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
-            val ipAddress = getPreferredIpAddress(nodeIps)
-            ipAddresses.add(ipAddress)
+            val ipAddress = nodeIps.mapNotNull {
+                val pair = it as ArrayList<*>;
+                if (isValidPublicIpAddress(pair[0].toString()))
+                    pair[0].toString()
+                else null
+            }
+            ipAddresses += ipAddress
         }
         return ipAddresses
-    }
-
-    /**
-     * Get the IP with the smallest response time. No network call.
-     * */
-    private fun getPreferredIpAddress(ipList: ArrayList<*>): String {
-        // Turn the IP list into a map of {IP: ResponseTime} and get the one with smallest response time.
-        // ["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833]
-        val ipMap = ipList.associate {
-            val pair = it as ArrayList<*>;
-            pair[0] to pair[1]
-        }
-        val ip = ipMap.minByOrNull { it.value as Double }?.key
-        return ip.toString()
     }
 
     suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
