@@ -85,6 +85,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
     implementation(libs.accompanist.systemuicontroller)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)

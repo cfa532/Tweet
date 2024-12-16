@@ -41,11 +41,14 @@ constraintlayoutCompose = "1.1.0"
 hiltWork = "1.2.0"
 firebaseCrashlyticsBuildtools = "3.0.2"
 roomCompiler = "2.6.1"
+ktor="3.0.2"
 
 [libraries]
 accompanist-systemuicontroller = { module = "com.google.accompanist:accompanist-systemuicontroller", version.ref = "accompanistSystemuicontroller" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics", version = "22.1.2" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor"}
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler"}
 accompanist-pager = { module = "com.google.accompanist:accompanist-pager", version.ref = "accompanistPager" }
 accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version.ref = "accompanistPager" }

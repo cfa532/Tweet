@@ -39,6 +39,10 @@ import java.net.SocketTimeoutException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -53,7 +57,6 @@ object HproseInstance {
     }
     // A in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
-
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
     lateinit var hproseClient: HproseService
@@ -63,8 +66,8 @@ object HproseInstance {
     }
     private val httpClient = OkHttpClient.Builder()
 //        .addInterceptor(loggingInterceptor)
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
@@ -113,7 +116,7 @@ object HproseInstance {
                          * */
                         val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs.firstOrNull()}")
-                        Timber.tag("initAppEntry").d("$paramMap $hostIPs")
+                        Timber.tag("initAppEntry").d("$paramMap")
 
                         /**
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
