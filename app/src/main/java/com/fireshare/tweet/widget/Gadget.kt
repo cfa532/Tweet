@@ -131,14 +131,15 @@ object Gadget {
     }
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
-    suspend fun getAccessibleUser(ipList: List<String>, mid: MimeiId): User? {
+    suspend fun getAccessibleUser(ipList: List<String>, userId: MimeiId): User? {
         return withTimeoutOrNull(2000L) {
             channelFlow {
                 ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
+                    println("Try $ip $userId")
                     launch {
                         try {
-                            HproseInstance.getUserData(mid, ip)?.let {
-                               send(it) // Emit the user if found
+                            HproseInstance.getUserData(userId, ip)?.let {
+                                send(it) // Emit the user if found
                             }
                         } catch (e: Exception) {
                             // Handle exceptions, e.g., log or rethrow

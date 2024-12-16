@@ -28,16 +28,13 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.logging.HttpLoggingInterceptor
 import timber.log.Timber
 import java.io.IOException
 import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -114,9 +111,8 @@ object HproseInstance {
                      * The code above makes a call to base URL of the app, get a html page
                      * and tries to extract appId and host IP addresses from source code.
                      * */
-                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                    appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${hostIPs.firstOrNull()}")
                     Timber.tag("initAppEntry").d("$paramMap")
+                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
 
                     /**
                      * addrs is an ArrayList of ArrayList of node's IP address pairs.
@@ -125,6 +121,8 @@ object HproseInstance {
                      *
                      * hostIPs is a list of node's IP that is a Mimei provider for this App.
                      */
+                    val firstIp = getAccessibleIP(hostIPs)
+                    appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                     val userId = preferenceHelper.getUserId()
                     if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                         /**
@@ -132,13 +130,14 @@ object HproseInstance {
                          * Initiate current account. Get its IP list and choose the best one,
                          * and assign it to appUser.baseUrl.
                          * */
-                        appUser = getAccessibleUser(hostIPs, userId) ?: appUser
-                        cachedUsers.add(appUser)
-                        hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                            .useService(HproseService::class.java)
-                        Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
+                        getProviders(userId, "http://$firstIp")?.let { ips ->
+                            appUser = getAccessibleUser(ips, userId) ?: appUser
+                            cachedUsers.add(appUser)
+                            hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
+                                .useService(HproseService::class.java)
+                            Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
+                        }
                     } else {
-                        val firstIp = getAccessibleIP(hostIPs)
                         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         cachedUsers.add(appUser)
                         hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
@@ -1021,10 +1020,9 @@ object HproseInstance {
         return runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val response = httpClient.get(url)
-
-                val responseValues = Gson().fromJson(
-                    response.bodyAsText(), Array<String>::class.java)
-                responseValues.firstOrNull()?.let { ip } // Return IP if found
+            val responseValues = Gson().fromJson(
+                response.bodyAsText(), Array<String>::class.java)
+            responseValues.firstOrNull()?.let { ip } // Return IP if found
         }.onFailure { e ->
             when (e) {
                 is ConnectException, is SocketTimeoutException -> {
@@ -1035,6 +1033,22 @@ object HproseInstance {
             }
         }.getOrNull()
     }
+
+    private suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? { return withRetry {
+        val entry = "get_providers"
+        val url =  "$baseUrl/entry?aid=$appId&ver=last&entry=$entry&mid=$mid"
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val gson = Gson()
+                return@withRetry gson.fromJson<List<String>>(response.bodyAsText(),
+                    object : TypeToken<List<String>>() {}.type)
+            }
+        } catch (e: Exception) {
+            Timber.tag("getProviders").e("$e")
+        }
+        null
+    } }
 
     /**
      * Return the current tweet list that is pinned to top.
