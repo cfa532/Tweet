@@ -29,7 +29,7 @@ class UploadCommentWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             val tweetString = inputData.getString("tweet") ?: return Result.failure()
-            val parentTweet = Json.decodeFromString<Tweet>(tweetString)
+            val originalTweet = Json.decodeFromString<Tweet>(tweetString)
 
             // whether the comment is also posted as a tweet.
             val isChecked = inputData.getBoolean("isChecked", false)
@@ -58,16 +58,16 @@ class UploadCommentWorker @AssistedInject constructor(
                 timestamp = System.currentTimeMillis()
             )
 
-            HproseInstance.uploadComment(parentTweet, comment).let { newTweet: Tweet ->
-                // newTweet is the updated tweet with new comment. After uploading it,
-                // !!!comment.mid is updated inside uploadComment() with newly created id.!!!
+            HproseInstance.uploadComment(originalTweet, comment).let { updatedTweet: Tweet ->
+                // updatedTweet is the original tweet with new comment. After uploading comment,
+                // !!!comment.mid is updated inside uploadComment() with newly created mid!!!
                 // retweet is a new tweet with the comment as its content.
                 val retweet = if (isChecked) {
-                    comment.originalTweetId = parentTweet.mid
-                    comment.originalAuthorId = parentTweet.authorId
+                    comment.originalTweetId = originalTweet.mid
+                    comment.originalAuthorId = originalTweet.authorId
                     HproseInstance.uploadTweet(comment)?.let { retweet ->
-                        increaseRetweetCount(parentTweet, retweet.mid)?.let {
-                            newTweet.retweetCount = it.retweetCount
+                        increaseRetweetCount(originalTweet, retweet.mid)?.let {
+                            updatedTweet.retweetCount = it.retweetCount
                         }
                         retweet
                     }
@@ -75,9 +75,9 @@ class UploadCommentWorker @AssistedInject constructor(
 
                 val gson = Gson()
                 val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
-                    "newTweet" to gson.toJson(newTweet))
+                    "updatedTweet" to gson.toJson(updatedTweet))
                 Timber.tag("UploadCommentWorker").d(map.toString())
-                val outputData = workDataOf("comment" to gson.toJson(map))
+                val outputData = workDataOf("commentedTweet" to gson.toJson(map))
                 return Result.success(outputData)
             }
         } catch (e: Exception) {

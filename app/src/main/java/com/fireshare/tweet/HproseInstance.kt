@@ -615,6 +615,25 @@ object HproseInstance {
         return tweet
     }
 
+    /**
+     * Increase the retweetCount of the original tweet mimei.
+     * @return updated original tweet.
+     * */
+    suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
+        val method = "retweet_add"
+        val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                return@withRetry Gson().fromJson(response.bodyAsText(), Tweet::class.java)
+            }
+        } catch (e: Exception) {
+            Timber.tag("increaseRetweetCount()").e("$e $url")
+        }
+        null
+    } }
+
     // Store an object in a Mimei file and return its MimeiId.
     suspend fun uploadTweet(tweet: Tweet): Tweet? { return withRetry {
         val method = "upload_tweet"
@@ -633,6 +652,10 @@ object HproseInstance {
         null
     } }
 
+    /**
+     * Delete a tweet. If it has original tweet, decrease its retweet count.
+     * Callback() update the in-memory original tweet.
+     * */
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
         tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
 
@@ -751,25 +774,6 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.e("toggleRetweet()", e.toString())
         }
-    } }
-
-    /**
-     * Increase the retweetCount of the original tweet mimei.
-     * @return updated original tweet.
-     * */
-    suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
-        val method = "retweet_add"
-        val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
-        try {
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                return@withRetry Gson().fromJson(response.bodyAsText(), Tweet::class.java)
-            }
-        } catch (e: Exception) {
-            Timber.tag("increaseRetweetCount()").e("$e $url")
-        }
-        null
     } }
 
     private suspend fun provide(user: User, tweetId: MimeiId? = null) { return withRetry {

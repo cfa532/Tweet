@@ -15,8 +15,6 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getUser
-import com.fireshare.tweet.HproseInstance.increaseRetweetCount
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -30,9 +28,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -163,7 +159,7 @@ class TweetViewModel @AssistedInject constructor(
                         WorkInfo.State.SUCCEEDED -> {
                             try {
                                 val outputData = workInfo.outputData
-                                val json = outputData.getString("comment") ?: return@observe
+                                val json = outputData.getString("commentedTweet") ?: return@observe
                                 Timber.tag("UploadComment").d("Comment added successfully: $json")
                                 // Handle the success and update UI
                                 val map = gson.fromJson(json, Map::class.java) as Map<*, *>
@@ -173,22 +169,22 @@ class TweetViewModel @AssistedInject constructor(
                                 Timber.tag("UploadComment").d("Comment: $comment")
                                 _comments.update { list -> listOf(comment) + list }
 
-                                // parent tweet with the new comment.
-                                val newTweet = gson.fromJson(map["newTweet"].toString(), Tweet::class.java)
-                                Timber.tag("UploadComment").d("Updated tweet: $newTweet")
-                                _tweetState.value = newTweet
+                                // Original tweet with the newly added comment.
+                                val updatedTweet = gson.fromJson(map["updatedTweet"].toString(), Tweet::class.java)
+                                Timber.tag("UploadComment").d("Updated tweet: $updatedTweet")
+                                _tweetState.value = updatedTweet
 
-                                // the comment is also posted as another tweet, if retweet is not null.
+                                // the comment is also posted as an tweet.
                                 if (map["retweet"].toString() != "null") {
                                     val retweet = gson.fromJson(map["retweet"].toString(), Tweet::class.java)
-                                    retweet.originalTweet = newTweet
+                                    retweet.originalTweet = updatedTweet
                                     retweet.author = appUser
                                     tweetFeedViewModel.addTweetToFeed(retweet)
 
                                     // update cached tweet in the database.
                                     viewModelScope.launch(Dispatchers.IO) {
                                         tweetCache.tweetDao().updateCachedTweet(
-                                            CachedTweet(tweet.mid, Gson().toJson(newTweet))
+                                            CachedTweet(tweet.mid, Gson().toJson(updatedTweet))
                                         )
                                     }
                                 }
