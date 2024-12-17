@@ -1127,7 +1127,7 @@ object HproseInstance {
                 var byteRead: Int
                 val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
                 val json = """
-                           {"aid": $appId, "ver": "last", "offset": $offset}
+                           {"aid": $appId, "ver": "last", "offset": 0}
                      """.trimIndent()
                 val request = Gson().fromJson(json, Map::class.java).toMutableMap()
                 val client =
