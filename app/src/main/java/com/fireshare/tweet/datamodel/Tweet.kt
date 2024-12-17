@@ -31,7 +31,7 @@ typealias MimeiId = String      // 27 or 64 character long string
 // some application wise constants
 object TW_CONST {
     const val GUEST_ID = "000000000000000000000000000"      // 27
-    const val CHUNK_SIZE = 1024 * 1024 // 1MB in bytes
+    const val CHUNK_SIZE = 512 * 1024 // 1MB in bytes
 }
 
 object UserFavorites {
@@ -185,6 +185,7 @@ data class User(
  * */
 suspend fun User.writableUrl(): String? {
     return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
+        this.baseUrl = writableUrl
         writableUrl
     } else {
         hostIds?.firstOrNull()?.let { hostId ->
@@ -192,6 +193,20 @@ suspend fun User.writableUrl(): String? {
                 "http://$hostIP".also { newUrl ->
                     this.writableUrl = newUrl
                     this.baseUrl = newUrl
+                }
+            } ?: baseUrl
+        }
+    }
+}
+// Do Not update baseUrl, used when no need to sync written data
+suspend fun User.writableUrl2(): String? {
+    return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
+        writableUrl
+    } else {
+        hostIds?.firstOrNull()?.let { hostId ->
+            HproseInstance.getHostIP(hostId)?.let { hostIP ->
+                "http://$hostIP".also { newUrl ->
+                    this.writableUrl = newUrl
                 }
             } ?: baseUrl
         }

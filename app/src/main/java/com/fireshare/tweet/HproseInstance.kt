@@ -14,6 +14,7 @@ import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.datamodel.writableUrl
+import com.fireshare.tweet.datamodel.writableUrl2
 import com.fireshare.tweet.widget.Gadget.getAccessibleIP
 import com.fireshare.tweet.widget.Gadget.getAccessibleUser
 import com.fireshare.tweet.widget.Gadget.getIpAddresses
@@ -57,7 +58,6 @@ object HproseInstance {
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
-    lateinit var hproseClient: HproseService
     private val httpClient = HttpClient(CIO)
 
 //    private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -133,15 +133,11 @@ object HproseInstance {
                         getProviders(userId, "http://$firstIp")?.let { ips ->
                             appUser = getAccessibleUser(ips, userId) ?: appUser
                             cachedUsers.add(appUser)
-                            hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                                .useService(HproseService::class.java)
                             Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
                         }
                     } else {
                         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         cachedUsers.add(appUser)
-                        hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                            .useService(HproseService::class.java)
                         Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
                     }
                 }
@@ -317,12 +313,6 @@ object HproseInstance {
                 val ret = Gson().fromJson(response.bodyAsText(), Map::class.java)
                 if (ret != null) {
                     if (ret["status"] == "success") {
-                        /**
-                         * Now user object has a new baseUrl of the node which hold user data.
-                         * If login succeed, httpClient need to use the new IP from now on.
-                         * */
-                        hproseClient =
-                            HproseClient.create(user.baseUrl).useService(HproseService::class.java)
                         return@withRetry Pair(user, null)
                     } else reason
                 } else reason
@@ -409,7 +399,7 @@ object HproseInstance {
             val request = gson.fromJson(json, Map::class.java)
             try {
                 val client =
-                    HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
+                    HproseClient.create(appUser.writableUrl2()).useService(HproseService::class.java)
                 client.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
@@ -1100,18 +1090,11 @@ object HproseInstance {
 
     suspend fun logging(msg: String) { return withRetry {
         val str = URLEncoder.encode(msg, "utf-8")
-//          = msg.toRequestBody("application/json; charset=utf-8".toMediaType())
-        val entry = "logging"
         val url =
-            "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry&msg=$str"
-        val request = Request.Builder()
-            .url(url)
-//            .post(requestBody)
-            .build()
+            "${appUser.writableUrl2()}/entry?aid=$appId&ver=last&entry=logging&msg=$str"
         try {
             httpClient.get(url)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
         }
     } }
 
@@ -1122,53 +1105,53 @@ object HproseInstance {
                              referenceId: MimeiId? = null): MimeiFileType?
     { return withRetry {
         withContext(Dispatchers.IO) { // Execute in IO dispatcher
-            try {
-                var offset = 0
-                var byteRead: Int
-                val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
-                val json = """
-                           {"aid": $appId, "ver": "last", "offset": 0}
-                     """.trimIndent()
-                val request = Gson().fromJson(json, Map::class.java).toMutableMap()
-                val client =
-                    HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
+            val client =
+                HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
+            val method = "open_temp_file"
+            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method"
+            val response = httpClient.get(url)
+            if (response.status != HttpStatusCode.OK)
+                return@withContext null
+            val fsid = Gson().fromJson(response.bodyAsText(), String::class.java)
+            println("fsid=$fsid")
+            var offset = 0L
+            var byteRead: Int
+            val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
 
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.use { stream ->
-                        while (stream.read(buffer).also { byteRead = it } != -1) {
-                            request["fsid"] = client.runMApp("upload_ipfs",
-                                request.toMap(), listOf(buffer))
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.use { stream ->
+                    while (stream.read(buffer).also { byteRead = it } != -1) {
+                        try {
+                            client?.mfSetData(fsid, buffer, offset)
                             offset += byteRead
-                            request["offset"] = offset
+                        } catch (e: Exception) {
+                            Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
+                            e.printStackTrace()
+                            return@withContext null
                         }
                     }
                 }
-                // Do not know the tweet mid yet, cannot add reference as 2nd argument.
-                // Do it later when uploading tweet.
-                val cid = request["fsid"]?.let { client.mfTemp2Ipfs(it.toString(), referenceId) }
-
-                // Determine MediaType based on MIME type
-                val mimeType = context.contentResolver.getType(uri)
-                Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
-                val mediaType = when {
-                    mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
-                    mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
-                    mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
-                    mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
-                    mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
-                    mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
-                    // ... add more mappings for other MediaType values ...
-                    else -> com.fireshare.tweet.widget.MediaType.Unknown
-                }
-                // Return MimeiFileType
-                if (cid != null) {
-                    MimeiFileType(cid, mediaType, offset.toLong())
-                } else null
-            } catch (e: Exception) {
-                Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
-                e.printStackTrace()
-                null
             }
+            // Do not know the tweet mid yet, cannot add reference as 2nd argument.
+            // Do it later when uploading tweet.
+            val cid = client.mfTemp2Ipfs(fsid, referenceId)
+
+            // Determine MediaType based on MIME type
+            val mimeType = context.contentResolver.getType(uri)
+            Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
+            val mediaType = when {
+                mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
+                mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
+                mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
+                mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
+                mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
+                mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
+                // ... add more mappings for other MediaType values ...
+                else -> com.fireshare.tweet.widget.MediaType.Unknown
+            }
+            // Return MimeiFileType
+            MimeiFileType(cid, mediaType, offset.toLong())
+
         }
     } }
 }

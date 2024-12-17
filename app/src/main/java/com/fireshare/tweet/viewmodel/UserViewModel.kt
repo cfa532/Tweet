@@ -9,8 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
-import com.fireshare.tweet.HproseInstance.hproseClient
-import com.fireshare.tweet.HproseService
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.TweetApplication.Companion.preferenceHelper
@@ -28,7 +26,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import hprose.client.HproseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -322,8 +319,6 @@ class UserViewModel @AssistedInject constructor(
             } else {
                 // register user on desired node, and use it henceforth.
                 appUser = appUser.copy(baseUrl = "http://$ip")
-                hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/")
-                    .useService(HproseService::class.java)
             }
         }
         val user = appUser.copy(
