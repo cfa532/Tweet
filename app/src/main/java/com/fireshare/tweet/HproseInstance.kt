@@ -1031,8 +1031,9 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                return@withRetry gson.fromJson<List<String>>(response.bodyAsText(),
+                val ips = gson.fromJson<List<String>>(response.bodyAsText(),
                     object : TypeToken<List<String>>() {}.type)
+                return@withRetry ips.toSet().toList()
             }
         } catch (e: Exception) {
             Timber.tag("getProviders").e("$e")

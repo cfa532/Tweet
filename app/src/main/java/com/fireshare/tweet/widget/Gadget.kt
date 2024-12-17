@@ -135,7 +135,7 @@ object Gadget {
         return withTimeoutOrNull(2000L) {
             channelFlow {
                 ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
-                    println("Try $ip $userId")
+//                    println("Try $ip $userId")
                     launch {
                         try {
                             HproseInstance.getUserData(userId, ip)?.let {
