@@ -39,6 +39,7 @@ import java.net.URLEncoder
 import java.util.regex.Pattern
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.HttpStatusCode
@@ -58,7 +59,13 @@ object HproseInstance {
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
-    private val httpClient = HttpClient(CIO)
+    private val httpClient = HttpClient(CIO) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 60_000 // Total request timeout
+            connectTimeoutMillis = 30_000  // Connection timeout
+            socketTimeoutMillis = 60_000  // Socket timeout
+        }
+    }
 
 //    private val loggingInterceptor = HttpLoggingInterceptor().apply {
 //        level = HttpLoggingInterceptor.Level.BODY
@@ -621,8 +628,7 @@ object HproseInstance {
                 return@withRetry tweet
             }
         } catch (e: Exception) {
-            Timber.tag("uploadTweet").e(e.toString())
-            e.printStackTrace()
+            Timber.tag("uploadTweet").e("$e $url $tweet $appUser")
         }
         null
     } }
@@ -636,7 +642,7 @@ object HproseInstance {
         try {
             var response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                // if the originalTweet is not null, also decrease its quote count
+                // if there is an originalTweet, also decrease its retweet count
                 if (tweet.originalTweetId != null) {
                     method = "retweet_remove"
                     url = "${tweet.originalTweet!!.author?.writableUrl()}/entry?aid=$appId&ver=last" +
@@ -649,7 +655,7 @@ object HproseInstance {
                     callback(tweet.mid)
             }
         } catch (e: Exception) {
-            Timber.tag("delTweet()").e(e.toString())
+            Timber.tag("delTweet()").e("$e $appUser $tweet $url")
         }
     } }
 
@@ -720,84 +726,77 @@ object HproseInstance {
      * */
     suspend fun retweet(
         tweet: Tweet,                       // original tweet to be retweeted
-        addTweetToFeed: (Tweet) -> Unit,    // add retweet to user's feed
-        updateOriginalTweet: (Tweet) -> Unit        // update viewModel of original tweet
+        addTweetToFeed: (Tweet) -> Unit     // add retweet to user's feed
     ) { return withRetry {
         try {
             // upload the retweet, simply a few dozen bytes.
-            val retweet = uploadTweet(
-                Tweet(
-                    mid = System.currentTimeMillis().toString(),    // placeholder
-                    content = "",
-                    authorId = appUser.mid,
-                    originalTweetId = tweet.mid,
-                    originalAuthorId = tweet.authorId
-                )
-            ) ?: return@withRetry
-
+            val retweet = uploadTweet( Tweet(
+                mid = System.currentTimeMillis().toString(),    // placeholder
+                content = "",
+                authorId = appUser.mid,
+                originalTweetId = tweet.mid,
+                originalAuthorId = tweet.authorId
+            )) ?: return@withRetry
             retweet.originalTweet = tweet
             addTweetToFeed(retweet)
 
-            increaseRetweetCount(tweet, retweet.mid)?.let { t ->
-                updateOriginalTweet(t.copy(author = tweet.author))
-
+            increaseRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
                 // update cached tweet in the database.
                 tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(tweet.mid, Gson().toJson(t))
+                    CachedTweet(tweet.mid, Gson().toJson(updatedTweet))
                 )
             }
             // become a provider for the original tweet
             provide(tweet.author!!, tweet.mid)
         } catch (e: Exception) {
-            e.printStackTrace()
             Timber.e("toggleRetweet()", e.toString())
         }
     } }
 
     /**
-     * Increase the retweet count in the original tweet mimei.
-     * @return updated tweet object.
+     * Increase the retweetCount of the original tweet mimei.
+     * @return updated original tweet.
      * */
     suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
         val method = "retweet_add"
         val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-            "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
-        val response = httpClient.get(url)
-        if (response.status == HttpStatusCode.OK) {
-            val gson = Gson()
-            return@withRetry gson.fromJson(response.bodyAsText(), Tweet::class.java)
+                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                return@withRetry Gson().fromJson(response.bodyAsText(), Tweet::class.java)
+            }
+        } catch (e: Exception) {
+            Timber.tag("increaseRetweetCount()").e("$e $url")
         }
         null
     } }
 
     private suspend fun provide(user: User, tweetId: MimeiId? = null) { return withRetry {
+        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
+                "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
         try {
-            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
-                    "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
-            val request = Request.Builder().url(url).build()
             httpClient.get(url)
         } catch (e: Exception) {
-            Timber.tag("provide()").e(e.toString())
+            Timber.tag("provide()").e("$e $url")
         }
     } }
 
     private suspend fun unprovide(user: User, tweetId: MimeiId? = null) { return withRetry {
+        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_unprovide" +
+                "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
         try {
-            val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_unprovide" +
-                    "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
-            val request = Request.Builder().url(url).build()
             httpClient.get(url)
         } catch (e: Exception) {
-            Timber.tag("provide()").e(e.toString())
+            Timber.tag("provide()").e("$e $url")
         }
     } }
 
     suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
+        val method = "toggle_likes"
+        val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last" +
+                "&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
         try {
-            val method = "toggle_likes"
-            val url =
-                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                        "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -819,22 +818,19 @@ object HproseInstance {
                     provide(tweet.author!!, tweet.mid)
                 else
                     tweet.author?.let { unprovide(it, tweet.mid) }
-                ret
-            } else {
-                tweet
+                return@withRetry ret
             }
         } catch (e: Exception) {
-            Timber.tag("likeTweet()").e(e, "Error: ${e.message}")
-            tweet
+            Timber.tag("likeTweet()").e(e, "Error: ${e.message} $tweet $url")
         }
+        tweet
     } }
 
     suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
+        val method = "toggle_bookmark"
+        val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last" +
+                "&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
         try {
-            val method = "toggle_bookmark"
-            val url =
-                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                        "&tweetid=${tweet.mid}&userid=${appUser.mid}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -855,14 +851,12 @@ object HproseInstance {
                     provide(tweet.author!!, tweet.mid)
                 else
                     tweet.author?.let { unprovide(it, tweet.mid) }
-                ret
-            } else {
-                tweet
+                return@withRetry ret
             }
         } catch (e: Exception) {
-            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message}")
-            tweet
+            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message} $tweet $url")
         }
+        tweet
     } }
 
     /**
@@ -895,34 +889,35 @@ object HproseInstance {
      * The mid of "comment" tweet is updated here. Return the updated parent tweet.
      * */
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
+        val method = "add_comment"
+        val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
+        val url =
+            "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&tweetid=${tweet.mid}&comment=$json"
         try {
-            // add the comment to tweetId
-            val method = "add_comment"
-            val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
-            val url =
-                "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                        "&tweetid=${tweet.mid}&comment=$json"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                val res = gson.fromJson(
+                val res = gson.fromJson<Map<String, Any?>>(
                     response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any?>
+                )
+                // update mid of comment, which was null when passed as argument
                 comment.mid = res["commentId"] as MimeiId
-                val ret = tweet.copy(
+
+                val updatedTweet = tweet.copy(
                     commentCount = (res["count"] as Double).toInt()
                 )
                 tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(ret.mid, gson.toJson(ret))
+                    CachedTweet(updatedTweet.mid, gson.toJson(updatedTweet))
                 )
                 provide(tweet.author!!, tweet.mid)
-                ret
+                updatedTweet
             } else {
                 tweet
             }
         } catch (e: Exception) {
-            Timber.tag("uploadComment()").e(e, "Error: ${e.message}")
+            Timber.tag("uploadComment()").e(e, "Error: ${e.message} $url $tweet")
             tweet
         }
     } }

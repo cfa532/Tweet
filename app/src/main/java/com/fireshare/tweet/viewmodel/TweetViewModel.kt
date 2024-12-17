@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.increaseRetweetCount
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.datamodel.CachedTweet
@@ -52,9 +53,6 @@ class TweetViewModel @AssistedInject constructor(
     }
     private val _tweetState = MutableStateFlow(tweet)
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
-    val hasLiked: Boolean get() = _tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
-    val likeCount: Int get() = _tweetState.value.likeCount
-    val hasBookmarked: Boolean get() = _tweetState.value.favorites?.get(UserFavorites.BOOKMARK) ?: false
 
     private val _attachments = MutableStateFlow(tweet.attachments)
     val attachments: StateFlow<List<MimeiFileType>?> get() = _attachments.asStateFlow()
@@ -129,19 +127,15 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    fun updateTweet(tweet: Tweet) {
-        _tweetState.value = tweet.copy()
-    }
-
     suspend fun delComment(commentId: MimeiId) {
         HproseInstance.delComment(tweetState.value, commentId) { tid ->
             _comments.update { currentComments ->
                 currentComments.filterNot { it.mid == tid }
             }
-            updateTweet(tweet.copy(commentCount = _comments.value.size))
+            _tweetState.value = tweet.copy(commentCount = _comments.value.size)
         }
     }
-    // add new Comment object to its parent Tweet
+    // add new Comment object to its parent Tweet. The code runs on Main thread.
     fun uploadComment(
         context: Context,
         content: String,
@@ -170,12 +164,12 @@ class TweetViewModel @AssistedInject constructor(
                             try {
                                 val outputData = workInfo.outputData
                                 val json = outputData.getString("comment") ?: return@observe
-                                Timber.tag("UploadComment").d("Tweet uploaded successfully: $json")
+                                Timber.tag("UploadComment").d("Comment added successfully: $json")
                                 // Handle the success and update UI
                                 val map = gson.fromJson(json, Map::class.java) as Map<*, *>
 
-                                var comment = gson.fromJson(map["comment"].toString(), Tweet::class.java)
-                                comment = comment.copy(author = appUser)
+                                val comment = gson.fromJson(map["comment"].toString(), Tweet::class.java)
+                                comment.author = appUser
                                 Timber.tag("UploadComment").d("Comment: $comment")
                                 _comments.update { list -> listOf(comment) + list }
 
@@ -185,22 +179,17 @@ class TweetViewModel @AssistedInject constructor(
                                 _tweetState.value = newTweet
 
                                 // the comment is also posted as another tweet, if retweet is not null.
-                                val retweet =
-                                    map["retweet"]?.let { gson.fromJson(it.toString(), Tweet::class.java) }
-                                if (retweet != null) {
+                                if (map["retweet"].toString() != "null") {
+                                    val retweet = gson.fromJson(map["retweet"].toString(), Tweet::class.java)
                                     retweet.originalTweet = newTweet
-                                    retweet.originalTweet!!.author = newTweet.author
-                                    tweetFeedViewModel.addTweet(retweet)
-                                    val uploadCommentScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-                                    uploadCommentScope.launch(Dispatchers.IO) {
-                                        increaseRetweetCount(tweet, retweet.mid)?.let { t ->
-                                            updateTweet(t.copy(author = tweetState.value.author))
+                                    retweet.author = appUser
+                                    tweetFeedViewModel.addTweetToFeed(retweet)
 
-                                            // update cached tweet in the database.
-                                            tweetCache.tweetDao().updateCachedTweet(
-                                                CachedTweet(tweet.mid, Gson().toJson(t))
-                                            )
-                                        }
+                                    // update cached tweet in the database.
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        tweetCache.tweetDao().updateCachedTweet(
+                                            CachedTweet(tweet.mid, Gson().toJson(newTweet))
+                                        )
                                     }
                                 }
                             } catch (e: Exception) {

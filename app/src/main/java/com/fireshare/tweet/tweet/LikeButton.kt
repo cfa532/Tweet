@@ -58,14 +58,14 @@ suspend fun guestWarning(context: Context, navController: NavController? = null)
 }
 
 @Composable
-fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
+fun CommentButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember {
         derivedStateOf { tweet.commentCount }
     }
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val sharedViewModel: SharedViewModel = hiltViewModel(LocalContext.current as ComponentActivity)
+    val sharedViewModel: SharedViewModel = hiltViewModel()
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
@@ -83,21 +83,23 @@ fun CommentButton(viewModel: TweetViewModel, color: Color? = null) {
                 painter = painterResource(id = R.drawable.ic_notice),
                 contentDescription = "comments",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = color ?: MaterialTheme.colorScheme.primary
+                tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(text = "$count",
                 style = MaterialTheme.typography.labelSmall,
-                color = color ?: MaterialTheme.colorScheme.primary
+                color = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
         }
     }
 }
 
 @Composable
-fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
+fun RetweetButton(viewModel: TweetViewModel) {
     val tweet by viewModel.tweetState.collectAsState()
-    val count = tweet.retweetCount
+    val count by remember {
+        derivedStateOf { tweet.retweetCount }
+    }
     val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -111,11 +113,10 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.updateRetweetCount()  // update retweet count in viewModel right away
-                tweetFeedViewModel.addRetweet(tweet) { updatedTweet ->
-                    // update the original tweet's retweet count
-                    viewModel.updateTweet(updatedTweet)
-                }
+                // update retweet count in this viewModel right away
+                viewModel.updateRetweetCount()
+
+                tweetFeedViewModel.addRetweet(tweet)    // update Mimei
             } }
     ) {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -123,13 +124,13 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
                 contentDescription = "forward",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (hasRetweeted) color ?: MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "$count",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (hasRetweeted) color ?: MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                color = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
         }
     }

@@ -9,6 +9,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.increaseRetweetCount
 import com.fireshare.tweet.HproseInstance.uploadToIPFS
 import com.fireshare.tweet.datamodel.Tweet
 import com.google.gson.Gson
@@ -29,7 +30,9 @@ class UploadCommentWorker @AssistedInject constructor(
         return try {
             val tweetString = inputData.getString("tweet") ?: return Result.failure()
             val parentTweet = Json.decodeFromString<Tweet>(tweetString)
-            val isChecked = inputData.getBoolean("isChecked", false)    // whether the comment is also a tweet.
+
+            // whether the comment is also posted as a tweet.
+            val isChecked = inputData.getBoolean("isChecked", false)
             val commentContent = inputData.getString("content")
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
@@ -57,23 +60,28 @@ class UploadCommentWorker @AssistedInject constructor(
 
             HproseInstance.uploadComment(parentTweet, comment).let { newTweet: Tweet ->
                 // newTweet is the updated tweet with new comment. After uploading it,
-                // comment.mid is updated inside uploadComment() with newly created id.
-                // retweet is a new tweet with comment as content
-                val gson = Gson()
+                // !!!comment.mid is updated inside uploadComment() with newly created id.!!!
+                // retweet is a new tweet with the comment as its content.
                 val retweet = if (isChecked) {
                     comment.originalTweetId = parentTweet.mid
                     comment.originalAuthorId = parentTweet.authorId
-                    HproseInstance.uploadTweet(comment)
+                    HproseInstance.uploadTweet(comment)?.let { retweet ->
+                        increaseRetweetCount(parentTweet, retweet.mid)?.let {
+                            newTweet.retweetCount = it.retweetCount
+                        }
+                        retweet
+                    }
                 } else null
+
+                val gson = Gson()
                 val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
                     "newTweet" to gson.toJson(newTweet))
-
                 Timber.tag("UploadCommentWorker").d(map.toString())
                 val outputData = workDataOf("comment" to gson.toJson(map))
                 return Result.success(outputData)
             }
         } catch (e: Exception) {
-            Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
+            Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
             Result.failure()
         }
     }

@@ -187,11 +187,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun addTweet(newTweet: Tweet) {
-        _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
-        tweetActionListener.onTweetAdded(newTweet)
-    }
-
     suspend fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
         // remove from userViewModel's feed
         tweetActionListener.onTweetDeleted(tweet.mid)
@@ -232,13 +227,21 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
+     * Add tweet to Feed list and user's viewModel. For display.
+     * */
+    fun addTweetToFeed(newTweet: Tweet) {
+        _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
+        tweetActionListener.onTweetAdded(newTweet)
+    }
+
+    /**
      * If original tweet is not null, retweet the original tweet,
      * otherwise retweet the tweet itself.
      * */
-    suspend fun addRetweet(tweet: Tweet, updateTweet: (Tweet) -> Unit) {
+    suspend fun addRetweet(tweet: Tweet) {
         val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
-        HproseInstance.retweet(t, addTweetToFeed = { addTweet(it) }) {
-            updateTweet(it)
+        HproseInstance.retweet(t) {
+            addTweetToFeed(it)
         }
     }
 
@@ -273,8 +276,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 Timber.tag("UploadTweet").d("Tweet uploaded successfully: $tweet")
                                 if (tweet != null) {
                                     tweet.author = appUser
+
                                     // add tweet to TweetFeedViewModel's list
-                                    addTweet(tweet)
+                                    addTweetToFeed(tweet)
+
                                     (context as? LifecycleOwner)?.lifecycleScope?.launch {
                                         SnackbarController.sendEvent(
                                             event = SnackbarEvent(
