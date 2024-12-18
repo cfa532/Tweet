@@ -124,10 +124,12 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     suspend fun delComment(commentId: MimeiId) {
-        HproseInstance.delComment(tweetState.value, commentId) { tid ->
-            _comments.update { currentComments ->
-                currentComments.filterNot { it.mid == tid }
-            }
+        _comments.update { currentComments ->
+            currentComments.filterNot { it.mid == commentId }
+        }
+        _tweetState.value = tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+
+        HproseInstance.delComment(tweetState.value, commentId) {
             _tweetState.value = tweet.copy(commentCount = _comments.value.size)
         }
     }

@@ -200,6 +200,7 @@ fun MediaBrowser(
         ) { page ->
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
+                // video preview
                 MediaType.Video, MediaType.Audio -> {
                     exoPlayer = viewModel.getExoPlayer(mediaItem.url, context)
                     exoPlayer?.volume = 1f
