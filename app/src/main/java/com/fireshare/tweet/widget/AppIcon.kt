@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -33,31 +34,23 @@ fun AppIcon() {
 
 @Composable
 fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
-    val avatarUrl = remember { mutableStateOf<String?>(null) }
+    val avatarUrl = remember { derivedStateOf { getMediaUrl(user?.avatar, user?.baseUrl) } }
 
-    LaunchedEffect(user?.avatar) {
-        avatarUrl.value = getMediaUrl(user?.avatar, user?.baseUrl)
-    }
-    if (avatarUrl.value == null) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_user_avatar),
-            contentDescription = "Placeholder Avatar",
-            modifier = Modifier
-                .size(size.dp)
-                .clip(CircleShape)
-                .background(Color.Gray),
-            contentScale = ContentScale.Crop
-        )
-    } else {
-        // Display the actual avatar image
+    avatarUrl.value?.let {
         ImageViewer(
-            avatarUrl.value!!,
+            it,
             modifier = modifier
                 .size(size.dp)
-                .clip(CircleShape)
-                .background(Color.Gray),
+                .clip(CircleShape),
             isPreview = true,
             imageSize = size
         )
-    }
+    } ?: Image(
+        painter = painterResource(id = R.drawable.ic_user_avatar),
+        contentDescription = "Placeholder Avatar",
+        modifier = modifier
+            .size(size.dp)
+            .clip(CircleShape),
+        contentScale = ContentScale.Crop
+    )
 }

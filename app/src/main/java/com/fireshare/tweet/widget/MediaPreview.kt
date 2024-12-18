@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -310,7 +311,8 @@ fun ImageViewer(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.onGloballyPositioned { coordinates ->
-                        parentSize = coordinates.size }
+                        parentSize = coordinates.size
+                    }
                         .wrapContentWidth()
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     offset = DpOffset(
@@ -319,8 +321,12 @@ fun ImageViewer(
                     )
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Download",
-                            color = MaterialTheme.colorScheme.primary) },
+                        text = {
+                            Text(
+                                "Download",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
                         onClick = {
                             showMenu = false
                             downloadScope.launch {
@@ -332,7 +338,7 @@ fun ImageViewer(
                 }
             }
         }
-    } else {
+    } else if (isDownloading) {
         // Download and cache image if not already cached
         LaunchedEffect(cachedPath.value) {
             val job = downloadScope.launch {
@@ -344,6 +350,8 @@ fun ImageViewer(
                 isDownloading = false
                 if (downloadedPath != null) {
                     cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
+                } else {
+                    downloadError = true
                 }
             }
         }
@@ -353,34 +361,56 @@ fun ImageViewer(
                 modifier = adjustedModifier
             ) {
                 if (!isPreview) {
-                    val cachedPreviewPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, true))
-                    val cachedPreviewImage =
-                        remember(imageUrl.getMimeiKey()) {
-                            mutableStateOf(cacheManager.loadImageFromCache(cachedPreviewPath.value))
-                        }
-                    if (cachedPreviewImage.value != null) {
+                    val cachedPreviewPath =
+                        rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, true))
+                    val cachedPreviewImage = remember(imageUrl.getMimeiKey()) {
+                        mutableStateOf(cacheManager.loadImageFromCache(cachedPreviewPath.value))
+                    }
+                    cachedPreviewImage.value?.let {
                         Image(
-                            painter = BitmapPainter(cachedPreviewImage.value!!),
+                            painter = BitmapPainter(it),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = adjustedModifier
                                 .fillMaxWidth()
                         )
-                    } else
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center)
-                        )
+                    } ?: CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
             }
-        } else if (downloadError) {
-            // Display a placeholder image or error message if download failed
-            Box(
-                modifier = adjustedModifier
-                    .fillMaxWidth()
-                    .background(Color.Gray),
-                contentAlignment = Alignment.Center
-            ) {
-            }
+        }
+    } else if (downloadError) {
+        // Display a placeholder image or error message if download failed
+        Box(
+            modifier = adjustedModifier
+                .fillMaxWidth()
+                .background(Color.Gray),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_user_avatar),
+                contentDescription = "Placeholder Avatar",
+                modifier = modifier
+                    .size(imageSize.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+        }
+    } else {    // Display placeholder for non-existent resource
+        Box(
+            modifier = adjustedModifier
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_user_avatar),
+                contentDescription = "Placeholder Avatar",
+                modifier = modifier
+                    .size(imageSize.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
         }
     }
 }
