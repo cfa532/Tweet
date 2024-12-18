@@ -1122,7 +1122,7 @@ object HproseInstance {
                 inputStream.use { stream ->
                     while (stream.read(buffer).also { byteRead = it } != -1) {
                         try {
-                            client?.mfSetData(fsid, buffer, offset)
+                            client.mfSetData(fsid, buffer, offset)
                             offset += byteRead
                         } catch (e: Exception) {
                             Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
