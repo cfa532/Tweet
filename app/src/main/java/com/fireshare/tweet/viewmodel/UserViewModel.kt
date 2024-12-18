@@ -422,7 +422,10 @@ class UserViewModel @AssistedInject constructor(
     }
 
     override fun onTweetAdded(tweet: Tweet) {
-        _tweets.update { currentTweets -> listOf(tweet) + currentTweets }
+        _tweets.update { currentTweets -> (listOf(tweet) + currentTweets)
+            .distinctBy { it.mid }
+            .sortedByDescending { it.timestamp }
+        }
     }
 
     override fun onTweetDeleted(tweetId: MimeiId) {

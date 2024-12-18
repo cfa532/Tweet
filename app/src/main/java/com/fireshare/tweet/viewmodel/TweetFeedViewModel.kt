@@ -230,7 +230,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Add tweet to Feed list and user's viewModel. For display.
      * */
     fun addTweetToFeed(newTweet: Tweet) {
-        _tweets.update { currentTweets -> listOf(newTweet) + currentTweets }
+        _tweets.update { currentTweets -> (listOf(newTweet) + currentTweets)
+            .distinctBy { it.mid }
+            .sortedByDescending { it.timestamp }
+        }
         tweetActionListener.onTweetAdded(newTweet)
     }
 
