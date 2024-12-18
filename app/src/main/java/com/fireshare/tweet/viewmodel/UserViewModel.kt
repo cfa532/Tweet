@@ -114,7 +114,11 @@ class UserViewModel @AssistedInject constructor(
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
         // For now, user avatar can only be image.
-        HproseInstance.uploadToIPFS(context, uri)?.mid?.let {
+        HproseInstance.uploadToIPFS(
+            context,
+            uri,
+            referenceId = appUser.mid
+        )?.mid?.let {
             HproseInstance.setUserAvatar(userId, it)   // Update database value
             appUser = user.value.copy(avatar = it)
             savedStateHandle["user"] = appUser
