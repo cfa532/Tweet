@@ -1,20 +1,32 @@
 package com.fireshare.tweet.widget
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Environment
 import android.view.View
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -23,8 +35,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -49,8 +66,11 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -79,9 +99,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import timber.log.Timber
 import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.math.max
 
 @Serializable
@@ -229,6 +253,10 @@ fun ImageViewer(
     var isDownloading by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf(false) }
 
+    var showMenu by remember { mutableStateOf(false) }
+    var menuPosition by remember { mutableStateOf(Offset.Zero) }
+    val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // Check if image is already cached. Use it directly if so.
     val cachedImage = remember(imageUrl.getMimeiKey()) {
         mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value))
@@ -245,11 +273,67 @@ fun ImageViewer(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = adjustedModifier
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            // Wait for the first down event
+                            val down = awaitFirstDown()
+
+                            // Variable to track if a long press was detected
+                            var longPressDetected = false
+
+                            // Check for a long press
+                            val longPress = awaitLongPressOrCancellation(down.id)
+                            if (longPress != null) {
+                                // Long press detected
+                                longPressDetected = true
+                                showMenu = true
+                                menuPosition = longPress.position
+                            }
+
+                            // Wait for the up event or cancellation
+                            val up = waitForUpOrCancellation()
+
+                            // If the gesture is released before a long press is detected
+                            if (up != null && !longPressDetected) {
+                                // Allow the event to propagate up for single click handling
+                                // Do not consume the event here
+                            }
+                        }
+                    }
             )
+            if (showMenu) {
+                // Calculate DropdownMenu position
+                var parentSize by remember { mutableStateOf(IntSize.Zero) }
+                val density = LocalDensity.current
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        parentSize = coordinates.size }
+                        .wrapContentWidth()
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    offset = DpOffset(
+                        with(density) { menuPosition.x.toDp() },
+                        with(density) { menuPosition.y.toDp() }
+                    )
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Download",
+                            color = MaterialTheme.colorScheme.primary) },
+                        onClick = {
+                            showMenu = false
+                            downloadScope.launch {
+                                downloadImage(context, imageUrl)
+                            }
+                        },
+                        modifier = Modifier.heightIn(max = 30.dp)
+                    )
+                }
+            }
         }
     } else {
         // Download and cache image if not already cached
-        val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         LaunchedEffect(cachedPath.value) {
             val job = downloadScope.launch {
                 isDownloading = true
@@ -523,4 +607,37 @@ fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70):
         return ret
     }
     return false
+}
+
+suspend fun downloadImage(context: Context, imageUrl: String) {
+    withContext(Dispatchers.IO) {
+        try {
+            val url = URL(imageUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.doInput = true
+            connection.connect()
+
+            val inputStream = connection.inputStream
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val file = File(downloadsDir, "image_${System.currentTimeMillis()}.jpg")
+
+            val outputStream = FileOutputStream(file)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+
+            outputStream.flush()
+            outputStream.close()
+
+            withContext(Dispatchers.Main) {
+                // Show a toast or notification indicating download success
+                Toast.makeText(context, "Image downloaded to ${file.absolutePath}", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                // Show an error message
+                Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 }

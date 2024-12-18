@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
@@ -249,6 +250,11 @@ fun TweetDropdownMenu(
             modifier = Modifier
                 .wrapContentWidth(align = Alignment.End)
                 .height(IntrinsicSize.Min)
+                .border(
+                    width = 1.dp, // Border width
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(4.dp)
+                ),
         ) {
             if (parentTweet != null) {
                 // this is a retweet. Allow the author to delete it.
@@ -322,7 +328,10 @@ fun TweetDropdownMenuItems(
     // Only author can pin the current Tweet to top list
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(
-            modifier = Modifier.alpha(1f),
+            modifier = Modifier.alpha(1f)
+//                .padding(top = 4.dp)
+//                .heightIn(max = 30.dp)
+                ,
             onClick = {
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     appUserViewModel.pinToTop(tweet.mid)
@@ -343,7 +352,7 @@ fun TweetDropdownMenuItems(
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
                 }
-            }
+            },
         )
     }
 }

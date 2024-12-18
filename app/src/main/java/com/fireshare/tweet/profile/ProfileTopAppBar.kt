@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -154,23 +155,29 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onDismissRequest = { expanded = false },
                         modifier = Modifier
                             .wrapContentWidth(align = Alignment.End)
-                            .height(IntrinsicSize.Min)
+                            .border(
+                                width = 1.dp, // Border width
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(4.dp)
+                            ),
                     ) {
                         if (user.mid == appUser.mid) {
-                            DropdownMenuItem(onClick = {
-                                viewModel.viewModelScope.launch {
-                                    viewModel.logout {
-                                        tweetFeedViewModel.reset()
-                                        navController.navigate(NavTweet.TweetFeed)
+                            DropdownMenuItem(
+                                onClick = {
+                                    viewModel.viewModelScope.launch {
+                                        viewModel.logout {
+                                            tweetFeedViewModel.reset()
+                                            navController.navigate(NavTweet.TweetFeed)
+                                        }
                                     }
-                                }
-                            },
+                                },
                                 text = {
                                     Text(
                                         text = stringResource(id = R.string.logout),
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                }
+                                },
+                                modifier = Modifier.heightIn(max = 30.dp)
                             )
                         }
                     }

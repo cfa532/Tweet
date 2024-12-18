@@ -10,8 +10,10 @@ import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -257,7 +260,14 @@ fun ComposeTweetScreen(
                         onDismissRequest = {
                             suggestions = emptyList()
                             isSearching = false
-                        }
+                        },
+                        modifier = Modifier
+                            .height(IntrinsicSize.Min)
+                            .border(
+                                width = 1.dp, // Border width
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(4.dp)
+                            ),
                     ) {
                         suggestions.forEach { suggestion ->
                             DropdownMenuItem(
@@ -269,6 +279,7 @@ fun ComposeTweetScreen(
                                     focusManager.clearFocus()
                                 },
                                 text = { Text(suggestion) },
+                                modifier = Modifier.heightIn(max = 30.dp)
                             )
                         }
                     }
