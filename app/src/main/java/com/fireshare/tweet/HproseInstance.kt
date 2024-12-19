@@ -29,7 +29,6 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import okhttp3.Request
 import timber.log.Timber
 import java.io.IOException
 import java.net.ConnectException
@@ -405,9 +404,9 @@ object HproseInstance {
             val gson = Gson()
             val request = gson.fromJson(json, Map::class.java)
             try {
-                val client =
+                val hproseClient =
                     HproseClient.create(appUser.writableUrl2()).useService(HproseService::class.java)
-                client.runMApp(entry, request) as Unit?
+                hproseClient.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
             }
@@ -736,7 +735,6 @@ object HproseInstance {
         val url =
             "${user?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&otherid=$followerId" +
                     "&userid=${userId}&isfollower=$isFollowing"
-        val request = Request.Builder().url(url).build()
         try {
             httpClient.get(url)
         } catch (e: Exception) {
@@ -1089,9 +1087,10 @@ object HproseInstance {
     }
 
     suspend fun logging(msg: String) { return withRetry {
-        val str = URLEncoder.encode(msg, "utf-8")
         val url =
-            "${appUser.writableUrl2()}/entry?aid=$appId&ver=last&entry=logging&msg=$str"
+            "${appUser.writableUrl2()}/entry?aid=$appId&ver=last&entry=logging&msg=${
+                URLEncoder.encode(msg, "utf-8")
+            }"
         try {
             httpClient.get(url)
         } catch (_: Exception) {
@@ -1105,7 +1104,7 @@ object HproseInstance {
                              referenceId: MimeiId? = null): MimeiFileType?
     { return withRetry {
         withContext(Dispatchers.IO) { // Execute in IO dispatcher
-            val client =
+            val hproseClient =
                 HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
             val method = "open_temp_file"
             val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method"
@@ -1122,7 +1121,7 @@ object HproseInstance {
                 inputStream.use { stream ->
                     while (stream.read(buffer).also { byteRead = it } != -1) {
                         try {
-                            client.mfSetData(fsid, buffer, offset)
+                            hproseClient.mfSetData(fsid, buffer, offset)
                             offset += byteRead
                         } catch (e: Exception) {
                             Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
@@ -1134,7 +1133,7 @@ object HproseInstance {
             }
             // Do not know the tweet mid yet, cannot add reference as 2nd argument.
             // Do it later when uploading tweet.
-            val cid = client.mfTemp2Ipfs(fsid, referenceId)
+            val cid = hproseClient.mfTemp2Ipfs(fsid, referenceId)
 
             // Determine MediaType based on MIME type
             val mimeType = context.contentResolver.getType(uri)
