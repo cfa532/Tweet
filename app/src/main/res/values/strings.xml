@@ -23,7 +23,7 @@
     <string name="cancel">Cancel</string>
     <string name="forwarded">forwarded</string>
     <string name="go">Go>></string>
-    <string name="follow">Follow</string>
+    <string name="follow">&#160;&#160;Follow&#160;&#160;</string>
     <string name="unfollow">Unfollow</string>
     <string name="edit">Edit</string>
     <string name="login_follow">Login to follow</string>

@@ -104,14 +104,7 @@ class TweetActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { innerPadding ->
-                        TweetNavGraph(intent)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(innerPadding)
-                        )
-                        {
-                        }
+                        TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
                     }
                 }
             }

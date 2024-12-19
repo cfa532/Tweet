@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
+import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.TweetApplication.Companion.preferenceHelper
@@ -271,17 +272,20 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout(popBack: () -> Unit) {
+    suspend fun logout(popBack: () -> Unit) {
         preferencesHelper.setUserId(null)
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * */
+        tweets.value.forEach {
+            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid)
+        }
+        _tweets.value = emptyList()
+        _topTweets.value = emptyList()
 //        savedStateHandle["user"] = appUser
 //        _fans.value = emptyList()
 //        _followings.value = emptyList()
-//        _tweets.value = emptyList()
-//        _topTweets.value = emptyList()
 //        username.value = ""
 //        password.value = ""
 //        profile.value = ""

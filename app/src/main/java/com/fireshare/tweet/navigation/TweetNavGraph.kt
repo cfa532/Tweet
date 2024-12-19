@@ -76,7 +76,7 @@ fun TweetNavGraph(
     }
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
-            modifier = modifier,
+            modifier = Modifier,
             navController = navController,
             startDestination = startDestination,
             route = NavTwee::class

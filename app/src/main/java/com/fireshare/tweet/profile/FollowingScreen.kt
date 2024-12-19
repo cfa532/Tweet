@@ -137,7 +137,6 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
             user.value = HproseInstance.getUser(userId)
         }
     }
-
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
@@ -145,7 +144,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
     )
     Row(
         modifier = Modifier
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .fillMaxWidth()
     ) {
@@ -168,11 +167,16 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
                     )
                     Text(
                         text = "@${user.value?.username}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
                     )
                 }
-                ToggleFollowingButton(userId, appUserViewModel)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    ToggleFollowingButton(userId, appUserViewModel)
+                }
             }
             Text(
                 text = "${user.value?.profile}",
@@ -196,37 +200,31 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     LaunchedEffect(followings) {
         followState.value = isFollowing
     }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
-    ) {
-        Text(
-            text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .clickable(onClick = {
-                    if (appUser.mid == TW_CONST.GUEST_ID) {
-                        appUserViewModel.viewModelScope.launch {
-                            guestWarning(context, navController)
-                        }
-                        return@clickable
+    Text(
+        text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier
+            .clickable(onClick = {
+                if (appUser.mid == TW_CONST.GUEST_ID) {
+                    appUserViewModel.viewModelScope.launch {
+                        guestWarning(context, navController)
                     }
-                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                        appUserViewModel.toggleFollow(userId) {
-                            tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                tweetFeedViewModel.updateFollowingsTweets(userId, it)
-                            }
+                    return@clickable
+                }
+                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                    appUserViewModel.toggleFollow(userId) {
+                        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                            tweetFeedViewModel.updateFollowingsTweets(userId, it)
                         }
                     }
-                })
-                .border(
-                    width = 1.dp,
-                    color = Color.LightGray,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-        )
-    }
+                }
+            })
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+    )
 }

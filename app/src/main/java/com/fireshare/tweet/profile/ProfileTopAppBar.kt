@@ -210,7 +210,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
         }
     }
 
-    Row(modifier = Modifier.padding(bottom = 4.dp)) {
+    Row(modifier = Modifier) {
         // hide the Follow/Unfollow button when header is collapsed.
         if (scrollBehavior?.state?.collapsedFraction == 1f)
             return
@@ -252,7 +252,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         }
                     }
                 })
-                .padding(horizontal = 20.dp, vertical = 6.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         )
     }
 }
