@@ -1,7 +1,6 @@
 package com.fireshare.tweet.tweet
 
 import android.content.Context
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer

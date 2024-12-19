@@ -98,7 +98,7 @@ fun TweetItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 800.dp)
+            .heightIn(max = 8000.dp)
             .onGloballyPositioned { layoutCoordinates ->
                 isVisible = isElementVisible(layoutCoordinates, 20)
             }

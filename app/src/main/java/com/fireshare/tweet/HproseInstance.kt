@@ -23,6 +23,12 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.serialization.encodeToString
@@ -34,12 +40,6 @@ import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
 import java.util.regex.Pattern
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.HttpStatusCode
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
