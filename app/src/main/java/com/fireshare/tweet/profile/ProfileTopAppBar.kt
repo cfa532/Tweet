@@ -252,7 +252,7 @@ fun ProfileTopBarButton(viewModel: UserViewModel,
                         }
                     }
                 })
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .padding(horizontal = 20.dp, vertical = 6.dp)
         )
     }
 }
