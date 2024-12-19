@@ -118,9 +118,9 @@ class UserViewModel @AssistedInject constructor(
             context,
             uri,
             referenceId = appUser.mid
-        )?.mid?.let {
-            HproseInstance.setUserAvatar(userId, it)   // Update database value
-            appUser = user.value.copy(avatar = it)
+        )?.let {
+            HproseInstance.setUserAvatar(userId, it.mid)   // Update database value
+            appUser = user.value.copy(avatar = it.mid)
             savedStateHandle["user"] = appUser
         }
         isLoading.value = false

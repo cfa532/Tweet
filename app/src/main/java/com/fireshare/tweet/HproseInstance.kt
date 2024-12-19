@@ -23,10 +23,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -405,7 +403,7 @@ object HproseInstance {
             val request = gson.fromJson(json, Map::class.java)
             try {
                 val hproseClient =
-                    HproseClient.create(appUser.writableUrl2()).useService(HproseService::class.java)
+                    HproseClient.create("${appUser.writableUrl()}/webapi/").useService(HproseService::class.java)
                 hproseClient.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
@@ -1102,52 +1100,51 @@ object HproseInstance {
      * */
     suspend fun uploadToIPFS(context: Context, uri: Uri,
                              referenceId: MimeiId? = null): MimeiFileType? { return withRetry {
-        val hproseClient =
-            HproseClient.create(appUser.writableUrl()).useService(HproseService::class.java)
-        val method = "open_temp_file"
-        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method"
-        val response = httpClient.get(url)
-        if (response.status != HttpStatusCode.OK)
-            return@withRetry null
-        val fsid = Gson().fromJson(response.bodyAsText(), String::class.java)
-        println("fsid=$fsid")
+        val hproseClient = HproseClient.create("${appUser.writableUrl()}/webapi/")
+            .useService(HproseService::class.java)
         var offset = 0L
         var byteRead: Int
         val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
-
-        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            inputStream.use { stream ->
-                while (stream.read(buffer).also { byteRead = it } != -1) {
-                    try {
-                        hproseClient.mfSetData(fsid, buffer, offset)
+        val json = """{"aid": $appId, "ver": "last", "offset": 0}"""
+        val request = Gson().fromJson(json, Map::class.java).toMutableMap()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.use { stream ->
+                    while (stream.read(buffer).also { byteRead = it } != -1) {
+                        request["fsid"] = hproseClient.runMApp(
+                            "upload_ipfs",
+                            request.toMap(), listOf(buffer)
+                        )
                         offset += byteRead
-                    } catch (e: Exception) {
-                        Timber.tag("uploadToIPFS()").e(e, "Error: $e $appUser")
-                        e.printStackTrace()
-                        return@withRetry null
+                        request["offset"] = offset
                     }
                 }
             }
-        }
-        // Do not know the tweet mid yet, cannot add reference as 2nd argument.
-        // Do it later when uploading tweet.
-        val cid = hproseClient.mfTemp2Ipfs(fsid, referenceId)
+            // Do not know the tweet mid yet, cannot add reference as 2nd argument.
+            // Do it later when uploading tweet.
+            request["finished"] = "true"
+            referenceId?.let { request["referenceid"] = it }
+            val cid = hproseClient.runMApp<String?>("upload_ipfs", request.toMap()) ?: return@withRetry null
 
-        // Determine MediaType based on MIME type
-        val mimeType = context.contentResolver.getType(uri)
-        Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
-        val mediaType = when {
-            mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
-            mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
-            mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
-            mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
-            mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
-            mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
-            // ... add more mappings for other MediaType values ...
-            else -> com.fireshare.tweet.widget.MediaType.Unknown
+            // Determine MediaType based on MIME type
+            val mimeType = context.contentResolver.getType(uri)
+            Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
+            val mediaType = when {
+                mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
+                mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
+                mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
+                mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
+                mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
+                mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
+                // ... add more mappings for other MediaType values ...
+                else -> com.fireshare.tweet.widget.MediaType.Unknown
+            }
+            // Return MimeiFileType
+            return@withRetry MimeiFileType(cid, mediaType, offset)
+        } catch (e: Exception) {
+            Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message}")
         }
-        // Return MimeiFileType
-        MimeiFileType(cid, mediaType, offset.toLong())
+        null
     }
 } }
 

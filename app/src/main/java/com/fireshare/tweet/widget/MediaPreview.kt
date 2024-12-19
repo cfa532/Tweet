@@ -267,6 +267,25 @@ fun ImageViewer(
     } else {
         modifier.fillMaxWidth()     // image is viewed full screen
     }
+
+    LaunchedEffect(imageUrl) {
+        if (cachedImage.value == null) {
+            downloadScope.launch {
+                isDownloading = true
+                downloadError = false
+                val downloadedPath =
+                    cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
+
+                isDownloading = false
+                if (downloadedPath != null) {
+                    cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
+                } else {
+                    downloadError = true
+                }
+            }
+        }
+    }
+
     if (cachedImage.value != null) {
         Box(modifier = modifier) {
             Image(
@@ -338,64 +357,24 @@ fun ImageViewer(
                 }
             }
         }
-    } else if (isDownloading) {
-        // Download and cache image if not already cached
-        LaunchedEffect(cachedPath.value) {
-            val job = downloadScope.launch {
-                isDownloading = true
-                downloadError = false
-                val downloadedPath =
-                    cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
-
-                isDownloading = false
-                if (downloadedPath != null) {
-                    cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
-                } else {
-                    downloadError = true
-                }
-            }
-        }
-        // Display light gray background while image is downloading
-        if (isDownloading) {
-            Box(
-                modifier = adjustedModifier
-            ) {
-                if (!isPreview) {
-                    val cachedPreviewPath =
-                        rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, true))
-                    val cachedPreviewImage = remember(imageUrl.getMimeiKey()) {
-                        mutableStateOf(cacheManager.loadImageFromCache(cachedPreviewPath.value))
-                    }
-                    cachedPreviewImage.value?.let {
-                        Image(
-                            painter = BitmapPainter(it),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = adjustedModifier
-                                .fillMaxWidth()
-                        )
-                    } ?: CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-            }
-        }
-    } else if (downloadError) {
-        // Display a placeholder image or error message if download failed
+    } else if (isDownloading || downloadError) { // Combined conditions
         Box(
             modifier = adjustedModifier
                 .fillMaxWidth()
-                .background(Color.Gray),
-            contentAlignment = Alignment.Center
+                .background(Color.LightGray) // Gray background
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_user_avatar),
-                contentDescription = "Placeholder Avatar",
-                modifier = modifier
-                    .size(imageSize.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
+            if (isDownloading) {
+//                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else { // downloadError is true
+                Image(
+                    painter = painterResource(id = R.drawable.ic_user_avatar),
+                    contentDescription = "Placeholder Avatar",
+                    modifier = modifier
+                        .size(imageSize.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
     } else {    // Display placeholder for non-existent resource
         Box(
