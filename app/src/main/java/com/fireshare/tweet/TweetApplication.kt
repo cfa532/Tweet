@@ -2,6 +2,7 @@ package com.fireshare.tweet
 
 import android.app.Application
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -33,6 +34,7 @@ class TweetApplication : Application(){
             // Plant a custom tree for release builds
             Timber.plant(ReleaseTree())
         }
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY)
 
         // Initialize WorkManager
 //        WorkManager.initialize(this, Configuration.Builder().build())

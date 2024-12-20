@@ -191,11 +191,11 @@ fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavContr
             modifier = Modifier
                 .padding(top = 0.dp)
                 .fillMaxWidth()
-                .background(Color.Black)
-                .border(1.dp, Color.Black)
+                .background(Color.Transparent)
+                .border(1.dp, Color.Transparent)
                 .heightIn(max = 20000.dp),
             horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             val modifier =
                 if (gridColumns == 1)

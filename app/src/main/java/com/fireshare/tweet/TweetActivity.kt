@@ -71,7 +71,7 @@ class TweetActivity : ComponentActivity() {
 
             scheduleNetworkCheckJob()
             activityViewModel.checkForUpgrade(this@TweetActivity)
-
+            setTheme(R.style.Theme_Tweet)
             setContent {
                 MaterialTheme {
                     // Global snackbar host
