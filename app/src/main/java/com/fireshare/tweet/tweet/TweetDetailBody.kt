@@ -66,7 +66,7 @@ import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
-import com.fireshare.tweet.widget.MediaItemPreview
+import com.fireshare.tweet.widget.MediaItemView
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -202,7 +202,7 @@ fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavContr
                     Modifier.fillMaxWidth()
                 else Modifier.size(containerWidth / gridColumns)
             itemsIndexed(mediaItems) { index, _ ->
-                MediaItemPreview(
+                MediaItemView(
                     mediaItems,
                     modifier
                         .clickable {

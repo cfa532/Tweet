@@ -148,7 +148,7 @@ fun MediaPreviewGrid(
             else Modifier.size(containerWidth / gridCells)
 
         itemsIndexed(limitedMediaList) { index, mediaItem ->
-            MediaItemPreview(
+            MediaItemView(
                 limitedMediaList,
                 modifier = modifier
                     .wrapContentSize()
@@ -170,7 +170,7 @@ fun MediaPreviewGrid(
 }
 
 @Composable
-fun MediaItemPreview(
+fun MediaItemView(
     mediaItems: List<MediaItem>,
     modifier: Modifier = Modifier,
     isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
@@ -207,7 +207,7 @@ fun MediaItemPreview(
                 }
             }
             else -> {       // Handle unknown file type
-                Timber.tag("MediaItemPreview").e("unknown file type ${mediaItem.url}")
+                Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
             }
         }
         if (isLastItem) {
