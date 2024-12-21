@@ -231,6 +231,153 @@ fun MediaItemPreview(
 }
 
 /**
+ * @param index: when there are multiple videos in a grid, the first one is played automatically.
+ * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
+ *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
+ * **/
+@OptIn(UnstableApi::class)
+@Composable
+fun VideoPreview(
+    url: String,
+    modifier: Modifier = Modifier,
+    index: Int = -1,
+    inPreviewGrid: Boolean = true,
+    goto: (Int) -> Unit     // action to be performed when video is closed.
+) {
+    val context = LocalContext.current
+    val preferenceHelper = TweetApplication.preferenceHelper
+
+    var isVideoVisible by remember { mutableStateOf(false) }
+    var areControlsVisible by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    var aspectRatio by remember { mutableFloatStateOf(1f) }
+    val exoPlayer = remember { createExoPlayer(context, url) }
+//    var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
+
+    /**
+     * Stop playing when screen is locked or closed.
+     * Resume play when unlocked.
+     * */
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(Unit) {
+        // Do not play video by default.
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    // Pause or stop video playback here
+                    exoPlayer.playWhenReady = false
+                }
+                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
+                    // Resume video playback here (if needed)
+                    exoPlayer.playWhenReady = true
+                }
+                else -> {}
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            exoPlayer.release()
+        }
+    }
+    LaunchedEffect(url.getMimeiKey()) {
+        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+        aspectRatio = width.toFloat() / height.toFloat()
+        if (inPreviewGrid) {
+            aspectRatio = max(1f, aspectRatio)
+        }
+    }
+
+    LaunchedEffect(isVideoVisible) {
+        if (isVideoVisible) {
+            exoPlayer.prepare()
+            if (index == 0) {
+                delay(500)
+                exoPlayer.playWhenReady = true
+            }
+        } else {
+            delay(500)
+            exoPlayer.playWhenReady = false
+            exoPlayer.stop()
+        }
+    }
+
+    LaunchedEffect(isMuted) {
+        exoPlayer.volume = if (isMuted) 0f else 1f
+    }
+
+    val scope = rememberCoroutineScope()
+    Box(
+        modifier = modifier
+            .onGloballyPositioned { layoutCoordinates ->
+                isVideoVisible = isElementVisible(layoutCoordinates)
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        areControlsVisible = !areControlsVisible
+                        if (areControlsVisible) {
+                            // Start a coroutine to hide controls after 2 seconds
+                            scope.launch {
+                                delay(1000)
+                                areControlsVisible = false
+                            }
+                        }
+                    }
+                )
+            }
+    ) {
+        AndroidView(
+            factory = {
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = true
+
+                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                        areControlsVisible = visibility == View.VISIBLE
+                    })
+                    hideController()
+                }
+            },
+            modifier = modifier.aspectRatio(aspectRatio)
+        )
+
+        if (areControlsVisible) {
+            // Show controls and buttons
+            IconButton(
+                onClick = { goto(index) },
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_full_screen),
+                    contentDescription = "Full screen",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(ButtonDefaults.IconSize)
+                )
+            }
+            // Mute button
+            IconButton(
+                onClick = {
+                    isMuted = !isMuted
+                    preferenceHelper.setSpeakerMute(isMuted)
+                },
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Icon(
+                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
+                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(ButtonDefaults.IconSize)
+                )
+            }
+        }
+    }
+}
+
+/**
  * Download and compress image in cache
  * @param imageUrl: Leither image url in the format of
  *                  http://ip/ipfs/mimeiId
@@ -387,153 +534,6 @@ fun ImageViewer(
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
-        }
-    }
-}
-
-/**
- * @param index: when there are multiple videos in a grid, the first one is played automatically.
- * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
- *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
- * **/
-@OptIn(UnstableApi::class)
-@Composable
-fun VideoPreview(
-    url: String,
-    modifier: Modifier = Modifier,
-    index: Int = -1,
-    inPreviewGrid: Boolean = true,
-    goto: (Int) -> Unit     // action to be performed when video is closed.
-) {
-    val context = LocalContext.current
-    val preferenceHelper = TweetApplication.preferenceHelper
-
-    var isVideoVisible by remember { mutableStateOf(false) }
-    var areControlsVisible by remember { mutableStateOf(false) }
-    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var aspectRatio by remember { mutableFloatStateOf(1f) }
-    val exoPlayer = remember { createExoPlayer(context, url) }
-//    var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
-
-    /**
-     * Stop playing when screen is locked or closed.
-     * Resume play when unlocked.
-     * */
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(Unit) {
-        // Do not play video by default.
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    // Pause or stop video playback here
-                    exoPlayer.playWhenReady = false
-                }
-                Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                    // Resume video playback here (if needed)
-                    exoPlayer.playWhenReady = true
-                }
-                else -> {}
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            exoPlayer.release()
-        }
-    }
-    LaunchedEffect(url.getMimeiKey()) {
-        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
-        aspectRatio = width.toFloat() / height.toFloat()
-        if (inPreviewGrid) {
-            aspectRatio = max(1f, aspectRatio)
-        }
-    }
-
-    LaunchedEffect(isVideoVisible) {
-        if (isVideoVisible) {
-            exoPlayer.prepare()
-            if (index == 0) {
-                delay(500)
-                exoPlayer.playWhenReady = true
-            }
-        } else {
-            delay(500)
-            exoPlayer.playWhenReady = false
-            exoPlayer.stop()
-        }
-    }
-
-    LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
-    }
-
-    val scope = rememberCoroutineScope()
-    Box(
-        modifier = modifier
-            .onGloballyPositioned { layoutCoordinates ->
-                isVideoVisible = isElementVisible(layoutCoordinates)
-            }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = {
-                        areControlsVisible = !areControlsVisible
-                        if (areControlsVisible) {
-                            // Start a coroutine to hide controls after 2 seconds
-                            scope.launch {
-                                delay(1000)
-                                areControlsVisible = false
-                            }
-                        }
-                    }
-                )
-            }
-    ) {
-        AndroidView(
-            factory = {
-                PlayerView(context).apply {
-                    player = exoPlayer
-                    useController = true
-
-                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                        areControlsVisible = visibility == View.VISIBLE
-                    })
-                    hideController()
-                }
-            },
-            modifier = modifier.aspectRatio(aspectRatio)
-        )
-
-        if (areControlsVisible) {
-            // Show controls and buttons
-            IconButton(
-                onClick = { goto(index) },
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_full_screen),
-                    contentDescription = "Full screen",
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(ButtonDefaults.IconSize)
-                )
-            }
-            // Mute button
-            IconButton(
-                onClick = {
-                    isMuted = !isMuted
-                    preferenceHelper.setSpeakerMute(isMuted)
-                },
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Icon(
-                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
-                    contentDescription = if (isMuted) "Unmute" else "Mute",
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(ButtonDefaults.IconSize)
-                )
-            }
         }
     }
 }
