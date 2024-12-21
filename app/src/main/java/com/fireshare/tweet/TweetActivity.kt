@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -40,6 +39,7 @@ import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
+import com.fireshare.tweet.ui.theme.TweetTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -71,9 +71,8 @@ class TweetActivity : ComponentActivity() {
 
             scheduleNetworkCheckJob()
             activityViewModel.checkForUpgrade(this@TweetActivity)
-            setTheme(R.style.Theme_Tweet)
             setContent {
-                MaterialTheme {
+                TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
 
