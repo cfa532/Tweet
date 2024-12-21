@@ -251,12 +251,11 @@ fun VideoPreview(
     var areControlsVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
+    // Create ExoPlayer inside DisposableEffect
     val exoPlayer = remember { createExoPlayer(context, url) }
-//    var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     /**
-     * Stop playing when screen is locked or closed.
-     * Resume play when unlocked.
+     * Stop playing when screen is locked or closed. Resume play when unlocked.
      * */
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
@@ -267,10 +266,12 @@ fun VideoPreview(
                     // Pause or stop video playback here
                     exoPlayer.playWhenReady = false
                 }
+
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback here (if needed)
                     exoPlayer.playWhenReady = true
                 }
+
                 else -> {}
             }
         }
@@ -289,7 +290,7 @@ fun VideoPreview(
         }
     }
 
-    LaunchedEffect(isVideoVisible) {
+    LaunchedEffect(isVideoVisible, index) {
         if (isVideoVisible) {
             exoPlayer.prepare()
             if (index == 0) {
@@ -297,7 +298,6 @@ fun VideoPreview(
                 exoPlayer.playWhenReady = true
             }
         } else {
-            delay(500)
             exoPlayer.playWhenReady = false
             exoPlayer.stop()
         }
