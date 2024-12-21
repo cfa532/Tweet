@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,10 +67,12 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -160,7 +163,8 @@ fun MediaPreviewGrid(
                  * If the last item previewed is not the last of the attachments, show a plus sign
                  * to indicate there are more items hidden.
                  * */
-                isLastItem = mediaItem == limitedMediaList.last() && mediaItems.size > maxItems,
+                numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
+                    mediaItems.size - maxItems else 0,
                 index = index,      // autoplay first video item, index 0
                 inPreviewGrid = true,
                 tweetId = tweetId
@@ -173,7 +177,8 @@ fun MediaPreviewGrid(
 fun MediaItemView(
     mediaItems: List<MediaItem>,
     modifier: Modifier = Modifier,
-    isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
+//    isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
+    numOfHiddenItems: Int = 0,
     index: Int = -1,               // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     tweetId: MimeiId? = null
@@ -210,21 +215,32 @@ fun MediaItemView(
                 Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
             }
         }
-        if (isLastItem) {
+        if (numOfHiddenItems > 0) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .background(Color(0x40FFFFFF)), // Lighter shaded background
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(100.dp)
-                        .alpha(0.7f)
-                )
+                Row(modifier = Modifier.align(Alignment.Center))
+                {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(60.dp)
+                            .alpha(0.8f)
+                    )
+                    Text(
+                        text = numOfHiddenItems.toString(),
+                        color = Color.White,
+                        fontSize = 60.sp, // Adjust this value as needed
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .alpha(0.8f)
+                    )
+                }
             }
         }
     }
@@ -293,7 +309,7 @@ fun VideoPreview(
     LaunchedEffect(isVideoVisible, index) {
         if (isVideoVisible) {
             exoPlayer.prepare()
-            if (index == 0) {
+            if (index <= 0) {
                 delay(500)
                 exoPlayer.playWhenReady = true
             }
@@ -473,9 +489,10 @@ fun ImageViewer(
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                        parentSize = coordinates.size
-                    }
+                    modifier = Modifier
+                        .onGloballyPositioned { coordinates ->
+                            parentSize = coordinates.size
+                        }
                         .wrapContentWidth()
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     offset = DpOffset(

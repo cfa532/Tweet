@@ -212,7 +212,7 @@ fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavContr
                                 NavTweet.MediaViewer(params)
                             )
                         },
-                    false,
+                    0,
                     index,
                     false,
                     tweet.mid
