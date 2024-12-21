@@ -145,12 +145,16 @@ fun MediaPreviewGrid(
             .background(Color.Black),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        val modifier =
-            if (gridCells == 1)
-                Modifier.fillMaxWidth()
-            else Modifier.size(containerWidth / gridCells)
+        val modifier = if (gridCells == 1) Modifier.fillMaxWidth() else Modifier.size(containerWidth / gridCells)
 
+        var isFirstVideo = false
         itemsIndexed(limitedMediaList) { index, mediaItem ->
+            val autoPlay = if (mediaItem.type == MediaType.Video && !isFirstVideo) {
+                isFirstVideo = true
+                true
+            } else {
+                false
+            }
             MediaItemView(
                 limitedMediaList,
                 modifier = modifier
@@ -159,13 +163,14 @@ fun MediaPreviewGrid(
                         val params = MediaViewerParams(mediaItems, index, tweetId)
                         navController.navigate(NavTweet.MediaViewer(params))
                     },
+                index = index,
                 /**
                  * If the last item previewed is not the last of the attachments, show a plus sign
                  * to indicate there are more items hidden.
                  * */
                 numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                     mediaItems.size - maxItems else 0,
-                index = index,      // autoplay first video item, index 0
+                autoPlay = autoPlay,      // autoplay first video item
                 inPreviewGrid = true,
                 tweetId = tweetId
             )
@@ -177,9 +182,9 @@ fun MediaPreviewGrid(
 fun MediaItemView(
     mediaItems: List<MediaItem>,
     modifier: Modifier = Modifier,
-//    isLastItem: Boolean = false,   // add a PLUS sign to indicate more items not shown
-    numOfHiddenItems: Int = 0,
-    index: Int = -1,               // autoplay first video item, index 0
+    index: Int,
+    numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
+    autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     tweetId: MimeiId? = null
 ) {
@@ -202,12 +207,12 @@ fun MediaItemView(
                 ImageViewer(mediaItem.url, modifier)
             }
             MediaType.Video -> {
-                VideoPreview(url = mediaItem.url, modifier, index, inPreviewGrid) {
+                VideoPreview(mediaItem.url, modifier, index, autoPlay, inPreviewGrid) {
                     goto(index)
                 }
             }
             MediaType.Audio -> {
-                VideoPreview(url = mediaItem.url, modifier) {
+                VideoPreview(mediaItem.url, modifier, index, autoPlay, inPreviewGrid) {
                     goto(index)
                 }
             }
@@ -229,13 +234,13 @@ fun MediaItemView(
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(50.dp)
                             .alpha(0.8f)
                     )
                     Text(
                         text = numOfHiddenItems.toString(),
                         color = Color.White,
-                        fontSize = 60.sp, // Adjust this value as needed
+                        fontSize = 50.sp, // Adjust this value as needed
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .alpha(0.8f)
@@ -257,6 +262,7 @@ fun VideoPreview(
     url: String,
     modifier: Modifier = Modifier,
     index: Int = -1,
+    autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
     goto: (Int) -> Unit     // action to be performed when video is closed.
 ) {
@@ -306,13 +312,11 @@ fun VideoPreview(
         }
     }
 
-    LaunchedEffect(isVideoVisible, index) {
+    LaunchedEffect(isVideoVisible) {
         if (isVideoVisible) {
             exoPlayer.prepare()
-            if (index <= 0) {
-                delay(500)
-                exoPlayer.playWhenReady = true
-            }
+            delay(500)
+            exoPlayer.playWhenReady = autoPlay
         } else {
             exoPlayer.playWhenReady = false
             exoPlayer.stop()
