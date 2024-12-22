@@ -43,8 +43,9 @@ android {
 //            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
 //            // default account to be followed by all users
 //            buildConfigField("String", "ALPHA_ID", "\"GeNHEVHl-WXJUpssflXF2JRruNa\"")
-            buildConfigField("String", "BASE_URL", "\"tweet1.fireshare.uk\"")
+            buildConfigField("String", "BASE_URL", "\"tweet2.sharefire.store/\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
+            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
         }
         release {
@@ -60,6 +61,7 @@ android {
             }
             buildConfigField("String", "BASE_URL", "\"tweet1.fireshare.uk\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
+            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
         }
     }

@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
+import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
@@ -50,6 +52,7 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.google.firebase.crashlytics.buildtools.buildids.BuildIdInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -59,6 +62,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
     val context = LocalContext.current
     var showBottomSheet by remember { mutableStateOf(false) }
     var contentToShare by rememberSaveable { mutableStateOf("") }
+    val tweet by viewModel.tweetState.collectAsState()
 
     if (showBottomSheet) {
         ShareBottomSheet(
@@ -74,8 +78,9 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
             }
         } else {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                val map = HproseInstance.checkUpgrade() ?: return@launch
-                contentToShare = "http://${map["domain"]}/tweet/${viewModel.tweetState.value.mid}"
+                val rand = (0..1).random()
+                contentToShare = "${appUser.baseUrl}/entry?mid=${BuildConfig.APP_ID_HASH}" +
+                        "&ver=last&r=$rand#/tweet/${tweet.mid}/${tweet.authorId}"
                 showBottomSheet = true
             }
         }
