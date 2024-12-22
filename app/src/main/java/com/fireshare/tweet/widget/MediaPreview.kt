@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -90,10 +91,10 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
-import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -125,9 +126,10 @@ fun String.getMimeiKey(): String {
 @Composable
 fun MediaPreviewGrid(
     mediaItems: List<MediaItem>,
-    tweetId: MimeiId,
+    viewModel: TweetViewModel,
     containerWidth: Dp = 400.dp
 ) {    // need to check container width later
+    val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
     val gridCells = if (mediaItems.size > 1) 2 else 1
     val maxItems = when (mediaItems.size) {
@@ -153,7 +155,7 @@ fun MediaPreviewGrid(
                 modifier = modifier
                     .wrapContentSize()
                     .clickable {
-                        val params = MediaViewerParams(mediaItems, index, tweetId)
+                        val params = MediaViewerParams(mediaItems, index, tweet.mid)
                         navController.navigate(NavTweet.MediaViewer(params))
                     },
                 index = index,
@@ -170,7 +172,7 @@ fun MediaPreviewGrid(
                                 false
                             },      // autoplay first video item
                 inPreviewGrid = true,
-                tweetId = tweetId
+                viewModel
             )
         }
     }
@@ -184,8 +186,9 @@ fun MediaItemView(
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
-    tweetId: MimeiId? = null
+    viewModel: TweetViewModel
 ) {
+    val tweet by viewModel.tweetState.collectAsState()
     val mediaItem = mediaItems[index]
     val navController = LocalNavController.current
     /**
@@ -193,8 +196,8 @@ fun MediaItemView(
      * which is opened in full screen automatically when clicked.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
-        tweetId?.let { navController.navigate(
-            NavTweet.MediaViewer(MediaViewerParams(mediaItems, idx, it))) }
+        navController.navigate(
+            NavTweet.MediaViewer(MediaViewerParams(mediaItems, idx, tweet.mid)))
     }
 
     Box(

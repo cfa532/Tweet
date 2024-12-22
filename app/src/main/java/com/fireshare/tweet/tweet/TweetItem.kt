@@ -182,7 +182,7 @@ fun TweetItem(
                                 }?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
                             }
                             if (mediaItems != null) {
-                                MediaPreviewGrid(mediaItems, tweet.mid)
+                                MediaPreviewGrid(mediaItems, viewModel)
                             }
                         }
                         Surface(

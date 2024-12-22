@@ -139,7 +139,7 @@ fun TweetDetailScreen(
                 /**
                  * Tweet content and attachments. This is the main body.
                  * */
-                TweetDetailBody(tweet, viewModel, parentEntry, gridColumns)
+                TweetDetailBody(viewModel, parentEntry, gridColumns)
 
                 // divider between tweet and its comment list
                 HorizontalDivider(

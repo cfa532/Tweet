@@ -74,7 +74,6 @@ fun CommentItem(
     }
     val author = comment.author
     val parentTweet by parentTweetViewModel.tweetState.collectAsState()
-    var isExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -143,10 +142,10 @@ fun CommentItem(
                     val mediaItems = comment.attachments?.mapNotNull { attachment ->
                         comment.author?.baseUrl?.let { baseUrl ->
                             val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
-                            MediaItem(mediaUrl, attachment.type ?: MediaType.Unknown)
+                            MediaItem(mediaUrl, attachment.type)
                         }
                     }
-                    mediaItems?.let { MediaPreviewGrid(it, parentTweet.mid) }
+                    mediaItems?.let { MediaPreviewGrid(it, parentTweetViewModel) }
                 }
             }
         }

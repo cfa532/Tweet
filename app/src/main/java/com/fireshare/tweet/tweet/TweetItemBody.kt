@@ -100,7 +100,7 @@ fun TweetItemBody(
                                     it.type
                                 )
                             } ?: emptyList()
-                            MediaPreviewGrid(mediaItems, tweet.mid)
+                            MediaPreviewGrid(mediaItems, viewModel)
                         }
                     }
                     /**

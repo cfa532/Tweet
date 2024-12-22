@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,9 +74,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBackStackEntry,
-                    gridColumns: Int)
+fun TweetDetailBody(
+    viewModel: TweetViewModel,
+    parentEntry: NavBackStackEntry,
+    gridColumns: Int)
 {
+    val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
 
     Surface(
@@ -138,7 +142,7 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
                             ?.let { it2 -> MediaItem(it2, it.type) }
                     }
                     mediaItems?.let {
-                        MediaGrid(it, tweet, navController, gridColumns)
+                        MediaGrid(it, viewModel, navController, gridColumns)
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
@@ -178,9 +182,13 @@ fun TweetDetailBody(tweet: Tweet, viewModel: TweetViewModel, parentEntry: NavBac
 }
 
 @Composable
-fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavController,
-              gridColumns: Int, containerWidth: Dp = 400.dp
+fun MediaGrid(
+    mediaItems: List<MediaItem>,
+    viewModel: TweetViewModel,
+    navController: NavController,
+    gridColumns: Int, containerWidth: Dp = 400.dp
 ) {
+    val tweet by viewModel.tweetState.collectAsState()
     Box(
         modifier = Modifier
             .padding(top = 0.dp)
@@ -216,7 +224,7 @@ fun MediaGrid(mediaItems: List<MediaItem>, tweet: Tweet, navController: NavContr
                     0,
                     autoPlay = true,
                     inPreviewGrid = false,
-                    tweet.mid
+                    viewModel
                 )
             }
         }
