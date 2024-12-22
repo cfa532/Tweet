@@ -67,7 +67,7 @@ object Gadget {
 
             // Apply style and annotation for all mentions
             pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
-            withStyle(style = SpanStyle(color = Color.Blue, textDecoration = TextDecoration.None)) {
+            withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
                 append("@$username")
             }
             pop()
