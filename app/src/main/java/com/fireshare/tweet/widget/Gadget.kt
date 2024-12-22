@@ -25,6 +25,9 @@ import java.net.InetAddress
 
 object Gadget {
 
+    /**
+     * Annotate HTTP links and @username in a text. Make both clickable.
+     * */
     fun buildAnnotatedText(text: String) = buildAnnotatedString {
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
         val mentionRegex = "@([\\w_]+)".toRegex()
@@ -42,7 +45,9 @@ object Gadget {
             withLink(
                 LinkAnnotation.Url(
                     url,
-                    TextLinkStyles(style = SpanStyle(color = Color.Blue))
+                    TextLinkStyles(style = SpanStyle(
+                        color = Color.Cyan
+                    ))
                 )
             ) {
                 append(url)
@@ -80,8 +85,8 @@ object Gadget {
     fun splitJson(arrJson: List<MimeiId>): List<MimeiId>? {
         /**
          * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
-         * element is a comma separated string of MimeiIds, that should have been
-         * the elements of the returned array.
+         * element is a comma separated string of MimeiIds, but it should have been
+         * an array of the MimeiIds
          * */
         if (arrJson.isNotEmpty()) {
             val first = arrJson.first()

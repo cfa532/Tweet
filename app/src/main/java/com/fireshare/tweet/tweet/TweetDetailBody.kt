@@ -399,7 +399,7 @@ fun SelectableText(text: String,
                             )
                             if (annotations.isNotEmpty()) {
                                 val username = annotations[0].item
-                                callback(username)
+                                callback(username)  // navigate to the user account
                             }
                         }
                     }
