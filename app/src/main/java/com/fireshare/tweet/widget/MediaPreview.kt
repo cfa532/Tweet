@@ -146,15 +146,8 @@ fun MediaPreviewGrid(
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         val modifier = if (gridCells == 1) Modifier.fillMaxWidth() else Modifier.size(containerWidth / gridCells)
-
         var isFirstVideo = false
         itemsIndexed(limitedMediaList) { index, mediaItem ->
-            val autoPlay = if (mediaItem.type == MediaType.Video && !isFirstVideo) {
-                isFirstVideo = true
-                true
-            } else {
-                false
-            }
             MediaItemView(
                 limitedMediaList,
                 modifier = modifier
@@ -170,7 +163,12 @@ fun MediaPreviewGrid(
                  * */
                 numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                     mediaItems.size - maxItems else 0,
-                autoPlay = autoPlay,      // autoplay first video item
+                autoPlay = if (mediaItem.type == MediaType.Video && !isFirstVideo) {
+                                isFirstVideo = true
+                                true
+                            } else {
+                                false
+                            },      // autoplay first video item
                 inPreviewGrid = true,
                 tweetId = tweetId
             )
@@ -221,6 +219,9 @@ fun MediaItemView(
             }
         }
         if (numOfHiddenItems > 0) {
+            /**
+             * Show a PLUS sign and number to indicate more items not shown
+             * */
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -261,7 +262,7 @@ fun MediaItemView(
 fun VideoPreview(
     url: String,
     modifier: Modifier = Modifier,
-    index: Int = -1,
+    index: Int,
     autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
     goto: (Int) -> Unit     // action to be performed when video is closed.
