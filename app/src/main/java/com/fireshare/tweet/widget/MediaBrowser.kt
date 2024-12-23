@@ -3,7 +3,10 @@ package com.fireshare.tweet.widget
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.os.Build
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -125,12 +128,22 @@ fun MediaBrowser(
      * */
     DisposableEffect(Unit) {
         activity?.window?.let { window ->
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)     // keep screen ON
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            val controller = WindowInsetsControllerCompat(window, window.decorView)
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) // keep screen ON
+
+            // Use WindowInsetsController directly for API level 30 and above
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.let { controller ->
+                    controller.systemBarsBehavior =
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.hide(WindowInsets.Type.systemBars())
+                }
+            } else {
+                // Fallback for older versions
+                val controller = WindowInsetsControllerCompat(window, window.decorView)
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
