@@ -618,24 +618,13 @@ fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70):
     val thresholdHeight = layoutHeight * threshold / 100
     val layoutTop = layoutCoordinates.positionInRoot().y
     val layoutBottom = layoutTop + layoutHeight
-
-    // This should be parentLayoutCoordinates not parentCoordinates
-    val parent =
-        layoutCoordinates.parentLayoutCoordinates
+    val parent = layoutCoordinates.parentLayoutCoordinates
 
     parent?.boundsInRoot()?.let { rect: Rect ->
         val parentTop = rect.top
         val parentBottom = rect.bottom
 
-        val ret = if (
-            parentBottom - layoutTop > thresholdHeight &&
-            (parentTop < layoutBottom - thresholdHeight)
-        ) {
-            true
-        } else {
-            false
-        }
-        return ret
+        return parentBottom - layoutTop > thresholdHeight && (parentTop < layoutBottom - thresholdHeight)
     }
     return false
 }

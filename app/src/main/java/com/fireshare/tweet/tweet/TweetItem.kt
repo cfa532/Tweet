@@ -44,56 +44,26 @@ import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun TweetItem(
     tweet: Tweet,
-    parentEntry: NavBackStackEntry,      // navGraph scoped
+    parentEntry: NavBackStackEntry, // navGraph scoped
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }
-    var lastRefreshTime by remember { mutableLongStateOf(System.currentTimeMillis()-180001L) }
     var isVisible by remember { mutableStateOf(false) }
-    var visibilityStartTime by remember { mutableLongStateOf(0L) }
-    val scope = rememberCoroutineScope()
 
-    /**
-     * If the composable stays visible for more than 1 second, refresh tweet.
-     * Only do it 3 minutes after the last refresh.
-     * */
-    LaunchedEffect(isVisible) {
-        if (isVisible) {
-            visibilityStartTime = System.currentTimeMillis()
-            delay(1000)
-
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - visibilityStartTime >= 500 && currentTime - lastRefreshTime >= 3 * 60 * 1000) {
-                withContext(Dispatchers.IO) {
-                    viewModel.refreshTweet()
-                    lastRefreshTime = currentTime
-                }
-            }
-
-            // Start periodic refresh after initial refresh
-            scope.launch(Dispatchers.IO) {
-                while (true) {
-                    delay(5 * 60 * 1000) // Refresh every 5 minutes
-                    viewModel.refreshTweet()
-                    lastRefreshTime = System.currentTimeMillis()
-                }
-            }
-        } else {
-            // Cancel the periodic refresh when the composable becomes invisible
-            scope.cancel()
-        }
-    }
+    TweetRefreshHandler(isVisible, viewModel)
 
     Surface(
         modifier = Modifier
@@ -151,7 +121,12 @@ fun TweetItem(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .clickable(onClick = {
-                                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                                navController.navigate(
+                                    NavTweet.TweetDetail(
+                                        tweet.authorId,
+                                        tweet.mid
+                                    )
+                                )
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
@@ -221,6 +196,59 @@ fun TweetItem(
         } else {
             // original tweet by user.
             TweetItemBody(viewModel, parentEntry)
+        }
+    }
+}
+
+/**
+ * This function handles the logic for refreshing tweets based on visibility and time intervals.
+ *
+ * @param isVisible Indicates whether the composable is currently visible.
+ * @param viewModel The ViewModel responsible for refreshing tweets.
+ */
+@Composable
+fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
+    // Use remember to persist the state across recompositions.
+    var lastRefreshTime by remember { mutableLongStateOf(0L) }
+    var visibilityStartTime by remember { mutableLongStateOf(0L) }
+    val refreshIntervalMillis = 5 * 60 * 1000L // 5 minutes
+    val initialDelayMillis = 1000L
+    val minTimeSinceLastRefreshMillis = 3 * 60 * 1000L // 3 minutes
+    val minVisibilityDurationMillis = 950L
+
+    // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
+    val scope = rememberCoroutineScope()
+    // Use remember to persist the job across recompositions.
+    var refreshJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            visibilityStartTime = System.currentTimeMillis()
+            delay(initialDelayMillis)
+
+            val currentTime = System.currentTimeMillis()
+            val timeSinceVisibilityStart = currentTime - visibilityStartTime
+            val timeSinceLastRefresh = currentTime - lastRefreshTime
+
+            if (timeSinceVisibilityStart >= minVisibilityDurationMillis && timeSinceLastRefresh >= minTimeSinceLastRefreshMillis) {
+                withContext(Dispatchers.IO) {
+                    viewModel.refreshTweet()
+                    lastRefreshTime = currentTime
+                }
+            }
+
+            // Start periodic refresh after initial refresh
+            refreshJob = scope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    delay(refreshIntervalMillis)
+                    viewModel.refreshTweet()
+                    lastRefreshTime = System.currentTimeMillis()
+                }
+            }
+        } else {
+            // Cancel the periodic refresh when the composable becomes invisible
+            refreshJob?.cancel()
+            refreshJob = null
         }
     }
 }
