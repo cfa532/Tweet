@@ -144,16 +144,16 @@ class UserViewModel @AssistedInject constructor(
             // Succeed. Now it is the other party's turn to update its followers.
             HproseInstance.toggleFollower(subjectUserId, isFollowing, appUserId)
             refreshFollowingsAndFans()
-            updateTweetFeed(isFollowing)
+            updateTweetFeed(isFollowing)    // callback to update tweet feed
         }
     }
 
     suspend fun refreshFollowingsAndFans() {
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-        //
+        // update cached followings list of the user
         val userData = UserData(userId = appUser.mid, followings = followings.value)
-        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
+        tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     @AssistedFactory

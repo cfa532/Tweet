@@ -32,9 +32,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.time.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.time.Duration
 import javax.inject.Inject
 
 @HiltViewModel
@@ -75,6 +77,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             refresh()
+            delay(Duration.ofSeconds(2))
             initState.value = false
         }
     }
@@ -85,7 +88,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     suspend fun refresh() {
         // get cached followings and load cached tweets.
-        val cachedFollowings = HproseInstance.tweetCache.tweetDao().getCachedFollowings()?: return
+        val cachedFollowings = tweetCache.tweetDao().getCachedFollowings()?: return
         if (cachedFollowings.isNotEmpty()) {
             splitJson(cachedFollowings)?.let {
                 startTimestamp.longValue = System.currentTimeMillis()
@@ -104,7 +107,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
         // update cached following list of the user
         val userData = UserData(userId = appUser.mid, followings = followings.value)
-        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
+        tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     suspend fun loadNewerTweets() {
@@ -138,7 +141,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // Define a custom scope to ensure tweet deletion job not cancelled.
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
-    private suspend fun getTweets(
+    private fun getTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
         followings: List<MimeiId>
@@ -146,7 +149,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         val batchSize = 10 // Adjust batch size as needed
 
         followings.chunked(batchSize).forEach { batch ->
-            withContext(viewModelScope.coroutineContext + networkDispatcher) {
+            viewModelScope.launch(networkDispatcher) {
                 batch.forEach { userId ->
                     try {
                         getUser(userId)?.let { user ->
@@ -213,11 +216,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             _followings.update { list -> list - userId }
             // remove all tweets of this user from list after unfollowing it.
             _tweets.update { currentTweets ->
-                currentTweets.filterNot { it.author?.mid == userId }
+                currentTweets.filterNot { it.authorId == userId }
             }
         }
-        val userData = UserData(userId = appUser.mid, followings = followings.value)
-        HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     suspend fun reset() {
