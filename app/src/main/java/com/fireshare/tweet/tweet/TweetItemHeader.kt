@@ -102,7 +102,7 @@ fun localizedTimeDifference(timestamp: Long): String {
         hours < 24 -> stringResource(id = R.string.hours_ago, hours)
         days < 7 -> stringResource(id = R.string.days_ago, days)
         weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
-        months < 12 -> stringResource(id = R.string.months_ago, months)
+        months < 12 -> stringResource(id = R.string.months_ago, months+1)
         else -> stringResource(id = R.string.years_ago, years)
     }
 }

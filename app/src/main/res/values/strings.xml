@@ -38,7 +38,7 @@
     <string name="posts">Tweets</string>
     <string name="show_more">Show more....</string>
     <string name="logout">Logout</string>
-    <string name="login_failed">Login failed</string>
+    <string name="login_failed">Login failed. Please retry later.</string>
     <string name="profile_update_ok">User profile updated successfully</string>
     <string name="registration_ok">Registration is successful</string>
     <string name="username_required">Username is required</string>
@@ -57,4 +57,5 @@
     <string name="username_taken">Username is taken</string>
     <string name="node_not_found">Host not found</string>
     <string name="no_chat">No chat sessions found. Click the ✉️ at top right corner on user profile page to start a chat.</string>
+    <string name="login_error">Wrong username or password</string>
 </resources>

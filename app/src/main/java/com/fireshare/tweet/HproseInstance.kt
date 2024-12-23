@@ -306,11 +306,11 @@ object HproseInstance {
      * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    suspend fun login(username: String, password: String): Pair<User?, String?> { return withRetry {
+    suspend fun login(username: String, password: String, context: Context): Pair<User?, String?> { return withRetry {
         try {
-            val reason = Pair(null, "Wrong username or password")
+            val reason = Pair(null, context.getString(R.string.login_error))
             val userId = getUserId(username) ?: return@withRetry reason
-            val user = getUser(userId) ?: return@withRetry Pair(null, "Cannot find user")
+            val user = getUser(userId) ?: return@withRetry Pair(null, context.getString(R.string.login_failed))
             val url =
                 "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
             val response = httpClient.get(url)
@@ -324,7 +324,7 @@ object HproseInstance {
             } else reason
         } catch (e: Exception) {
             Timber.tag("Hprose.Login").e("${e.message}")
-            return@withRetry Pair(null, "Login failed")
+            return@withRetry Pair(null, context.getString(R.string.login_failed))
         }
     } }
 

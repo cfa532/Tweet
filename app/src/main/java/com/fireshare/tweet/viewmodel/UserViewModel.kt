@@ -249,7 +249,7 @@ class UserViewModel @AssistedInject constructor(
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
         ) {
-            val ret = HproseInstance.login(username.value!!, password.value)
+            val ret = HproseInstance.login(username.value!!, password.value, context)
             isLoading.value = false
 
             if (ret.second != null) {
