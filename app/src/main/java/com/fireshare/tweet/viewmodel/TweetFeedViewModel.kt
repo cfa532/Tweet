@@ -14,6 +14,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
+import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -219,7 +220,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         HproseInstance.tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
-    fun reset() {
+    suspend fun reset() {
+        tweets.value.forEach {
+            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
+        }
         _tweets.value = emptyList()
         _followings.value = HproseInstance.getAlphaIds()
         startTimestamp = mutableLongStateOf(System.currentTimeMillis())

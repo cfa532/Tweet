@@ -300,15 +300,18 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 
     @Transaction
-    suspend fun deleteCachedTweetAndRemoveFromMidList(tweetId: MimeiId) {
+    suspend fun deleteCachedTweetAndRemoveFromMidList(
+        tweetId: MimeiId,
+        authorId: MimeiId = appUser.mid
+    ) {
         // 1. Delete the CachedTweet
         deleteCachedTweet(tweetId)
 
         // 2. Remove the tweetId from TweetMidList
-        val tweetMidList = getCachedTweetMidList(appUser.mid) // Assuming appUser.mid is the userId
+        val tweetMidList = getCachedTweetMidList(authorId) // Assuming appUser.mid is the userId
         if (tweetMidList != null) {
             val updatedMidList = tweetMidList.toMutableList().apply { remove(tweetId) }
-            insertOrUpdateTweetMidList(TweetMidList(appUser.mid, updatedMidList))
+            insertOrUpdateTweetMidList(TweetMidList(authorId, updatedMidList))
         }
     }
 }

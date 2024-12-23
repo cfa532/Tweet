@@ -272,14 +272,14 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun logout(popBack: () -> Unit) {
+     suspend fun logout(popBack: () -> Unit) {
         preferencesHelper.setUserId(null)
         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * */
         tweets.value.forEach {
-            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid)
+            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
         }
         _tweets.value = emptyList()
         _topTweets.value = emptyList()
@@ -342,12 +342,12 @@ class UserViewModel @AssistedInject constructor(
                 if (appUser.mid == TW_CONST.GUEST_ID) {
                     val newUser: User = gson.fromJson(ret["user"].toString(), type)
                     /**
-                     * Set the newly created user
+                     * Set the newly created user as followers of admin users.
                      * */
-                    user.followingList?.forEach {
-                        this.toggleFollow(it, newUser.mid) {}
+                    appUser.followingList?.forEach {
+                        HproseInstance.toggleFollower(it, true, newUser.mid)
                     }
-                    password.value = ""
+                    password.value = ""     // clear the password
                     popBack()
                 } else {
                     // update user profile

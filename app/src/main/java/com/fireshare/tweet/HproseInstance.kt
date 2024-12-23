@@ -141,6 +141,7 @@ object HproseInstance {
                         }
                     } else {
                         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                        appUser.followingList = getAlphaIds()
                         cachedUsers.add(appUser)
                         Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
                     }
@@ -367,7 +368,7 @@ object HproseInstance {
         val user = userObj.copy(fansList = null, followingList = null)
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account, with default followings.
-            user.followingList = BuildConfig.ALPHA_ID.split(",")
+            user.followingList = getAlphaIds()
             url =
                 "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
                     Json.encodeToString(user)
@@ -385,7 +386,6 @@ object HproseInstance {
                 val updatedUser = Gson().fromJson(response.bodyAsText(), Map::class.java)
                 return@withRetry updatedUser
             }
-            Timber.tag("HproseInstance.setUserData").e("Set user data error. $user")
         } catch (e: Exception) {
             e.printStackTrace()
             Timber.tag("setUserData").e(e.toString())
@@ -588,7 +588,7 @@ object HproseInstance {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
         }
         // if cannot get tweet from node, delete it from cache.
-        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweetId)
+        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweetId, authorId)
         null
     }}
 
@@ -725,14 +725,15 @@ object HproseInstance {
      * instead of toggling the status of a follower because this way will not introduce a
      * persistent inconsistency when something went wrong, which happens easily with the toggle method.
      * */
-    suspend fun toggleFollower(userId: MimeiId, isFollowing: Boolean,
-                               followerId: MimeiId = appUser.mid    // default follower is appUser
-    ) { return withRetry {
+    suspend fun toggleFollower(
+        userId: MimeiId,
+        isFollowing: Boolean,
+        followerId: MimeiId = appUser.mid )
+    { return withRetry {
         val user = getUser(userId)
         val method = "toggle_follower"
-        val url =
-            "${user?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&otherid=$followerId" +
-                    "&userid=${userId}&isfollower=$isFollowing"
+        val url = "${user?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&otherid=$followerId&userid=${userId}&isfollower=$isFollowing"
         try {
             httpClient.get(url)
         } catch (e: Exception) {
