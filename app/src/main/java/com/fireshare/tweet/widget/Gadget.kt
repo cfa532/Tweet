@@ -99,19 +99,27 @@ object Gadget {
     }
 
     /**
-     * Return an array of valid IPs from different servers.
+     * Return an array of valid IPs from different serving nodes.
+     * Prefer IPv6 over V4 address
      * */
     fun getIpAddresses(nodeList: ArrayList<*>): List<String> {
         val ipAddresses = mutableListOf<String>()
+        // iterate over the node list
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
-            val ipAddress = nodeIps.mapNotNull {
+            var ipv4: String? = null
+            // iterate over the node's IP list. Prefer IPv6 address over IPv4.
+            nodeIps.forEach lit@{
                 val pair = it as ArrayList<*>;
-                if (isValidPublicIpAddress(pair[0].toString()))
-                    pair[0].toString()
-                else null
+                val ip = pair[0].toString()
+                if (InetAddressUtils.isIPv6Address(ip)) {
+                    ipAddresses += ip
+                    ipv4 = null
+                    return@lit
+                } else if (isValidPublicIpAddress(ip))
+                    ipv4 = ip
             }
-            ipAddresses += ipAddress
+            ipv4?.let { ipAddresses += it }
         }
         return ipAddresses
     }
@@ -138,7 +146,6 @@ object Gadget {
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getAccessibleUser(ipList: List<String>, userId: MimeiId): User? {
-        println("getAccessibleUser: $userId $ipList")
         return withTimeoutOrNull(2000L) {
             channelFlow {
                 ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
@@ -162,7 +169,7 @@ object Gadget {
                  * can be consistent.
                  * */
                 user.writableUrl = null
-                Timber.tag("getAccessibleUser").d("get $user")
+                Timber.tag("getAccessibleUser").d("Fastest user: $user")
             }
         }
     }
@@ -196,21 +203,19 @@ object Gadget {
             if (!ip.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
                 return false // Invalid IP format
             }
-            if (InetAddressUtils.isIPv4Address(ip)) {
-                try {
-                    val address = InetAddress.getByName(ip) as Inet4Address
-                    val addressBytes = address.address
+            try {
+                val address = InetAddress.getByName(ip) as Inet4Address
+                val addressBytes = address.address
 
-                    // Check if the IP falls within the local IP ranges
-                    return when {
-                        addressBytes[0] == 10.toByte() -> false // 10.0.0.0/8
-                        addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> false // 172.16.0.0/12
-                        addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> false // 192.168.0.0/16
-                        else -> true
-                    }
-                } catch (e:Exception) {
-                    Timber.tag("isValidIP").e("${e.message}")
+                // Check if the IP falls within the local IP ranges
+                return when {
+                    addressBytes[0] == 10.toByte() -> false // 10.0.0.0/8
+                    addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> false // 172.16.0.0/12
+                    addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> false // 192.168.0.0/16
+                    else -> true
                 }
+            } catch (e: Exception) {
+                Timber.tag("isValidIP").e("${e.message}")
             }
             return false
         }
