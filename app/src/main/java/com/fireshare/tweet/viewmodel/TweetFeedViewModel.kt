@@ -36,6 +36,7 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -108,7 +109,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
-    fun loadNewerTweets() {
+    suspend fun loadNewerTweets() {
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
         _isRefreshingAtTop.value = true
@@ -123,7 +124,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun loadOlderTweets() {
+    suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
         try {
@@ -139,14 +140,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // Define a custom scope to ensure tweet deletion job not cancelled.
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
-    private fun getTweets(
+    private suspend fun getTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
         followings: List<MimeiId>
     ) {
         val batchSize = 10 // Adjust batch size as needed
         followings.chunked(batchSize).forEach { batch ->
-            viewModelScope.launch(networkDispatcher) {
+            withContext(networkDispatcher) {
                 batch.forEach { userId ->
                     try {
                         getUser(userId)?.let { user ->
