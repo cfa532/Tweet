@@ -45,7 +45,6 @@ import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch

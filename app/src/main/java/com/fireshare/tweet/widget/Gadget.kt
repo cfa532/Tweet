@@ -14,6 +14,7 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.User
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -137,14 +138,17 @@ object Gadget {
 
     // In Pair<URL, String?>?, where String is JSON of Mimei content
     suspend fun getAccessibleUser(ipList: List<String>, userId: MimeiId): User? {
+        println("getAccessibleUser: $userId $ipList")
         return withTimeoutOrNull(2000L) {
             channelFlow {
                 ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
 //                    println("Try $ip $userId")
                     launch {
                         try {
+                            Timber.tag("getAccessibleUser").d("Trying $ip $userId")
                             HproseInstance.getUserData(userId, ip)?.let {
                                 send(it) // Emit the user if found
+                                cancel()
                             }
                         } catch (e: Exception) {
                             // Handle exceptions, e.g., log or rethrow
@@ -168,11 +172,11 @@ object Gadget {
             channelFlow {
                 for (ip in ipList) {
                     if (isValidPublicIpAddress(ip)) {
-                        Timber.tag("getAccessibleIP").d("Trying $ip")
                         launch {
                             val accessibleIp = HproseInstance.isAccessible(ip) // Get accessible IP
                             if (accessibleIp != null) {
                                 send(accessibleIp) // Send the IP if accessible
+                                cancel()
                             }
                         }
                     }

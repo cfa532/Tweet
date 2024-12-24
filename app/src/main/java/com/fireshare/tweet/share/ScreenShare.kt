@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.BuildConfig
-import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -52,7 +51,6 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.google.firebase.crashlytics.buildtools.buildids.BuildIdInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 

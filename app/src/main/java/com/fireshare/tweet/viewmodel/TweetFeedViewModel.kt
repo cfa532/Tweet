@@ -32,12 +32,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.time.delay
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import java.time.Duration
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -77,7 +75,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             refresh()
-            delay(Duration.ofSeconds(2))
+            delay(2000)
             initState.value = false
         }
     }
@@ -110,7 +108,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
-    suspend fun loadNewerTweets() {
+    fun loadNewerTweets() {
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
         _isRefreshingAtTop.value = true
@@ -125,7 +123,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    suspend fun loadOlderTweets() {
+    fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
         try {
@@ -147,13 +145,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         followings: List<MimeiId>
     ) {
         val batchSize = 10 // Adjust batch size as needed
-
         followings.chunked(batchSize).forEach { batch ->
             viewModelScope.launch(networkDispatcher) {
                 batch.forEach { userId ->
                     try {
                         getUser(userId)?.let { user ->
-                            println(user)
                             HproseInstance.getTweetList(
                                 user,
                                 tweets.value,

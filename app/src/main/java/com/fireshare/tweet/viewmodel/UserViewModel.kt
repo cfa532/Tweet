@@ -152,7 +152,7 @@ class UserViewModel @AssistedInject constructor(
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
         // update cached followings list of the user
-        val userData = UserData(userId = appUser.mid, followings = followings.value)
+        val userData = UserData(userId = this.userId, followings = followings.value)
         tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
@@ -319,14 +319,12 @@ class UserViewModel @AssistedInject constructor(
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             // Find IP of desired node. User can change its value to appoint
             // a different host node later.
-            val ip = HproseInstance.getHostIP(hostId.value)
-            if (ip == null) {
+            HproseInstance.getHostIP(hostId.value)?.let { ip ->
+                appUser = appUser.copy(baseUrl = "http://$ip")
+            }?: run {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
                 isLoading.value = false
                 return
-            } else {
-                // register user on desired node, and use it henceforth.
-                appUser = appUser.copy(baseUrl = "http://$ip")
             }
         }
         val user = appUser.copy(
@@ -334,8 +332,7 @@ class UserViewModel @AssistedInject constructor(
             username = username.value, password = password.value,
             profile = profile.value, avatar = appUser.avatar
         )
-        val ret = HproseInstance.setUserData(user)
-        if (ret != null) {
+        HproseInstance.setUserData(user)?.let { ret ->
             if (ret["status"] == "success") {
                 val gson = Gson()
                 val type = object : TypeToken<User>() {}.type
@@ -367,7 +364,7 @@ class UserViewModel @AssistedInject constructor(
             } else {
                 showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
             }
-        } else {
+        }?: run {
             showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
         }
         isLoading.value = false

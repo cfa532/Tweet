@@ -64,16 +64,6 @@ object HproseInstance {
         }
     }
 
-//    private val loggingInterceptor = HttpLoggingInterceptor().apply {
-//        level = HttpLoggingInterceptor.Level.BODY
-//    }
-//    private val httpClient = OkHttpClient.Builder()
-////        .addInterceptor(loggingInterceptor)
-//        .connectTimeout(10, TimeUnit.SECONDS)
-//        .readTimeout(10, TimeUnit.SECONDS)
-//        .writeTimeout(60, TimeUnit.SECONDS)
-//        .build()
-
     suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
         this.preferenceHelper = preferenceHelper
         chatDatabase = ChatDatabase.getInstance(context.applicationContext)
@@ -86,9 +76,9 @@ object HproseInstance {
      * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
      * */
     private suspend fun initAppEntry() {
-        cachedUsers.clear()     // make sure no stale data during retry init.
-        val baseUrl = "http://" + preferenceHelper.getAppUrl().toString()
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
+        // make sure no stale data during retry init.
+        cachedUsers.clear()
+        val baseUrl = "http://" + preferenceHelper.getAppUrl()!!  // there is a default value
         try {
             val response: HttpResponse = httpClient.get(baseUrl)
             /**
@@ -140,7 +130,6 @@ object HproseInstance {
                             Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
                         }
                     } else {
-                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                         appUser.followingList = getAlphaIds()
                         cachedUsers.add(appUser)
                         Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
@@ -148,6 +137,7 @@ object HproseInstance {
                 }
             } else {
                 Timber.tag("initAppEntry").e("No data found within window.setParam()")
+                appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
             }
         } catch (e: Exception) {
             Timber.tag("initAppEntry").e(e.toString())
@@ -1006,9 +996,12 @@ object HproseInstance {
         return runCatching {
             val url = "http://$ip/getvar?name=mmversions&arg0=$appId"
             val response = httpClient.get(url)
-            val responseValues = Gson().fromJson(
-                response.bodyAsText(), Array<String>::class.java)
-            responseValues.firstOrNull()?.let { ip } // Return IP if found
+            if (response.status == HttpStatusCode.OK) {
+                val responseValues = Gson().fromJson(
+                    response.bodyAsText(), Array<String>::class.java
+                )
+                responseValues.firstOrNull()?.let { ip } // Return IP if found
+            } else null
         }.onFailure { e ->
             when (e) {
                 is ConnectException, is SocketTimeoutException -> {

@@ -68,6 +68,9 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
     ) { factory ->
         factory.create(userId)
     }
+    val followingsOfProfile by viewModel.followings.collectAsState()
+    val userOfProfile by viewModel.user.collectAsState()
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -76,7 +79,6 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    val userOfProfile by viewModel.user.collectAsState()
                     Column {
                         UserAvatar(userOfProfile, 36)
                         Text(
@@ -85,7 +87,6 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
-
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() })
@@ -100,9 +101,6 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
         },
         bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
-
-        val followingsOfProfile by viewModel.followings.collectAsState()
-
         Surface(modifier = Modifier.padding(innerPadding))
         {
             LazyColumn(
