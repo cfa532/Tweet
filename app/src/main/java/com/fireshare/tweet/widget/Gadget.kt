@@ -83,12 +83,12 @@ object Gadget {
         }
     }
 
+    /**
+     * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
+     * element is a comma separated string of MimeiIds, but it should have been
+     * an array of the MimeiIds
+     * */
     fun splitJson(arrJson: List<MimeiId>): List<MimeiId>? {
-        /**
-         * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
-         * element is a comma separated string of MimeiIds, but it should have been
-         * an array of the MimeiIds
-         * */
         if (arrJson.isNotEmpty()) {
             val first = arrJson.first()
             if (first.isNotEmpty()) {

@@ -455,24 +455,20 @@ object HproseInstance {
         endTimestamp: Long?
     ): Flow<List<Tweet>> = channelFlow {
         try {
-            // 1. Retrieve cached tweet mid list for the user. In case of no network, the
-            // user can still see cached ones.
-            val cachedTweetIdList = tweetCache.tweetDao().getCachedTweetMidList(user.mid)
-            if (!cachedTweetIdList.isNullOrEmpty()) {
-                // 2. Retrieve tweets from cache using cached mid list
-                val cachedTweets = splitJson(cachedTweetIdList)
-                    ?.mapNotNull { retrieveCachedTweet(it) } ?: emptyList()
-                send(cachedTweets)
+            // 1. Retrieve cached tweet mid list for this user.
+            tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.let {
+                splitJson(it)?.mapNotNull { mid ->
+                    retrieveCachedTweet(mid)
+                }?.let { it1 -> send(it1) }
             }
+
             // 3. Make network call to get mid list from server
             val method = "get_tweet_list"
-            val url = StringBuilder("${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
-                .append("&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp").toString()
+            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                "&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp"
             val response = httpClient.get(url)
-
             if (response.status == HttpStatusCode.OK) {
-                val gson = Gson()
-                val midList = gson.fromJson(
+                val midList = Gson().fromJson(
                     response.bodyAsText(),
                     object : TypeToken<List<MimeiId>?>() {}.type
                 ) as List<MimeiId>?
@@ -483,18 +479,18 @@ object HproseInstance {
                 }
 
                 // 5. Retrieve any tweets not in the cached list and add them to tweets list.
-                val unCachedTweetIdList = midList?.filterNot {mid->
+                midList?.filterNot { mid->
                     tweets.any { it.mid == mid }
-                }
-                val networkTweets = unCachedTweetIdList?.mapNotNull { tweetId ->
-                    getTweet(tweetId, user.mid)?.also { tweet ->
+                }?.mapNotNull { unCachedTweetId ->
+                    getTweet(unCachedTweetId, user.mid)?.also { tweet ->
                         if (tweet.originalTweetId != null) {
                             tweet.originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
                                 ?: return@mapNotNull null
                         }
                     }
-                } ?: emptyList()
-                send(networkTweets)
+                }?.also { unCachedTweets->
+                    send(unCachedTweets)
+                }
             }
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
