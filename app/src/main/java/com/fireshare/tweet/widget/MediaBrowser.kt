@@ -279,60 +279,56 @@ fun MediaBrowser(
                 }
                 // image view
                 else -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        ImageViewer(
-                            mediaItem.url,
-                            isPreview = false,  // show original image
-                            modifier = Modifier
-                                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                                .draggable(
-                                    orientation = Orientation.Horizontal,
-                                    state = rememberDraggableState { delta ->
-                                        if (scaleFactor > 1f)
-                                            offsetX += delta    // move expanded image
-                                        else {
-                                            // Do not update offsetX when flipping images
-                                            if (delta > 20) {
-                                                animationScope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        pagerState.currentPage - 1
-                                                    )
-                                                }
-                                            } else if (delta < -20) {
-                                                animationScope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        pagerState.currentPage + 1
-                                                    )
-                                                }
+                    ImageViewer(
+                        mediaItem.url,
+                        isPreview = false,  // show original image
+                        modifier = Modifier
+                            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { delta ->
+                                    if (scaleFactor > 1f)
+                                        offsetX += delta    // move expanded image
+                                    else {
+                                        // Do not update offsetX when flipping images
+                                        if (delta > 20) {
+                                            animationScope.launch {
+                                                pagerState.animateScrollToPage(
+                                                    pagerState.currentPage - 1
+                                                )
+                                            }
+                                        } else if (delta < -20) {
+                                            animationScope.launch {
+                                                pagerState.animateScrollToPage(
+                                                    pagerState.currentPage + 1
+                                                )
                                             }
                                         }
                                     }
-                                )
-                                .draggable(
-                                    orientation = Orientation.Vertical,
-                                    state = rememberDraggableState { delta ->
-                                        offsetY += delta
-                                        if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered) {
-                                            isNavigationTriggered = true
-                                            if (navController.previousBackStackEntry != null) {
-                                                navController.popBackStack()
-                                            } else {
-                                                Timber
-                                                    .tag("MediaBrowser")
-                                                    .e("No previous back stack entry")
-                                            }
+                                }
+                            )
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta ->
+                                    offsetY += delta
+                                    if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered) {
+                                        isNavigationTriggered = true
+                                        if (navController.previousBackStackEntry != null) {
+                                            navController.popBackStack()
+                                        } else {
+                                            Timber
+                                                .tag("MediaBrowser")
+                                                .e("No previous back stack entry")
                                         }
                                     }
-                                )
-                                .graphicsLayer(
-                                    scaleX = scaleFactor,
-                                    scaleY = scaleFactor
-                                )
-                                .align(Alignment.Center)
-                        )
-                    }
+                                }
+                            )
+                            .graphicsLayer(
+                                scaleX = scaleFactor,
+                                scaleY = scaleFactor
+                            )
+                            .align(Alignment.Center)
+                    )
                 }
             }
         }

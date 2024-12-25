@@ -310,6 +310,7 @@ fun VideoPreview(
             exoPlayer.release()
         }
     }
+
     LaunchedEffect(url.getMimeiKey()) {
         val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
         aspectRatio = width.toFloat() / height.toFloat()
@@ -560,14 +561,28 @@ fun ImageViewer(
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_user_avatar),
-                contentDescription = "Placeholder Avatar",
-                modifier = modifier
-                    .size(imageSize.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
+            if (cacheManager.isCached(imageUrl, true)) {
+                val placeholderImage = cacheManager.loadImageFromCache(
+                    cacheManager.getCachedImagePath(imageUrl, true)
+                )
+                if (placeholderImage != null) {
+                    Image(
+                        painter = BitmapPainter(placeholderImage),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = adjustedModifier
+                    )
+                }
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_user_avatar),
+                    contentDescription = "Placeholder Avatar",
+                    modifier = modifier
+                        .size(imageSize.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
     }
 }
@@ -596,9 +611,8 @@ object VideoCacheManager {
 
     fun getCache(context: Context): Cache {
         if (simpleCache == null) {
-            val cacheSize: Long = 100 * 1024 * 1024 // 100 MB
             val cacheDir = File(context.cacheDir, "video_cache")
-            val evictor = LeastRecentlyUsedCacheEvictor(cacheSize)
+            val evictor = LeastRecentlyUsedCacheEvictor(1000L * 1024 * 1024)
             val databaseProvider = StandaloneDatabaseProvider(context)
             simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
         }
