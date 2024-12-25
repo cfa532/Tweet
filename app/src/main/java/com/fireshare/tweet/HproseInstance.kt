@@ -236,12 +236,12 @@ object HproseInstance {
     suspend fun checkNewMessages(): List<ChatMessage>? { return withRetry {
         if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
         try {
-            val gson = Gson()
+            val entry = "message_check"
             val url =
-                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=message_check&userid=${appUser.mid}"
+                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val list = gson.fromJson(
+                val list = Gson().fromJson(
                     response.bodyAsText(),
                     object : TypeToken<List<ChatMessage>>() {}.type
                 ) as List<ChatMessage>?
@@ -318,6 +318,9 @@ object HproseInstance {
         }
     } }
 
+    /**
+     * Get the node Id of current baseUrl host
+     * */
     suspend fun getHostId(): MimeiId? { return withRetry {
         val url = "${appUser.baseUrl}/getvar?name=hostid"
         try {
@@ -331,6 +334,10 @@ object HproseInstance {
         null
     } }
 
+    /**
+     * @param nodeId
+     * Find IP addresses of given node.
+     * */
     suspend fun getHostIP(nodeId: MimeiId): String?  { return withRetry {
         val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
         try {
