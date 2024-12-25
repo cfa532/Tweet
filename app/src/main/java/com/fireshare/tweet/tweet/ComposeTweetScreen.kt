@@ -324,26 +324,24 @@ fun ComposeTweetScreen(
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
                         } },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .padding(top = 10.dp, end = 8.dp)
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
                             contentDescription = "Open camera",
                             tint = MaterialTheme.colorScheme.surfaceTint,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
 
                     // select media files to upload
                     IconButton(onClick = { filesPickerLauncher.launch(arrayOf("*/*")) },
-                        modifier = Modifier.size(48.dp)
                         ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_photo_plus),
                             contentDescription = "upload file",
                             tint = MaterialTheme.colorScheme.surfaceTint,
+                            modifier = Modifier.size(44.dp)
                         )
                     }
                 }
