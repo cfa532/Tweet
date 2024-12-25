@@ -532,21 +532,29 @@ fun ImageViewer(
                 .fillMaxWidth()
                 .background(Color.LightGray) // Gray background
         ) {
-            if (!isPreview && cacheManager.isCached(imageUrl, true)) {
-                val placeholderImage = cacheManager.loadImageFromCache(
-                    cacheManager.getCachedImagePath(imageUrl, true)
-                )
-                if (placeholderImage != null) {
-                    Image(
-                        painter = BitmapPainter(placeholderImage),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = adjustedModifier
+            if (!isPreview) {
+                if (cacheManager.isCached(imageUrl, true)) {
+                    val placeholderImage = cacheManager.loadImageFromCache(
+                        cacheManager.getCachedImagePath(imageUrl, true)
+                    )
+                    if (placeholderImage != null) {
+                        Image(
+                            painter = BitmapPainter(placeholderImage),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = adjustedModifier
+                        )
+                    }
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                            .heightIn(min = 400.dp)
                     )
                 }
             }
         }
-    } else {    // Display placeholder for non-existent resource
+    } else {
+        // Display placeholder for non-existent resource
         Box(
             modifier = adjustedModifier
                 .fillMaxWidth(),
