@@ -87,14 +87,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     suspend fun refresh() {
         // get cached followings and load cached tweets.
-        val cachedFollowings = tweetCache.tweetDao().getCachedFollowings()?: return
-        if (cachedFollowings.isNotEmpty()) {
-            splitJson(cachedFollowings)?.let {
-                startTimestamp.longValue = System.currentTimeMillis()
-                endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-                getTweets(startTimestamp.longValue, endTimestamp.longValue, it)
-            }
-        }
+        val cachedFollowings = tweetCache.tweetDao().getCachedFollowings()?.let {
+            splitJson(it)?: emptyList()
+        }?: emptyList()
+        startTimestamp.longValue = System.currentTimeMillis()
+        endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
+        getTweets(startTimestamp.longValue, endTimestamp.longValue, cachedFollowings)
 
         // get followings from server and load tweets not cached.
         _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
@@ -102,7 +100,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _followings.update { list -> (list + HproseInstance.getAlphaIds() ).toSet().toList() }
         if (appUser.mid !== TW_CONST.GUEST_ID)
             _followings.update { list -> (list + appUser.mid ).toSet().toList() }
-        getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
+
+        val unCachedFollowings = followings.value.filterNot {
+            cachedFollowings.contains(it)
+        }
+        getTweets(startTimestamp.longValue, endTimestamp.longValue, unCachedFollowings)
 
         // update cached following list of the user
         val userData = UserData(userId = appUser.mid, followings = followings.value)

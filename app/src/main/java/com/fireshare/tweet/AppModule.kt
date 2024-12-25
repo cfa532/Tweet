@@ -23,19 +23,19 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideShareViewModel(): SharedViewModel {
-        return SharedViewModel(
-            tweetFeedViewModel = TweetFeedViewModel()
-        )
-    }
-
-    @Provides
-    @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }
 
     @Provides
+    @Singleton
+    fun provideShareViewModel(tweetFeedViewModel: TweetFeedViewModel): SharedViewModel {
+        return SharedViewModel(
+            tweetFeedViewModel = tweetFeedViewModel // Inject the existing instance
+        )
+    }
+
+   @Provides
     @Singleton
     fun provideBadgeViewModel(): BottomBarViewModel {
         return BottomBarViewModel()

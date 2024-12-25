@@ -593,7 +593,7 @@ object HproseInstance {
             tweet.originalTweet =
                 getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: return null
         }
-        Timber.tag("restoreTweet").d("$tweet")
+        Timber.tag("retrieveCachedTweet").d("$tweet")
         tweet.author = getUser(tweet.authorId)
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =
