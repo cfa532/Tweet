@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
@@ -90,9 +91,10 @@ fun ComposeTweetScreen(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
     var tweetContent by remember { mutableStateOf("") }
-    val selectedAttachments = remember { mutableStateListOf<Uri>() }
     var isPrivate by remember { mutableStateOf(false) }
-    val filePickerLauncher = rememberLauncherForActivityResult(
+
+    val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    val filesPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
@@ -284,8 +286,9 @@ fun ComposeTweetScreen(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // the row of action icons.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -332,7 +335,9 @@ fun ComposeTweetScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = { filePickerLauncher.launch(arrayOf("image/*", "video/*", "audio/*")) },
+
+                    // select media files to upload
+                    IconButton(onClick = { filesPickerLauncher.launch(arrayOf("*/*")) },
                         modifier = Modifier.size(48.dp)
                         ) {
                         Icon(
@@ -343,7 +348,7 @@ fun ComposeTweetScreen(
                     }
                 }
 
-                // Display icons for attached files
+                // Display previews for attached files
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()

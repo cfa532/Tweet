@@ -75,7 +75,6 @@ fun ComposeCommentScreen(
     popBack: () -> Unit,
 ) {
     var tweetContent by remember { mutableStateOf("") }
-    val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val context = LocalContext.current
 
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -85,8 +84,9 @@ fun ComposeCommentScreen(
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
 
     // Create a launcher for the file picker
+    val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         uri?.let {
             if (selectedAttachments.find { u -> u == it } == null) {
@@ -286,7 +286,7 @@ fun ComposeCommentScreen(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(onClick = { filePickerLauncher.launch("*/*") },
+                    IconButton(onClick = { filePickerLauncher.launch(arrayOf("image/*", "video/*", "audio/*")) },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
