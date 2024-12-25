@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
@@ -16,6 +17,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.tweetCache
+import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
@@ -190,6 +192,7 @@ class TweetViewModel @AssistedInject constructor(
                                         )
                                     }
                                 }
+                                Toast.makeText(context, context.getString(R.string.comment_added), Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Timber.tag("UploadComment").e("${e.message}")
                             }

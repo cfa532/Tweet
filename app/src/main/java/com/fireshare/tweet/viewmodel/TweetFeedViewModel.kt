@@ -2,6 +2,7 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -287,13 +288,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                     // add tweet to TweetFeedViewModel's list
                                     addTweetToFeed(tweet)
 
-                                    (context as? LifecycleOwner)?.lifecycleScope?.launch {
-                                        SnackbarController.sendEvent(
-                                            event = SnackbarEvent(
-                                                message = context.getString(R.string.tweet_uploaded)
-                                            )
-                                        )
-                                    }
+                                    Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
+//                                    (context as? LifecycleOwner)?.lifecycleScope?.launch {
+//                                        SnackbarController.sendEvent(
+//                                            event = SnackbarEvent(
+//                                                message = context.getString(R.string.tweet_uploaded)
+//                                            )
+//                                        )
+//                                    }
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("UploadTweet").e("$e")
