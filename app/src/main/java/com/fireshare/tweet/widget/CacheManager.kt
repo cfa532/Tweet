@@ -128,4 +128,16 @@ class CacheManager(private val context: Context) {
             }
         }
     }
+
+    /**
+     * Checks if an image is already cached.
+     * @param imageUrl The URL of the image.
+     * @param isPreview Boolean indicating if the image is a preview.
+     * @return True if the image is cached, false otherwise.
+     */
+    fun isCached(imageUrl: String, isPreview: Boolean = true): Boolean {
+        val cachedPath = getCachedImagePath(imageUrl, isPreview)
+        val file = File(cachedPath)
+        return file.exists()
+    }
 }

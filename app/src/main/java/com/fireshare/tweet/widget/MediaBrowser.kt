@@ -282,7 +282,9 @@ fun MediaBrowser(
                     Box(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        ImageViewer(mediaItem.url, isPreview = false,
+                        ImageViewer(
+                            mediaItem.url,
+                            isPreview = false,  // show original image
                             modifier = Modifier
                                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                                 .draggable(

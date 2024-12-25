@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
@@ -34,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -479,10 +481,8 @@ fun ImageViewer(
                             }
 
                             // Wait for the up event or cancellation
-                            val up = waitForUpOrCancellation()
-
                             // If the gesture is released before a long press is detected
-                            if (up != null && !longPressDetected) {
+                            if (waitForUpOrCancellation() != null && !longPressDetected) {
                                 // Allow the event to propagate up for single click handling
                                 // Do not consume the event here
                             }
@@ -532,17 +532,18 @@ fun ImageViewer(
                 .fillMaxWidth()
                 .background(Color.LightGray) // Gray background
         ) {
-            if (isDownloading) {
-//                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else { // downloadError is true
-                Image(
-                    painter = painterResource(id = R.drawable.ic_user_avatar),
-                    contentDescription = "Placeholder Avatar",
-                    modifier = modifier
-                        .size(imageSize.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
+            if (!isPreview && cacheManager.isCached(imageUrl, true)) {
+                val placeholderImage = cacheManager.loadImageFromCache(
+                    cacheManager.getCachedImagePath(imageUrl, true)
                 )
+                if (placeholderImage != null) {
+                    Image(
+                        painter = BitmapPainter(placeholderImage),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = adjustedModifier
+                    )
+                }
             }
         }
     } else {    // Display placeholder for non-existent resource
@@ -629,6 +630,9 @@ fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70):
     return false
 }
 
+/**
+ * Allow app users to download Tweet image to local photo directory.
+ * */
 suspend fun downloadImage(context: Context, imageUrl: String) {
     withContext(Dispatchers.IO) {
         try {
