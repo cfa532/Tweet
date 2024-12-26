@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -242,6 +243,7 @@ fun MediaBrowser(
                             .fillMaxWidth()
                             .offset { IntOffset(0, offsetY.roundToInt()) }
                             .draggable(
+                                // horizontal drag to swipe video
                                 orientation = Orientation.Horizontal,
                                 state = rememberDraggableState { delta ->
                                     if (delta > 20) {
@@ -260,6 +262,7 @@ fun MediaBrowser(
                                 }
                             )
                             .draggable(
+                                // vertical drag to pop back to previous page.
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
@@ -312,7 +315,7 @@ fun MediaBrowser(
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
                                     if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered) {
-                                        isNavigationTriggered = true
+                                        isNavigationTriggered = true    // prevent multiple popBack
                                         if (navController.previousBackStackEntry != null) {
                                             navController.popBackStack()
                                         } else {
@@ -378,11 +381,14 @@ fun MediaBrowser(
                         )
                     }
                 }
+
                 Spacer(modifier = Modifier.weight(1f))
+
                 val mediaItem = mediaItems[pagerState.currentPage]
                 if (tweetId != null && mediaItem.type != MediaType.Video) {
                     Box(
                         modifier = Modifier
+                            .alpha(1f)
                             .fillMaxWidth()
                             .height(100.dp)
                             .background(Color.Transparent)

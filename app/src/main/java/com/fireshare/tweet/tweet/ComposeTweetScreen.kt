@@ -186,7 +186,6 @@ fun ComposeTweetScreen(
                             }
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing
-                            .alpha(1f) // Set opacity to 80%
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
