@@ -198,7 +198,7 @@ object HproseInstance {
                 entry = "message_incoming"
                 url = "${receipt?.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
                             "&senderid=${appUser.mid}&receiptid=$receiptId&msg=${
-                                Json.encodeToString(msg)
+                                URLEncoder.encode(Json.encodeToString(msg), "utf-8")
                             }"
                 httpClient.get(url)
             }
@@ -362,19 +362,19 @@ object HproseInstance {
      * */
     suspend fun setUserData(userObj: User): Map<*, *>? { return withRetry {
         val url: String
-        val user = userObj.copy(fansList = null, followingList = null)
+        val user = userObj.copy(fansList = null, followingList = null)  // remove memory only lists
         if (user.mid == TW_CONST.GUEST_ID) {
             // register a new User account, with default followings.
             user.followingList = getAlphaIds()
             url =
                 "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
-                    Json.encodeToString(user)
+                    URLEncoder.encode(Json.encodeToString(user), "utf-8")
                 }"
         } else {
             // update existing account
             val method = "set_author_core_data"
             url = "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&user=${
-                Json.encodeToString(user)
+                URLEncoder.encode(Json.encodeToString(user), "utf-8")
             }"
         }
         try {

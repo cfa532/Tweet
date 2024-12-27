@@ -341,7 +341,6 @@ fun MediaBrowser(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
                         .background(Color.Transparent)
                 ) {
                     IconButton(
@@ -384,28 +383,24 @@ fun MediaBrowser(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                val mediaItem = mediaItems[pagerState.currentPage]
-                if (tweetId != null && mediaItem.type != MediaType.Video) {
-                    Box(
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .background(Color.Transparent)
+                ) {
+                    Row(
                         modifier = Modifier
-                            .alpha(1f)
                             .fillMaxWidth()
-                            .height(100.dp)
-                            .background(Color.Transparent)
+                            .padding(start = 16.dp, bottom = 32.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, bottom = 32.dp),
-                            horizontalArrangement = Arrangement.SpaceAround
-                        ) {
-                            LikeButton(viewModel)
-                            BookmarkButton(viewModel)
-                            CommentButton(viewModel)
-                            RetweetButton(viewModel)
-                            Spacer(modifier = Modifier.width(20.dp))
-                            ShareButton(viewModel)
-                        }
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
+                        CommentButton(viewModel)
+                        RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(20.dp))
+                        ShareButton(viewModel)
                     }
                 }
             }

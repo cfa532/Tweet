@@ -273,26 +273,26 @@ class UserViewModel @AssistedInject constructor(
     }
 
      suspend fun logout(popBack: () -> Unit) {
-        preferencesHelper.setUserId(null)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-        /**
-         * Do NOT clear the UserViewModel object. It will be reused by other users.
-         * */
-        tweets.value.forEach {
-            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
-        }
-        _tweets.value = emptyList()
-        _topTweets.value = emptyList()
+         preferencesHelper.setUserId(null)
+         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+         /**
+          * Do NOT clear the UserViewModel object. It will be reused by other users.
+          * */
+         _tweets.value = emptyList()
+         _topTweets.value = emptyList()
+         _followings.value = HproseInstance.getAlphaIds()
+         tweets.value.forEach {
+             tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
+         }
 //        savedStateHandle["user"] = appUser
 //        _fans.value = emptyList()
-//        _followings.value = emptyList()
 //        username.value = ""
 //        password.value = ""
 //        profile.value = ""
 //        name.value = ""
 //        hostId.value = ""
-        popBack()
-    }
+         popBack()
+     }
 
     /**
      * Handle both register and update of user profile. Username, password are required.
@@ -317,7 +317,7 @@ class UserViewModel @AssistedInject constructor(
 
         isLoading.value = true
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-            // Find IP of desired node. User can change its value to appoint
+            // Register new account. Find IP of desired node. User can change its value to appoint
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
