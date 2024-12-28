@@ -73,7 +73,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
-    var showDialog by remember { mutableStateOf(false) }    // show large Avatar view
+    var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
@@ -164,7 +164,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 onClick = {
                                     viewModel.viewModelScope.launch {
                                         viewModel.logout {
-                                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                            tweetFeedViewModel.viewModelScope.launch {
                                                 tweetFeedViewModel.reset()
                                             }
                                             navController.navigate(NavTweet.TweetFeed)
