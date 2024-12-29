@@ -111,9 +111,7 @@ fun TweetFeedScreen(
     LaunchedEffect(appUser.mid) {
         // reload page when user login or out
         if (!viewModel.initState.value)
-            withContext(Dispatchers.IO) {
-                viewModel.refresh()
-            }
+            viewModel.refresh()
     }
     LaunchedEffect(isAtBottom) {
         if (isAtBottom) {

@@ -2,6 +2,8 @@ package com.fireshare.tweet
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.documentfile.provider.DocumentFile
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -39,6 +41,7 @@ import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
+import java.util.Date
 import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -1104,6 +1107,23 @@ object HproseInstance {
         val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
         val json = """{"aid": $appId, "ver": "last", "offset": 0}"""
         val request = Gson().fromJson(json, Map::class.java).toMutableMap()
+
+        // Get file name
+        var fileName: String? = null
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) {
+                    fileName = cursor.getString(nameIndex)
+                }
+            }
+        }
+        // Get file timestamp
+        val documentFile = DocumentFile.fromSingleUri(context, uri)
+        val fileTimestamp: Long = documentFile?.lastModified()?.let {
+            if (it == 0L) System.currentTimeMillis() else it
+        }?: System.currentTimeMillis()
+
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 inputStream.use { stream ->
@@ -1137,7 +1157,7 @@ object HproseInstance {
                 else -> com.fireshare.tweet.widget.MediaType.Unknown
             }
             // Return MimeiFileType
-            return@withRetry MimeiFileType(cid, mediaType, offset)
+            return@withRetry MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp)
         } catch (e: Exception) {
             Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message}")
         }

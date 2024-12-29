@@ -54,6 +54,9 @@ data class MimeiFileType(
     val mid: MimeiId,
     val type: MediaType,
     val size: Long? = null,
+    val fileName: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+    val downloadable: Boolean = false,  // only used in web version
 )
 
 @Serializable
