@@ -449,7 +449,7 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("HproseInstance.getFollowings").e(e.toString())
+            Timber.tag("Hprose.getFans").e(e.toString())
         }
         null
     } }

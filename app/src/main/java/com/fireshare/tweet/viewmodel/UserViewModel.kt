@@ -285,11 +285,11 @@ class UserViewModel @AssistedInject constructor(
           * */
          _tweets.value = emptyList()
          _topTweets.value = emptyList()
-         _followings.value = HproseInstance.getAlphaIds()
          tweets.value.forEach {
              tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
          }
 //        savedStateHandle["user"] = appUser
+//        _followings.value = HproseInstance.getAlphaIds()
 //        _fans.value = emptyList()
 //        username.value = ""
 //        password.value = ""
