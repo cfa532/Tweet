@@ -183,6 +183,7 @@ class UserViewModel @AssistedInject constructor(
         HproseInstance.getTweetList(user.value, _tweets.value, startTimestamp, endTimestamp)
             .collect { tweets ->
                 _tweets.update { list -> (list + tweets)
+                    .filterNot { it.isPrivate && it.authorId != appUser.mid }
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
                 }

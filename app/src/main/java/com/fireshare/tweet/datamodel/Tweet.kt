@@ -56,7 +56,6 @@ data class MimeiFileType(
     val size: Long? = null,
     val fileName: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val downloadable: Boolean = false,  // only used in web version
 )
 
 @Serializable
@@ -92,6 +91,7 @@ data class Tweet(
     var attachments: List<MimeiFileType>? = null,
 
     var isPrivate: Boolean = false,     // Viewable by the author only if true.
+    val downloadable: Boolean? = false,  // only used in web version.
 )
 
 @Parcelize

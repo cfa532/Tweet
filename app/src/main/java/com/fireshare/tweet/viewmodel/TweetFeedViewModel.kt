@@ -161,8 +161,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 sinceTimestamp
                             ).collect { tweets ->
                                 _tweets.update { list -> (list + tweets)
-                                        .distinctBy { it.mid }
-                                        .sortedByDescending { it.timestamp }
+                                    .filterNot { it.isPrivate }
+                                    .distinctBy { it.mid }
+                                    .sortedByDescending { it.timestamp }
                                 }
                             }
                         }
@@ -182,6 +183,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 HproseInstance.getTweetList(uid, tweets.value, startTimestamp.longValue, endTimestamp.longValue)
                     .collect { tweets ->
                         _tweets.update { list -> (list + tweets)
+                            .filterNot { it.isPrivate }
                             .distinctBy { it.mid }
                             .sortedByDescending { it.timestamp } }
                     }
@@ -287,15 +289,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
                                     // add tweet to TweetFeedViewModel's list
                                     addTweetToFeed(tweet)
-
+                                    // notify user the result of tweet upload
                                     Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
-//                                    (context as? LifecycleOwner)?.lifecycleScope?.launch {
-//                                        SnackbarController.sendEvent(
-//                                            event = SnackbarEvent(
-//                                                message = context.getString(R.string.tweet_uploaded)
-//                                            )
-//                                        )
-//                                    }
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("UploadTweet").e("$e")
