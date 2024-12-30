@@ -8,6 +8,7 @@ import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessageDao
 import com.fireshare.tweet.datamodel.ChatSessionDao
 import com.fireshare.tweet.navigation.SharedViewModel
+import com.fireshare.tweet.service.SearchViewModel
 import com.fireshare.tweet.viewmodel.BottomBarViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.Module
@@ -23,6 +24,12 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideSearchViewModel(): SearchViewModel {
+        return SearchViewModel()
+    }
+
+    @Provides
+    @Singleton
     fun provideTweetFeedViewModel(): TweetFeedViewModel {
         return TweetFeedViewModel()
     }
@@ -35,7 +42,7 @@ object AppModule {
         )
     }
 
-   @Provides
+    @Provides
     @Singleton
     fun provideBadgeViewModel(): BottomBarViewModel {
         return BottomBarViewModel()

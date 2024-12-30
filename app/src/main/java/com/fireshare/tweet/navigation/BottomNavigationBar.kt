@@ -4,9 +4,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -61,6 +63,13 @@ fun BottomNavigationBar(
             selectedIcon = Icons.Filled.Create,
             unselectedIcon = Icons.Outlined.Create,
             hasNews = true
+        ),
+        BottomNavigationItem(
+            title = "Search",
+            route = NavTweet.Search,
+            selectedIcon = Icons.Filled.Search,
+            unselectedIcon = Icons.Outlined.Search,
+            hasNews = false
         )
     )
     NavigationBar {

@@ -31,6 +31,9 @@ sealed interface NavTweet {
     ) : NavTweet
 
     @Serializable
+    data object Search : NavTweet
+
+    @Serializable
     data object ComposeTweet : NavTweet
 
     @Serializable

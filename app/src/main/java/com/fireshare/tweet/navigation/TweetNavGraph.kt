@@ -26,6 +26,7 @@ import com.fireshare.tweet.profile.FollowerScreen
 import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.UserProfileScreen
+import com.fireshare.tweet.service.SearchScreen
 import com.fireshare.tweet.tweet.ComposeCommentScreen
 import com.fireshare.tweet.tweet.ComposeTweetScreen
 import com.fireshare.tweet.tweet.TweetDetailScreen
@@ -186,6 +187,9 @@ fun TweetNavGraph(
             composable<NavTweet.Follower> {
                 val user = it.toRoute<NavTweet.Following>()
                 FollowerScreen(user.userId, sharedViewModel.appUserViewModel)
+            }
+            composable<NavTweet.Search> {
+                SearchScreen()
             }
             /**
              * Deeplink carries the tweetId and authorId only.
