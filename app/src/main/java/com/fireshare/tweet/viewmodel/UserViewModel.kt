@@ -208,7 +208,9 @@ class UserViewModel @AssistedInject constructor(
         }
         // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
         _topTweets.update {
-            pinnedTweets.toList().distinctBy { it.mid }
+            pinnedTweets.toList()
+                .filterNot { it.isPrivate && it.authorId != appUser.mid }
+                .distinctBy { it.mid }
                 .sortedByDescending { it.timestamp }
         }
         initState.value = false
@@ -236,7 +238,9 @@ class UserViewModel @AssistedInject constructor(
             }
         }
         _topTweets.update {
-            pinnedTweets.toList().distinctBy { it.mid }
+            pinnedTweets.toList()
+                .filterNot { it.isPrivate && it.authorId != appUser.mid }
+                .distinctBy { it.mid }
                 .sortedByDescending { it.timestamp }
         }
     }
