@@ -61,4 +61,5 @@
     <string name="login_error">用户名或密码错误</string>
     <string name="comment_added">评论已添加</string>
     <string name="confirm_pwd">请确认密码</string>
+    <string name="use_current_pswd">保持现有密码</string>
 </resources>

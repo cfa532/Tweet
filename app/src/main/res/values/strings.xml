@@ -60,4 +60,5 @@
     <string name="login_error">Wrong username or password</string>
     <string name="comment_added">Comment added</string>
     <string name="confirm_pwd">Please confirm password</string>
+    <string name="use_current_pswd">Keep current password</string>
 </resources>

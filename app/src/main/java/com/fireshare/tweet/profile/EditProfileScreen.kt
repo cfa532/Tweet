@@ -146,7 +146,9 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.onPasswordChange(it) },
-                    label = { Text(stringResource(R.string.password)) },
+                    label = { Text(
+                        if (appUser.mid == TW_CONST.GUEST_ID) stringResource(R.string.password)
+                        else stringResource(R.string.use_current_pswd) ) },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
@@ -164,7 +166,7 @@ fun EditProfileScreen(
                     OutlinedTextField(
                         value = confirm.value,
                         onValueChange = { confirm.value = it },
-                        label = { Text("Confirm password") },
+                        label = { Text(stringResource(R.string.confirm_pwd)) },
                         modifier = Modifier
                             .padding(top = 8.dp)
                             .fillMaxWidth()

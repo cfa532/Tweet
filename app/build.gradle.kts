@@ -19,8 +19,8 @@ android {
         applicationId = "com.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 14    // Google Play store version code
-        versionName = "22"   // compared with App Mimei version to check for upgrade.
+        versionCode = 15    // Google Play store version code
+        versionName = "23"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
