@@ -3,12 +3,14 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.text.toLowerCase
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
+import com.fireshare.tweet.HproseInstance.getUserId
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.TweetApplication
@@ -304,25 +306,36 @@ class UserViewModel @AssistedInject constructor(
      * Do NOT update appUser, wait for the new user to login.
      * */
     suspend fun register(context: Context, popBack: () -> Unit) {
-        if (username.value?.isEmpty() == true
-            || password.value.isEmpty()
-        ) {
-            var message = ""
-            if (username.value?.isEmpty() == true) {
-                message = context.getString(R.string.username_required)
-            } else if (password.value.isEmpty()) {
-                message = context.getString(R.string.password_required)
-            }
-            val event = SnackbarEvent(
-                message = message
-            )
-            showSnackbar(event)
-            return
-        }
-
         isLoading.value = true
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-            // Register new account. Find IP of desired node. User can change its value to appoint
+            /**
+             * Register a new user. Check username and password first.
+             * */
+            if (username.value?.isEmpty() == true
+                || password.value.isEmpty()
+            ) {
+                var message = ""
+                if (username.value?.isEmpty() == true) {
+                    message = context.getString(R.string.username_required)
+                } else if (password.value.isEmpty()) {
+                    message = context.getString(R.string.password_required)
+                }
+                isLoading.value = false
+                val event = SnackbarEvent(
+                    message = message
+                )
+                showSnackbar(event)
+                return
+            }
+            // check if the name has been taken.
+            // !!! Potentially username clash may happen!!!
+            val userId = getUserId(username.value!!) ?: return
+            getUser(userId)?.let {
+                showSnackbar(SnackbarEvent(message = context.getString(R.string.username_taken)))
+                isLoading.value = false
+                return
+            }
+            // Find IP of desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
@@ -334,7 +347,7 @@ class UserViewModel @AssistedInject constructor(
         }
         val user = appUser.copy(
             name = name.value, hostIds = listOf(hostId.value),
-            username = username.value, password = password.value,
+            username = username.value!!.lowercase(), password = password.value,
             profile = profile.value, avatar = appUser.avatar
         )
         HproseInstance.setUserData(user)?.let { ret ->

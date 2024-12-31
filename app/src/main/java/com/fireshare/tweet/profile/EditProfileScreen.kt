@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +49,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
@@ -68,6 +71,8 @@ fun EditProfileScreen(
     val context = LocalContext.current
     val username by viewModel.username
     val password by viewModel.password
+    val confirm = remember { mutableStateOf(password) }
+    val showConfirm = remember { mutableStateOf(false) }
     val name by viewModel.name
     val profile by viewModel.profile
     val hostId by viewModel.hostId
@@ -86,6 +91,13 @@ fun EditProfileScreen(
     val scrollState = rememberScrollState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    LaunchedEffect(password) {
+        if (password.isNotEmpty()) {
+            showConfirm.value = true
+        } else {
+            showConfirm.value = false
+        }
+    }
     LaunchedEffect(Unit) {
         keyboardController?.show()
         viewModel.onPasswordChange("")
@@ -128,7 +140,8 @@ fun EditProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
-                    singleLine = true
+                    singleLine = true,
+                    enabled = appUser.mid == TW_CONST.GUEST_ID  // register new user
                 )
                 OutlinedTextField(
                     value = password,
@@ -147,6 +160,26 @@ fun EditProfileScreen(
                     },
                     singleLine = true
                 )
+                if (showConfirm.value) {
+                    OutlinedTextField(
+                        value = confirm.value,
+                        onValueChange = { confirm.value = it },
+                        label = { Text("Confirm password") },
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val image =
+                                if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
+                            IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
+                                Icon(imageVector = image, contentDescription = null)
+                            }
+                        },
+                        singleLine = true,
+                    )
+                }
                 OutlinedTextField(
                     value = name ?: "",
                     onValueChange = { viewModel.onNameChange(it) },
@@ -181,6 +214,14 @@ fun EditProfileScreen(
             Button(
                 onClick = {
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        if (password.isNotEmpty() && password != confirm.value) {
+                            val event = SnackbarEvent(
+                                message = context.getString(R.string.confirm_pwd)
+                            )
+                            viewModel.isLoading.value = false
+                            viewModel.showSnackbar(event)
+                            return@launch
+                        }
                         viewModel.register(context) {
                             val event = SnackbarEvent(
                                 message = context.getString(R.string.registration_ok)

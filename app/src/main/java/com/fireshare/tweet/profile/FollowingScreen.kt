@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
+fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIndex: Int = 0)
 {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -99,7 +99,7 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 1) }
+        bottomBar = { BottomNavigationBar(navController, bottomBarIndex) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding))
         {
@@ -159,7 +159,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
             ) {
                 Column {
                     Text(
-                        text = "${user.value?.name}",
+                        text = user.value?.name ?: "No One",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -177,7 +177,7 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
                 }
             }
             Text(
-                text = "${user.value?.profile}",
+                text = user.value?.profile ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )

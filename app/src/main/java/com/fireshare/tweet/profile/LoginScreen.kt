@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +66,9 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
     val isLoading by viewModel.isLoading
     val loginError by viewModel.loginError
     val scrollState = rememberScrollState()
+    LaunchedEffect(Unit) {
+        viewModel.loginError.value = ""
+    }
 
     Column(
         modifier = Modifier

@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
+fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIndex: Int = 0)
 {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -97,7 +97,7 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 1) }
+        bottomBar = { BottomNavigationBar(navController, bottomBarIndex) }
     ) { innerPadding ->
         val followersOfProfile by viewModel.fans.collectAsState()
 
@@ -159,7 +159,7 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
             ) {
                 Column {
                     Text(
-                        text = "${user.value?.name}",
+                        text = user.value?.name ?: "No One",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -172,7 +172,7 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
                 ToggleFollowerButton(userId, appUserViewModel)
             }
             Text(
-                text = "${user.value?.profile}",
+                text = user.value?.profile ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
