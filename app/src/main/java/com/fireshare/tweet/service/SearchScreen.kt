@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    viewModel: SearchViewModel = hiltViewModel(),
+    viewModel: SearchViewModel,
     selectedBottomBarItemIndex: Int = 3
 ) {
     val searchQuery = remember { mutableStateOf("") }
@@ -99,7 +100,8 @@ fun SearchScreen(
                     value = searchQuery.value,
                     onValueChange = { searchQuery.value = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Search") },
+                    placeholder = { Text("Search @username or #hashtag",
+                        modifier = Modifier.alpha(0.5f)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = {
