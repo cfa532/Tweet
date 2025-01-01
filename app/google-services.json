@@ -23,6 +23,44 @@
           "other_platform_oauth_client": []
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:22577482908:android:22d43aea9b6639b4f17159",
+        "android_client_info": {
+          "package_name": "com.fireshare.tweet.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArNsp4cuFOcrQSls6HlWOcnMxI42dG7v8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:22577482908:android:6dc0a6b3e698cecbf17159",
+        "android_client_info": {
+          "package_name": "com.fireshare.tweet.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArNsp4cuFOcrQSls6HlWOcnMxI42dG7v8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"
