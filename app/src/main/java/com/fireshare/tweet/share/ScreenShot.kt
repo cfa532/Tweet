@@ -19,6 +19,11 @@ import com.google.zxing.common.BitMatrix
 import java.io.File
 import java.io.FileOutputStream
 
+/**
+ * @param activity The activity from which the screenshot is captured.
+ * @param qrText will be encoded into QR code.
+ * @param callback process the screenshot with QR code at right lower corner.
+ * */
 fun captureScreenshotWithQRCode(activity: Activity, qrText: String, callback: (Bitmap?) -> Unit) {
     captureScreenshot(activity) { screenshot ->
         if (screenshot != null && screenshot.config != null)  {
