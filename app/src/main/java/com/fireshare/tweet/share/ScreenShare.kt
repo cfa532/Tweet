@@ -5,6 +5,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -43,16 +45,20 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.BuildConfig
+import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.MediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 @Composable
 fun ShareScreenshotButton(viewModel: TweetViewModel) {
@@ -76,9 +82,8 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
             }
         } else {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                val rand = (0..1).random()
                 contentToShare = "${appUser.baseUrl}/entry?mid=${BuildConfig.APP_ID_HASH}" +
-                        "&ver=last&r=$rand#/tweet/${tweet.mid}/${tweet.authorId}"
+                        "&ver=last&r=${Random.nextFloat()}#/tweet/${tweet.mid}/${tweet.authorId}"
                 showBottomSheet = true
             }
         }
@@ -108,6 +113,7 @@ fun ShareBottomSheet(
     var selectedApplication by remember { mutableStateOf<String?>(null) } // Store selected application
     val bottomSheetState = rememberModalBottomSheetState()
     val shareText = remember { mutableStateOf(contentToShare) }
+    val tweet by viewModel.tweetState.collectAsState()
 
     val shareIntent = Intent().apply {
         action = Intent.ACTION_SEND
@@ -129,11 +135,29 @@ fun ShareBottomSheet(
 
     val shareOptions = listOf(
         ShareOption(getString(context, R.string.screenshot), painterResource(R.drawable.ic_camera_2)) {
-            captureScreenshotWithQRCode(context as Activity, shareText.value) {
-                if (it != null) {
-                    val file = saveBitmapToFile(context, it, "screenshot${System.currentTimeMillis()}.png")
-                    shareImage(context, file)
-                    onDismiss()
+            captureScreenshot(context as Activity) {bitmap ->
+                if (bitmap == null) return@captureScreenshot
+                val newBitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, false)
+                val fileName = "screenshot${System.currentTimeMillis()}.png"
+                val file = saveBitmapToFile(context, newBitmap, fileName)
+                viewModel.viewModelScope.launch {
+                    val map = HproseInstance.checkUpgrade() ?: return@launch
+                    HproseInstance.uploadToIPFS(context, Uri.fromFile(file))?.let {
+                        it.type = MediaType.Image
+                        HproseInstance.uploadTweet(
+                            Tweet(mid = it.mid,
+                                authorId = appUser.mid,
+                                content = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}",
+                                attachments = listOf(it))
+                        )?.let { newTweet ->
+                            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            shareText.value = "http://${map["domain"]}/tweet/${newTweet.mid}/${newTweet.authorId}"
+                            val clip = ClipData.newPlainText("Shared Text", shareText.value)
+                            clipboardManager.setPrimaryClip(clip)
+                        }
+                    }
+//                    shareImage(context, file)
+//                    onDismiss()
                 }
             }
         },
