@@ -3,7 +3,6 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.text.toLowerCase
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,10 +10,9 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.getUserId
+import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetApplication
-import com.fireshare.tweet.TweetApplication.Companion.preferenceHelper
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
@@ -71,7 +69,6 @@ class UserViewModel @AssistedInject constructor(
     private var endTimestamp = startTimestamp - THIRTY_DAYS_IN_MILLIS   // previous time
 
     // variable for login management
-    private val preferencesHelper = TweetApplication.preferenceHelper
     var username = mutableStateOf(user.value.username)
     var password = mutableStateOf("")
     var name = mutableStateOf(user.value.name)
@@ -264,7 +261,7 @@ class UserViewModel @AssistedInject constructor(
                 loginError.value = ret.second.toString()
             } else {
                 appUser = ret.first as User
-                preferencesHelper.setUserId(appUser.mid)
+                preferenceHelper.setUserId(appUser.mid)
                 savedStateHandle["user"] = appUser
                 username.value = user.value.username
                 name.value = appUser.name ?: ""
@@ -280,7 +277,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
      suspend fun logout(popBack: () -> Unit) {
-         preferencesHelper.setUserId(null)
+         preferenceHelper.setUserId(null)
          appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
          /**
           * Do NOT clear the UserViewModel object. It will be reused by other users.

@@ -47,9 +47,9 @@ import java.util.regex.Pattern
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
 
-    private lateinit var preferenceHelper: PreferenceHelper
-    lateinit var appUser: User    // current user object
     private var appId: MimeiId = BuildConfig.APP_ID     // placeholder, overwritten later
+    lateinit var preferenceHelper: PreferenceHelper
+    lateinit var appUser: User
 
     // get the first user account, or a list of accounts.
     fun getAlphaIds(): List<MimeiId> {
@@ -67,10 +67,11 @@ object HproseInstance {
         }
     }
 
-    suspend fun init(context: Context, preferenceHelper: PreferenceHelper) {
-        this.preferenceHelper = preferenceHelper
-        chatDatabase = ChatDatabase.getInstance(context.applicationContext)
-        tweetCache = TweetCacheDatabase.getInstance(context.applicationContext)
+    suspend fun init(context: Context) {
+        this.preferenceHelper = PreferenceHelper(context)
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${preferenceHelper.getAppUrl()!!}")
+        chatDatabase = ChatDatabase.getInstance(context)
+        tweetCache = TweetCacheDatabase.getInstance(context)
 
         initAppEntry()
     }

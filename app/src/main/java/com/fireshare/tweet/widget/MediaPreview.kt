@@ -91,8 +91,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
+import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
-import com.fireshare.tweet.TweetApplication
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -273,7 +273,6 @@ fun VideoPreview(
     goto: (Int) -> Unit     // action to be performed when video is closed.
 ) {
     val context = LocalContext.current
-    val preferenceHelper = TweetApplication.preferenceHelper
 
     var isVideoVisible by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(false) }

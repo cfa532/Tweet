@@ -24,9 +24,8 @@ class TweetApplication : Application(){
 
     override fun onCreate() {
         super.onCreate()
-        preferenceHelper = PreferenceHelper(this)
         initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@TweetApplication, preferenceHelper)
+            HproseInstance.init(this@TweetApplication)
         }
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
@@ -48,10 +47,6 @@ class TweetApplication : Application(){
             ExistingPeriodicWorkPolicy.KEEP,
             cleanUpRequest
         )
-    }
-
-    companion object {
-        lateinit var preferenceHelper: PreferenceHelper
     }
 
 //    @Inject
