@@ -131,9 +131,11 @@ fun TweetItem(
                         // Tweet header: Icon, name, timestamp, more actions
                         TweetItemHeader(viewModel, parentEntry)
 
-                        if (!tweet.content.isNullOrEmpty()) {
-                            SelectableText(tweet.content!!, maxLines = 10,
-                                modifier = Modifier.padding(start = 16.dp)
+                        tweet.content?.let {
+                            SelectableText(it,
+                                maxLines = 10,
+                                modifier = Modifier
+                                    .padding(start = 16.dp)
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     HproseInstance.getUserId(username)?.let {

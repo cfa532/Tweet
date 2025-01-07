@@ -54,6 +54,7 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.tweet.SelectableText
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -256,9 +257,8 @@ fun EditProfileScreen(
                 .padding(start = 32.dp, bottom = 16.dp)
                 .alpha(0.2f)
         ) {
-            Text(
-                text = "uid: ${user.mid} ${user.baseUrl}",
-                color = MaterialTheme.colorScheme.secondary,
+            SelectableText(
+                text = "${user.mid} ${user.baseUrl}",
             )
         }
     }
