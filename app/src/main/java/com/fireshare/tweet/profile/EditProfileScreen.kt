@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -65,10 +66,10 @@ import kotlinx.coroutines.withContext
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
+    context: Context,
     viewModel: UserViewModel
 ) {
     val focusRequester = remember { FocusRequester() }
-    val context = LocalContext.current
     val username by viewModel.username
     val password by viewModel.password
     val confirm = remember { mutableStateOf(password) }
