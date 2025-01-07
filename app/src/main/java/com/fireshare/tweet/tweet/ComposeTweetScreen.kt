@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Environment
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +48,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -141,6 +143,9 @@ fun ComposeTweetScreen(
             Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
         }
     }
+    // manually prevent fast continuous click of a button
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+    val debounceTime = 500L
 
     Scaffold(
         topBar = {
@@ -182,7 +187,11 @@ fun ComposeTweetScreen(
                                     selectedAttachments,
                                     isPrivate
                                 )
-                                navController.popBackStack()
+                                val currentTime = SystemClock.elapsedRealtime()
+                                if (currentTime - lastClickTime > debounceTime) {
+                                    navController.popBackStack()
+                                    lastClickTime = currentTime
+                                }
                             }
                         }, modifier = Modifier
                             .padding(horizontal = 16.dp) // Add padding for spacing

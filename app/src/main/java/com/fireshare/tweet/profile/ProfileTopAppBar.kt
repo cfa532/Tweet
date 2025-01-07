@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,6 +79,10 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
 
+    // manually prevent fast continuous click of a button
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+    val debounceTime = 500L
+
     LargeTopAppBar(
         title = {
             Row(
@@ -115,7 +121,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }
         },
         navigationIcon = {
-            IconButton(onClick = { navController.popBackStack() }) {
+            IconButton(onClick = {
+                val currentTime = SystemClock.elapsedRealtime()
+                if (currentTime - lastClickTime > debounceTime) {
+                    navController.popBackStack()
+                    lastClickTime = currentTime
+                }
+            }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",

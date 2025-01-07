@@ -124,8 +124,8 @@ fun TweetDetailBody(
                     .padding(start = 0.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
-                    if (!tweet.content.isNullOrEmpty()) {
-                        SelectableText(tweet.content!!,
+                     tweet.content?.let {
+                        SelectableText(it,
                             modifier = Modifier.padding(bottom = 8.dp)
                         ) { username ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {

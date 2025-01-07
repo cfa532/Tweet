@@ -1,5 +1,6 @@
 package com.fireshare.tweet.service
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,8 +24,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -59,6 +62,8 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
     val navController = LocalNavController.current
     val searchUsers by viewModel.searchUsers.collectAsState()
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+    val debounceTime = 500L
 
     Scaffold(
         topBar = {
@@ -73,8 +78,14 @@ fun SearchScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() })
-                    {
+                    IconButton(onClick = {
+                        // manually prevent fast continuous click of a button
+                        val currentTime = SystemClock.elapsedRealtime()
+                        if (currentTime - lastClickTime > debounceTime) {
+                            navController.popBackStack()
+                            lastClickTime = currentTime
+                        }
+                    } ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
