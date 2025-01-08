@@ -308,31 +308,25 @@ class UserViewModel @AssistedInject constructor(
             /**
              * Register a new user. Check username and password first.
              * */
-            if (username.value?.isEmpty() == true
-                || password.value.isEmpty()
-            ) {
-                var message = ""
-                if (username.value?.isEmpty() == true) {
-                    message = context.getString(R.string.username_required)
-                } else if (password.value.isEmpty()) {
-                    message = context.getString(R.string.password_required)
-                }
+            if (username.value.isNullOrEmpty()) {
+                showSnackbar(SnackbarEvent(message = context.getString(R.string.username_required)))
                 isLoading.value = false
-                val event = SnackbarEvent(
-                    message = message
-                )
-                showSnackbar(event)
+                return
+            }
+            if (password.value.isEmpty()) {
+                showSnackbar(SnackbarEvent(message = context.getString(R.string.password_required)))
+                isLoading.value = false
                 return
             }
             // check if the name has been taken.
-            // !!! Potentially username clash may happen!!!
+            // !!! Potential username clash may happen!!!
             val userId = getUserId(username.value!!) ?: return
             getUser(userId)?.let {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.username_taken)))
                 isLoading.value = false
                 return
             }
-            // Find IP of desired node. User can change its value to appoint to
+            // Find IP of the desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")

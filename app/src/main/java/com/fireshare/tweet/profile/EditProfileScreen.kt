@@ -94,11 +94,7 @@ fun EditProfileScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(password) {
-        if (password.isNotEmpty()) {
-            showConfirm.value = true
-        } else {
-            showConfirm.value = false
-        }
+        showConfirm.value = password.isNotEmpty()
     }
     LaunchedEffect(Unit) {
         keyboardController?.show()
