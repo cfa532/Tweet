@@ -306,7 +306,7 @@ fun TweetDropdownMenuItems(
                             originTweetViewModel.refreshTweet()
                         }
                     }
-                    // if current route is TweetDetail. Go to TweetFeed
+                    // if current route is TweetDetail. Go back to TweetFeed
                     if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                         withContext(Dispatchers.Main) {
                             navController.popBackStack()

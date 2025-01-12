@@ -197,6 +197,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // remove from userViewModel's feed
         tweetActionListener.onTweetDeleted(tweet.mid)
         _tweets.update { currentTweets ->
+            tweetCache.tweetDao().deleteCachedTweet(tweet.mid)
             currentTweets.filterNot { it.mid == tweet.mid }
         }
         HproseInstance.delTweet(tweet) {
