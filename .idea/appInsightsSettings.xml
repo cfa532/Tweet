@@ -23,8 +23,8 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.fireshare.tweet" />
-                  <option name="mobileSdkAppId" value="1:22577482908:android:898b5486e8e12b9ef17159" />
+                  <option name="appId" value="com.fireshare.tweet.debug" />
+                  <option name="mobileSdkAppId" value="1:22577482908:android:22d43aea9b6639b4f17159" />
                   <option name="projectId" value="tweet-c64e9" />
                   <option name="projectNumber" value="22577482908" />
                 </ConnectionSetting>
