@@ -339,7 +339,7 @@ class UserViewModel @AssistedInject constructor(
         val user = appUser.copy(
             name = name.value, hostIds = listOf(hostId.value),
             username = username.value!!.lowercase(), password = password.value,
-            profile = profile.value, avatar = appUser.avatar
+            profile = profile.value?.trim(), avatar = appUser.avatar
         )
         HproseInstance.setUserData(user)?.let { ret ->
             if (ret["status"] == "success") {

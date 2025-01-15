@@ -229,7 +229,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             onValueChange = { viewModel.textState.value = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp, max = 150.dp)
+                .heightIn(max = 150.dp)
                 .padding(0.dp),
             placeholder = { Text("Type a message...") },
             keyboardOptions = KeyboardOptions.Default.copy(

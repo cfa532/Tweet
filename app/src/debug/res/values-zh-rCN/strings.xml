@@ -40,7 +40,7 @@
     <string name="show_more">更多>></string>
     <string name="logout">登出</string>
     <string name="login_failed">登录失败，请稍后重试。</string>
-    <string name="profile_update_ok">用户数据更新成功</string>
+    <string name="profile_update_ok">用户数据更新成功，请等几分钟再登录。</string>
     <string name="registration_ok">注册成功</string>
     <string name="username_required">用户名必填</string>
     <string name="password_required">密码必填</string>

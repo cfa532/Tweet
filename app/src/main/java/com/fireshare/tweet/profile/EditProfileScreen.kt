@@ -101,9 +101,7 @@ fun EditProfileScreen(
         viewModel.onPasswordChange("")
         // get hostId if not exists
         if (hostId.isEmpty()) {
-            withContext(Dispatchers.IO) {
-                viewModel.getHostId()
-            }
+            viewModel.getHostId()
         }
     }
 

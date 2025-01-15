@@ -39,7 +39,7 @@
     <string name="show_more">Show more....</string>
     <string name="logout">Logout</string>
     <string name="login_failed">Login failed. Please retry later.</string>
-    <string name="profile_update_ok">User profile updated successfully</string>
+    <string name="profile_update_ok">User profile updated successfully. Please wait a few minutes before login.</string>
     <string name="registration_ok">Registration is successful</string>
     <string name="username_required">Username is required</string>
     <string name="password_required">Password is required</string>
