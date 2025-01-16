@@ -67,9 +67,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun EditProfileScreen(
     navController: NavHostController,
-    context: Context,
     viewModel: UserViewModel
 ) {
+    val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
     val username by viewModel.username
     val password by viewModel.password

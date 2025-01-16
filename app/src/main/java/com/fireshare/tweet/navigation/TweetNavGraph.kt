@@ -141,7 +141,7 @@ fun TweetNavGraph(
                 UserProfileScreen(navController, userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<ProfileEditor> {
-                EditProfileScreen(navController, LocalContext.current, sharedViewModel.appUserViewModel)
+                EditProfileScreen(navController, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
@@ -190,7 +190,7 @@ fun TweetNavGraph(
                 }
             }
             composable<NavTweet.Registration> {
-                EditProfileScreen(navController, LocalContext.current, sharedViewModel.appUserViewModel)
+                EditProfileScreen(navController, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Following> {
                 val user = it.toRoute<NavTweet.Following>()
