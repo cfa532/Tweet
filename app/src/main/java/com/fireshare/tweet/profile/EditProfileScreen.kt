@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -286,14 +287,14 @@ fun AvatarSection(
             IconButton(
                 onClick = { launcher.launch("image/*") },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd) // Align the IconButton to the bottom end
-                    .offset(x = (32).dp, y = (0).dp) // Adjust offset to position it outside the avatar
+                    .align(Alignment.TopEnd) // Align the IconButton to the bottom end
+                    .offset(x = (32).dp, y = (-8).dp) // Adjust offset to position it outside the avatar
             ) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    painter = painterResource(id = R.drawable.ic_photo_plus),
                     contentDescription = "Change avatar",
                     tint = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
         }
