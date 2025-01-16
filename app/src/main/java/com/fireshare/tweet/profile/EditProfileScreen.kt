@@ -14,13 +14,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -269,11 +273,29 @@ fun AvatarSection(
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(onClick = { launcher.launch("image/*") })
+            modifier = Modifier.size(120.dp) // Set a fixed size for the avatar area
         ) {
-            UserAvatar(user, 120)
+            Box(
+                modifier = Modifier
+                    .matchParentSize() // Ensure the avatar fills the parent Box
+                    .clip(CircleShape)
+                    .clickable(onClick = { launcher.launch("image/*") })
+            ) {
+                UserAvatar(user, 120)
+            }
+            IconButton(
+                onClick = { launcher.launch("image/*") },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd) // Align the IconButton to the bottom end
+                    .offset(x = (32).dp, y = (0).dp) // Adjust offset to position it outside the avatar
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Change avatar",
+                    tint = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
