@@ -288,12 +288,12 @@ fun AvatarSection(
                 onClick = { launcher.launch("image/*") },
                 modifier = Modifier
                     .align(Alignment.TopEnd) // Align the IconButton to the bottom end
-                    .offset(x = (32).dp, y = (-8).dp) // Adjust offset to position it outside the avatar
+                    .offset(x = (40).dp, y = (-8).dp) // Adjust offset to position it outside the avatar
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_photo_plus),
                     contentDescription = "Change avatar",
-                    tint = MaterialTheme.colorScheme.primaryContainer,
+                    tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(32.dp)
                 )
             }
