@@ -89,8 +89,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     suspend fun refresh() {
         // get cached followings and load cached tweets.
         val cachedFollowings = tweetCache.tweetDao().getCachedFollowings()?.let {
-            splitJson(it)?: emptyList()
+            splitJson(it)
         }?: emptyList()
+        _tweets.value = emptyList()
         startTimestamp.longValue = System.currentTimeMillis()
         endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
         getTweets(startTimestamp.longValue, endTimestamp.longValue, cachedFollowings)

@@ -59,6 +59,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
@@ -240,8 +241,8 @@ fun MainTopAppBar(
                                 .height(800.dp)
                         ) {
                             item {
-                                Text(
-                                    "Privacy Policy\n" +
+                                Text( "ver:" + BuildConfig.VERSION_NAME +
+                                    "\nPrivacy Policy\n" +
                                             "\n" +
                                             "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
                                             "\n" +
