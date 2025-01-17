@@ -41,7 +41,6 @@ import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.util.Date
 import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
