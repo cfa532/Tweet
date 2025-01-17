@@ -303,12 +303,11 @@ fun ImageModalDialog(
                 getMediaUrl(user.avatar, user.baseUrl)?.let {
                     ImageViewer(it, isPreview = false)
                 }
-                Spacer(modifier = Modifier.height(8.dp)) // Add some space between the image and text
                 Text(
                     text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 8.dp) // Add some padding
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp) // Add some padding
                 )
             }
 
