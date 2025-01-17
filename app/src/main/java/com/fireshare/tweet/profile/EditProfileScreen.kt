@@ -245,17 +245,6 @@ fun EditProfileScreen(
                 modifier = Modifier.align(Alignment.Center)
             )
         }
-        // Display user mid and current base url
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 32.dp, bottom = 16.dp)
-                .alpha(0.2f)
-        ) {
-            SelectableText(
-                text = "${user.mid} ${user.baseUrl}",
-            )
-        }
     }
 }
 

@@ -61,6 +61,7 @@ import com.fireshare.tweet.navigation.ProfileEditor
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.tweet.SelectableText
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
@@ -303,12 +304,17 @@ fun ImageModalDialog(
                 getMediaUrl(user.avatar, user.baseUrl)?.let {
                     ImageViewer(it, isPreview = false)
                 }
-                Text(
-                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
-                    color = Color.Gray,
+                SelectableText(user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp) // Add some padding
+                    color = Color.Gray
                 )
+//                Text(
+//                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
+//                    color = Color.Gray,
+//                    style = MaterialTheme.typography.bodySmall,
+//                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp) // Add some padding
+//                )
             }
 
             IconButton(

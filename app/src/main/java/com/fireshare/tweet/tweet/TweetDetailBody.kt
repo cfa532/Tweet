@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -369,6 +370,8 @@ fun TweetDropdownMenuItems(
 fun SelectableText(text: String,
                    maxLines: Int = Int.MAX_VALUE,
                    modifier: Modifier = Modifier,
+                   style: TextStyle = MaterialTheme.typography.bodyLarge,
+                   color: Color = MaterialTheme.colorScheme.onSurface,
                    callback: (String)->Unit = {})
 {
     // fold text content up to 10 lines. Open it upon user click.
@@ -385,8 +388,8 @@ fun SelectableText(text: String,
                 lineCount = textLayoutResult.lineCount
                 layoutResult = textLayoutResult
             },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = style,
+            color = color,
             modifier = modifier
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
