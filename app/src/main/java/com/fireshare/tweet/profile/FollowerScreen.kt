@@ -62,12 +62,14 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIn
 {
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val viewModel = if (userId == appUser.mid) appUserViewModel
-    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        context as ComponentActivity, key = userId
-    ) { factory ->
-        factory.create(userId)
-    }
+    val viewModel =
+        if (userId == appUser.mid)
+            appUserViewModel
+        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+            context as ComponentActivity, key = userId
+        ) { factory ->
+            factory.create(userId)
+        }
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(

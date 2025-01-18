@@ -49,6 +49,9 @@ sealed interface NavTweet {
     data object Login : NavTweet
 
     @Serializable
+    data object Settings : NavTweet
+
+    @Serializable
     data class UserProfile(val userId: MimeiId) : NavTweet
 
     @Serializable

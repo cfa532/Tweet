@@ -29,6 +29,7 @@ import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.FollowerScreen
 import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
+import com.fireshare.tweet.profile.SystemSettings
 import com.fireshare.tweet.profile.UserProfileScreen
 import com.fireshare.tweet.service.SearchScreen
 import com.fireshare.tweet.service.SearchViewModel
@@ -191,6 +192,9 @@ fun TweetNavGraph(
             }
             composable<NavTweet.Registration> {
                 EditProfileScreen(navController, sharedViewModel.appUserViewModel)
+            }
+            composable<NavTweet.Settings> {
+                SystemSettings(navController, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Following> {
                 val user = it.toRoute<NavTweet.Following>()

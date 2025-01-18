@@ -31,7 +31,7 @@ class PreferenceHelper(context: Context) {
         return sharedPreferences.getString("name", null)
     }
 
-    fun saveAppUrl(baseUrl: String) {
+    fun setAppUrl(baseUrl: String) {
         return sharedPreferences.edit().putString("appUrl", baseUrl).apply()
     }
     fun getAppUrl(): String? {
