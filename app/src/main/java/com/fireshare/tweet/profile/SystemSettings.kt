@@ -136,7 +136,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.White),
                 ) {
-                    val (content, button) = createRefs()
+                    val (_, button) = createRefs()
                     LazyColumn(
                         modifier = Modifier
                             .padding(8.dp)
