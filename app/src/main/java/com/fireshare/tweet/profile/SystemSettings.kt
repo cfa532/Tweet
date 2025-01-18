@@ -2,8 +2,10 @@ package com.fireshare.tweet.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +22,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,25 +36,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.R
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
     val appUser by appUserViewModel.user.collectAsState()
-    var appUrl = remember { HproseInstance.preferenceHelper.getAppUrl() }
     var showDialog by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
 
     Scaffold(
         topBar = {
@@ -84,30 +83,52 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             )
         },
     ) { innerPadding ->
-        Column(modifier = Modifier
+        Column(modifier = Modifier.fillMaxWidth()
             .padding(innerPadding)
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            OutlinedTextField(
-                value = appUrl ?: "",
-                onValueChange = { appUrl = it },
-                label = { Text("App Url") },
+//            var appUrl by remember { mutableStateOf(HproseInstance.preferenceHelper.getAppUrl() ?: "") }
+//            val focusRequester = remember { FocusRequester() }
+//            OutlinedTextField(
+//                value = appUrl ?: "",
+//                onValueChange = { appUrl = it },
+//                label = { Text("App Url") },
+//                modifier = Modifier
+//                    .padding(top = 8.dp)
+//                    .fillMaxWidth()
+//                    .focusRequester(focusRequester),
+//                singleLine = true,
+//            )
+//            Button(onClick = {
+//                HproseInstance.preferenceHelper.setAppUrl(
+//                    appUrl ?: HproseInstance.preferenceHelper.getAppUrl()!!
+//                ) },
+//                modifier = Modifier
+//                    .padding(top = 16.dp)
+//                    .width(intrinsicSize = IntrinsicSize.Max)
+//                    .align(Alignment.CenterHorizontally)
+//            ) {
+//                Text(stringResource(R.string.save))
+//            }
+            var isCachedCleared by remember { mutableStateOf(false) }
+            Row(
                 modifier = Modifier
-                    .padding(top = 8.dp)
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = true
-            )
-            Button(onClick = {
-                HproseInstance.preferenceHelper.setAppUrl(
-                    appUrl ?: HproseInstance.preferenceHelper.getAppUrl()!!
-                ) },
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(intrinsicSize = IntrinsicSize.Max)
-                    .align(Alignment.CenterHorizontally)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(stringResource(R.string.save))
+                Text("Clear all cached data")
+                Button(onClick = {
+                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                        HproseInstance.tweetCache.tweetDao().clearAllCachedTweets()
+                        isCachedCleared = true
+                    } },
+                    enabled = !isCachedCleared
+                ) {
+                    Text("Clear")
+                }
             }
             Spacer(modifier = Modifier.weight(1f))
             Text("Privacy policy",
@@ -116,14 +137,13 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     .background(MaterialTheme.colorScheme.onTertiary,
                         shape = RoundedCornerShape(12.dp))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
-                    .width(intrinsicSize = IntrinsicSize.Max)
-                    .align(Alignment.CenterHorizontally),
+                    .width(intrinsicSize = IntrinsicSize.Max),
                 color = MaterialTheme.colorScheme.primary
             )
             Text("Version: ${BuildConfig.VERSION_NAME}",
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+                modifier = Modifier
                     .padding(top = 8.dp))
         }
         if (showDialog) {
