@@ -415,15 +415,15 @@ object HproseInstance {
     suspend fun getFollowings(user: User): List<MimeiId>? { return withRetry {
         try {
             if (user.mid != TW_CONST.GUEST_ID) {
-                val method = "get_followings"
+                val method = "get_followings_sorted"
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
-                    val gson = Gson()
-                    user.followingList =
-                        gson.fromJson(response.bodyAsText(), object : TypeToken<List<MimeiId>>() {}.type)
-                    return@withRetry user.followingList
+                    val followings = Gson().fromJson(response.bodyAsText(),
+                        object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
+                    return@withRetry followings.sortedByDescending { it["Value"] as Double }
+                        .map { it["Field"] as MimeiId }
                 }
             }
         } catch (e: Exception) {
@@ -433,19 +433,23 @@ object HproseInstance {
         null
     } }
 
-    // get fans list of the user
+    // get fans list of an user
     suspend fun getFans(user: User): List<MimeiId>? { return withRetry {
         try {
             if (user.mid != TW_CONST.GUEST_ID) {
-                val method = "get_followers"
+                val method = "get_followers_sorted"
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
-                    val gson = Gson()
-                    user.fansList =
-                        gson.fromJson(response.bodyAsText(), object : TypeToken<List<MimeiId>>() {}.type)
-                    return@withRetry user.fansList
+                    val fans = Gson().fromJson(response.bodyAsText(),
+                        object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
+                    /**
+                     * Map is Redis Hset<Field, Value>, where Field is an user Id
+                     * Value is the timestamp of the follower.
+                     * */
+                    return@withRetry fans.sortedByDescending { it["Value"] as Double }
+                        .map { it["Field"] as MimeiId }
                 }
             }
         } catch (e: Exception) {

@@ -224,11 +224,11 @@ data class CachedTweet(
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
 
-// cache for appUser's followings list
+// cache of appUser's followings list
 @Entity
 data class UserData(
-    @PrimaryKey val userId: MimeiId = appUser.mid, // Assuming appUser.mid is the user ID
-    val followings: List<MimeiId> = emptyList() // Store followings as a list
+    @PrimaryKey val userId: MimeiId = appUser.mid,
+    val followings: List<MimeiId> = emptyList()
 )
 @Entity
 data class TweetMidList(

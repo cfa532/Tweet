@@ -110,7 +110,6 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getHostId() ?: ""
         } else user.value.hostIds!![0]
     }
-
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
         // For now, user avatar can only be image.
@@ -125,11 +124,10 @@ class UserViewModel @AssistedInject constructor(
         }
         isLoading.value = false
     }
-
     suspend fun toggleFollow(subjectUserId: MimeiId,
                              appUserId: MimeiId = appUser.mid,
                              updateTweetFeed: (Boolean) -> Unit) {
-        // update the interface without waiting for the server to respond.
+        // update UI data without waiting for the server to respond.
         _followings.update { list ->
             if (list.contains(subjectUserId)) {
                 list.filter { id -> id != subjectUserId }
@@ -146,7 +144,6 @@ class UserViewModel @AssistedInject constructor(
             updateTweetFeed(isFollowing)    // callback to update tweet feed
         }
     }
-
     suspend fun refreshFollowingsAndFans() {
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
