@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
@@ -82,17 +83,12 @@ fun TweetItemBody(
                         }
                     }
                     // there are attached media files
-                    if (!tweet.attachments.isNullOrEmpty()) {
+                    if ( ! tweet.attachments.isNullOrEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
-                                .wrapContentHeight()
-                                .heightIn(min = 100.dp, max = 400.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.surfaceTint,
-                                    shape = MaterialTheme.shapes.medium
-                                )
+                                .heightIn(min = 24.dp, max = 400.dp)
                         ) {
                             val mediaItems = tweet.attachments?.map {
                                 MediaItem(

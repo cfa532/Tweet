@@ -337,10 +337,7 @@ fun TweetDropdownMenuItems(
     // Only author can pin the current Tweet to top list
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(
-            modifier = Modifier.alpha(1f)
-//                .padding(top = 4.dp)
-//                .heightIn(max = 30.dp)
-                ,
+            modifier = Modifier.alpha(1f),
             onClick = {
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     appUserViewModel.pinToTop(tweet.mid)
