@@ -127,8 +127,10 @@ fun MediaPreviewGrid(
 ) {    // need to check container width later
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
-    val gridCells = if (mediaItems.size > 1) 2 else 1
-    val maxItems = when (mediaItems.size) {
+    // check if all attachments are audio
+    val isAllAudio = mediaItems.all { it.type == MediaType.Audio }
+    val gridCells = if (isAllAudio) 1 else if (mediaItems.size > 1) 2 else 1
+    val maxItems = if (isAllAudio) 9 else when (mediaItems.size) {
         1 -> 1
         in 2..3 -> 2
         else -> 4
