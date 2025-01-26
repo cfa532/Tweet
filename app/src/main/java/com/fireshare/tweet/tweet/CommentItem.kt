@@ -43,13 +43,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +70,6 @@ fun CommentItem(
         factory.create(comment)
     }
     val author = comment.author
-    val parentTweet by parentTweetViewModel.tweetState.collectAsState()
 
     Column(
         modifier = Modifier
@@ -132,19 +129,15 @@ fun CommentItem(
                     }
                 }
                 // attached media files
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .heightIn(max = 400.dp)
-                ) {
-                    val mediaItems = comment.attachments?.mapNotNull { attachment ->
-                        comment.author?.baseUrl?.let { baseUrl ->
-                            val mediaUrl = getMediaUrl(attachment.mid, baseUrl).toString()
-                            MediaItem(mediaUrl, attachment.type)
-                        }
+                comment.attachments?.let {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .heightIn(max = 400.dp)
+                    ) {
+                        MediaPreviewGrid(it, parentTweetViewModel)
                     }
-                    mediaItems?.let { MediaPreviewGrid(it, parentTweetViewModel) }
                 }
             }
         }

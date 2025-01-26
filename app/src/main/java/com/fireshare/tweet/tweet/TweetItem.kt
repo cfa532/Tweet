@@ -33,15 +33,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -146,21 +143,17 @@ fun TweetItem(
                                 }
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 8.dp, top = 4.dp)
-                                .heightIn(max = 800.dp) // Set a specific height for the grid
-                        ) {
-                            val mediaItems = tweet.attachments?.mapNotNull {
-                                tweet.author?.baseUrl?.let { it1 ->
-                                    getMediaUrl(it.mid, it1).toString()
-                                }?.let { it2 -> MediaItem(it2, it.type?: MediaType.Unknown) }
-                            }
-                            if (mediaItems != null) {
-                                MediaPreviewGrid(mediaItems, viewModel)
+                        tweet.attachments?.let {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                                    .heightIn(max = 800.dp) // Set a specific height for the grid
+                            ) {
+                                MediaPreviewGrid(it, viewModel)
                             }
                         }
+
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             tonalElevation = 3.dp,

@@ -1,6 +1,5 @@
 package com.fireshare.tweet.tweet
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,24 +10,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaPreviewGrid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,23 +38,22 @@ fun TweetItemBody(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
-    // fold text content up to 9 lines. Open it upon user click.
 
+    // fold text content up to 9 lines. Open it upon user click.
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 0.dp,
         modifier = Modifier
-            .clickable(onClick = {
-                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
-            })
             .padding(top = 8.dp)
+            .clickable(onClick = {
+                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid) )
+            } )
     ) {
         Column(
             modifier = Modifier
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
-
             // Tweet Header. Icon, name, timestamp, more actions
             TweetItemHeader(viewModel, parentEntry, parentTweet)
 
@@ -83,20 +77,13 @@ fun TweetItemBody(
                         }
                     }
                     // there are attached media files
-                    if ( ! tweet.attachments.isNullOrEmpty()) {
+                    tweet.attachments?.let {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)
-                                .heightIn(min = 24.dp, max = 400.dp)
+                                .heightIn(min = 30.dp)
                         ) {
-                            val mediaItems = tweet.attachments?.map {
-                                MediaItem(
-                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                    it.type
-                                )
-                            } ?: emptyList()
-                            MediaPreviewGrid(mediaItems, viewModel)
+                            MediaPreviewGrid(it, viewModel)
                         }
                     }
                     /**

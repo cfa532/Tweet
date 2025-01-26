@@ -59,6 +59,7 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
@@ -138,11 +139,7 @@ fun TweetDetailBody(
                             }
                         }
                     }
-                    val mediaItems = tweet.attachments?.mapNotNull {
-                        tweet.author?.baseUrl?.let { it1 -> getMediaUrl(it.mid, it1).toString() }
-                            ?.let { it2 -> MediaItem(it2, it.type) }
-                    }
-                    mediaItems?.let {
+                    tweet.attachments?.let {
                         MediaGrid(it, viewModel, navController, gridColumns)
                     }
 
@@ -184,7 +181,7 @@ fun TweetDetailBody(
 
 @Composable
 fun MediaGrid(
-    mediaItems: List<MediaItem>,
+    mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel,
     navController: NavController,
     gridColumns: Int, containerWidth: Dp = 400.dp
@@ -213,14 +210,18 @@ fun MediaGrid(
             itemsIndexed(mediaItems) { index, _ ->
                 MediaItemView(
                     mediaItems,
-                    modifier
-                        .clickable {
-                            val params =
-                                MediaViewerParams(mediaItems, index, tweet.mid)
-                            navController.navigate(
-                                NavTweet.MediaViewer(params)
-                            )
-                        },
+                    modifier.clickable {
+                        val params =MediaViewerParams(
+                            mediaItems.map {
+                                MediaItem(
+                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                    it.type
+                                )
+                            }, index, tweet.mid)
+                        navController.navigate(
+                            NavTweet.MediaViewer(params)
+                        )
+                    },
                     index,
                     0,
                     autoPlay = true,

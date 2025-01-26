@@ -8,10 +8,6 @@ import android.os.Environment
 import android.view.View
 import android.widget.Toast
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,8 +24,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
@@ -47,7 +44,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,13 +52,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -91,7 +85,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
@@ -103,8 +96,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
+import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -122,12 +117,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
 import kotlin.math.max
 
 @Composable
 fun MediaPreviewGrid(
-    mediaItems: List<MediaItem>,
+    mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel,
     containerWidth: Dp = 400.dp
 ) {    // need to check container width later
@@ -148,7 +142,8 @@ fun MediaPreviewGrid(
             .fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        val modifier = if (gridCells == 1) Modifier.fillMaxWidth() else Modifier.size(containerWidth / gridCells)
+        val modifier = if (gridCells == 1) Modifier.fillMaxWidth()
+            else Modifier.size(containerWidth / gridCells)
         var isFirstVideo = false
         itemsIndexed(limitedMediaList) { index, mediaItem ->
             MediaItemView(
@@ -156,7 +151,14 @@ fun MediaPreviewGrid(
                 modifier = modifier
                     .wrapContentSize()
                     .clickable {
-                        val params = MediaViewerParams(mediaItems, index, tweet.mid)
+                        val params = MediaViewerParams(
+                            mediaItems.map {
+                                MediaItem(
+                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                    it.type
+                                )
+                            }, index, tweet.mid
+                        )
                         navController.navigate(NavTweet.MediaViewer(params))
                     },
                 index = index,
@@ -181,7 +183,7 @@ fun MediaPreviewGrid(
 
 @Composable
 fun MediaItemView(
-    mediaItems: List<MediaItem>,
+    mediaItems: List<MimeiFileType>,
     modifier: Modifier = Modifier,
     index: Int,
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
@@ -190,7 +192,13 @@ fun MediaItemView(
     viewModel: TweetViewModel
 ) {
     val tweet by viewModel.tweetState.collectAsState()
-    val mediaItem = mediaItems[index]
+    val attachments = mediaItems.map {
+        MediaItem(
+            getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+            it.type
+        )
+    }
+    val mediaItem = attachments[index]
     val navController = LocalNavController.current
     /**
      * Action to take when the Full Screen button is clicked. Different from image,
@@ -198,7 +206,10 @@ fun MediaItemView(
      * */
     val goto: (Int) -> Unit = { idx: Int ->
         navController.navigate(
-            NavTweet.MediaViewer(MediaViewerParams(mediaItems, idx, tweet.mid)))
+            NavTweet.MediaViewer(MediaViewerParams(
+                attachments, idx, tweet.mid
+            ) )
+        )
     }
 
     Box(
@@ -214,7 +225,7 @@ fun MediaItemView(
                 }
             }
             MediaType.Audio -> {
-                AudioPreview(mediaItem.url, modifier)
+                AudioPreview(mediaItems[index], modifier)
             }
             else -> {       // Handle unknown file type
                 Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
@@ -256,144 +267,31 @@ fun MediaItemView(
 
 @Composable
 fun AudioPreview(
-    url: String,
+    mediaItem: MimeiFileType,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val exoPlayer = remember { createExoPlayer(context, url) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var playbackState by remember { mutableIntStateOf(Player.STATE_IDLE) }
-    var currentPosition by remember { mutableFloatStateOf(0f) }
-    var duration by remember { mutableFloatStateOf(0f) }
-    var showPlayer by remember { mutableStateOf(false) }
-
-    // Prepare and play when the URL changes
-    LaunchedEffect(url) {
-        val mediaItem = androidx.media3.common.MediaItem.fromUri(Uri.parse(url))
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-    }
-
-    // Update playback state
-    LaunchedEffect(exoPlayer) {
-        snapshotFlow { exoPlayer.playbackState }
-            .collect { state ->
-                playbackState = state
-            }
-    }
-
-    // Update isPlaying state
-    LaunchedEffect(playbackState) {
-        isPlaying = when (playbackState) {
-            Player.STATE_BUFFERING,
-            Player.STATE_READY -> exoPlayer.playWhenReady
-            else -> false
-        }
-    }
-
-    // Update current position and duration
-    LaunchedEffect(exoPlayer) {
-        snapshotFlow { exoPlayer.currentPosition }
-            .collect { position ->
-                currentPosition = position.toFloat()
-            }
-    }
-
-    LaunchedEffect(exoPlayer) {
-        snapshotFlow { exoPlayer.duration }
-            .collect { dur ->
-                duration = dur.toFloat()
-            }
-    }
-
-    // Dispose ExoPlayer when the composable leaves the composition
-    DisposableEffect(exoPlayer) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
     Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    isPlaying = !isPlaying
-                    if (isPlaying) {
-                        showPlayer = true
-                        exoPlayer.play()
-                    } else {
-                        showPlayer = false
-                        exoPlayer.pause()
-                    }
+
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                painter = if (isPlaying) painterResource(R.drawable.btn_stop) else painterResource(R.drawable.btn_play),
-                contentDescription = if (isPlaying) "Stop" else "Play",
+                painter = painterResource(R.drawable.btn_play),
+                contentDescription = "Play",
                 modifier = Modifier.size(12.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = url.substringAfterLast('/'),
+                text = mediaItem.fileName ?: mediaItem.mid,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-
-        AnimatedVisibility(
-            visible = showPlayer,
-            enter = fadeIn(animationSpec = tween(durationMillis = 300)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 300))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-            ) {
-                LinearProgressIndicator(
-                    progress = { if (duration > 0) currentPosition / duration else 0f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = formatDuration(currentPosition.toLong()),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                    IconButton(onClick = {
-                        isPlaying = !isPlaying
-                        if (isPlaying) {
-                            exoPlayer.pause()
-                        } else {
-                            exoPlayer.play()
-                        }
-                    }) {
-                        Icon(
-                            painter = if (isPlaying) painterResource(R.drawable.btn_pause) else painterResource(R.drawable.btn_play),
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Text(
-                        text = formatDuration(duration.toLong()),
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-            }
-        }
     }
-}
-
-fun formatDuration(durationMs: Long): String {
-    val totalSeconds = durationMs / 1000 // Correctly convert milliseconds to seconds
-    val minutes = totalSeconds / 60
-    val remainingSeconds = totalSeconds % 60
-    return String.format(Locale.getDefault(), "%02d:%02d", minutes, remainingSeconds)
 }
 
 /**
