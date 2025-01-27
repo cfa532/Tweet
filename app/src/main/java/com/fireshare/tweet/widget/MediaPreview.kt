@@ -100,6 +100,7 @@ import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiFileType
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -227,7 +228,7 @@ fun MediaItemView(
                 }
             }
             MediaType.Audio -> {
-                AudioPreview(mediaItems[index], modifier)
+                AudioPreview(mediaItems[index], modifier, tweet)
             }
             else -> {       // Handle unknown file type
                 Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
@@ -271,13 +272,15 @@ fun MediaItemView(
 fun AudioPreview(
     mediaItem: MimeiFileType,
     modifier: Modifier = Modifier,
+    tweet: Tweet
 ) {
+    val navController = LocalNavController.current
     Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-
+                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
