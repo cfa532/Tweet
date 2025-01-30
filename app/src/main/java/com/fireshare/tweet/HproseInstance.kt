@@ -46,7 +46,7 @@ import java.util.regex.Pattern
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
 
-    private var appId: MimeiId = BuildConfig.APP_ID     // placeholder, overwritten later
+    private var appId: MimeiId = BuildConfig.APP_ID
     lateinit var preferenceHelper: PreferenceHelper
     lateinit var appUser: User
 
@@ -68,7 +68,7 @@ object HproseInstance {
 
     suspend fun init(context: Context) {
         this.preferenceHelper = PreferenceHelper(context)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${preferenceHelper.getAppUrl()!!}")
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${preferenceHelper.getAppUrl()}")
         chatDatabase = ChatDatabase.getInstance(context)
         tweetCache = TweetCacheDatabase.getInstance(context)
 
@@ -81,66 +81,26 @@ object HproseInstance {
     private suspend fun initAppEntry() {
         // make sure no stale data during retry init.
         cachedUsers.clear()
-        val baseUrl = "http://" + preferenceHelper.getAppUrl()!!  // there is a default value
         try {
-            val response: HttpResponse = httpClient.get(baseUrl)
-            /**
-             * retrieve window.Param from page source code of http://base_url
-             * window.setParam({
-             *         CurNode:0,
-             *         log: true,
-             *         ver:"last",
-             *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
-             *         aid: "",
-             *         remote:"::1",
-             *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
-             * })]
-             * */
-            val htmlContent = response.bodyAsText().trimIndent()
-            val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-            val matcher = pattern.matcher(htmlContent as CharSequence)
-            if (matcher.find()) {
-                matcher.group(1)?.let {
-                    val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                    appId = paramMap["mid"].toString()
-
+            getProviders(appId, appUser.baseUrl)?.let {
+                appUser.baseUrl = "http://${getAccessibleIP(it)}"
+                val userId = preferenceHelper.getUserId()
+                if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
                     /**
-                     * The code above makes a call to base URL of the app, get a html page
-                     * and tries to extract appId and host IP addresses from source code.
+                     * If there is a valid userId in preference, this is a login user.
+                     * Initiate current account. Get its IP list and choose the best one,
+                     * and assign it to appUser.baseUrl.
                      * */
-                    Timber.tag("initAppEntry").d("$paramMap")
-                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
-
-                    /**
-                     * addrs is an ArrayList of ArrayList of node's IP address pairs.
-                     * Each pair is an ArrayList of two elements. The first is the IP address,
-                     * and the second is the time spent to get response from the IP.
-                     *
-                     * hostIPs is a list of node's IP that is a Mimei provider for this App.
-                     */
-                    val firstIp = getAccessibleIP(hostIPs)
-                    appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
-                    val userId = preferenceHelper.getUserId()
-                    if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
-                        /**
-                         * If there is a valid userId in preference, this is a login user.
-                         * Initiate current account. Get its IP list and choose the best one,
-                         * and assign it to appUser.baseUrl.
-                         * */
-                        getProviders(userId, "http://$firstIp")?.let { ips ->
-                            appUser = getAccessibleUser(ips, userId) ?: appUser
-                            cachedUsers.add(appUser)
-                            Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
-                        }
-                    } else {
-                        appUser.followingList = getAlphaIds()
+                    getProviders(userId, appUser.baseUrl)?.let { ips ->
+                        appUser = getAccessibleUser(ips, userId) ?: appUser
                         cachedUsers.add(appUser)
-                        Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
+                        Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
                     }
+                } else {
+                    appUser.followingList = getAlphaIds()
+                    cachedUsers.add(appUser)
+                    Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
                 }
-            } else {
-                Timber.tag("initAppEntry").e("No data found within window.setParam()")
-                appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = baseUrl)
             }
         } catch (e: Exception) {
             Timber.tag("initAppEntry").e(e.toString())

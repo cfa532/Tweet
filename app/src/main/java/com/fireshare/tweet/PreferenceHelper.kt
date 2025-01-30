@@ -38,14 +38,6 @@ class PreferenceHelper(context: Context) {
         return sharedPreferences.getString("appUrl", BuildConfig.BASE_URL)
     }
 
-    fun saveKeyPhrase(phrase: String) {
-        sharedPreferences.edit().putString("keyPhrase", phrase).apply()
-    }
-
-    fun getKeyPhrase(): String? {
-        return sharedPreferences.getString("keyPhrase", null)
-    }
-
     fun setSpeakerMute(isMuted: Boolean) {
         sharedPreferences.edit().putBoolean("speakerMuted", isMuted).apply()
     }
