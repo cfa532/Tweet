@@ -19,7 +19,7 @@ import com.fireshare.tweet.datamodel.writableUrl
 import com.fireshare.tweet.datamodel.writableUrl2
 import com.fireshare.tweet.widget.Gadget.getAccessibleIP
 import com.fireshare.tweet.widget.Gadget.getAccessibleUser
-import com.fireshare.tweet.widget.Gadget.getIpAddresses
+import com.fireshare.tweet.widget.Gadget.filterIpAddresses
 import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
@@ -108,7 +108,7 @@ object HproseInstance {
                      * and tries to extract appId and host IP addresses from source code.
                      * */
                     Timber.tag("initAppEntry").d("$paramMap")
-                    val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                    val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
 
                     /**
                      * addrs is an ArrayList of ArrayList of node's IP address pairs.
@@ -298,10 +298,14 @@ object HproseInstance {
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
     suspend fun login(username: String, password: String, context: Context): Pair<User?, String?> { return withRetry {
+        var reason = Pair(null, context.getString(R.string.login_error))
         try {
-            val reason = Pair(null, context.getString(R.string.login_error))
             val userId = getUserId(username) ?: return@withRetry reason
-            val user = getUser(userId) ?: return@withRetry Pair(null, context.getString(R.string.login_failed))
+            val user = getUser(userId)
+            if (user == null) {
+                reason = Pair(null, context.getString(R.string.login_failed))
+                return@withRetry reason
+            }
             val url =
                 "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
             val response = httpClient.get(url)
@@ -315,7 +319,7 @@ object HproseInstance {
             } else reason
         } catch (e: Exception) {
             Timber.tag("Hprose.Login").e("${e.message}")
-            return@withRetry Pair(null, context.getString(R.string.login_failed))
+            return@withRetry reason
         }
     } }
 
@@ -970,7 +974,7 @@ object HproseInstance {
                 if (matcher.find()) {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                        val hostIPs = getIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         getAccessibleUser(hostIPs, userId)?.let { user ->
                             cachedUsers.add(user)
                             return@withRetry user

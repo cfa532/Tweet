@@ -24,6 +24,21 @@ import timber.log.Timber
 import java.net.Inet4Address
 import java.net.InetAddress
 
+/**
+ * Extract host IP from a full IP address.
+ * */
+fun String.getIP(): String? {
+    val ipv4Regex = Regex("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::\\d+)?$")
+    val ipv6Regex = Regex("\\[(.*?)]")
+
+    if (ipv4Regex.matches(this)) {
+        return this
+    }
+
+    val ipv6Match = ipv6Regex.find(this)
+    return ipv6Match?.groupValues?.get(1)
+}
+
 object Gadget {
 
     /**
@@ -100,26 +115,32 @@ object Gadget {
 
     /**
      * Return an array of valid IPs from different serving nodes.
-     * Prefer IPv6 over V4 address
+     * One node one IP. Prefer IPv4 over V6 address.
      * */
-    fun getIpAddresses(nodeList: ArrayList<*>): List<String> {
+    fun filterIpAddresses(nodeList: ArrayList<*>): List<String> {
         val ipAddresses = mutableListOf<String>()
         // iterate over the node list
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
+            var ipv6: String? = null
             var ipv4: String? = null
             // iterate over the node's IP list. Prefer IPv6 address over IPv4.
             nodeIps.forEach lit@{
                 val pair = it as ArrayList<*>;
                 val ip = pair[0].toString()
-                if (InetAddressUtils.isIPv6Address(ip)) {
-                    ipAddresses += ip
-                    ipv4 = null
-                    return@lit
-                } else if (isValidPublicIpAddress(ip))
-                    ipv4 = ip
+                if (InetAddressUtils.isIPv6Address(ip.getIP())) {
+                    ipv6 = ip
+                } else {
+                    if (ip.getIP()?.let { it1 -> isValidPublicIpAddress(it1) } == true) {
+                        ipv4 = ip
+                        ipAddresses += ip
+                        return@lit
+                    }
+                }
             }
-            ipv4?.let { ipAddresses += it }
+            if (ipv4 == null && ipv6 != null) {
+                ipAddresses += ipv6.toString()
+            }
         }
         return ipAddresses
     }
