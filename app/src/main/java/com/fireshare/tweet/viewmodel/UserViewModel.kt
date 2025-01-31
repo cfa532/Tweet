@@ -333,12 +333,12 @@ class UserViewModel @AssistedInject constructor(
                 return
             }
         }
-        val user = appUser.copy(
-            name = name.value, hostIds = listOf(hostId.value),
-            username = username.value!!.lowercase(), password = password.value,
+        var updatedUser = appUser.copy(
+            name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
+            username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value?.trim(), avatar = appUser.avatar
         )
-        HproseInstance.setUserData(user)?.let { ret ->
+        HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
                 val gson = Gson()
                 val type = object : TypeToken<User>() {}.type
@@ -354,7 +354,7 @@ class UserViewModel @AssistedInject constructor(
                     popBack()
                 } else {
                     // update user profile
-                    val updatedUser: User = gson.fromJson(ret["user"].toString(), type)
+                    updatedUser = gson.fromJson(ret["user"].toString(), type)
                     appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )

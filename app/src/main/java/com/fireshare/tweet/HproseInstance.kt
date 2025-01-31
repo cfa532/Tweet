@@ -282,17 +282,17 @@ object HproseInstance {
     } }
 
     /**
-     * Get the node Id of current baseUrl host
+     * Given host url, get the node Id
      * */
-    suspend fun getHostId(): MimeiId? { return withRetry {
-        val url = "${appUser.baseUrl}/getvar?name=hostid"
+    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? { return withRetry {
+        val url = "$host/getvar?name=hostid"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 return@withRetry response.bodyAsText().trim().trim('"').trim(',')
             }
         } catch (e: Exception) {
-            Timber.tag("getHostId").e(e.toString())
+            Timber.tag("getHostId").e("$e $url")
         }
         null
     } }
@@ -320,21 +320,33 @@ object HproseInstance {
         null
     } }
 
-    /**
-     * Register or update user data.
-     * */
     suspend fun setUserData(userObj: User): Map<*, *>? { return withRetry {
-        val url: String
+        var url: String
         val user = userObj.copy(fansList = null, followingList = null)  // remove memory only lists
         if (user.mid == TW_CONST.GUEST_ID) {
-            // register a new User account, with default followings.
+            /**
+             * Register a new user.
+             * */
             user.followingList = getAlphaIds()
             url =
                 "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
                     URLEncoder.encode(Json.encodeToString(user), "utf-8")
                 }"
         } else {
-            // update existing account
+            /**
+             * Update existing user account.
+             * If hostId is changed, check if the new host has the user mimei.
+             * If not, sync user mimei on new node first.
+             * */
+            val newHostId = userObj.hostIds?.first() ?: return@withRetry null
+            if (newHostId != appUser.hostIds?.first()) {
+                val hostIp = getHostIP(newHostId) ?: return@withRetry null
+                val targetUser = getUserData(userObj.mid, hostIp)
+                if (targetUser == null) {
+                    url = "http://$hostIp/entry?aid=$appId&ver=last&entry=sync_user&mid=${appUser.mid}"
+                    httpClient.get(url)
+                }
+            }
             val method = "set_author_core_data"
             url = "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&user=${
                 URLEncoder.encode(Json.encodeToString(user), "utf-8")
@@ -670,7 +682,7 @@ object HproseInstance {
                     if (isFollowing)
                         provide(user)
                     else
-                        unprovide(user)
+                        unProvide(user)
                 }
                 return@withRetry isFollowing
             }
@@ -743,7 +755,7 @@ object HproseInstance {
         }
     } }
 
-    private suspend fun unprovide(user: User, tweetId: MimeiId? = null) { return withRetry {
+    private suspend fun unProvide(user: User, tweetId: MimeiId? = null) { return withRetry {
         val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_unprovide" +
                 "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
         try {
@@ -778,7 +790,7 @@ object HproseInstance {
                 if (hasLiked)
                     provide(tweet.author!!, tweet.mid)
                 else
-                    tweet.author?.let { unprovide(it, tweet.mid) }
+                    tweet.author?.let { unProvide(it, tweet.mid) }
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -811,7 +823,7 @@ object HproseInstance {
                 if (hasBookmarked)
                     provide(tweet.author!!, tweet.mid)
                 else
-                    tweet.author?.let { unprovide(it, tweet.mid) }
+                    tweet.author?.let { unProvide(it, tweet.mid) }
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -895,8 +907,8 @@ object HproseInstance {
     }
 
     /**
-     * Get baseUrl where user data can be accessed. Each user may has a different node.
-     * Therefore it is indispensable to acquire base url for each user.
+     * Given userId, get baseUrl where user data can be accessed.
+     * An user mimei may be stored on many nodes.
      * */
     suspend fun getUser(userId: MimeiId): User? { return withRetry {
         // check if user data has been cached
