@@ -71,7 +71,8 @@ sealed interface NavTweet {
 data class MediaViewerParams(
     val mediaItems: List<MediaItem>,
     val index: Int = 0,     // the index of the media item to show
-    val tweetId: MimeiId? = null    // the tweet that the media items belong to
+    val tweetId: MimeiId,    // the tweet that the media items belong to
+    val authorId: MimeiId
 )
 
 @Serializable

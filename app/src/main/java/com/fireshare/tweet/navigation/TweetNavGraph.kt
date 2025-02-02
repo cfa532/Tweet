@@ -3,6 +3,7 @@ package com.fireshare.tweet.navigation
 import android.content.Intent
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -12,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
@@ -63,7 +63,7 @@ fun TweetNavGraph(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            LocalContext.current as ComponentActivity, key = appUser.mid
+            LocalActivity.current as ComponentActivity, key = appUser.mid
         ){ factory ->
             factory.create(appUser.mid)
     }
@@ -119,6 +119,7 @@ fun TweetNavGraph(
                 val debounceTime = 500L
                 ComposeCommentScreen {
                     // manually prevent fast continuous click of a button
+                    // which may produce multiple popBackStack() calls.
                     val currentTime = SystemClock.elapsedRealtime()
                     if (currentTime - lastClickTime > debounceTime) {
                         navController.popBackStack()
@@ -131,11 +132,11 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
-                // reassign the appUserViewModel here. It maybe after the user login with
+                // reassign the appUserViewModel here. Maybe after the user login with
                 // a different username.
                 sharedViewModel.appUserViewModel =
                     hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                        LocalContext.current as ComponentActivity, key = appUser.mid
+                        LocalActivity.current as ComponentActivity, key = appUser.mid
                     ) { factory ->
                         factory.create(appUser.mid)
                     }
@@ -176,7 +177,8 @@ fun TweetNavGraph(
                     parentEntry,
                     navController,
                     md.params.index,
-                    md.params.tweetId
+                    md.params.tweetId,
+                    md.params.authorId
                 )
             }
             composable<NavTweet.Login> {

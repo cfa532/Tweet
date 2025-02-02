@@ -160,7 +160,7 @@ fun MediaPreviewGrid(
                                     getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                     it.type
                                 )
-                            }, index, tweet.mid
+                            }, index, tweet.mid, tweet.authorId
                         )
                         navController.navigate(NavTweet.MediaViewer(params))
                     },
@@ -210,7 +210,7 @@ fun MediaItemView(
     val goto: (Int) -> Unit = { idx: Int ->
         navController.navigate(
             NavTweet.MediaViewer(MediaViewerParams(
-                attachments, idx, tweet.mid
+                attachments, idx, tweet.mid, tweet.authorId
             ) )
         )
     }

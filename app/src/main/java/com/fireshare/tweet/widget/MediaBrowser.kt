@@ -36,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -85,7 +86,8 @@ fun MediaBrowser(
     parentEntry: NavBackStackEntry,
     navController: NavController,
     startIndex: Int,
-    tweetId: MimeiId?
+    tweetId: MimeiId,
+    authorId: MimeiId
 ) {
     /**
      *  Create a tweetViewModel with given tweetId to remember the position of this tweet
@@ -96,11 +98,12 @@ fun MediaBrowser(
         parentEntry,
         key = tweetId
     ) { factory ->
-        factory.create(Tweet(mid = tweetId!!, authorId = "default"))
+        factory.create(Tweet(mid = tweetId, authorId = authorId))
     }
-    val mediaItems = viewModel.tweetAttachments!!.map {
+    val tweetAttachments by viewModel.attachments.collectAsState()
+    val mediaItems = tweetAttachments?.map {
         MediaItem(HproseInstance.getMediaUrl(it.mid, HproseInstance.appUser.baseUrl)!!, it.type)
-    }
+    } ?: return
 
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
@@ -110,7 +113,6 @@ fun MediaBrowser(
     val lifecycleOwner = LocalLifecycleOwner.current
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
-    val orientation by remember { mutableIntStateOf(configuration.orientation) }
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -119,7 +121,7 @@ fun MediaBrowser(
     var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     // prevent double trigger of popBack event
-    var isNavigationTriggered by remember { mutableStateOf(false) }
+    val isNavigationTriggered = remember { mutableStateOf(false) }
 
     /**
      * Keep screen ON when video is playing in full screen mode.
@@ -174,7 +176,7 @@ fun MediaBrowser(
                 detectDragGestures(
                     onDragEnd = {
                         offsetY = initOffsetY
-                        isNavigationTriggered = false
+                        isNavigationTriggered.value = false
                     },
                     onDrag = { _, _ ->
                     },
@@ -214,7 +216,7 @@ fun MediaBrowser(
             when (mediaItem.type) {
                 // video preview
                 MediaType.Video, MediaType.Audio -> {
-                    exoPlayer = viewModel.getExoPlayer(mediaItem.url, context)
+                    exoPlayer = remember(mediaItem.url) { viewModel.getExoPlayer(mediaItem.url, context) }
                     exoPlayer?.volume = 1f
 
                     DisposableEffect(page) {
@@ -265,8 +267,8 @@ fun MediaBrowser(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
-                                    if (offsetY > 20f && !isNavigationTriggered) {
-                                        isNavigationTriggered = true
+                                    if (offsetY > 20f && !isNavigationTriggered.value) {
+                                        isNavigationTriggered.value = true
                                         if (navController.previousBackStackEntry != null) {
                                             navController.popBackStack()
                                         } else {
@@ -313,8 +315,8 @@ fun MediaBrowser(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
-                                    if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered) {
-                                        isNavigationTriggered = true    // prevent multiple popBack
+                                    if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered.value) {
+                                        isNavigationTriggered.value = true    // prevent multiple popBack
                                         if (navController.previousBackStackEntry != null) {
                                             navController.popBackStack()
                                         } else {
@@ -361,7 +363,7 @@ fun MediaBrowser(
                     }
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation = when (orientation) {
+                            activity?.requestedOrientation = when (configuration.orientation) {
                                 Configuration.ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                 Configuration.ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                                 else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

@@ -217,7 +217,7 @@ fun MediaGrid(
                                     getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                     it.type
                                 )
-                            }, index, tweet.mid)
+                            }, index, tweet.mid, tweet.authorId)
                         navController.navigate(
                             NavTweet.MediaViewer(params)
                         )

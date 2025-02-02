@@ -57,7 +57,6 @@ class TweetViewModel @AssistedInject constructor(
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
-    val tweetAttachments = tweet.attachments
 
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
     // remember current video playback position after configuration changes.
