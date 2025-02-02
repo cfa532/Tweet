@@ -68,6 +68,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SimpleExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -91,6 +93,7 @@ import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 import com.fireshare.tweet.widget.createExoPlayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -215,30 +218,42 @@ fun AudioPlayer(
     initialIndex: Int = 0,
 ) {
     val context = LocalContext.current
-    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     val aspectRatio by remember { mutableFloatStateOf(16 / 9f) }
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
-    val exoPlayer = remember { viewModel.getExoPlayer(attachments[initialIndex].url!!, context) }
+    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
-    LaunchedEffect(currentIndex) {
-        exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(attachments[currentIndex].url!!))
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-
-        // Listen for playback completion
-        exoPlayer.addListener(object : Player.Listener {
+    // Create a Player.Listener outside the DisposableEffect
+    val playerListener = remember {
+        object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED && currentIndex < attachments.size - 1) {
-                    // Move to the next audio file
                     currentIndex = (currentIndex + 1) % attachments.size
-                    exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(attachments[currentIndex].url!!))
-                    exoPlayer.prepare()
+                    exoPlayer.seekTo(currentIndex, 0)
                     exoPlayer.playWhenReady = true
                 }
             }
-        })
+        }
+    }
+    // Create a list of MediaItems from the attachments
+    val mediaItems = remember {
+        attachments.map {
+            androidx.media3.common.MediaItem.fromUri(it.url!!)
+        }
+    }
+    // Add the media items to the ExoPlayer
+    LaunchedEffect(key1 = mediaItems) {
+        exoPlayer.addMediaItems(mediaItems)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
     }
 
+    // Listen for playback completion
+    DisposableEffect(exoPlayer) {
+        exoPlayer.addListener(playerListener)
+        onDispose {
+            exoPlayer.removeListener(playerListener)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth()
@@ -253,6 +268,8 @@ fun AudioPlayer(
                 modifier = Modifier.fillMaxWidth()
                     .clickable {
                         currentIndex = attachments.indexOf(it)
+                        exoPlayer.seekTo(currentIndex, 0) // Seek to the selected track
+                        exoPlayer.playWhenReady = true
                     }
                     .background(
                         if (isSelected) {
@@ -289,7 +306,7 @@ fun AudioPlayer(
                     player = exoPlayer
                     useController = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    controllerShowTimeoutMs = -1
+                    controllerShowTimeoutMs = -1    // show controls all the time.
                     controllerAutoShow
                 }
             },
