@@ -82,7 +82,6 @@ fun TweetFeedScreen(
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()
-//    val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
