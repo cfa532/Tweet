@@ -162,7 +162,7 @@ fun TweetDetailBody(
                         val isAllAudio = attachments.all { it.type == MediaType.Audio }
                         if (isAllAudio) {
                             attachments.forEach {
-                                it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                                it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
                             }
                             AudioPlayer(attachments)
                         } else

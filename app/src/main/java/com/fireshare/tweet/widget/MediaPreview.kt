@@ -418,11 +418,12 @@ fun VideoPreview(
                 PlayerView(context).apply {
                     player = exoPlayer
                     useController = true
-
+                    controllerShowTimeoutMs = 1000    // show controls all the time.
+                    controllerAutoShow
                     setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
                         areControlsVisible = visibility == View.VISIBLE
                     })
-                    hideController()
+//                    hideController()
                 }
             },
             modifier = modifier.aspectRatio(aspectRatio)
