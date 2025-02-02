@@ -252,6 +252,7 @@ fun AudioPlayer(
         exoPlayer.addListener(playerListener)
         onDispose {
             exoPlayer.removeListener(playerListener)
+            exoPlayer.release()
         }
     }
 
