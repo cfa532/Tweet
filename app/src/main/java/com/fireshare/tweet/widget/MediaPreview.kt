@@ -24,9 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
@@ -52,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,6 +84,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
@@ -228,7 +228,7 @@ fun MediaItemView(
                 }
             }
             MediaType.Audio -> {
-                AudioPreview(mediaItems[index], modifier, tweet)
+                AudioPreview(mediaItems, index, modifier, tweet)
             }
             else -> {       // Handle unknown file type
                 Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
@@ -268,11 +268,31 @@ fun MediaItemView(
     }
 }
 
+@OptIn(UnstableApi::class)
+fun createExoPlayer(context: Context, url: String): ExoPlayer {
+    val cache = VideoCacheManager.getCache(context)
+    val dataSourceFactory = DefaultDataSource.Factory(context)
+    val cacheDataSourceFactory = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(dataSourceFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+        .createMediaSource(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+
+    return ExoPlayer.Builder(context).build().apply {
+        setMediaSource(mediaSource)
+        prepare()
+    }
+}
+
+@OptIn(UnstableApi::class)
 @Composable
 fun AudioPreview(
-    mediaItem: MimeiFileType,
+    mediaItems: List<MimeiFileType>,
+    index: Int,
     modifier: Modifier = Modifier,
-    tweet: Tweet
+    tweet: Tweet,
 ) {
     val navController = LocalNavController.current
     Column(modifier = modifier) {
@@ -291,7 +311,7 @@ fun AudioPreview(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = mediaItem.fileName ?: mediaItem.mid,
+                text = mediaItems[index].fileName ?: mediaItems[index].mid,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -320,7 +340,6 @@ fun VideoPreview(
     var areControlsVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
-    // Create ExoPlayer inside DisposableEffect
     val exoPlayer = remember { createExoPlayer(context, url) }
 
     /**
@@ -626,24 +645,6 @@ fun ImageViewer(
                 )
             }
         }
-    }
-}
-
-@OptIn(UnstableApi::class)
-fun createExoPlayer(context: Context, url: String): ExoPlayer {
-    val cache = VideoCacheManager.getCache(context)
-    val dataSourceFactory = DefaultDataSource.Factory(context)
-    val cacheDataSourceFactory = CacheDataSource.Factory()
-        .setCache(cache)
-        .setUpstreamDataSourceFactory(dataSourceFactory)
-        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-        .createMediaSource(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
-
-    return ExoPlayer.Builder(context).build().apply {
-        setMediaSource(mediaSource)
-        prepare()
     }
 }
 

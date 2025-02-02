@@ -56,6 +56,7 @@ data class MimeiFileType(
     val size: Long? = null,
     val fileName: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
+    var url: String? = null,
 )
 
 @Serializable

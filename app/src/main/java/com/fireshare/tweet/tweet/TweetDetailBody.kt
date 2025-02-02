@@ -1,5 +1,6 @@
 package com.fireshare.tweet.tweet
 
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,8 +9,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -17,9 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -34,8 +39,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,18 +54,27 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
+import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
@@ -70,7 +87,9 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemView
+import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
+import com.fireshare.tweet.widget.createExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,8 +98,8 @@ import kotlinx.coroutines.withContext
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    gridColumns: Int)
-{
+    gridColumns: Int
+) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
 
@@ -139,8 +158,17 @@ fun TweetDetailBody(
                             }
                         }
                     }
-                    tweet.attachments?.let {
-                        MediaGrid(it, viewModel, navController, gridColumns)
+                    // if all attachments are audio files
+
+                    tweet.attachments?.let { attachments ->
+                        val isAllAudio = attachments.all { it.type == MediaType.Audio }
+                        if (isAllAudio) {
+                            attachments.forEach {
+                                it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                            }
+                            AudioPlayer(attachments, viewModel)
+                        } else
+                            MediaGrid(attachments, viewModel, navController, gridColumns)
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
@@ -176,6 +204,97 @@ fun TweetDetailBody(
                 }
             }
         }
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+fun AudioPlayer(
+    attachments: List<MimeiFileType>,
+    viewModel: TweetViewModel,
+    initialIndex: Int = 0,
+) {
+    val context = LocalContext.current
+    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    val aspectRatio by remember { mutableFloatStateOf(16 / 9f) }
+    var currentIndex by remember { mutableIntStateOf(initialIndex) }
+    val exoPlayer = remember { viewModel.getExoPlayer(attachments[initialIndex].url!!, context) }
+
+    LaunchedEffect(currentIndex) {
+        exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(attachments[currentIndex].url!!))
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+
+        // Listen for playback completion
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && currentIndex < attachments.size - 1) {
+                    // Move to the next audio file
+                    currentIndex = (currentIndex + 1) % attachments.size
+                    exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(attachments[currentIndex].url!!))
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
+                }
+            }
+        })
+    }
+
+
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .heightIn(max = 800.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = PaddingValues(vertical = 8.dp) // Add padding to the top and bottom
+    ) {
+        items(attachments, key = { it.mid }) {
+            val isSelected = currentIndex == attachments.indexOf(it)
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clickable {
+                        currentIndex = attachments.indexOf(it)
+                    }
+                    .background(
+                        if (isSelected) {
+                            Color.LightGray
+                        } else {
+                            Color.Transparent
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.btn_play),
+                    contentDescription = "Play",
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = it.fileName ?: it.mid,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        AndroidView(
+            factory = {
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = true
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    controllerShowTimeoutMs = -1
+                    controllerAutoShow
+                }
+            },
+            modifier = Modifier.aspectRatio(aspectRatio)
+        )
     }
 }
 
