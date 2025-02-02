@@ -17,9 +17,9 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.datamodel.writableUrl
 import com.fireshare.tweet.datamodel.writableUrl2
+import com.fireshare.tweet.widget.Gadget.filterIpAddresses
 import com.fireshare.tweet.widget.Gadget.getAccessibleIP
 import com.fireshare.tweet.widget.Gadget.getAccessibleUser
-import com.fireshare.tweet.widget.Gadget.filterIpAddresses
 import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException

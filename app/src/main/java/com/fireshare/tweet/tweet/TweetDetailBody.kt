@@ -64,19 +64,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.SimpleExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
-import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
@@ -91,9 +88,7 @@ import com.fireshare.tweet.widget.MediaItem
 import com.fireshare.tweet.widget.MediaItemView
 import com.fireshare.tweet.widget.MediaType
 import com.fireshare.tweet.widget.UserAvatar
-import com.fireshare.tweet.widget.createExoPlayer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -169,7 +164,7 @@ fun TweetDetailBody(
                             attachments.forEach {
                                 it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
                             }
-                            AudioPlayer(attachments, viewModel)
+                            AudioPlayer(attachments)
                         } else
                             MediaGrid(attachments, viewModel, navController, gridColumns)
                     }
@@ -214,7 +209,6 @@ fun TweetDetailBody(
 @Composable
 fun AudioPlayer(
     attachments: List<MimeiFileType>,
-    viewModel: TweetViewModel,
     initialIndex: Int = 0,
 ) {
     val context = LocalContext.current
@@ -246,7 +240,9 @@ fun AudioPlayer(
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }
-
+    LaunchedEffect(currentIndex) {
+        println("current index = $currentIndex")
+    }
     // Listen for playback completion
     DisposableEffect(exoPlayer) {
         exoPlayer.addListener(playerListener)
