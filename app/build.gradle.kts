@@ -20,7 +20,7 @@ android {
         minSdk = 29
         targetSdk = 35
         versionCode = 18    // Google Play store version code
-        versionName = "25"   // compared with App Mimei version to check for upgrade.
+        versionName = "26"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

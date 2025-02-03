@@ -2,7 +2,6 @@ package com.fireshare.tweet.tweet
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -77,13 +77,15 @@ fun TweetItemBody(
                         }
                     }
                     // there are attached media files
-                    tweet.attachments?.let {
-                        Box(
+                    if (!tweet.attachments.isNullOrEmpty()) {
+                        Surface (
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)
-                                .heightIn(min = 30.dp)
+                                .heightIn(min = 32.dp),
+                            tonalElevation = 4.dp,
+                            shape = RoundedCornerShape(size = 8.dp)
                         ) {
-                            MediaPreviewGrid(it, viewModel)
+                            MediaPreviewGrid(tweet.attachments!!, viewModel)
                         }
                     }
                     /**
