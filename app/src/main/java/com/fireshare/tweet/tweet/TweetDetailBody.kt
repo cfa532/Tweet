@@ -158,7 +158,8 @@ fun TweetDetailBody(
                     }
                     // if all attachments are audio files
 
-                    tweet.attachments?.let { attachments ->
+                    if (! tweet.attachments.isNullOrEmpty()) {
+                        val attachments = tweet.attachments!!
                         val isAllAudio = attachments.all { it.type == MediaType.Audio }
                         if (isAllAudio) {
                             attachments.forEach {

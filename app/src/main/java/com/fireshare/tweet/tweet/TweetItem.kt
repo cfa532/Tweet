@@ -143,20 +143,21 @@ fun TweetItem(
                                 }
                             }
                         }
-                        tweet.attachments?.let {
-                            Box(
+                        if (! tweet.attachments.isNullOrEmpty()) {
+                            Surface (
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(start = 16.dp, end = 8.dp, top = 4.dp)
-                                    .heightIn(max = 800.dp) // Set a specific height for the grid
+                                    .heightIn(max = 800.dp), // Set a specific height for the grid
+                                tonalElevation = 4.dp
                             ) {
-                                MediaPreviewGrid(it, viewModel)
+                                MediaPreviewGrid(tweet.attachments!!, viewModel)
                             }
                         }
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            tonalElevation = 3.dp,
+                            tonalElevation = 8.dp,
                             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
                         ) {
                             // quoted tweet
