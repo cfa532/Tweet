@@ -89,6 +89,7 @@ fun BottomNavigationBar(
                     }
                     val currentRoute = navController.currentBackStackEntry?.destination?.route
                     if (currentRoute != null) {
+                        // if in the same route as the destination, do nothing
                         if (!currentRoute.contains(item.route.toString()) ) {
                             if (item.route == NavTweet.ChatList) {
                                 bottomBarViewModel.updateBadgeCount(0)

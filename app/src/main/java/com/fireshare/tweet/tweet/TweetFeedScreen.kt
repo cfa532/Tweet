@@ -93,9 +93,7 @@ fun TweetFeedScreen(
     } )
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
-    val listState = rememberSaveable(saver = LazyListState.Saver, key = "tweet_feed_list_state_${parentEntry.id}") {
-        LazyListState()
-    }
+    val listState = rememberLazyListState()
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -104,33 +102,30 @@ fun TweetFeedScreen(
         }
     }
 
-    val currentTweet by viewModel.currentTweet.collectAsState()
-    LaunchedEffect(tweets) {
-        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
-        if (position > -1)
-            listState.scrollToItem(position)
-    }
-
     val context = LocalContext.current
     val activity = context as? Activity
     LaunchedEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
-    // reload page when user login or out
-    val initState by viewModel.initState.collectAsState()
+    val currentTweet by viewModel.currentTweet.collectAsState()
+    LaunchedEffect(tweets, listState) {
+        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
+        if (position > 0)
+            listState.scrollToItem(position-1)
+        else
+            listState.scrollToItem(0)
+    }
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
-            .debounce(500)
+            .debounce(300)
             .collectLatest { index ->
                 if (tweets.isNotEmpty())
                     viewModel.updateScrollPosition(tweets[index])
             }
-        delay(500)
-        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
-        if (position > -1)
-            listState.scrollToItem(position)
     }
+
+    val initState by viewModel.initState.collectAsState()
     LaunchedEffect(appUser.mid) {
         if ( !initState )
             viewModel.refresh()
@@ -138,6 +133,13 @@ fun TweetFeedScreen(
     LaunchedEffect(isAtBottom) {
         if (isAtBottom) {
             viewModel.loadOlderTweets()
+        }
+    }
+    val previousRoute = parentEntry.savedStateHandle.get<String>("previousRoute")
+    LaunchedEffect(key1 = previousRoute) {
+        if (previousRoute?.contains("TweetFeed") == true) {
+            // Scroll to the top of the list
+            listState.scrollToItem(0)
         }
     }
 

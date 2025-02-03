@@ -58,7 +58,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // remember the current viewable tweet, to keep a scrollable position.
     var currentTweet = MutableStateFlow<Tweet?>(null)
-    fun updateScrollPosition(tweet: Tweet) {
+    fun updateScrollPosition(tweet: Tweet?) {
         currentTweet.value = tweet
     }
 

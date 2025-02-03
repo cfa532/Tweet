@@ -93,6 +93,8 @@ fun TweetNavGraph(
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
+                // Save the current route in the savedStateHandle
+                parentEntry.savedStateHandle["previousRoute"] = "TweetFeed"
                 TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
