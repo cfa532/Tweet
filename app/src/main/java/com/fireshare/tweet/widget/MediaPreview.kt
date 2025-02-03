@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
@@ -392,74 +393,63 @@ fun VideoPreview(
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
 
-    val scope = rememberCoroutineScope()
     Box(
         modifier = modifier
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
-//            .pointerInput(Unit) {
-//                detectTapGestures(
-//                    onTap = {
-//                        areControlsVisible = !areControlsVisible
-//                        if (areControlsVisible) {
-//                            // Start a coroutine to hide controls after 2 seconds
-//                            scope.launch {
-//                                delay(1000)
-//                                areControlsVisible = false
-//                            }
-//                        }
-//                    }
-//                )
-//            }
     ) {
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = false
-//                    controllerShowTimeoutMs = 1000    // show controls all the time.
-                    controllerAutoShow = false
+                    useController = !inPreviewGrid
+                    controllerShowTimeoutMs = 2000
+                    controllerAutoShow = !inPreviewGrid
 //                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
 //                        areControlsVisible = visibility == View.VISIBLE
 //                    })
-//                    hideController()
+                    hideController()
                 }
             },
             modifier = modifier.aspectRatio(aspectRatio)
         )
+        // Mute button
+        IconButton(
+            onClick = {
+                isMuted = !isMuted
+                preferenceHelper.setSpeakerMute(isMuted)
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp)
+        ) {
+            Icon(
+                painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
+                contentDescription = if (isMuted) "UnMute" else "Mute",
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier
+                    .size(ButtonDefaults.IconSize)
+            )
+        }
 
-        if (areControlsVisible) {
-            // Show controls and buttons
-//            IconButton(
-//                onClick = { goto(index) },
-//                modifier = Modifier.align(Alignment.TopEnd)
-//            ) {
-//                Icon(
-//                    painter = painterResource(R.drawable.ic_full_screen),
-//                    contentDescription = "Full screen",
-//                    tint = Color.White,
-//                    modifier = Modifier
-//                        .size(ButtonDefaults.IconSize)
-//                )
-//            }
-            // Mute button
+        if ( ! inPreviewGrid) {
+            // Show full screen button
             IconButton(
-                onClick = {
-                    isMuted = !isMuted
-                    preferenceHelper.setSpeakerMute(isMuted)
-                },
-                modifier = Modifier.align(Alignment.TopStart)
+                onClick = { goto(index) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp)
             ) {
                 Icon(
-                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
-                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    painter = painterResource(R.drawable.ic_full_screen),
+                    contentDescription = "Full screen",
                     tint = Color.White,
                     modifier = Modifier
                         .size(ButtonDefaults.IconSize)
                 )
             }
-        }
+       }
     }
 }
 

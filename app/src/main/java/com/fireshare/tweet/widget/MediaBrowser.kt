@@ -172,19 +172,6 @@ fun MediaBrowser(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        offsetY = initOffsetY
-                        isNavigationTriggered.value = false
-                    },
-                    onDrag = { _, _ ->
-                    },
-                    onDragStart = {
-                        initOffsetY = offsetY
-                    }
-                )
-            }
-            .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
                         scaleFactor = if (scaleFactor > 1f) {
@@ -270,13 +257,7 @@ fun MediaBrowser(
                                     offsetY += delta
                                     if (offsetY > 20f && !isNavigationTriggered.value) {
                                         isNavigationTriggered.value = true
-                                        if (navController.previousBackStackEntry != null) {
-                                            navController.popBackStack()
-                                        } else {
-                                            Timber
-                                                .tag("MediaBrowser")
-                                                .e("No previous back stack entry")
-                                        }
+                                        navController.popBackStack()
                                     }
                                 }
                             )
@@ -318,13 +299,7 @@ fun MediaBrowser(
                                     offsetY += delta
                                     if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered.value) {
                                         isNavigationTriggered.value = true    // prevent multiple popBack
-                                        if (navController.previousBackStackEntry != null) {
-                                            navController.popBackStack()
-                                        } else {
-                                            Timber
-                                                .tag("MediaBrowser")
-                                                .e("No previous back stack entry")
-                                        }
+                                        navController.popBackStack()
                                     }
                                 }
                             )
