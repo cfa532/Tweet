@@ -335,7 +335,7 @@ fun VideoPreview(
 ) {
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
-    var areControlsVisible by remember { mutableStateOf(false) }
+    val areControlsVisible by remember { mutableStateOf(true) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
     val exoPlayer = remember { createExoPlayer(context, url) }
@@ -398,20 +398,20 @@ fun VideoPreview(
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = {
-                        areControlsVisible = !areControlsVisible
-                        if (areControlsVisible) {
-                            // Start a coroutine to hide controls after 2 seconds
-                            scope.launch {
-                                delay(1000)
-                                areControlsVisible = false
-                            }
-                        }
-                    }
-                )
-            }
+//            .pointerInput(Unit) {
+//                detectTapGestures(
+//                    onTap = {
+//                        areControlsVisible = !areControlsVisible
+//                        if (areControlsVisible) {
+//                            // Start a coroutine to hide controls after 2 seconds
+//                            scope.launch {
+//                                delay(1000)
+//                                areControlsVisible = false
+//                            }
+//                        }
+//                    }
+//                )
+//            }
     ) {
         AndroidView(
             factory = {
@@ -431,18 +431,18 @@ fun VideoPreview(
 
         if (areControlsVisible) {
             // Show controls and buttons
-            IconButton(
-                onClick = { goto(index) },
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_full_screen),
-                    contentDescription = "Full screen",
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(ButtonDefaults.IconSize)
-                )
-            }
+//            IconButton(
+//                onClick = { goto(index) },
+//                modifier = Modifier.align(Alignment.TopEnd)
+//            ) {
+//                Icon(
+//                    painter = painterResource(R.drawable.ic_full_screen),
+//                    contentDescription = "Full screen",
+//                    tint = Color.White,
+//                    modifier = Modifier
+//                        .size(ButtonDefaults.IconSize)
+//                )
+//            }
             // Mute button
             IconButton(
                 onClick = {
