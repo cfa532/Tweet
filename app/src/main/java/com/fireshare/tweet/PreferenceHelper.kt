@@ -7,30 +7,6 @@ import com.fireshare.tweet.datamodel.TW_CONST
 class PreferenceHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    fun saveProfile(profile: String) {
-        sharedPreferences.edit().putString("profile", profile).apply()
-    }
-
-    fun getProfile(): String? {
-        return sharedPreferences.getString("profile", " ")
-    }
-
-    fun saveUsername(username: String) {
-        sharedPreferences.edit().putString("username", username).apply()
-    }
-
-    fun getUsername(): String? {
-        return sharedPreferences.getString("username", null)
-    }
-
-    fun saveName(name: String) {
-        sharedPreferences.edit().putString("name", name).apply()
-    }
-
-    fun getName(): String? {
-        return sharedPreferences.getString("name", null)
-    }
-
     fun setAppUrl(baseUrl: String) {
         return sharedPreferences.edit().putString("appUrl", baseUrl).apply()
     }
@@ -44,16 +20,9 @@ class PreferenceHelper(context: Context) {
     fun getSpeakerMute(): Boolean {
         return sharedPreferences.getBoolean("speakerMuted", true)
     }
-    fun setAutoplay(autoplayVideo: Boolean) {
-        sharedPreferences.edit().putBoolean("autoplayVideo", autoplayVideo).apply()
-    }
-    fun getAutoplay(): Boolean {
-        return sharedPreferences.getBoolean("autoplayVideo", true)
-    }
-    fun getUserId(): String {
-        var uid = sharedPreferences.getString("userId", null)
-        if (uid == null) uid = TW_CONST.GUEST_ID
-        return uid
+
+    fun getUserId(): String? {
+        return sharedPreferences.getString("userId", TW_CONST.GUEST_ID)
     }
     fun setUserId(id: String?) {
         sharedPreferences.edit().putString("userId", id).apply()

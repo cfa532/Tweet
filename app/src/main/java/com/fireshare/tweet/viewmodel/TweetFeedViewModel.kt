@@ -56,6 +56,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
+    // remember the current viewable tweet, to keep a scrollable position.
+    var currentTweet = MutableStateFlow<Tweet?>(null)
+    fun updateScrollPosition(tweet: Tweet) {
+        currentTweet.value = tweet
+    }
+
     // get all followings of current user, and load tweets.
     private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
     private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()

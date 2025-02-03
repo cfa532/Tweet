@@ -359,8 +359,6 @@ class UserViewModel @AssistedInject constructor(
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
                     savedStateHandle["user"] = appUser
-                    appUser.name?.let { preferenceHelper.saveName(it) }
-                    appUser.profile?.let { preferenceHelper.saveProfile(it) }
 
                     val event = SnackbarEvent(
                         message = context.getString(R.string.profile_update_ok)

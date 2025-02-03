@@ -120,7 +120,7 @@ object HproseInstance {
                     val firstIp = getAccessibleIP(hostIPs)
                     appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                     val userId = preferenceHelper.getUserId()
-                    if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID) {
+                    if (userId != null && userId != TW_CONST.GUEST_ID) {
                         /**
                          * If there is a valid userId in preference, this is a login user.
                          * Initiate current account. Get its IP list and choose the best one,

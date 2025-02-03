@@ -35,11 +35,16 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +57,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
@@ -61,9 +67,12 @@ import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -72,16 +81,16 @@ fun TweetFeedScreen(
     viewModel: TweetFeedViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
+    val currentTweet by viewModel.currentTweet.collectAsState()
+
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-
-    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-    val pullRefreshState =
-        rememberPullRefreshState(refreshingAtTop, {
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.loadNewerTweets()
-            }
-        })
+    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
+    val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
+        viewModel.viewModelScope.launch(Dispatchers.IO) {
+            viewModel.loadNewerTweets()
+        }
+    } )
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberSaveable(saver = LazyListState.Saver, key = "tweet_feed_list_state_${parentEntry.id}") {
@@ -96,14 +105,33 @@ fun TweetFeedScreen(
     }
     val context = LocalContext.current
     val activity = context as? Activity
-    // Use a side-effect to avoid recomposition on orientation change
+
+    LaunchedEffect(tweets) {
+        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
+        if (position > -1)
+            listState.scrollToItem(position)
+    }
     LaunchedEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .debounce(500)
+            .collectLatest { index ->
+                if (tweets.isNotEmpty())
+                    viewModel.updateScrollPosition(tweets[index])
+            }
+
+        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
+        if (position > -1)
+            listState.scrollToItem(position)
+    }
+
+    // reload page when user login or out
+    val initState by viewModel.initState.collectAsState()
     LaunchedEffect(appUser.mid) {
-        // reload page when user login or out
-        if (!viewModel.initState.value)
+        if ( !initState )
             viewModel.refresh()
     }
     LaunchedEffect(isAtBottom) {
