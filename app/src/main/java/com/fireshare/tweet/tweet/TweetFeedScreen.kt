@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,8 +71,6 @@ fun TweetFeedScreen(
     selectedBottomBarItemIndex: Int,
     viewModel: TweetFeedViewModel
 ) {
-//    val sharedViewModel: SharedViewModel = hiltViewModel()
-//    val viewModel = sharedViewModel.tweetFeedViewModel
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -84,7 +84,9 @@ fun TweetFeedScreen(
         })
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
-    val listState = rememberLazyListState()
+    val listState = rememberSaveable(saver = LazyListState.Saver, key = "tweet_feed_list_state_${parentEntry.id}") {
+        LazyListState()
+    }
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
