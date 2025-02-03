@@ -81,7 +81,6 @@ fun TweetFeedScreen(
     viewModel: TweetFeedViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
-    val currentTweet by viewModel.currentTweet.collectAsState()
 
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -103,18 +102,22 @@ fun TweetFeedScreen(
             lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
         }
     }
-    val context = LocalContext.current
-    val activity = context as? Activity
 
+    val currentTweet by viewModel.currentTweet.collectAsState()
     LaunchedEffect(tweets) {
         val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
         if (position > -1)
             listState.scrollToItem(position)
     }
+
+    val context = LocalContext.current
+    val activity = context as? Activity
     LaunchedEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
+    // reload page when user login or out
+    val initState by viewModel.initState.collectAsState()
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .debounce(500)
@@ -127,9 +130,6 @@ fun TweetFeedScreen(
         if (position > -1)
             listState.scrollToItem(position)
     }
-
-    // reload page when user login or out
-    val initState by viewModel.initState.collectAsState()
     LaunchedEffect(appUser.mid) {
         if ( !initState )
             viewModel.refresh()
