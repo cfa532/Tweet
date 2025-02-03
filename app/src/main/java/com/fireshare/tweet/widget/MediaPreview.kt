@@ -422,7 +422,6 @@ fun VideoPreview(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp)
         ) {
             Icon(
                 painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
@@ -439,7 +438,6 @@ fun VideoPreview(
                 onClick = { goto(index) },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = 16.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_full_screen),
