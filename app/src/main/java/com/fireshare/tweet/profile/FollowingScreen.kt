@@ -51,6 +51,7 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.tweet.guestWarning
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -192,8 +193,7 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
     val followState = remember { mutableStateOf(isFollowing) }
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(followings) {
         followState.value = isFollowing

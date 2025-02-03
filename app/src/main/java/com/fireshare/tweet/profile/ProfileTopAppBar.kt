@@ -78,8 +78,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     // manually prevent fast continuous click of a button
     var lastClickTime by remember { mutableLongStateOf(0L) }

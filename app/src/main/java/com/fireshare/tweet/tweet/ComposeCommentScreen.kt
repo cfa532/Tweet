@@ -65,6 +65,7 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.launch
@@ -160,7 +161,7 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     val isLoading = remember { mutableStateOf(false) }
-                    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
+                    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(enabled = !isLoading.value,
                         onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {

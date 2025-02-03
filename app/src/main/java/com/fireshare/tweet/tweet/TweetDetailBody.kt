@@ -82,6 +82,7 @@ import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.share.ShareScreenshotButton
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItem
@@ -420,7 +421,7 @@ fun TweetDropdownMenuItems(
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val navController = LocalNavController.current
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted

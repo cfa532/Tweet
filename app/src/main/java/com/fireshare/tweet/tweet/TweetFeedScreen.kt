@@ -68,6 +68,7 @@ import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -125,7 +126,7 @@ fun TweetFeedScreen(
                 if (tweets.isNotEmpty())
                     viewModel.updateScrollPosition(tweets[index])
             }
-
+        delay(500)
         val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
         if (position > -1)
             listState.scrollToItem(position)

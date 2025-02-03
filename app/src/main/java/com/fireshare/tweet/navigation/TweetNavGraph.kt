@@ -67,7 +67,8 @@ fun TweetNavGraph(
         ){ factory ->
             factory.create(appUser.mid)
     }
-    sharedViewModel.tweetFeedViewModel.tweetActionListener = sharedViewModel.appUserViewModel
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    tweetFeedViewModel.tweetActionListener = sharedViewModel.appUserViewModel
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
@@ -89,10 +90,10 @@ fun TweetNavGraph(
             route = NavTwee::class
         ) {
             composable<NavTweet.TweetFeed> {
-                val parentEntry = remember(navController) {
+                val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                TweetFeedScreen(navController, parentEntry, 0, sharedViewModel.tweetFeedViewModel)
+                TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()
@@ -237,7 +238,6 @@ fun TweetNavGraph(
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
-    val tweetFeedViewModel: TweetFeedViewModel  // make sharedViewModel singleton
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel

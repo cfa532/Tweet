@@ -36,10 +36,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideShareViewModel(tweetFeedViewModel: TweetFeedViewModel): SharedViewModel {
-        return SharedViewModel(
-            tweetFeedViewModel = tweetFeedViewModel // Inject the existing instance
-        )
+    fun provideShareViewModel(): SharedViewModel {
+        return SharedViewModel()
     }
 
     @Provides

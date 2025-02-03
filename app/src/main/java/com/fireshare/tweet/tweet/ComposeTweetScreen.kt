@@ -75,6 +75,7 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.service.SnackbarAction
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.widget.UploadFilePreview
 import kotlinx.coroutines.launch
 import java.io.File
@@ -90,7 +91,7 @@ fun ComposeTweetScreen(
 ) {
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
-    val tweetFeedViewModel = sharedViewModel.tweetFeedViewModel
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     var tweetContent by remember { mutableStateOf("") }
     var isPrivate by remember { mutableStateOf(false) }
 
