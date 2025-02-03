@@ -233,9 +233,11 @@ fun MediaBrowser(
                             PlayerView(ctx).apply {
                                 player = exoPlayer
                                 useController = true    // otherwise video won't play
-                                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                                    showControls = visibility == View.VISIBLE
-                                })
+//                                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+//                                    showControls = visibility == View.VISIBLE
+//                                })
+                                controllerShowTimeoutMs = 2000
+                                controllerAutoShow = true
                                 hideController()    // hide control buttons
                             }
                         },

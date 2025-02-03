@@ -92,7 +92,7 @@ fun TweetNavGraph(
                 val parentEntry = remember(navController) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                TweetFeedScreen(navController, parentEntry, 0)
+                TweetFeedScreen(navController, parentEntry, 0, sharedViewModel.tweetFeedViewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()

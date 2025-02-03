@@ -304,7 +304,7 @@ fun AudioPlayer(
                     useController = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     controllerShowTimeoutMs = -1    // show controls all the time.
-                    controllerAutoShow
+                    controllerAutoShow = true
                 }
             },
             modifier = Modifier.aspectRatio(aspectRatio)

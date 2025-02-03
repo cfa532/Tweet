@@ -54,6 +54,8 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.navigation.SharedViewModel
+import com.fireshare.tweet.viewmodel.TweetFeedViewModel
+import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -65,9 +67,10 @@ fun TweetFeedScreen(
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
     selectedBottomBarItemIndex: Int,
+    viewModel: TweetFeedViewModel
 ) {
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    val viewModel = sharedViewModel.tweetFeedViewModel
+//    val sharedViewModel: SharedViewModel = hiltViewModel()
+//    val viewModel = sharedViewModel.tweetFeedViewModel
     val tweets by viewModel.tweets.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
