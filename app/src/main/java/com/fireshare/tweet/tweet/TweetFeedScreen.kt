@@ -61,11 +61,10 @@ import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
+ @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -105,8 +104,8 @@ fun TweetFeedScreen(
     val scrollPosition by viewModel.scrollPosition.collectAsState()
     LaunchedEffect(key1 = scrollPosition) {
         if ( !isScrolling ) {
-            viewModel.viewModelScope.launch {
-                delay(500) // Adjust the delay as needed
+            withContext(Dispatchers.Main) {
+                delay(500)
                 listState.scrollToItem(scrollPosition)
             }
         }
