@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
@@ -64,7 +65,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
- @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -85,6 +86,7 @@ fun TweetFeedScreen(
     // for pulling up at the bottom of the list
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()
+
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -106,7 +108,7 @@ fun TweetFeedScreen(
         if ( !isScrolling ) {
             withContext(Dispatchers.Main) {
                 delay(500)
-                listState.scrollToItem(scrollPosition)
+                listState.scrollToItem(scrollPosition.first, scrollPosition.second)
             }
         }
     }
@@ -116,11 +118,12 @@ fun TweetFeedScreen(
             .collect { isScrolling = it }
     }
     LaunchedEffect(key1 = listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }
+        snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             // .debounce(100)
             .collect {
-                if (isScrolling)
+                if (isScrolling) {
                     viewModel.updateScrollPosition(it)
+                }
             }
     }
 
