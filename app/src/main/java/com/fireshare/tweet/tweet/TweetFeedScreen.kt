@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,14 +34,11 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -52,18 +48,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
-import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.AppIcon
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -108,20 +100,28 @@ fun TweetFeedScreen(
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
-    val currentTweet by viewModel.currentTweet.collectAsState()
-    LaunchedEffect(tweets, listState) {
-        val position = tweets.indexOfFirst { it.mid == currentTweet?.mid }
-        if (position > 0)
-            listState.scrollToItem(position-1)
-        else
-            listState.scrollToItem(0)
+    // State to track if the user is actively scrolling
+    var isScrolling by remember { mutableStateOf(false) }
+    val scrollPosition by viewModel.scrollPosition.collectAsState()
+    LaunchedEffect(key1 = scrollPosition) {
+        if ( !isScrolling ) {
+            viewModel.viewModelScope.launch {
+                delay(500) // Adjust the delay as needed
+                listState.scrollToItem(scrollPosition)
+            }
+        }
     }
-    LaunchedEffect(listState) {
+    // Update isScrolling state when the user scrolls
+    LaunchedEffect(key1 = listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { isScrolling = it }
+    }
+    LaunchedEffect(key1 = listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
-            .debounce(300)
-            .collectLatest { index ->
-                if (tweets.isNotEmpty())
-                    viewModel.updateScrollPosition(tweets[index])
+            // .debounce(100)
+            .collect {
+                if (isScrolling)
+                    viewModel.updateScrollPosition(it)
             }
     }
 
@@ -133,13 +133,6 @@ fun TweetFeedScreen(
     LaunchedEffect(isAtBottom) {
         if (isAtBottom) {
             viewModel.loadOlderTweets()
-        }
-    }
-    val previousRoute = parentEntry.savedStateHandle.get<String>("previousRoute")
-    LaunchedEffect(key1 = previousRoute) {
-        if (previousRoute?.contains("TweetFeed") == true) {
-            // Scroll to the top of the list
-            listState.scrollToItem(0)
         }
     }
 
