@@ -45,8 +45,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -103,26 +106,21 @@ fun TweetFeedScreen(
     }
 
     // State to track if the user is actively scrolling
-    var isScrolling by remember { mutableStateOf(false) }
     val scrollPosition by viewModel.scrollPosition.collectAsState()
     LaunchedEffect(key1 = scrollPosition) {
-        if ( !isScrolling ) {
+        if ( listState.isScrollInProgress.not() ) {
             withContext(Dispatchers.Main) {
                 delay(500)
-                listState.scrollToItem(scrollPosition.first, scrollPosition.second)
+                listState.animateScrollToItem(scrollPosition.first, scrollPosition.second)
             }
         }
     }
-    // Update isScrolling state when the user scrolls
-    LaunchedEffect(key1 = listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .collect { isScrolling = it }
-    }
+
     LaunchedEffect(key1 = listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
-            .debounce(100)
+//            .debounce(100)
             .collect {
-                if (isScrolling) {
+                if (listState.isScrollInProgress) {
                     viewModel.updateScrollPosition(it)
                 }
             }
@@ -159,7 +157,10 @@ fun TweetFeedScreen(
             ) {
                 items(tweets, key = { it.mid } ) { tweet ->
                     if (!tweet.isPrivate)
-                        TweetItem(tweet, parentEntry)
+                        TweetItem(
+                            tweet = tweet,
+                            parentEntry = parentEntry
+                        )
                 }
                 item {
                     if (refreshingAtTop) {
