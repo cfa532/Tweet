@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +41,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -139,7 +141,7 @@ fun TweetFeedScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        topBar = { MainTopAppBar(navController, scrollBehavior) },
+        topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
     ) { innerPadding ->
         Box(
@@ -200,8 +202,10 @@ fun TweetFeedScreen(
 @Composable
 fun MainTopAppBar(
     navController: NavHostController,
+    listState: LazyListState,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
+    val scope = rememberCoroutineScope()
     CenterAlignedTopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -216,7 +220,9 @@ fun MainTopAppBar(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = {
-                            navController.navigate(NavTweet.TweetFeed)
+                            scope.launch {
+                                listState.animateScrollToItem(0)
+                            }
                         })
                 ) {
                     AppIcon()
