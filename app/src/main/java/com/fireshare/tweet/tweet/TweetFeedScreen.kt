@@ -79,8 +79,8 @@ fun TweetFeedScreen(
 ) {
     val tweets by viewModel.tweets.collectAsState()
 
-    val scrollBehavior =
-        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+//        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
         viewModel.viewModelScope.launch(Dispatchers.IO) {
