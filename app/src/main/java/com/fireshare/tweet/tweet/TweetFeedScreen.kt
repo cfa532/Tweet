@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
@@ -34,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,17 +41,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -69,11 +63,10 @@ import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
+ @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -120,6 +113,7 @@ fun TweetFeedScreen(
                 }
             }
     }
+
     val initState by viewModel.initState.collectAsState()
     LaunchedEffect(appUser.mid) {
         if (!initState)
@@ -131,15 +125,29 @@ fun TweetFeedScreen(
         }
     }
 
-    // Calculate the transparency based on the scroll position
+    // State to track if scrolling is in progress
+    val isScrolling = remember { mutableStateOf(false) }
+
+    // Update isScrolling state
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect {
+                isScrolling.value = it
+            }
+    }
+
+    // Calculate the transparency based on scrolling state
     val bottomBarTransparency by remember {
         derivedStateOf {
-            if (listState.isScrollInProgress) 0.5f else 1f
+            if (isScrolling.value) {
+                0.3f // When scrolling, alpha is 0.3
+            } else {
+                0.95f // When not scrolling, alpha is 0.8
+            }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
-
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
@@ -198,14 +206,13 @@ fun TweetFeedScreen(
                 )
             }
         }
-
         // Place the BottomNavigationBar on top of the LazyColumn
         BottomNavigationBar(
             navController,
             selectedBottomBarItemIndex,
             Modifier
                 .alpha(bottomBarTransparency)
-                .align(Alignment.BottomCenter) // Align to the bottom
+                .align(Alignment.BottomCenter)
         )
     }
 }

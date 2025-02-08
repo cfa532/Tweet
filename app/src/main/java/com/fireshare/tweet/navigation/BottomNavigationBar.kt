@@ -74,8 +74,9 @@ fun BottomNavigationBar(
             hasNews = false
         )
     )
-    NavigationBar(modifier = modifier)
-    {
+    NavigationBar(
+        modifier = modifier
+    ) {
         val context = LocalContext.current
 
         items.forEachIndexed { index, item ->
