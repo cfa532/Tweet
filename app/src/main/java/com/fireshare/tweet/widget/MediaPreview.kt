@@ -227,7 +227,12 @@ fun MediaItemView(
                 }
             }
             MediaType.Audio -> {
-                AudioPreview(mediaItems, index, modifier, tweet)
+                val backgroundModifier = if (index % 2 != 0) { // Check if index is odd
+                    modifier.background(Color.Black.copy(alpha = 0.05f)) // Slightly darker background
+                } else {
+                    modifier
+                }
+                AudioPreview(mediaItems, index, backgroundModifier, tweet)
             }
             else -> {       // Handle unknown file type
                 Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
@@ -298,6 +303,7 @@ fun AudioPreview(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(start = 2.dp)
                 .clickable {
                     navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
                 },
