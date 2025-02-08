@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +37,7 @@ import kotlinx.coroutines.launch
 fun BottomNavigationBar(
     navController: NavController,
     selectedIndex: Int = 100,
+    modifier: Modifier = Modifier,
     bottomBarViewModel: BottomBarViewModel = hiltViewModel()
 ) {
     var selectedItemIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -72,7 +74,8 @@ fun BottomNavigationBar(
             hasNews = false
         )
     )
-    NavigationBar {
+    NavigationBar(modifier = modifier)
+    {
         val context = LocalContext.current
 
         items.forEachIndexed { index, item ->

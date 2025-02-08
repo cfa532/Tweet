@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -80,19 +82,15 @@ fun TweetFeedScreen(
     viewModel: TweetFeedViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
-
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-//        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
         viewModel.viewModelScope.launch(Dispatchers.IO) {
             viewModel.loadNewerTweets()
         }
-    } )
-    // for pulling up at the bottom of the list
+    })
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()
-
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
@@ -100,37 +98,31 @@ fun TweetFeedScreen(
             lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
         }
     }
-
     val context = LocalContext.current
     val activity = context as? Activity
     LaunchedEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
-
-    // State to track if the user is actively scrolling
     val scrollPosition by viewModel.scrollPosition.collectAsState()
     LaunchedEffect(key1 = scrollPosition) {
-        if ( listState.isScrollInProgress.not() ) {
+        if (listState.isScrollInProgress.not()) {
             withContext(Dispatchers.Main) {
                 delay(500)
                 listState.animateScrollToItem(scrollPosition.first, scrollPosition.second)
             }
         }
     }
-
     LaunchedEffect(key1 = listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
-//            .debounce(100)
             .collect {
                 if (listState.isScrollInProgress) {
                     viewModel.updateScrollPosition(it)
                 }
             }
     }
-
     val initState by viewModel.initState.collectAsState()
     LaunchedEffect(appUser.mid) {
-        if ( !initState )
+        if (!initState)
             viewModel.refresh()
     }
     LaunchedEffect(isAtBottom) {
@@ -139,117 +131,137 @@ fun TweetFeedScreen(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
-        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(color = Color.LightGray)
-                .pullRefresh(pullRefreshState)
-                .padding(innerPadding),
-        ) {
-            LazyColumn(
+    // Calculate the transparency based on the scroll position
+    val bottomBarTransparency by remember {
+        derivedStateOf {
+            if (listState.isScrollInProgress) 0.5f else 1f
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
+            bottomBar = {} // Remove bottomBar from Scaffold
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                state = listState
+                    .background(color = Color.LightGray)
+                    .pullRefresh(pullRefreshState)
+                    .padding(innerPadding),
             ) {
-                items(tweets, key = { it.mid } ) { tweet ->
-                    if (!tweet.isPrivate)
-                        TweetItem(
-                            tweet = tweet,
-                            parentEntry = parentEntry
-                        )
-                }
-                item {
-                    if (refreshingAtTop) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 60.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(80.dp),
-                            color = Color.LightGray,
-                            strokeWidth = 8.dp
-                        )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 60.dp) // Adjust this value
+                ) {
+                    items(tweets, key = { it.mid }) { tweet ->
+                        if (!tweet.isPrivate)
+                            TweetItem(
+                                tweet = tweet,
+                                parentEntry = parentEntry
+                            )
+                    }
+                    item {
+                        if (refreshingAtTop) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 60.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .size(80.dp),
+                                color = Color.LightGray,
+                                strokeWidth = 8.dp
+                            )
+                        }
+                    }
+                    item {
+                        if (refreshingAtBottom) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .align(Alignment.BottomCenter)
+                            )
+                        }
                     }
                 }
-                item {
-                    if (refreshingAtBottom) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .align(Alignment.BottomCenter)
-                        )
-                    }
-                }
+                PullRefreshIndicator(
+                    refreshingAtTop,
+                    state = pullRefreshState,
+                    Modifier.align(Alignment.TopCenter)
+                )
             }
-            PullRefreshIndicator(
-                refreshingAtTop,
-                state = pullRefreshState,
-                Modifier.align(Alignment.TopCenter)
-            )
         }
+
+        // Place the BottomNavigationBar on top of the LazyColumn
+        BottomNavigationBar(
+            navController,
+            selectedBottomBarItemIndex,
+            Modifier
+                .alpha(bottomBarTransparency)
+                .align(Alignment.BottomCenter) // Align to the bottom
+        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainTopAppBar(
-    navController: NavHostController,
-    listState: LazyListState,
-    scrollBehavior: TopAppBarScrollBehavior? = null
-) {
-    val scope = rememberCoroutineScope()
-    CenterAlignedTopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            titleContentColor = MaterialTheme.colorScheme.primary,
-        ),
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(onClick = {
-                            scope.launch {
-                                listState.animateScrollToItem(0)
-                            }
-                        })
-                ) {
-                    AppIcon()
-                }
-            }
-        },
-        navigationIcon = {
-            IconButton(onClick = {
-                if (appUser.mid == TW_CONST.GUEST_ID)
-                    navController.navigate(NavTweet.Login)
-                else
-                    navController.navigate(NavTweet.UserProfile(appUser.mid))
-            } ) {
-                UserAvatar(appUser,32)
-            }
-        },
-        actions = {
-            IconButton(onClick = {
-                navController.navigate(NavTweet.Settings)
-            }) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = MaterialTheme.colorScheme.surfaceTint
-                )
-            }
-        },
-        scrollBehavior = scrollBehavior
-    )
-}
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun MainTopAppBar(
+     navController: NavHostController,
+     listState: LazyListState,
+     scrollBehavior: TopAppBarScrollBehavior? = null
+ ) {
+     val scope = rememberCoroutineScope()
+     CenterAlignedTopAppBar(
+         colors = TopAppBarDefaults.topAppBarColors(
+             containerColor = MaterialTheme.colorScheme.primaryContainer,
+             titleContentColor = MaterialTheme.colorScheme.primary,
+         ),
+         title = {
+             Row(
+                 modifier = Modifier.fillMaxWidth(),
+                 horizontalArrangement = Arrangement.Center
+             ) {
+                 Box(
+                     modifier = Modifier
+                         .clip(CircleShape)
+                         .clickable(onClick = {
+                             scope.launch {
+                                 listState.animateScrollToItem(0)
+                             }
+                         })
+                 ) {
+                     AppIcon()
+                 }
+             }
+         },
+         navigationIcon = {
+             IconButton(onClick = {
+                 if (appUser.mid == TW_CONST.GUEST_ID)
+                     navController.navigate(NavTweet.Login)
+                 else
+                     navController.navigate(NavTweet.UserProfile(appUser.mid))
+             }) {
+                 UserAvatar(appUser, 32)
+             }
+         },
+         actions = {
+             IconButton(onClick = {
+                 navController.navigate(NavTweet.Settings)
+             }) {
+                 Icon(
+                     imageVector = Icons.Default.Settings,
+                     contentDescription = "Settings",
+                     tint = MaterialTheme.colorScheme.surfaceTint
+                 )
+             }
+         },
+         scrollBehavior = scrollBehavior
+     )
+ }
