@@ -1,5 +1,6 @@
 package com.fireshare.tweet.widget
 
+import android.app.DownloadManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -33,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
@@ -70,8 +73,12 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
@@ -231,8 +238,8 @@ fun MediaItemView(
                 }
                 AudioPreview(mediaItems, index, backgroundModifier, tweet)
             }
-            else -> {       // Handle unknown file type
-                Timber.tag("MediaItemView").e("unknown file type ${mediaItem.url}")
+            else -> {       // add link to download other file type
+                BlobLink(mediaItems[index], mediaItem.url, modifier)
             }
         }
         if (numOfHiddenItems > 0) {
@@ -267,6 +274,54 @@ fun MediaItemView(
             }
         }
     }
+}
+
+@Composable
+fun BlobLink(
+    blobItem: MimeiFileType,
+    url: String,
+    modifier: Modifier
+) {
+    val annotatedText = buildAnnotatedString {
+        withStyle(
+            style = SpanStyle(
+                color = Color.Blue,
+                textDecoration = TextDecoration.Underline
+            )
+        ) {
+            append(blobItem.fileName.toString())
+        }
+        addStringAnnotation(
+            tag = "URL",
+            annotation = url,
+            start = 0,
+            end = blobItem.fileName.toString().length
+        )
+    }
+
+    val context = LocalContext.current
+    Text(
+        text = annotatedText,
+        modifier = modifier.fillMaxWidth()
+            .padding(start = 4.dp)
+            .wrapContentWidth(Alignment.Start)
+            .clickable {
+                downloadFile(context, url, blobItem.fileName.toString())
+            }
+    )
+}
+
+fun downloadFile(context: Context, url: String, fileName: String) {
+    val request = DownloadManager.Request(Uri.parse(url))
+        .setTitle(fileName)
+        .setDescription("Downloading")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    downloadManager.enqueue(request)
+
+    Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
 }
 
 @OptIn(UnstableApi::class)
