@@ -34,10 +34,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +53,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -65,8 +71,9 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.State
 
- @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
@@ -137,15 +144,7 @@ fun TweetFeedScreen(
     }
 
     // Calculate the transparency based on scrolling state
-    val bottomBarTransparency by remember {
-        derivedStateOf {
-            if (isScrolling.value) {
-                0.3f // When scrolling, alpha is 0.3
-            } else {
-                0.95f // When not scrolling, alpha is 0.8
-            }
-        }
-    }
+    val bottomBarTransparency = rememberDelayedBottomBarTransparency(isScrolling)
 
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(
@@ -211,7 +210,7 @@ fun TweetFeedScreen(
             navController,
             selectedBottomBarItemIndex,
             Modifier
-                .alpha(bottomBarTransparency)
+                .alpha(bottomBarTransparency.value)
                 .align(Alignment.BottomCenter)
         )
     }
@@ -271,4 +270,39 @@ fun TweetFeedScreen(
          },
          scrollBehavior = scrollBehavior
      )
+ }
+
+ @Composable
+ fun rememberDelayedBottomBarTransparency(isScrolling: MutableState<Boolean>): State<Float> {
+     val transparency = remember { mutableFloatStateOf(if (isScrolling.value) 0.3f else 0.95f) }
+     val lifecycleOwner = LocalLifecycleOwner.current
+
+     // Use a LaunchedEffect to manage the coroutine and delay
+     LaunchedEffect(isScrolling.value) {
+         if (!isScrolling.value) {
+             // If not scrolling, start the delay and update transparency
+             delay(2000) // Wait for 2 seconds
+             transparency.floatValue = 0.95f
+         } else {
+             // If scrolling, immediately set transparency to 0.3f
+             transparency.floatValue = 0.3f
+         }
+     }
+
+     // Reset transparency to 0.95f when the composable is first created
+     // and when the lifecycle is resumed. This ensures the bottom bar is
+     // visible when the app is first launched or when returning from the background.
+     DisposableEffect(lifecycleOwner) {
+         val observer = LifecycleEventObserver { _, event ->
+             if (event == Lifecycle.Event.ON_RESUME) {
+                 transparency.floatValue = 0.95f
+             }
+         }
+         lifecycleOwner.lifecycle.addObserver(observer)
+         onDispose {
+             lifecycleOwner.lifecycle.removeObserver(observer)
+         }
+     }
+
+     return transparency
  }
