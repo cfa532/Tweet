@@ -117,12 +117,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
-                IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
-                    Icon(imageVector = image, contentDescription = null)
-                }
-            },
+            trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
             keyboardOptions = KeyboardOptions.Default.copy(
                 imeAction = ImeAction.Done
             ),

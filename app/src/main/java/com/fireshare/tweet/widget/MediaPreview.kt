@@ -285,7 +285,7 @@ fun BlobLink(
     val annotatedText = buildAnnotatedString {
         withStyle(
             style = SpanStyle(
-                color = Color.Blue,
+                color = Color.Cyan,
                 textDecoration = TextDecoration.Underline
             )
         ) {

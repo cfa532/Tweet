@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -149,12 +150,7 @@ fun EditProfileScreen(
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        val image = if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
-                        IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
-                            Icon(imageVector = image, contentDescription = null)
-                        }
-                    },
+                    trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
                     singleLine = true
                 )
                 if (showConfirm.value) {
@@ -167,13 +163,7 @@ fun EditProfileScreen(
                             .fillMaxWidth()
                             .focusRequester(focusRequester),
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            val image =
-                                if (isPasswordVisible) Icons.Default.Star else Icons.Default.Lock
-                            IconButton(onClick = { viewModel.onPasswordVisibilityChange() }) {
-                                Icon(imageVector = image, contentDescription = null)
-                            }
-                        },
+                        trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
                         singleLine = true,
                     )
                 }
@@ -243,6 +233,21 @@ fun EditProfileScreen(
                 modifier = Modifier.align(Alignment.Center)
             )
         }
+    }
+}
+
+@Composable
+fun EyeSlashButton(
+    viewModel: UserViewModel,
+    isPasswordVisible: Boolean
+) {
+    IconButton(
+        onClick = { viewModel.onPasswordVisibilityChange() },
+        modifier = Modifier.size(ButtonDefaults.IconSize)
+    ) {
+        Icon(painter = painterResource(
+            if (isPasswordVisible) R.drawable.eyes else R.drawable.eye_slash
+        ), contentDescription = null)
     }
 }
 
