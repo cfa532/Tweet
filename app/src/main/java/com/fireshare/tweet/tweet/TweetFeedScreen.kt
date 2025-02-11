@@ -273,7 +273,7 @@ fun TweetFeedScreen(
      )
  }
 
- data object BottomBarTransparency {
+ private data object BottomBarTransparency {
      const val VISIBLE = 0.98f
      const val INVISIBLE = 0.3f
  }
