@@ -19,6 +19,7 @@ import com.fireshare.tweet.datamodel.writableUrl
 import com.fireshare.tweet.datamodel.writableUrl2
 import com.fireshare.tweet.widget.Gadget.filterIpAddresses
 import com.fireshare.tweet.widget.Gadget.getAccessibleIP
+import com.fireshare.tweet.widget.Gadget.getAccessibleTweet
 import com.fireshare.tweet.widget.Gadget.getAccessibleUser
 import com.fireshare.tweet.widget.Gadget.splitJson
 import com.google.gson.Gson
@@ -129,12 +130,12 @@ object HproseInstance {
                         getProviders(userId, "http://$firstIp")?.let { ips ->
                             appUser = getAccessibleUser(ips, userId) ?: appUser
                             cachedUsers.add(appUser)
-                            Timber.tag("initAppEntry").d("User inited. $appId, $appUser")
+                            Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                         }
                     } else {
                         appUser.followingList = getAlphaIds()
                         cachedUsers.add(appUser)
-                        Timber.tag("initAppEntry").d("Guest user inited. $appId, $appUser")
+                        Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                     }
                 }
             } else {
@@ -531,7 +532,8 @@ object HproseInstance {
      * */
     suspend fun getTweet(
         tweetId: MimeiId,
-        authorId: MimeiId
+        authorId: MimeiId,
+        nodeIP: String? = null      // ip address where tweet can be found.
     ): Tweet? { return withRetry {
         try {
             // if there is a cached tweet, return it.
@@ -542,18 +544,18 @@ object HproseInstance {
                 else
                     return@withRetry cachedTweet
             }
-
-            val author =
-                getUser(authorId) ?: return@withRetry null   // cannot get author data, return null
-            val method = "get_tweet"
-            val url = StringBuilder("${author.baseUrl}/entry?aid=$appId&ver=last&entry=$method")
+            // author could be null, for tweet could be provided by the others.
+            val author = getUser(authorId)
+            val hostIP = nodeIP ?: author?.baseUrl
+            val url = StringBuilder("$hostIP/entry?aid=$appId&ver=last&entry=get_tweet")
                 .append("&tweetid=$tweetId")
                 // appUser is passed to sever, to check if the current user has liked or bookmarked.
                 .append("&userid=${appUser.mid}").toString()
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                gson.fromJson(response.bodyAsText(), Tweet::class.java)?.let { tweet ->
+                var tweet = gson.fromJson(response.bodyAsText(), Tweet::class.java)
+                if (tweet != null) {
                     tweet.author = author
                     /**
                      * Insert the tweet into the cache database.
@@ -563,6 +565,20 @@ object HproseInstance {
                     )
                     Timber.tag("getTweet").d("$tweet")
                     return@withRetry tweet
+                } else {
+                    if (nodeIP == null) {
+                        // most likely the author cannot provide tweet data.
+                        // Try to load the tweet some somewhere else, by tweetId alone.
+                        getProviders(tweetId)?.let { ipList ->
+                            tweet = getAccessibleTweet(ipList, tweetId, authorId)
+                        }
+                        tweet.author = author
+                        tweetCache.tweetDao().insertOrUpdateCachedTweet(
+                            CachedTweet(tweet.mid, gson.toJson(tweet))
+                        )
+                        Timber.tag("getTweet").d("By tweetId alone. $tweet")
+                        return@withRetry tweet
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -781,7 +797,7 @@ object HproseInstance {
                 )
             }
             // become a provider for the original tweet
-            provide(tweet.author!!, tweet.mid)
+            tweet.author?.let { provide(it, tweet.mid) }
         } catch (e: Exception) {
             Timber.e("toggleRetweet()", e.toString())
         }
@@ -830,7 +846,7 @@ object HproseInstance {
                 )
                 // become a provider of the tweet if like it.
                 if (hasLiked)
-                    provide(tweet.author!!, tweet.mid)
+                    tweet.author?.let { provide(it, tweet.mid) }
                 else
                     tweet.author?.let { unProvide(it, tweet.mid) }
                 return@withRetry ret
@@ -863,7 +879,7 @@ object HproseInstance {
                 )
                 // become a provider of the tweet if like it.
                 if (hasBookmarked)
-                    provide(tweet.author!!, tweet.mid)
+                    tweet.author?.let { provide(it, tweet.mid) }
                 else
                     tweet.author?.let { unProvide(it, tweet.mid) }
                 return@withRetry ret
@@ -926,7 +942,7 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(updatedTweet.mid, gson.toJson(updatedTweet))
                 )
-                provide(tweet.author!!, tweet.mid)
+                tweet.author?.let { provide(it, tweet.mid) }
                 updatedTweet
             } else {
                 tweet
@@ -1037,7 +1053,8 @@ object HproseInstance {
         }.getOrNull()
     }
 
-    private suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? { return withRetry {
+    private suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>?
+    { return withRetry {
         val entry = "get_providers"
         val url =  "$baseUrl/entry?aid=$appId&ver=last&entry=$entry&mid=$mid"
         try {

@@ -11,6 +11,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.datamodel.MimeiId
+import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import kotlinx.coroutines.Dispatchers.IO
@@ -165,7 +166,9 @@ object Gadget {
         }
     }
 
-    // In Pair<URL, String?>?, where String is JSON of Mimei content
+    /**
+     * @return the first User object from the given IP list.
+     * */
     suspend fun getAccessibleUser(ipList: List<String>, userId: MimeiId): User? {
         return withTimeoutOrNull(2000L) {
             channelFlow {
@@ -194,6 +197,33 @@ object Gadget {
         }
     }
 
+    /**
+     * @return the first Tweet object from the given IP list.
+     * */
+    suspend fun getAccessibleTweet(ipList: List<String>, tweetId: MimeiId, authorId: MimeiId): Tweet? {
+        return withTimeoutOrNull(2000L) {
+            channelFlow {
+                ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
+                    launch {
+                        try {
+                            HproseInstance.getTweet(tweetId, authorId, ip)?.let {
+                                send(it) // Emit the user if found
+                                cancel()
+                            }
+                        } catch (e: Exception) {
+                            // Handle exceptions, e.g., log or rethrow
+                        }
+                    }
+                }
+            }.firstOrNull()?.also {
+                Timber.tag("getAccessibleTweet").d("$it")
+            }
+        }
+    }
+
+    /**
+     * @return the first accessible node from the given IP list.
+     * */
     suspend fun getAccessibleIP(ipList: List<String>): String? {
         return withTimeoutOrNull(2000L) {
             channelFlow {
