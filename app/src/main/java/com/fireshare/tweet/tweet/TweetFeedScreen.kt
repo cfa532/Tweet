@@ -2,6 +2,7 @@
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -272,9 +273,15 @@ fun TweetFeedScreen(
      )
  }
 
+ data object BottomBarTransparency {
+     const val VISIBLE = 0.98f
+     const val INVISIBLE = 0.3f
+ }
+
  @Composable
  fun rememberDelayedBottomBarTransparency(isScrolling: MutableState<Boolean>): State<Float> {
-     val transparency = remember { mutableFloatStateOf(if (isScrolling.value) 0.3f else 0.95f) }
+     val transparency = remember { mutableFloatStateOf(
+         if (isScrolling.value) BottomBarTransparency.INVISIBLE else BottomBarTransparency.VISIBLE) }
      val lifecycleOwner = LocalLifecycleOwner.current
 
      // Use a LaunchedEffect to manage the coroutine and delay
@@ -282,10 +289,10 @@ fun TweetFeedScreen(
          if (!isScrolling.value) {
              // If not scrolling, start the delay and update transparency
              delay(2000) // Wait for 2 seconds
-             transparency.floatValue = 0.95f
+             transparency.floatValue = BottomBarTransparency.VISIBLE
          } else {
              // If scrolling, immediately set transparency to 0.3f
-             transparency.floatValue = 0.3f
+             transparency.floatValue = BottomBarTransparency.INVISIBLE
          }
      }
 
@@ -295,7 +302,7 @@ fun TweetFeedScreen(
      DisposableEffect(lifecycleOwner) {
          val observer = LifecycleEventObserver { _, event ->
              if (event == Lifecycle.Event.ON_RESUME) {
-                 transparency.floatValue = 0.95f
+                 transparency.floatValue = BottomBarTransparency.VISIBLE
              }
          }
          lifecycleOwner.lifecycle.addObserver(observer)
