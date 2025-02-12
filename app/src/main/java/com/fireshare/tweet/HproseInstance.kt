@@ -118,7 +118,7 @@ object HproseInstance {
                      *
                      * hostIPs is a list of node's IP that is a Mimei provider for this App.
                      */
-                    val firstIp = getAccessibleIP(hostIPs)
+                    val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP(hostIPs)
                     appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
                     val userId = preferenceHelper.getUserId()
                     if (userId != null && userId != TW_CONST.GUEST_ID) {
@@ -474,7 +474,7 @@ object HproseInstance {
     } }
 
     /**
-     * Get tweets of a given author in a given span of time. if end is null, get all tweets.
+     * Get tweets of a given author in a given span of time.
      * Update tweets state flow directly.
      * */
     fun getTweetList(
@@ -484,14 +484,14 @@ object HproseInstance {
         endTimestamp: Long?
     ): Flow<List<Tweet>> = channelFlow {
         try {
-            // 1. Retrieve cached tweet mid list for this user.
+            // 1. Retrieve cached tweet mid list for this user and cached tweet.
             tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.let {
                 splitJson(it)?.mapNotNull { mid ->
                     retrieveCachedTweet(mid)
                 }?.let { it1 -> send(it1) }
             }
 
-            // 3. Make network call to get mid list from server
+            // 2. Make network call to get mid list from server
             val method = "get_tweet_list"
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
                 "&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp"
@@ -502,12 +502,12 @@ object HproseInstance {
                     object : TypeToken<List<MimeiId>?>() {}.type
                 ) as List<MimeiId>?
 
-                // 4. Overwrite cached mid list of the user with a updated list
+                // 3. Overwrite cached mid list of the user with a updated list
                 midList?.let {
                     tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
                 }
 
-                // 5. Retrieve any tweets not in the cached list and add them to tweets list.
+                // 4. Retrieve any tweets not in the cached list and add them to tweets list.
                 midList?.filterNot { mid->
                     tweets.any { it.mid == mid }
                 }?.mapNotNull { unCachedTweetId ->
@@ -544,9 +544,9 @@ object HproseInstance {
                 else
                     return@withRetry cachedTweet
             }
-            // author could be null, for tweet could be provided by the others.
+            // author data could be null, for tweet could be provided by the others.
             val author = getUser(authorId)
-            val hostIP = nodeIP ?: author?.baseUrl
+            val hostIP = (nodeIP ?: author?.baseUrl)?: return@withRetry null
             val url = StringBuilder("$hostIP/entry?aid=$appId&ver=last&entry=get_tweet")
                 .append("&tweetid=$tweetId")
                 // appUser is passed to sever, to check if the current user has liked or bookmarked.
