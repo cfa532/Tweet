@@ -80,7 +80,7 @@ fun TweetItemBody(
                         Surface (
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)
-                                .heightIn(min = 40.dp, max = 400.dp),
+                                .heightIn(min = 32.dp, max = 400.dp),
                             tonalElevation = 4.dp,
                             shape = RoundedCornerShape(size = 8.dp)
                         ) {

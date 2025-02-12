@@ -148,7 +148,7 @@ fun TweetItem(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(start = 16.dp, end = 8.dp, top = 4.dp)
-                                    .heightIn(min = 40.dp, max = 400.dp), // Set a specific height for the grid
+                                    .heightIn(min = 32.dp, max = 400.dp), // Set a specific height for the grid
                                 tonalElevation = 4.dp
                             ) {
                                 MediaPreviewGrid(tweet.attachments!!, viewModel)
