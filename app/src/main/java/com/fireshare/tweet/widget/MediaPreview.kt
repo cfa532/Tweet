@@ -174,12 +174,13 @@ fun MediaPreviewGrid(
                  * */
                 numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                     mediaItems.size - maxItems else 0,
+                // autoplay first video item
                 autoPlay = if (mediaItem.type == MediaType.Video && !isFirstVideo) {
                                 isFirstVideo = true
                                 true
                             } else {
                                 false
-                            },      // autoplay first video item
+                            },
                 inPreviewGrid = true,
                 viewModel
             )
