@@ -487,7 +487,7 @@ object HproseInstance {
             // 1. Retrieve cached tweet mid list for this user and cached tweet.
             tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.let {
                 splitJson(it)?.mapNotNull { mid ->
-                    retrieveCachedTweet(mid)
+                    retrieveCachedTweet(mid)    // originalTweet is cached together.
                 }?.let { it1 -> send(it1) }
             }
 
@@ -507,7 +507,7 @@ object HproseInstance {
                     tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
                 }
 
-                // 4. Retrieve any tweets not in the cached list and add them to tweets list.
+                // 4. Retrieve any tweets not fetched yet, and add them to tweets list.
                 midList?.filterNot { mid->
                     tweets.any { it.mid == mid }
                 }?.mapNotNull { unCachedTweetId ->
@@ -523,6 +523,58 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
+        }
+    }
+    /**
+     * Load 10 tweets of an User each time.
+     * */
+    fun getTweetListByRank(
+        user: User,
+        tweets: List<Tweet>,
+        startRank: Int = 0,
+        count: Int = 10
+    ): Flow<List<Tweet>> = channelFlow {
+        try {
+            // 1. Retrieve cached tweet mid list for this user and cached tweet.
+            tweetCache.tweetDao().getCachedTweetMidList(user.mid)?.let {
+                splitJson(it)?.mapNotNull { mid ->
+                    retrieveCachedTweet(mid)     // originalTweet is cached together.
+                }?.let { it1 -> send(it1) }
+            }
+
+            // 2. Make network call to get mid list from server
+            val method = "get_tweet_list_by_rank"
+            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                    "&userid=${user.mid}&start=$startRank&count=$count"
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val midList = Gson().fromJson(
+                    response.bodyAsText(),
+                    object : TypeToken<List<MimeiId>?>() {}.type
+                ) as List<MimeiId>?
+
+                // 3. Overwrite cached mid list of the user with a updated list
+                midList?.let {
+                    tweetCache.tweetDao().insertOrUpdateTweetMidList(TweetMidList(user.mid, it))
+                }
+
+                // 4. Retrieve any tweets not in the cached list and add them to tweets list.
+                midList?.filterNot { mid ->
+                    tweets.any { it.mid == mid }
+                }?.mapNotNull { unCachedTweetId ->
+                    getTweet(unCachedTweetId, user.mid)?.also { tweet ->
+                        if (tweet.originalTweetId != null) {
+                            tweet.originalTweet =
+                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                                    ?: return@mapNotNull null
+                        }
+                    }
+                }?.also { unCachedTweets ->
+                    send(unCachedTweets)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("getTweetListByRank").e(e.toString())
         }
     }
 

@@ -395,7 +395,6 @@ fun VideoPreview(
 ) {
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
-    val areControlsVisible by remember { mutableStateOf(true) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     var aspectRatio by remember { mutableFloatStateOf(1f) }
     val exoPlayer = remember { createExoPlayer(context, url) }
@@ -465,9 +464,6 @@ fun VideoPreview(
                     useController = !inPreviewGrid
                     controllerShowTimeoutMs = 2000
                     controllerAutoShow = !inPreviewGrid
-//                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-//                        areControlsVisible = visibility == View.VISIBLE
-//                    })
                     hideController()
                 }
             },
@@ -485,7 +481,7 @@ fun VideoPreview(
             Icon(
                 painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
                 contentDescription = if (isMuted) "UnMute" else "Mute",
-                tint = MaterialTheme.colorScheme.secondary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .size(ButtonDefaults.IconSize)
             )

@@ -61,12 +61,7 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
     private var initState = MutableStateFlow(true)      // initial load state
 
-    companion object {
-        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
-        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
-    }
-    private var startTimestamp = System.currentTimeMillis()    // current time
-    private var endTimestamp = startTimestamp - THIRTY_DAYS_IN_MILLIS   // previous time
+    private var startRank = MutableStateFlow(0)    // current rank of tweet in DB
 
     // variable for login management
     var username = mutableStateOf(user.value.username)
@@ -81,20 +76,18 @@ class UserViewModel @AssistedInject constructor(
     suspend fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
-        startTimestamp = System.currentTimeMillis()
-        val endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        startRank.value = 0
         Timber.tag("UserVM.loadNewerTweets")
-            .d("startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+            .d("start rank=$startRank.value")
         getTweets()
         _isRefreshing.value = false
     }
     suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
-        val startTimestamp = endTimestamp
-        endTimestamp = startTimestamp - SEVEN_DAYS_IN_MILLIS
+        startRank.value = 0
         Timber.tag("UserVM.loadOlderTweets")
-            .d("startTimestamp=$startTimestamp, endTimestamp=$endTimestamp")
+            .d("start rank=$startRank.value")
         getTweets()
         _isRefreshingAtBottom.value = false
     }
@@ -176,8 +169,9 @@ class UserViewModel @AssistedInject constructor(
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getTweetList(user.value, _tweets.value, startTimestamp, endTimestamp)
+        HproseInstance.getTweetListByRank(user.value, _tweets.value, startRank.value)
             .collect { tweets ->
+                startRank.value += tweets.size  // for loading older tweets
                 _tweets.update { list -> (list + tweets)
                     .filterNot { it.isPrivate && it.authorId != appUser.mid }
                     .distinctBy { it.mid }
