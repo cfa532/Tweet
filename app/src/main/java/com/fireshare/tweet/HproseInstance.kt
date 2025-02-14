@@ -1,11 +1,8 @@
 package com.fireshare.tweet
 
-import android.app.AlertDialog
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.widget.EditText
-import android.widget.Toast
 import androidx.documentfile.provider.DocumentFile
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
@@ -35,11 +32,8 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
