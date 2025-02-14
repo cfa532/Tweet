@@ -35,9 +35,6 @@ class TweetApplication : Application(){
         }
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY)
 
-        // Initialize WorkManager
-//        WorkManager.initialize(this, Configuration.Builder().build())
-
         // Schedule the CleanUpWorker
         val cleanUpRequest = PeriodicWorkRequestBuilder<CleanUpWorker>(1, TimeUnit.DAYS)
             .build()
@@ -48,15 +45,6 @@ class TweetApplication : Application(){
             cleanUpRequest
         )
     }
-
-//    @Inject
-//    lateinit var workerFactory: HiltWorkerFactory
-
-//    , Configuration.Provider
-//    override val workManagerConfiguration: Configuration
-//        get() = Configuration.Builder()
-//            .setWorkerFactory(workerFactory)
-//            .build()
 }
 
 /**
