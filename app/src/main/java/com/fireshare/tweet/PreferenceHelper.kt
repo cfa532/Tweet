@@ -7,11 +7,17 @@ import com.fireshare.tweet.datamodel.TW_CONST
 class PreferenceHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    fun setAppUrl(baseUrl: String) {
-        return sharedPreferences.edit().putString("appUrl", baseUrl).apply()
+    fun setAppUrls(urls: Set<String>) {
+        val urlsString = urls.filter { it.isNotEmpty() }.joinToString(",") { it }
+        sharedPreferences.edit().putString("custom_urls", urlsString).apply()
     }
-    fun getAppUrl(): String? {
-        return sharedPreferences.getString("appUrl", BuildConfig.BASE_URL)
+    fun getAppUrls(): Set<String> {
+        val urlsString = sharedPreferences.getString("custom_urls", "") ?: ""
+        return if (urlsString.isNotEmpty()) {
+            urlsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        } else {
+            setOf("http://${BuildConfig.BASE_URL}")
+        }
     }
 
     fun setSpeakerMute(isMuted: Boolean) {

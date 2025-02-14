@@ -87,7 +87,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             .padding(horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-//            var appUrl by remember { mutableStateOf(HproseInstance.preferenceHelper.getAppUrl() ?: "") }
+//            var appUrl by remember { mutableStateOf(HproseInstance.preferenceHelper.getAppUrls() ?: "") }
 //            val focusRequester = remember { FocusRequester() }
 //            OutlinedTextField(
 //                value = appUrl ?: "",
@@ -100,8 +100,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
 //                singleLine = true,
 //            )
 //            Button(onClick = {
-//                HproseInstance.preferenceHelper.setAppUrl(
-//                    appUrl ?: HproseInstance.preferenceHelper.getAppUrl()!!
+//                HproseInstance.preferenceHelper.setAppUrls(
+//                    appUrl ?: HproseInstance.preferenceHelper.getAppUrls()!!
 //                ) },
 //                modifier = Modifier
 //                    .padding(top = 16.dp)

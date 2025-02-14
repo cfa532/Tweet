@@ -1,8 +1,11 @@
 package com.fireshare.tweet
 
+import android.app.AlertDialog
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.EditText
+import android.widget.Toast
 import androidx.documentfile.provider.DocumentFile
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
@@ -32,8 +35,11 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -59,7 +65,7 @@ object HproseInstance {
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
-    private val httpClient = HttpClient(CIO) {
+    val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
             requestTimeoutMillis = 60_000 // Total request timeout
             connectTimeoutMillis = 30_000  // Connection timeout
@@ -69,10 +75,9 @@ object HproseInstance {
 
     suspend fun init(context: Context) {
         this.preferenceHelper = PreferenceHelper(context)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://${preferenceHelper.getAppUrl()}")
         chatDatabase = ChatDatabase.getInstance(context)
         tweetCache = TweetCacheDatabase.getInstance(context)
-
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = preferenceHelper.getAppUrls().first())
         initAppEntry()
     }
 
@@ -82,67 +87,69 @@ object HproseInstance {
     private suspend fun initAppEntry() {
         // make sure no stale data during retry init.
         cachedUsers.clear()
-        try {
-            val response: HttpResponse = httpClient.get(appUser.baseUrl!!)
-            /**
-             * retrieve window.Param from page source code of http://base_url
-             * window.setParam({
-             *         CurNode:0,
-             *         log: true,
-             *         ver:"last",
-             *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081", 3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
-             *         aid: "",
-             *         remote:"::1",
-             *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
-             * })]
-             * */
-            val htmlContent = response.bodyAsText().trimIndent()
-            val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-            val matcher = pattern.matcher(htmlContent as CharSequence)
-            if (matcher.find()) {
-                matcher.group(1)?.let {
-                    val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                    appId = paramMap["mid"].toString()
+        for (url in preferenceHelper.getAppUrls()) {
+            try {
+                /**
+                 * retrieve window.Param from page source code of http://base_url
+                 * window.setParam({
+                 *         CurNode:0,
+                 *         log: true,
+                 *         ver:"last",
+                 *         addrs: [[["183.159.17.7:8081", 3.080655111],["[240e:391:e00:169:1458:aa58:c381:5c85]:8081",
+                 *                  3.9642842857833],["192.168.0.94:8081", 281478208946270]]],
+                 *         aid: "",
+                 *         remote:"::1",
+                 *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
+                 * })]
+                 * */
+                val response: HttpResponse = httpClient.get(url)
+                val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
+                val matcher = pattern.matcher(response.bodyAsText().trimIndent() as CharSequence)
+                if (matcher.find()) {
+                    matcher.group(1)?.let {
+                        val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
+                        appId = paramMap["mid"].toString()
 
-                    /**
-                     * The code above makes a call to base URL of the app, get a html page
-                     * and tries to extract appId and host IP addresses from source code.
-                     * */
-                    Timber.tag("initAppEntry").d("$paramMap")
-                    val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
-
-                    /**
-                     * addrs is an ArrayList of ArrayList of node's IP address pairs.
-                     * Each pair is an ArrayList of two elements. The first is the IP address,
-                     * and the second is the time spent to get response from the IP.
-                     *
-                     * hostIPs is a list of node's IP that is a Mimei provider for this App.
-                     */
-                    val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP(hostIPs)
-                    appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
-                    val userId = preferenceHelper.getUserId()
-                    if (userId != null && userId != TW_CONST.GUEST_ID) {
                         /**
-                         * If there is a valid userId in preference, this is a login user.
-                         * Initiate current account. Get its IP list and choose the best one,
-                         * and assign it to appUser.baseUrl.
+                         * The code above makes a call to base URL of the app, get a html page
+                         * and tries to extract appId and host IP addresses from source code.
                          * */
-                        getProviders(userId, "http://$firstIp")?.let { ips ->
-                            appUser = getAccessibleUser(ips, userId) ?: appUser
+                        Timber.tag("initAppEntry").d("$paramMap")
+                        val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
+
+                        /**
+                         * addrs is an ArrayList of ArrayList of node's IP address pairs.
+                         * Each pair is an ArrayList of two elements. The first is the IP address,
+                         * and the second is the time spent to get response from the IP.
+                         *
+                         * hostIPs is a list of node's IP that is a Mimei provider for this App.
+                         */
+                        val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP(hostIPs)
+                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                        val userId = preferenceHelper.getUserId()
+                        if (userId != null && userId != TW_CONST.GUEST_ID) {
+                            /**
+                             * If there is a valid userId in preference, this is a login user.
+                             * Initiate current account. Get its IP list and choose the best one,
+                             * and assign it to appUser.baseUrl.
+                             * */
+                            getProviders(userId, "http://$firstIp")?.let { ips ->
+                                appUser = getAccessibleUser(ips, userId) ?: appUser
+                                cachedUsers.add(appUser)
+                                Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
+                            }
+                        } else {
+                            appUser.followingList = getAlphaIds()
                             cachedUsers.add(appUser)
-                            Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
+                            Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                         }
-                    } else {
-                        appUser.followingList = getAlphaIds()
-                        cachedUsers.add(appUser)
-                        Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                     }
+                } else {
+                    Timber.tag("initAppEntry").e("No data found within window.setParam()")
                 }
-            } else {
-                Timber.tag("initAppEntry").e("No data found within window.setParam()")
+            } catch (e: Exception) {
+                Timber.tag("initAppEntry").e(e.toString())
             }
-        } catch (e: Exception) {
-            Timber.tag("initAppEntry").e(e.toString())
         }
     }
 
@@ -1105,7 +1112,7 @@ object HproseInstance {
         }.getOrNull()
     }
 
-    private suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>?
+    suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>?
     { return withRetry {
         val entry = "get_providers"
         val url =  "$baseUrl/entry?aid=$appId&ver=last&entry=$entry&mid=$mid"

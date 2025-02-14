@@ -35,17 +35,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getProviders
 import com.fireshare.tweet.navigation.TweetNavGraph
 import com.fireshare.tweet.service.NetworkCheckJobService
 import com.fireshare.tweet.service.ObserveAsEvents
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.ui.theme.TweetTheme
+import com.fireshare.tweet.widget.Gadget.getAccessibleIP
 import dagger.hilt.android.AndroidEntryPoint
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
@@ -141,15 +150,36 @@ class TweetActivity : ComponentActivity() {
 class ActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
-    val isDownloading = _isDownloading.asStateFlow()
 
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
-            val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-            val currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: return@launch
-            if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
-                val downloadUrl = "${appUser.baseUrl}/mm/${versionInfo["packageId"]}"
-                showUpdateDialog(context, downloadUrl)
+            try {
+                delay(10000)
+                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
+                val currentVersion =
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                        ?: return@launch
+                appUser.baseUrl?.let { hostIp ->
+                    if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
+                        showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
+                    } else {
+                        // check for mimei of available App entry Urls. Update records in
+                        // preference each time the app is run.
+                        val mid = BuildConfig.ENTRY_URLS
+                        getProviders(mid)?.let {
+                            getAccessibleIP(it)?.let { ip ->
+                                val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                                if (response.status == HttpStatusCode.OK) {
+                                    val newUrls =
+                                        response.bodyAsText().split(System.lineSeparator()).toSet()
+                                    HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("checkForUpgrade").e("$e")
             }
         }
     }
