@@ -137,6 +137,8 @@ object HproseInstance {
                             cachedUsers.add(appUser)
                             Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                         }
+                        // once a workable URL is found, break.
+                        return
                     }
                 } else {
                     Timber.tag("initAppEntry").e("No data found within window.setParam()")
@@ -211,7 +213,7 @@ object HproseInstance {
     } }
 
     // get the recent unread message from a sender.
-    suspend fun fetchMessages(senderId: MimeiId, numOfMsgs: Int = 50): List<ChatMessage>? { return withRetry {
+    suspend fun fetchMessages(senderId: MimeiId, MessageCount: Int = 50): List<ChatMessage>? { return withRetry {
         try {
             val gson = Gson()
             val entry = "message_fetch"
@@ -461,7 +463,7 @@ object HproseInstance {
                     val fans = Gson().fromJson(response.bodyAsText(),
                         object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
                     /**
-                     * Map is Redis Hset<Field, Value>, where Field is an user Id
+                     * Map is Redis HSet<Field, Value>, where Field is an user Id
                      * Value is the timestamp of the follower.
                      * */
                     return@withRetry fans.sortedByDescending { it["Value"] as Double }
