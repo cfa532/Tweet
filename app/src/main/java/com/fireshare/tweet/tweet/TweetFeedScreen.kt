@@ -1,4 +1,4 @@
- package com.fireshare.tweet.tweet
+package com.fireshare.tweet.tweet
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -65,7 +65,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
- @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, FlowPreview::class)
 @Composable
 fun TweetFeedScreen(
     navController: NavHostController,
