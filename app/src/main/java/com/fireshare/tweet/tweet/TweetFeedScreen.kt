@@ -1,8 +1,14 @@
 package com.fireshare.tweet.tweet
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -21,6 +27,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.preferenceHelper
@@ -50,26 +58,23 @@ fun TweetFeedScreen(
     viewModel: TweetFeedViewModel
 ) {
     val tabs = listOf(
-        TabItem(
-            title = "Following",
-            unselectedIcon = Icons.Outlined.CenterFocusStrong,
-            selectedIcon = Icons.Filled.CallEnd
-        ),
-        TabItem(
-            title = "Recommended",
-            unselectedIcon = Icons.Outlined.Search,
-            selectedIcon = Icons.Filled.ImageSearch
-        )
+        TabItem(title = "Following"),
+        TabItem(title = "Recommended")
     )
     // State to track if scrolling is in progress
     val isScrolling by viewModel.isScrolling.collectAsState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val listState = rememberLazyListState()
 
+    // Check if the top bar is collapsed by checking the offset
+    val isTopAppBarCollapsed by remember {
+        derivedStateOf { scrollBehavior.state.collapsedFraction > 0.9f }
+    }
+
     // Calculate the transparency based on scrolling state
     val bottomBarTransparency = rememberDelayedBottomBarTransparency(isScrolling)
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
-    val pagerState = rememberPagerState{ tabs.size }
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
 
     LaunchedEffect(selectedTabIndex) {
         pagerState.animateScrollToPage(selectedTabIndex)
@@ -84,32 +89,42 @@ fun TweetFeedScreen(
             topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
             bottomBar = {} // Remove bottomBar from Scaffold
         ) { innerPadding ->
-
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                TabRow(selectedTabIndex = selectedTabIndex) {
-                    tabs.forEachIndexed { index, item ->
-                        Tab(
-                            selected = index == selectedTabIndex,
-                            onClick = {
-                                selectedTabIndex = index
-                            },
-                            text = { Text(item.title) },
-                        )
+                // Use AnimatedVisibility to show/hide the TabRow
+                AnimatedVisibility(
+                    visible = !isTopAppBarCollapsed,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 150)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 150))
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        modifier = Modifier.height(48.dp), // Original height
+                    ) {
+                        tabs.forEachIndexed { index, item ->
+                            Tab(
+                                selected = index == selectedTabIndex,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(item.title) },
+                            )
+                        }
                     }
                 }
+
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
                         .weight(1f)
-                ) {index ->
+                ) { index ->
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        when(index) {
+                        when (index) {
                             0 -> {
                                 FollowingsTweet(parentEntry, listState, scrollBehavior)
                             }
@@ -120,7 +135,6 @@ fun TweetFeedScreen(
                     }
                 }
             }
-
         }
         // Place the BottomNavigationBar on top of the LazyColumn
         BottomNavigationBar(

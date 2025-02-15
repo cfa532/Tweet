@@ -37,6 +37,7 @@ fun MainTopAppBar(
 ) {
     val scope = rememberCoroutineScope()
     CenterAlignedTopAppBar(
+        scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             titleContentColor = MaterialTheme.colorScheme.primary,
@@ -61,18 +62,15 @@ fun MainTopAppBar(
         },
         navigationIcon = {
             IconButton(onClick = {
-                if (appUser.mid == TW_CONST.GUEST_ID)
-                    navController.navigate(NavTweet.Login)
-                else
-                    navController.navigate(NavTweet.UserProfile(appUser.mid))
+                if (appUser.mid == TW_CONST.GUEST_ID) navController.navigate(NavTweet.Login) else navController.navigate(
+                    NavTweet.UserProfile(appUser.mid)
+                )
             }) {
                 UserAvatar(appUser, 32)
             }
         },
         actions = {
-            IconButton(onClick = {
-                navController.navigate(NavTweet.Settings)
-            }) {
+            IconButton(onClick = { navController.navigate(NavTweet.Settings) }) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings",
@@ -80,6 +78,5 @@ fun MainTopAppBar(
                 )
             }
         },
-        scrollBehavior = scrollBehavior
     )
 }
