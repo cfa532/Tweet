@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIndex: Int = 0)
+fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -99,7 +99,7 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarI
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, bottomBarIndex) }
+        bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding))
         {

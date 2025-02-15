@@ -50,7 +50,7 @@
     <string name="share_link">Share link</string>
     <string name="screenshot">Screenshot</string>
     <string name="social_media">Social media</string>
-    <string name="pinToTop">Pin</string>
+    <string name="pinToTop">Pinned</string>
     <string name="followings">Followings</string>
     <string name="unpin">Unpin</string>
     <string name="registration_failed">Registration failed. Try again later.</string>

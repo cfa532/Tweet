@@ -42,7 +42,7 @@ object UserFavorites {
 
 /**
  * When tweet is added or removed from the tweet feed list,
- * update tweet list in UserProfileScreen, also add or remove it.
+ * update tweet list in ProfileScreen, also add or remove it.
  * */
 interface TweetActionListener {
     fun onTweetAdded(tweet: Tweet)

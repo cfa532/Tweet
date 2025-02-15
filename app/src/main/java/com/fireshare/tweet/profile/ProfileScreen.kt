@@ -59,7 +59,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
-fun UserProfileScreen(
+fun ProfileScreen(
     navController: NavHostController,
     userId: MimeiId,
     parentEntry: NavBackStackEntry,
@@ -195,65 +195,6 @@ fun UserProfileScreen(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
-        }
-    }
-}
-
-@Composable
-fun ProfileDetail(
-    viewModel: UserViewModel,
-    navController: NavHostController,
-    appUserViewModel: UserViewModel
-) {
-    val appUserFollowings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user.collectAsState()
-    val profile by remember { derivedStateOf { user.profile } }
-    val tweetCount = viewModel.tweets.collectAsState().value.size
-    val fansList by viewModel.fans.collectAsState()
-    val followingsList by viewModel.followings.collectAsState()
-
-    LaunchedEffect(appUserFollowings) {
-        withContext(Dispatchers.IO) {
-            viewModel.refreshFollowingsAndFans()
-        }
-    }
-
-    // go to list of followings of the user
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        tonalElevation = 100.dp,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
-        ) {
-            Text(
-                text = profile ?: "Profile",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Row {
-                Text(
-                    text = "${fansList.count()} ${stringResource(R.string.fans)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable(
-                        onClick = {
-                            navController.navigate((NavTweet.Follower(user.mid)))
-                        }
-                    ))
-                Text(
-                    text = "${followingsList.count()} ${stringResource(R.string.followings)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp)
-                        .clickable(onClick = {
-                            navController.navigate(NavTweet.Following(user.mid))
-                        }),
-                )
-                Text(
-                    text = "$tweetCount ${stringResource(R.string.posts)}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
         }
     }
 }

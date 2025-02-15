@@ -62,4 +62,6 @@
     <string name="comment_added">评论已添加</string>
     <string name="confirm_pwd">请确认密码</string>
     <string name="use_current_pswd">保持现有密码</string>
+    <string name="user_bookmarks">书签</string>
+    <string name="user_favorites">喜欢</string>
 </resources>

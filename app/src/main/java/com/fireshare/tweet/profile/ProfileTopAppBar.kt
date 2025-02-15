@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -55,17 +54,12 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.navigation.ProfileEditor
-import com.fireshare.tweet.navigation.SharedViewModel
-import com.fireshare.tweet.service.SnackbarAction
-import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.tweet.SelectableText
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.ImageViewer
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -199,75 +193,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
         },
         scrollBehavior = scrollBehavior
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProfileTopBarButton(viewModel: UserViewModel,
-                        navController: NavHostController,
-                        scrollBehavior: TopAppBarScrollBehavior?
-) {
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    val appUserViewModel = sharedViewModel.appUserViewModel
-    val followings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user.collectAsState()
-    val buttonText = remember { mutableStateOf("Follow") }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-
-    val context = LocalContext.current
-    LaunchedEffect(followings) {
-        buttonText.value = when {
-            user.mid == appUser.mid -> context.getString(R.string.edit)
-            followings.contains(user.mid) -> context.getString(R.string.unfollow)
-            else -> context.getString(R.string.follow)
-        }
-    }
-
-    Row(modifier = Modifier) {
-        // hide the Follow/Unfollow button when header is collapsed.
-        if (scrollBehavior?.state?.collapsedFraction == 1f)
-            return
-
-        Text(
-            text = buttonText.value,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.tertiary,
-            modifier = Modifier
-                .border(
-                    width = 1.dp,
-                    color = Color.DarkGray,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .clickable(onClick = {
-                    when (buttonText.value) {
-                        context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
-                        else -> {
-                            if (appUser.mid != TW_CONST.GUEST_ID)
-                                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    appUserViewModel.toggleFollow(user.mid) {
-                                        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                            tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
-                                        }
-                                    }
-                                }
-                            else {
-                                val event = SnackbarEvent(
-                                    message = context.getString(R.string.login_follow),
-                                    action = SnackbarAction(
-                                        name = context.getString(R.string.go),
-                                        action = { navController.navigate(NavTweet.Login) }
-                                    )
-                                )
-                                viewModel.viewModelScope.launch {
-                                    viewModel.showSnackbar(event)
-                                }
-                            }
-                        }
-                    }
-                })
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-    }
 }
 
 /**

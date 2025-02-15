@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIndex: Int = 0)
+fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
 {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -99,7 +99,7 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel, bottomBarIn
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, bottomBarIndex) }
+        bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
         val followersOfProfile by viewModel.fans.collectAsState()
 

@@ -936,7 +936,9 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
-                // become a provider of the tweet if like it.
+                /**
+                 * Become a provider of the tweet if bookmarked it.
+                 * */
                 if (hasBookmarked)
                     tweet.author?.let { provide(it, tweet.mid) }
                 else

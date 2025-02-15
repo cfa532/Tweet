@@ -65,6 +65,12 @@ sealed interface NavTweet {
 
     @Serializable
     data class DeepLink(val tweetId: MimeiId, val authorId: MimeiId) : NavTweet
+
+    @Serializable
+    data class Bookmarks(val userId: MimeiId) : NavTweet
+
+    @Serializable
+    data class Favorites(val userId: MimeiId) : NavTweet
 }
 
 @Serializable

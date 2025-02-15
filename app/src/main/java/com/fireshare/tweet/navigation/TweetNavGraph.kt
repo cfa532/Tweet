@@ -30,7 +30,8 @@ import com.fireshare.tweet.profile.FollowerScreen
 import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.SystemSettings
-import com.fireshare.tweet.profile.UserProfileScreen
+import com.fireshare.tweet.profile.ProfileScreen
+import com.fireshare.tweet.profile.UserBookmarks
 import com.fireshare.tweet.service.SearchScreen
 import com.fireshare.tweet.service.SearchViewModel
 import com.fireshare.tweet.tweet.ComposeCommentScreen
@@ -143,10 +144,14 @@ fun TweetNavGraph(
                     ) { factory ->
                         factory.create(appUser.mid)
                     }
-                UserProfileScreen(navController, userId, parentEntry, sharedViewModel.appUserViewModel)
+                ProfileScreen(navController, userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<ProfileEditor> {
                 EditProfileScreen(navController, sharedViewModel.appUserViewModel)
+            }
+            composable<NavTweet.Favorites> {  }
+            composable<NavTweet.Bookmarks> {
+                UserBookmarks(sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
