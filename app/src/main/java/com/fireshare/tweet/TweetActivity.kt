@@ -49,17 +49,22 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
-
+    private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,19 +77,24 @@ class TweetActivity : ComponentActivity() {
                 !activityViewModel.isAppReady.value
             }
         }
+        initJob = CoroutineScope(IO).async {
+            HproseInstance.init(this@TweetActivity)
+        }
 
         lifecycleScope.launch {
-            (application as TweetApplication).initJob.await()   // wait until network ready
-
+            initJob.await()   // wait until network ready
             activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
-            scheduleNetworkCheckJob()
-            activityViewModel.checkForUpgrade(this@TweetActivity)
+            launch {
+                delay(10000)
+                scheduleNetworkCheckJob()
+                activityViewModel.checkForUpgrade(this@TweetActivity)
+            }
+
             setContent {
                 TweetTheme {
                     // Global snackbar host
                     val snackbarHostState = remember { SnackbarHostState() }
-
                     ObserveAsEvents(
                         flow = SnackbarController.events,
                         snackbarHostState

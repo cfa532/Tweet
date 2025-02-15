@@ -20,13 +20,9 @@ import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class TweetApplication : Application(){
-    lateinit var initJob: Deferred<Unit>
 
     override fun onCreate() {
         super.onCreate()
-        initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@TweetApplication)
-        }
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         } else {

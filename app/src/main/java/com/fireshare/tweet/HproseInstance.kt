@@ -51,28 +51,25 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     lateinit var appUser: User
 
-    // get the first user account, or a list of accounts.
-    fun getAlphaIds(): List<MimeiId> {
-        return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
-    }
-    // A in-memory cache of users.
+    // in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var tweetCache: TweetCacheDatabase
+
+    suspend fun init(context: Context) {
+        this.preferenceHelper = PreferenceHelper(context)
+        chatDatabase = ChatDatabase.getInstance(context)
+        tweetCache = TweetCacheDatabase.getInstance(context)
+        appUser = User(mid = TW_CONST.GUEST_ID,
+            baseUrl = preferenceHelper.getAppUrls().first())
+        initAppEntry()
+    }
     val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
             requestTimeoutMillis = 60_000 // Total request timeout
             connectTimeoutMillis = 30_000  // Connection timeout
             socketTimeoutMillis = 60_000  // Socket timeout
         }
-    }
-
-    suspend fun init(context: Context) {
-        this.preferenceHelper = PreferenceHelper(context)
-        chatDatabase = ChatDatabase.getInstance(context)
-        tweetCache = TweetCacheDatabase.getInstance(context)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = preferenceHelper.getAppUrls().first())
-        initAppEntry()
     }
 
     /**
@@ -147,6 +144,13 @@ object HproseInstance {
                 Timber.tag("initAppEntry").e(e.toString())
             }
         }
+    }
+
+    /**
+     * List of system users to be followed by default
+     * */
+    fun getAlphaIds(): List<MimeiId> {
+        return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
     private suspend fun <T> withRetry(block: suspend () -> T): T {
