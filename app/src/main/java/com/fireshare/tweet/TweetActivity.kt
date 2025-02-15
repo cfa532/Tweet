@@ -86,7 +86,7 @@ class TweetActivity : ComponentActivity() {
             activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
             launch {
-                delay(10000)
+                delay(60000)
                 scheduleNetworkCheckJob()
                 activityViewModel.checkForUpgrade(this@TweetActivity)
             }
