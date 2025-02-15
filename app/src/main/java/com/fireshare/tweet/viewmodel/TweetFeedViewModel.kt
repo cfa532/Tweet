@@ -59,9 +59,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // Remember the current viewable tweet's mid, to keep a scrollable position.
     private val _scrollPosition = MutableStateFlow(Pair(0, 0))
     val scrollPosition: StateFlow<Pair<Int, Int>> get() = _scrollPosition.asStateFlow()
+    private val _isScrolling = MutableStateFlow(false)
+    val isScrolling: StateFlow<Boolean> get() = _isScrolling.asStateFlow()
 
     fun updateScrollPosition(scrollPosition: Pair<Int, Int>) {
         _scrollPosition.value = scrollPosition
+    }
+    fun setScrollingState(isScrolling: Boolean) {
+        _isScrolling.value = isScrolling
     }
 
     // get all followings of current user, and load tweets.

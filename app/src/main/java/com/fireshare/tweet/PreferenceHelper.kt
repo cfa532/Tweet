@@ -33,4 +33,11 @@ class PreferenceHelper(context: Context) {
     fun setUserId(id: String?) {
         sharedPreferences.edit().putString("userId", id).apply()
     }
+
+    fun getTweetFeedTabIndex(): Int {
+        return sharedPreferences.getInt("tweetFeedIndex", 0)
+    }
+    fun setTweetFeedTabIndex(id: Int) {
+        sharedPreferences.edit().putInt("tweetFeedIndex", id).apply()
+    }
 }
