@@ -125,12 +125,8 @@ fun TweetFeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (index) {
-                            0 -> {
-                                FollowingsTweet(parentEntry, listState, scrollBehavior)
-                            }
-                            1 -> {
-                                RecommendedTweetScreen()
-                            }
+                            0 -> FollowingsTweet(parentEntry, listState, scrollBehavior)
+                            1 -> RecommendedTweetScreen()
                         }
                     }
                 }
