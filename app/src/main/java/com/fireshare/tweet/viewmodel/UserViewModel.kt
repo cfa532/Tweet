@@ -158,7 +158,7 @@ class UserViewModel @AssistedInject constructor(
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
 
     suspend fun getBookmarks(start: Int) {
-        getSortedMetaByUser(user.value, "bookmarks")?.let { list ->
+        getSortedMetaByUser(user.value, "bookmark")?.let { list ->
             val end = (start + 10).coerceAtMost(list.size)
             for (index in start until end) {
                 HproseInstance.getTweet(list[index], user.value.mid)?.let {

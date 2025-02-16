@@ -53,6 +53,7 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -67,7 +68,9 @@ fun UserBookmarks(
 
     LaunchedEffect(Unit) {
         // load bookmarked tweets
-        viewModel.getBookmarks(start.intValue)
+        withContext(Dispatchers.IO) {
+            viewModel.getBookmarks(start.intValue)
+        }
     }
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
@@ -96,7 +99,7 @@ fun UserBookmarks(
                     Column {
                         UserAvatar(user, 36)
                         Text(
-                            text = user.name ?: "No One",
+                            text = stringResource(R.string.user_bookmarks),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
                         )
@@ -124,18 +127,6 @@ fun UserBookmarks(
                 modifier = Modifier.fillMaxWidth(),
                 state = listState
             ) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center // Center align content horizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.user_bookmarks),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
                 items(bookmarks, key = { it.mid }) { tweet ->
                     TweetItem(tweet, parentEntry)
                 }
