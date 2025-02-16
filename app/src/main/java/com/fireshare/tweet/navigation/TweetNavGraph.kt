@@ -32,6 +32,7 @@ import com.fireshare.tweet.profile.LoginScreen
 import com.fireshare.tweet.profile.SystemSettings
 import com.fireshare.tweet.profile.ProfileScreen
 import com.fireshare.tweet.profile.UserBookmarks
+import com.fireshare.tweet.profile.UserFavorites
 import com.fireshare.tweet.service.SearchScreen
 import com.fireshare.tweet.service.SearchViewModel
 import com.fireshare.tweet.tweet.ComposeCommentScreen
@@ -153,6 +154,7 @@ fun TweetNavGraph(
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
+                UserFavorites(sharedViewModel.appUserViewModel, parentEntry)
             }
             composable<NavTweet.Bookmarks> {
                 val parentEntry = remember(it) {

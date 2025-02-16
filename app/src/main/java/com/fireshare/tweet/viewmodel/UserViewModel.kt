@@ -167,6 +167,16 @@ class UserViewModel @AssistedInject constructor(
             }
         }
     }
+    suspend fun getFavorites(start: Int) {
+        getSortedMetaByUser(user.value, "favorite")?.let { list ->
+            val end = (start + 10).coerceAtMost(list.size)
+            for (index in start until end) {
+                HproseInstance.getTweet(list[index], user.value.mid)?.let {
+                    _favorites.update { bs -> (listOf(it) + bs) }
+                }
+            }
+        }
+    }
 
     @AssistedFactory
     interface UserViewModelFactory {

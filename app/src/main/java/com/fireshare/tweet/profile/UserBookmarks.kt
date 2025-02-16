@@ -54,6 +54,7 @@ import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -75,7 +76,8 @@ fun UserBookmarks(
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
         viewModel.viewModelScope.launch(Dispatchers.IO) {
-            viewModel.loadNewerTweets()
+            start.intValue = 0
+            viewModel.getBookmarks(start.intValue)
         }
     } )
     // for pulling up at the bottom of the list
@@ -87,6 +89,14 @@ fun UserBookmarks(
     }
     val isAtBottom =
         layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom && bookmarks.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                start.intValue += 10
+                viewModel.getBookmarks(start.intValue)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
