@@ -153,6 +153,7 @@ fun TweetNavGraph(
             composable<NavTweet.Bookmarks> {
                 UserBookmarks(sharedViewModel.appUserViewModel)
             }
+            composable<NavTweet.Comments> {  }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
                 val parentEntry = remember(it) {

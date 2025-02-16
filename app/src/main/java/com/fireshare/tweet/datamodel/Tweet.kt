@@ -98,91 +98,36 @@ data class Tweet(
 @Parcelize
 @Serializable
 data class User(
-    var baseUrl: String? = null,        // most recent url used to access user data
-    var writableUrl: String? = null,    // url used to write user data on.
-    var mid: MimeiId,                   // Unique identifier for the user, and the mimei database
+    var baseUrl: String? = null,
+    var writableUrl: String? = null,
+    var mid: MimeiId,  // Ensure MimeiId is Parcelable
     var name: String? = null,
     var username: String? = null,
-    var password: String? = null,       // hashed password
-    var avatar: MimeiId? = null,        // Optional profile image URL
+    var password: String? = null,
+    var avatar: MimeiId? = null,  // Ensure MimeiId is Parcelable
     var email: String? = null,
     var profile: String? = null,
     var timestamp: Long = System.currentTimeMillis(),
+
     var tweetCount: Int = 0,
     var followingCount: Int? = null,
     var followersCount: Int? = null,
+    var bookmarksCount: Int? = null,
+    var favoritesCount: Int? = null,
+    var commentsCount: Int? = null,
 
-    // List of nodes authorized to the user to write tweets on.
-    // Only first one is used now.
-    var hostIds: List<MimeiId>? = null,
+    var hostIds: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
     var publicKey: String? = null,
 
-    // List of tweet MIDs bookmarked by the user
-    var fansList: List<MimeiId>? = null,
-    var followingList: List<MimeiId>? = null,
-    var bookmarkedTweets: List<MimeiId>? = null,
-    var likedTweets: List<MimeiId>? = null,
-    var repliedTweets: List<MimeiId>? = null,
+    var fansList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var followingList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var bookmarkedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var likedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var repliedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var commentsList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
 
-    // List of top tweets liked by the user
-    var topTweets: List<MimeiId>? = null,
-): Parcelable {
-    constructor(parcel: Parcel) : this(
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readString().toString(),
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readString(),
-        parcel.readLong(),
-        parcel.readInt(),
-        parcel.readValue(Int::class.java.classLoader) as? Int,
-        parcel.readValue(Int::class.java.classLoader) as? Int,
-        parcel.createStringArrayList(),
-        parcel.readString(),
-        parcel.createStringArrayList(),
-        parcel.createStringArrayList(),
-        parcel.createStringArrayList(),
-        parcel.createStringArrayList(),
-        parcel.createStringArrayList(),
-        parcel.createStringArrayList()
-    ) {
-    }
-
-    companion object : Parceler<User> {
-
-        override fun User.write(parcel: Parcel, flags: Int) {
-            parcel.writeString(baseUrl)
-            parcel.writeString(writableUrl)
-            parcel.writeString(mid)
-            parcel.writeString(name)
-            parcel.writeString(username)
-            parcel.writeString(password)
-            parcel.writeString(avatar)
-            parcel.writeString(email)
-            parcel.writeString(profile)
-            parcel.writeLong(timestamp)
-            parcel.writeInt(tweetCount)
-            parcel.writeValue(followingCount)
-            parcel.writeValue(followersCount)
-            parcel.writeStringList(hostIds)
-            parcel.writeString(publicKey)
-            parcel.writeStringList(fansList)
-            parcel.writeStringList(followingList)
-            parcel.writeStringList(bookmarkedTweets)
-            parcel.writeStringList(likedTweets)
-            parcel.writeStringList(repliedTweets)
-            parcel.writeStringList(topTweets)
-        }
-
-        override fun create(parcel: Parcel): User {
-            return User(parcel)
-        }
-    }
-}
+    var topTweets: List<MimeiId>? = null  // Ensure MimeiId is Parcelable
+) : Parcelable
 
 /**
  * IP address of the first node in HostIds, which the user is authorized to write data on.

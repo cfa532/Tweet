@@ -415,17 +415,17 @@ object HproseInstance {
         null
     } }
 
-    suspend fun setUserAvatar(userId: MimeiId, avatar: MimeiId) {
+    suspend fun setUserAvatar(user: User, avatar: MimeiId) {
         return withRetry {
             val entry = "set_user_avatar"
             val json = """
-            {"aid": $appId, "ver": "last", "userid": $userId, "avatar": $avatar}
+            {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
         """.trimIndent()
             val gson = Gson()
             val request = gson.fromJson(json, Map::class.java)
             try {
                 val hproseClient =
-                    HproseClient.create("${appUser.writableUrl()}/webapi/").useService(HproseService::class.java)
+                    HproseClient.create("${user.writableUrl()}/webapi/").useService(HproseService::class.java)
                 hproseClient.runMApp(entry, request) as Unit?
             } catch (e: Exception) {
                 Timber.tag("setUserAvatar").e(e.toString())
@@ -459,16 +459,16 @@ object HproseInstance {
     suspend fun getFans(user: User): List<MimeiId>? { return withRetry {
         try {
             if (user.mid != TW_CONST.GUEST_ID) {
-                val method = "get_followers_sorted"
+                val entry = "get_followers_sorted"
                 val url =
-                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
+                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
                     val fans = Gson().fromJson(response.bodyAsText(),
                         object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
                     /**
                      * Map is Redis HSet<Field, Value>, where Field is an user Id
-                     * Value is the timestamp of the follower.
+                     * Value is the timestamp of the follower been added.
                      * */
                     return@withRetry fans.sortedByDescending { it["Value"] as Double }
                         .map { it["Field"] as MimeiId }
@@ -777,6 +777,7 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 delComment(commentId)
+                toggleMetaByUser(commentId, "comment")
             }
         } catch (e: Exception) {
             Timber.tag("delComment()").e(e.toString())
@@ -796,10 +797,7 @@ object HproseInstance {
             if (response.status == HttpStatusCode.OK) {
                 val isFollowing = Gson().fromJson(response.bodyAsText(), Boolean::class.java)
                 getUser(userId)?.let { user ->
-                    if (isFollowing)
-                        provide(user)
-                    else
-                        unProvide(user)
+                    provide(user, user.mid, isFollowing)
                 }
                 return@withRetry isFollowing
             }
@@ -856,25 +854,18 @@ object HproseInstance {
                 )
             }
             // become a provider for the original tweet
-            tweet.author?.let { provide(it, tweet.mid) }
+            tweet.author?.let { provide(it, tweet.mid, true) }
         } catch (e: Exception) {
             Timber.e("toggleRetweet()", e.toString())
         }
     } }
 
-    private suspend fun provide(user: User, tweetId: MimeiId? = null) { return withRetry {
+    private suspend fun provide(user: User, mid: MimeiId, isProvider: Boolean
+    ) { return withRetry {
+        if (appUser.hostIds == user.hostIds)
+            return@withRetry
         val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
-                "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
-        try {
-            httpClient.get(url)
-        } catch (e: Exception) {
-            Timber.tag("provide()").e("$e $url")
-        }
-    } }
-
-    private suspend fun unProvide(user: User, tweetId: MimeiId? = null) { return withRetry {
-        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_unprovide" +
-                "&userid=${user.mid}&tweetid=$tweetId&nodeid=${user.hostIds?.get(0)}"
+                "&mid=$mid&provide=$isProvider"
         try {
             httpClient.get(url)
         } catch (e: Exception) {
@@ -904,10 +895,8 @@ object HproseInstance {
                     CachedTweet(tweet.mid, gson.toJson(ret))
                 )
                 // become a provider of the tweet if like it.
-                if (hasLiked)
-                    tweet.author?.let { provide(it, tweet.mid) }
-                else
-                    tweet.author?.let { unProvide(it, tweet.mid) }
+                tweet.author?.let { provide(it, tweet.mid, hasLiked) }
+                toggleMetaByUser(tweet.mid, "favorite")
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -924,8 +913,7 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                val res = gson.fromJson(
-                    response.bodyAsText(),
+                val res = gson.fromJson( response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any?>
                 val hasBookmarked = res["hasBookmarked"] as Boolean
@@ -939,10 +927,8 @@ object HproseInstance {
                 /**
                  * Become a provider of the tweet if bookmarked it.
                  * */
-                if (hasBookmarked)
-                    tweet.author?.let { provide(it, tweet.mid) }
-                else
-                    tweet.author?.let { unProvide(it, tweet.mid) }
+                tweet.author?.let { provide(it, tweet.mid, hasBookmarked) }
+                toggleMetaByUser(tweet.mid, "bookmark")
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -950,6 +936,23 @@ object HproseInstance {
         }
         tweet
     } }
+
+    /**
+     * Add or remove Favorite, Bookmark or Comment make by appUser.
+     * */
+    private suspend fun toggleMetaByUser(
+        mid: MimeiId,   // tweetId or commentId to be recorded as user activity.
+        type: String    // favorite, bookmark or comment
+    ) {
+        val entry = "toggle_meta_by_user"
+        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&mid=$mid&userid=${appUser.mid}&type=$type"
+        try {
+            httpClient.get(url)
+        } catch (e: Exception) {
+            Timber.tag("toggleMetaByUser").e("${e.message} $url")
+        }
+    }
 
     /**
      * Load all comments on a tweet.
@@ -1003,7 +1006,10 @@ object HproseInstance {
                 tweetCache.tweetDao().updateCachedTweet(
                     CachedTweet(updatedTweet.mid, gson.toJson(updatedTweet))
                 )
-                tweet.author?.let { provide(it, tweet.mid) }
+                // become a provider of the tweet if commented it.
+                tweet.author?.let { provide(it, tweet.mid, true) }
+                toggleMetaByUser(comment.mid, "comment")
+
                 updatedTweet
             } else {
                 tweet

@@ -61,13 +61,14 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
     private var initState = MutableStateFlow(true)      // initial load state
 
-    private var startRank = MutableStateFlow(0)    // current rank of tweet in DB
+    // current rank of tweet in DB. Retrieve 10 tweets each time start from it.
+    private var startRank = MutableStateFlow(0)
 
     // variable for login management
-    var username = mutableStateOf(user.value.username)
+    var username = mutableStateOf(appUser.username)
     var password = mutableStateOf("")
-    var name = mutableStateOf(user.value.name)
-    var profile = mutableStateOf(user.value.profile)
+    var name = mutableStateOf(appUser.name)
+    var profile = mutableStateOf(appUser.profile)
     var hostId = mutableStateOf("")
     var isPasswordVisible = mutableStateOf(false)
     var isLoading = mutableStateOf(false)
@@ -98,11 +99,13 @@ class UserViewModel @AssistedInject constructor(
     fun hasPinned(tweet: Tweet): Boolean {
         return topTweets.value.any { it.mid == tweet.mid }
     }
+
     suspend fun getHostId() {
         hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
             HproseInstance.getHostId() ?: ""
-        } else user.value.hostIds!![0]
+        } else user.value.hostIds!!.first()
     }
+
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
         // For now, user avatar can only be image.
@@ -111,15 +114,18 @@ class UserViewModel @AssistedInject constructor(
             uri,
             referenceId = appUser.mid
         )?.let {
-            HproseInstance.setUserAvatar(userId, it.mid)   // Update database value
-            appUser = user.value.copy(avatar = it.mid)
+            HproseInstance.setUserAvatar(appUser, it.mid)   // Update appUser's avatar
+            appUser = appUser.copy(avatar = it.mid)
             savedStateHandle["user"] = appUser
         }
         isLoading.value = false
     }
-    suspend fun toggleFollow(subjectUserId: MimeiId,
-                             appUserId: MimeiId = appUser.mid,
-                             updateTweetFeed: (Boolean) -> Unit) {
+
+    suspend fun toggleFollow(
+        subjectUserId: MimeiId,
+        appUserId: MimeiId = appUser.mid,
+        updateTweetFeed: (Boolean) -> Unit
+    ) {
         // update UI data without waiting for the server to respond.
         _followings.update { list ->
             if (list.contains(subjectUserId)) {
@@ -128,7 +134,6 @@ class UserViewModel @AssistedInject constructor(
                 list + subjectUserId
             }
         }
-
         // toggle the Following status on the given UserId
         HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
             // Succeed. Now it is the other party's turn to update its followers.
@@ -137,12 +142,19 @@ class UserViewModel @AssistedInject constructor(
             updateTweetFeed(isFollowing)    // callback to update tweet feed
         }
     }
+
     suspend fun refreshFollowingsAndFans() {
         _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
         // update cached followings list of the user
         val userData = UserData(userId = this.userId, followings = followings.value)
         tweetCache.tweetDao().insertOrUpdateUserData(userData)
+    }
+
+    private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
+    val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
+    suspend fun getUserMeta() {
+
     }
 
     @AssistedFactory
@@ -155,7 +167,7 @@ class UserViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 savedStateHandle["user"] = getUser(userId)
                 if (userId == appUser.mid) {
-                    // By default NOT to update fans and followings list of an user object.
+                    // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
                     // Only get current user's fans list when opening the app.
                     refreshFollowingsAndFans()
@@ -254,7 +266,7 @@ class UserViewModel @AssistedInject constructor(
                 appUser = ret.first as User
                 preferenceHelper.setUserId(appUser.mid)
                 savedStateHandle["user"] = appUser
-                username.value = user.value.username
+                username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""

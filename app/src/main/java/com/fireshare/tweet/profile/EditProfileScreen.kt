@@ -76,11 +76,9 @@ fun EditProfileScreen(
     val name by viewModel.name
     val profile by viewModel.profile
     val hostId by viewModel.hostId
-    val user by viewModel.user.collectAsState()
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    val launcher = rememberLauncherForActivityResult( contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -123,7 +121,7 @@ fun EditProfileScreen(
                 )
             }
             // AppUser avatar
-            AvatarSection(launcher, viewModel)
+            AppUserAvatar(launcher)
 
             Spacer(modifier = Modifier.height(16.dp))
             Column {
@@ -250,11 +248,9 @@ fun EyeSlashButton(
 }
 
 @Composable
-fun AvatarSection(
+fun AppUserAvatar(
     launcher: ManagedActivityResultLauncher<String, Uri?>,
-    viewModel: UserViewModel
 ) {
-    val user by viewModel.user.collectAsState()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -268,7 +264,7 @@ fun AvatarSection(
                     .clip(CircleShape)
                     .clickable(onClick = { launcher.launch("image/*") })
             ) {
-                UserAvatar(user, 120)
+                UserAvatar(appUser, 120)
             }
             IconButton(
                 onClick = { launcher.launch("image/*") },
