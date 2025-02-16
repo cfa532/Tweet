@@ -391,7 +391,7 @@ object HproseInstance {
             val newHostId = userObj.hostIds?.first() ?: return@withRetry null
             if (newHostId != appUser.hostIds?.first()) {
                 val hostIp = getHostIP(newHostId) ?: return@withRetry null
-                val targetUser = getUserData(userObj.mid, hostIp)
+                val targetUser = getUserCoreData(userObj.mid, hostIp)
                 if (targetUser == null) {
                     url = "http://$hostIp/entry?aid=$appId&ver=last&entry=sync_user&mid=${appUser.mid}"
                     httpClient.get(url)
@@ -777,7 +777,9 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 delComment(commentId)
-                toggleMetaByUser(commentId, "comment")
+                toggleMetaByUser(commentId, "comment")?.let { updatedUser ->
+                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
+                }
             }
         } catch (e: Exception) {
             Timber.tag("delComment()").e(e.toString())
@@ -896,7 +898,9 @@ object HproseInstance {
                 )
                 // become a provider of the tweet if like it.
                 tweet.author?.let { provide(it, tweet.mid, hasLiked) }
-                toggleMetaByUser(tweet.mid, "favorite")
+                toggleMetaByUser(tweet.mid, "favorite")?.let { updatedUser ->
+                    appUser = appUser.copy(favoritesCount = updatedUser.favoritesCount)
+                }
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -926,9 +930,12 @@ object HproseInstance {
                 )
                 /**
                  * Become a provider of the tweet if bookmarked it.
+                 * Also update appUser's count of bookmarks.
                  * */
                 tweet.author?.let { provide(it, tweet.mid, hasBookmarked) }
-                toggleMetaByUser(tweet.mid, "bookmark")
+                toggleMetaByUser(tweet.mid, "bookmark")?.let { updatedUser ->
+                    appUser = appUser.copy(bookmarksCount = updatedUser.bookmarksCount)
+                }
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -937,25 +944,54 @@ object HproseInstance {
         tweet
     } }
 
+    suspend fun getSortedMetaByUser(
+        user: User,
+        type: String
+    ):List<MimeiId>? { return withRetry {
+        val entry = "get_user_meta"
+        val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&userid=${user.mid}&type=$type"
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val res = Gson().fromJson(
+                    response.bodyAsText(),
+                    object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
+                return@withRetry res.sortedByDescending { it["Value"] as Double }
+                    .map { it["Field"] as MimeiId }
+            }
+        } catch (e: Exception) {
+            Timber.tag("toggleMetaByUser").e("${e.message} $url")
+        }
+        null
+    } }
+
     /**
      * Add or remove Favorite, Bookmark or Comment make by appUser.
      * */
     private suspend fun toggleMetaByUser(
         mid: MimeiId,   // tweetId or commentId to be recorded as user activity.
         type: String    // favorite, bookmark or comment
-    ) {
+    ): User? { return withRetry {
         val entry = "toggle_meta_by_user"
         val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&mid=$mid&userid=${appUser.mid}&type=$type"
         try {
-            httpClient.get(url)
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val updatedUser = Gson().fromJson(
+                    response.bodyAsText(),
+                    User::class.java)
+                return@withRetry updatedUser
+            }
         } catch (e: Exception) {
             Timber.tag("toggleMetaByUser").e("${e.message} $url")
         }
-    }
+        null
+    } }
 
     /**
-     * Load all comments on a tweet.
+     * Load all comments of a tweet.
      * @param pageNumber
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? { return withRetry {
@@ -1008,8 +1044,9 @@ object HproseInstance {
                 )
                 // become a provider of the tweet if commented it.
                 tweet.author?.let { provide(it, tweet.mid, true) }
-                toggleMetaByUser(comment.mid, "comment")
-
+                toggleMetaByUser(comment.mid, "comment")?.let { updatedUser ->
+                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
+                }
                 updatedTweet
             } else {
                 tweet
@@ -1071,11 +1108,10 @@ object HproseInstance {
         null
     } }
 
-    suspend fun getUserData(mid: MimeiId, ip: String): User? { return withRetry {
+    suspend fun getUserCoreData(mid: MimeiId, ip: String): User? { return withRetry {
         try {
             val entry = "get_user_core_data"
-            val url =
-                "http://$ip/entry?aid=$appId&ver=last&entry=$entry&userid=$mid"
+            val url = "http://$ip/entry?aid=$appId&ver=last&entry=$entry&userid=$mid"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -1086,11 +1122,11 @@ object HproseInstance {
                 return@withRetry user
             }
         } catch (e: IOException) {
-//            Timber.tag("getUserData").e(e, "Network error while retrieving user data")
+//            Timber.tag("getUserCoreData").e(e, "Network error while retrieving user data")
         } catch (e: JsonSyntaxException) {
-            Timber.tag("getUserData").e(e, "Error parsing user data from JSON")
+            Timber.tag("getUserCoreData").e(e, "Error parsing user data from JSON")
         } catch (e: Exception) {
-//            Timber.tag("getUserData").e(e, "Error retrieving user data")
+//            Timber.tag("getUserCoreData").e(e, "Error retrieving user data")
         }
         null
     } }

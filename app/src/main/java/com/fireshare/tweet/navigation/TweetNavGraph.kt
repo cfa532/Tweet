@@ -149,11 +149,22 @@ fun TweetNavGraph(
             composable<ProfileEditor> {
                 EditProfileScreen(navController, sharedViewModel.appUserViewModel)
             }
-            composable<NavTweet.Favorites> {  }
-            composable<NavTweet.Bookmarks> {
-                UserBookmarks(sharedViewModel.appUserViewModel)
+            composable<NavTweet.Favorites> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
             }
-            composable<NavTweet.Comments> {  }
+            composable<NavTweet.Bookmarks> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
+                UserBookmarks(sharedViewModel.appUserViewModel, parentEntry)
+            }
+            composable<NavTweet.Comments> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
+            }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
                 val parentEntry = remember(it) {

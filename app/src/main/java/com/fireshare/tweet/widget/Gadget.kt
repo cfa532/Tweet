@@ -176,7 +176,7 @@ object Gadget {
                     launch {
                         try {
                             Timber.tag("getAccessibleUser").d("Trying $ip $userId")
-                            HproseInstance.getUserData(userId, ip)?.let {
+                            HproseInstance.getUserCoreData(userId, ip)?.let {
                                 send(it) // Emit the user if found
                                 cancel()
                             }

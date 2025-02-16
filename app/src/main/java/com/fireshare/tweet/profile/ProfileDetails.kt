@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
@@ -40,9 +41,6 @@ fun ProfileDetail(
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val profile by remember { derivedStateOf { user.profile } }
-    val tweetCount = viewModel.tweets.collectAsState().value.size
-    val fansList by viewModel.fans.collectAsState()
-    val followingsList by viewModel.followings.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
         withContext(Dispatchers.IO) {
@@ -65,11 +63,11 @@ fun ProfileDetail(
             )
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp),
+                    .padding(start = 0.dp, end = if (user.mid == appUser.mid ) 20.dp else 120.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${fansList.count()} ${stringResource(R.string.fans)}",
+                    text = "${user.followersCount?:0} ${stringResource(R.string.fans)}",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.clickable(
                         onClick = {
@@ -77,7 +75,7 @@ fun ProfileDetail(
                         }
                     ))
                 Text(
-                    text = "${followingsList.count()} ${stringResource(R.string.followings)}",
+                    text = "${user.followingCount?:0} ${stringResource(R.string.followings)}",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
                         .clickable(onClick = {
@@ -85,44 +83,49 @@ fun ProfileDetail(
                         }),
                 )
                 Text(
-                    text = "$tweetCount ${stringResource(R.string.posts)}",
+                    text = "${user.tweetCount?:0} ${stringResource(R.string.posts)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
-
-                Row(
-                    modifier = Modifier.clickable(
-                        onClick = {
-                            navController.navigate((NavTweet.Bookmarks(user.mid)))
+                // show the following buttons only on appUser's profile
+                if (user.mid == appUser.mid) {
+                    appUser.bookmarksCount?.let {
+                        Row(
+                            modifier = Modifier.clickable(
+                                onClick = {
+                                    navController.navigate((NavTweet.Bookmarks(user.mid)))
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = "${if (it>0) it else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Icon(
+                                imageVector = Icons.Outlined.Bookmarks,
+                                contentDescription = stringResource(R.string.user_bookmarks),
+                                modifier = Modifier.size(IconSize)
+                            )
                         }
-                    )
-                ) {
-                    Text(
-                        text = "${user.bookmarkedTweets?.size ?: ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.Bookmarks,
-                        contentDescription = stringResource(R.string.user_bookmarks),
-                        modifier = Modifier.size(IconSize)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.clickable(
-                        onClick = {
-                            navController.navigate((NavTweet.Favorites(user.mid)))
+                    }
+                    appUser.favoritesCount?.let {
+                        Row(
+                            modifier = Modifier.clickable(
+                                onClick = {
+                                    navController.navigate((NavTweet.Favorites(user.mid)))
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = "${if (it>0) it else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Icon(
+                                imageVector = Icons.Outlined.FavoriteBorder,
+                                contentDescription = stringResource(R.string.user_favorites),
+                                modifier = Modifier.size(IconSize)
+                            )
                         }
-                    )
-                ) {
-                    Text(
-                        text = "${user.likedTweets?.size ?: "" } ",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(R.string.user_favorites),
-                        modifier = Modifier.size(IconSize)
-                    )
+                    }
                 }
             }
         }

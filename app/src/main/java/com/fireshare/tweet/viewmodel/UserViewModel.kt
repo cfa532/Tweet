@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getSortedMetaByUser
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.getUserId
 import com.fireshare.tweet.HproseInstance.preferenceHelper
@@ -151,10 +152,20 @@ class UserViewModel @AssistedInject constructor(
         tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
-    private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
-    val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
-    suspend fun getUserMeta() {
+    private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
+    val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
+    private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
+    val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
 
+    suspend fun getBookmarks(start: Int) {
+        getSortedMetaByUser(user.value, "bookmarks")?.let { list ->
+            val end = (start + 10).coerceAtMost(list.size)
+            for (index in start until end) {
+                HproseInstance.getTweet(list[index], user.value.mid)?.let {
+                    _bookmarks.update { bs -> (listOf(it) + bs) }
+                }
+            }
+        }
     }
 
     @AssistedFactory
@@ -342,7 +353,10 @@ class UserViewModel @AssistedInject constructor(
         var updatedUser = appUser.copy(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim(), avatar = appUser.avatar
+            profile = profile.value?.trim(), avatar = appUser.avatar,
+            tweetCount = appUser.tweetCount, followersCount = appUser.followersCount,
+            followingCount = appUser.followingCount, bookmarksCount = appUser.bookmarksCount,
+            commentsCount = appUser.bookmarksCount, favoritesCount = appUser.favoritesCount
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {

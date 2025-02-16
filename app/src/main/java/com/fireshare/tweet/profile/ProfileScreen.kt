@@ -4,10 +4,7 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,7 +47,6 @@ import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.navigation.BottomNavigationBar
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.tweet.TweetItem
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
@@ -114,12 +110,10 @@ fun ProfileScreen(
         topBar = { ProfileTopAppBar(viewModel, navController, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .pullRefresh(pullRefreshState)
-                .background(color = Color.LightGray)
-                .fillMaxSize()
-                .padding(innerPadding),
+        Box(modifier = Modifier.fillMaxSize()
+            .pullRefresh(pullRefreshState)
+            .background(color = Color.LightGray)
+            .padding(innerPadding),
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth()
