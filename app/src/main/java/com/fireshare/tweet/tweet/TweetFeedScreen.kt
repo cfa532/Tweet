@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -35,11 +36,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.fireshare.tweet.HproseInstance.preferenceHelper
+import com.fireshare.tweet.R
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 
@@ -57,9 +61,10 @@ fun TweetFeedScreen(
     selectedBottomBarItemIndex: Int,
     viewModel: TweetFeedViewModel
 ) {
+    val context = LocalContext.current
     val tabs = listOf(
-        TabItem(title = "Following"),
-        TabItem(title = "Recommended")
+        TabItem(title = context.getString(R.string.your_followings)),
+        TabItem(title = context.getString(R.string.recommendation))
     )
     // State to track if scrolling is in progress
     val isScrolling by viewModel.isScrolling.collectAsState()
@@ -108,7 +113,10 @@ fun TweetFeedScreen(
                             Tab(
                                 selected = index == selectedTabIndex,
                                 onClick = { selectedTabIndex = index },
-                                text = { Text(item.title) },
+                                text = { Text(
+                                    color = Color.Gray,
+                                    text = item.title
+                                ) },
                             )
                         }
                     }

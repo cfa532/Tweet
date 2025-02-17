@@ -161,18 +161,31 @@ class UserViewModel @AssistedInject constructor(
         getSortedMetaByUser(user.value, "bookmark")?.let { list ->
             val end = (start + 10).coerceAtMost(list.size)
             for (index in start until end) {
-                HproseInstance.getTweet(list[index], user.value.mid)?.let {
-                    _bookmarks.update { bs -> (listOf(it) + bs) }
+                HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
+                    _bookmarks.update { bs ->
+                        if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
+                            listOf(newTweet) + bs
+                        } else {
+                            bs
+                        }
+                    }
                 }
             }
         }
     }
+
     suspend fun getFavorites(start: Int) {
         getSortedMetaByUser(user.value, "favorite")?.let { list ->
             val end = (start + 10).coerceAtMost(list.size)
             for (index in start until end) {
-                HproseInstance.getTweet(list[index], user.value.mid)?.let {
-                    _favorites.update { bs -> (listOf(it) + bs) }
+                HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
+                    _favorites.update { bs ->
+                        if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
+                            listOf(newTweet) + bs
+                        } else {
+                            bs
+                        }
+                    }
                 }
             }
         }

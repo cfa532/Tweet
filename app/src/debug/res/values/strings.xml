@@ -18,7 +18,7 @@
     <string name="comment_as_tweet">Post as Tweet</string>
     <string name="guest_reminder">Please login or register</string>
     <string name="update_available">Update Available</string>
-    <string name="updata_message">A new version of the app is available. Would you like to update?</string>
+    <string name="update_message">A new version of the app is available. Would you like to update?</string>
     <string name="update">Update</string>
     <string name="cancel">Cancel</string>
     <string name="forwarded">forwarded</string>
@@ -58,7 +58,7 @@
     <string name="node_not_found">Host not found</string>
     <string name="no_chat">No chat sessions found. Click the ✉️ at top right corner on user profile page to start a chat.</string>
     <string name="login_error">Wrong username or password</string>
-    <string name="comment_added">Comment added</string>
+    <string name="comment_failed">Comment failed</string>
     <string name="confirm_pwd">Please confirm password</string>
     <string name="use_current_pswd">Keep current password</string>
 </resources>

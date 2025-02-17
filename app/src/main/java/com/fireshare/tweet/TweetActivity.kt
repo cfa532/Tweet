@@ -198,7 +198,7 @@ class ActivityViewModel: ViewModel() {
         (context as Activity).runOnUiThread {
             AlertDialog.Builder(context)
                 .setTitle(getString(context, R.string.update_available))
-                .setMessage(getString(context, R.string.updata_message))
+                .setMessage(getString(context, R.string.update_message))
                 .setPositiveButton(getString(context, R.string.update)) { _, _ ->
                     downloadAndInstall(context, downloadUrl)
                 }

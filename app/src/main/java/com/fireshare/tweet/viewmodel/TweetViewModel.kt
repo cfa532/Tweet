@@ -153,6 +153,7 @@ class TweetViewModel @AssistedInject constructor(
             .build()
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
+        Toast.makeText(context, context.getString(R.string.upload_comment), Toast.LENGTH_SHORT).show()
 
         // Observe the work status
         workManager.getWorkInfoByIdLiveData(uploadRequest.id)
@@ -191,15 +192,16 @@ class TweetViewModel @AssistedInject constructor(
                                         )
                                     }
                                 }
-                                Toast.makeText(context, context.getString(R.string.comment_added), Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Timber.tag("UploadComment").e("${e.message}")
+                                Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
                             }
                         }
 
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
                             Timber.tag("UploadTweet").e("Tweet upload failed")
+                            Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
                         }
 
                         WorkInfo.State.RUNNING -> {
