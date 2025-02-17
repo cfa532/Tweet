@@ -606,7 +606,7 @@ object HproseInstance {
             // author data could be null, for tweet could be provided by the others.
             val author = getUser(authorId)
             val hostIP = (nodeIP ?: author?.baseUrl)?: return@withRetry null
-            val url = StringBuilder("$hostIP/entry?aid=$appId&ver=last&entry=get_tweet")
+            val url = StringBuilder("http://$hostIP/entry?aid=$appId&ver=last&entry=get_tweet")
                 .append("&tweetid=$tweetId")
                 // appUser is passed to sever, to check if the current user has liked or bookmarked.
                 .append("&userid=${appUser.mid}").toString()
@@ -920,6 +920,7 @@ object HproseInstance {
                 val res = gson.fromJson( response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any?>
+
                 val hasBookmarked = res["hasBookmarked"] as Boolean
                 tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
                 val ret = tweet.copy(
@@ -930,7 +931,7 @@ object HproseInstance {
                 )
                 /**
                  * Become a provider of the tweet if bookmarked it.
-                 * Also update appUser's count of bookmarks.
+                 * Also update appUser's record of bookmarks.
                  * */
                 tweet.author?.let { provide(it, tweet.mid, hasBookmarked) }
                 toggleMetaByUser(tweet.mid, "bookmark")?.let { updatedUser ->

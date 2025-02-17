@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -107,14 +108,15 @@ fun TweetFeedScreen(
                 ) {
                     TabRow(
                         selectedTabIndex = selectedTabIndex,
-                        modifier = Modifier.height(48.dp), // Original height
                     ) {
                         tabs.forEachIndexed { index, item ->
                             Tab(
+                                modifier = Modifier.height(36.dp), // Original height
                                 selected = index == selectedTabIndex,
                                 onClick = { selectedTabIndex = index },
                                 text = { Text(
                                     color = Color.Gray,
+                                    fontWeight = FontWeight.Light,
                                     text = item.title
                                 ) },
                             )

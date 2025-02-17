@@ -41,6 +41,8 @@ fun ProfileDetail(
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val profile by remember { derivedStateOf { user.profile } }
+    val bookmarksCount by remember { derivedStateOf { user.bookmarksCount } }
+    val favoritesCount by remember { derivedStateOf { user.favoritesCount } }
 
     LaunchedEffect(appUserFollowings) {
         withContext(Dispatchers.IO) {
@@ -67,7 +69,7 @@ fun ProfileDetail(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${user.followersCount?:0} ${stringResource(R.string.fans)}",
+                    text = "${stringResource(R.string.fans)} ${user.followersCount?:0}",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.clickable(
                         onClick = {
@@ -75,7 +77,7 @@ fun ProfileDetail(
                         }
                     ))
                 Text(
-                    text = "${user.followingCount?:0} ${stringResource(R.string.followings)}",
+                    text = "${stringResource(R.string.followings)} ${user.followingCount?:0}",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
                         .clickable(onClick = {
@@ -83,12 +85,12 @@ fun ProfileDetail(
                         }),
                 )
                 Text(
-                    text = "${user.tweetCount?:0} ${stringResource(R.string.posts)}",
+                    text = "${stringResource(R.string.posts)} ${user.tweetCount}",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 // show the following buttons only on appUser's profile
                 if (user.mid == appUser.mid) {
-                    appUser.bookmarksCount?.let {
+                    bookmarksCount?.let {
                         Row(
                             modifier = Modifier.clickable(
                                 onClick = {
@@ -96,18 +98,18 @@ fun ProfileDetail(
                                 }
                             )
                         ) {
-                            Text(
-                                text = "${if (it>0) it else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
                             Icon(
                                 imageVector = Icons.Outlined.Bookmarks,
                                 contentDescription = stringResource(R.string.user_bookmarks),
                                 modifier = Modifier.size(IconSize)
                             )
+                            Text(
+                                text = "${if (it>0) it else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
-                    appUser.favoritesCount?.let {
+                    favoritesCount?.let {
                         Row(
                             modifier = Modifier.clickable(
                                 onClick = {
@@ -115,14 +117,14 @@ fun ProfileDetail(
                                 }
                             )
                         ) {
-                            Text(
-                                text = "${if (it>0) it else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
                             Icon(
                                 imageVector = Icons.Outlined.FavoriteBorder,
                                 contentDescription = stringResource(R.string.user_favorites),
                                 modifier = Modifier.size(IconSize)
+                            )
+                            Text(
+                                text = "${if (it>0) it else ""}",
+                                style = MaterialTheme.typography.bodySmall,
                             )
                         }
                     }

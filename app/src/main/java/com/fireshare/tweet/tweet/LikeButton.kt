@@ -142,6 +142,8 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val appUserViewModel = sharedViewModel.appUserViewModel
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
@@ -150,7 +152,9 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.likeTweet()
+                viewModel.likeTweet {tweet, isLiking ->
+                    appUserViewModel.updateFavorite(tweet, isLiking)
+                }
             }
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
@@ -177,6 +181,8 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val appUserViewModel = sharedViewModel.appUserViewModel
 
     IconButton(onClick = {
         if (appUser.mid == TW_CONST.GUEST_ID) {
@@ -185,7 +191,9 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.bookmarkTweet()
+                viewModel.bookmarkTweet {tweet, isBookmarked ->
+                    appUserViewModel.updateBookmark(tweet, isBookmarked)
+                }
             }
     } )
     {

@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun TweetItem(
     tweet: Tweet,
-    parentEntry: NavBackStackEntry, // navGraph scoped
+    parentEntry: NavBackStackEntry // navGraph scoped
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid

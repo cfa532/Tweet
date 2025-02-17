@@ -35,13 +35,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.math.max
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
     private val savedStateHandle: SavedStateHandle
 ): ViewModel(), TweetActionListener {
-    var user = savedStateHandle.getStateFlow("user", appUser)
+    private val _user = MutableStateFlow(savedStateHandle.getStateFlow("user", appUser).value)
+    val user: StateFlow<User> get() = _user.asStateFlow()
 
     // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -173,6 +175,16 @@ class UserViewModel @AssistedInject constructor(
             }
         }
     }
+    fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
+        if (isBookmarked) {
+            _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount?.plus(1))
+            _bookmarks.update { bs -> listOf(tweet) + bs }
+        } else {
+            _user.value = user.value.copy(
+                bookmarksCount = user.value.bookmarksCount?.minus(1)?.let { max(it, 0) })
+            _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
+        }
+    }
 
     suspend fun getFavorites(start: Int) {
         getSortedMetaByUser(user.value, "favorite")?.let { list ->
@@ -188,6 +200,16 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
             }
+        }
+    }
+    fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
+        if (isFavorite) {
+            _user.value = user.value.copy(favoritesCount = user.value.favoritesCount?.plus(1))
+            _favorites.update { bs -> listOf(tweet) + bs }
+        } else {
+            _user.value = user.value.copy(
+                favoritesCount = user.value.favoritesCount?.minus(1)?.let { max(it, 0) })
+            _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
     }
 

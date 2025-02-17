@@ -23,6 +23,7 @@ import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.UserFavorites
+import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.service.UploadCommentWorker
 import com.fireshare.tweet.widget.createExoPlayer
 import com.google.gson.Gson
@@ -235,29 +236,38 @@ class TweetViewModel @AssistedInject constructor(
         context.startActivity(shareIntent, null)
     }
 
-    suspend fun likeTweet() {
-        if (tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) == true) {
-            _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, false)
-        } else {
-            _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, true)
-        }
+    /**
+     * Update favorite count and icon right away for better user experience.
+     * */
+    suspend fun likeTweet(updateAppUser: (Tweet, Boolean) -> Unit) {
+        val hasLiked = tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+        _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, ! hasLiked)
         _tweetState.value = tweetState.value.copy(
-            likeCount = if (tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) == false)
-                max(0, tweetState.value.likeCount - 1) else tweetState.value.likeCount + 1,
+            likeCount = if (hasLiked) max(0, tweetState.value.likeCount - 1)
+            else tweetState.value.likeCount + 1,
         )
+        updateAppUser(tweetState.value, ! hasLiked)
+        /**
+         * Overwrite in-memory favorites with result from database call that persists the change.
+         * */
         _tweetState.value = HproseInstance.likeTweet(tweetState.value)
     }
 
-    suspend fun bookmarkTweet() {
-        if (tweetState.value.favorites?.get(UserFavorites.BOOKMARK) == true) {
-            _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, false)
-        } else {
-            _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, true)
-        }
+    /**
+     * Update bookmark count and icon right away for better user experience.
+     * */
+    suspend fun bookmarkTweet(updateAppUser: (Tweet, Boolean) -> Unit) {
+        val hasBookmarked = tweetState.value.favorites?.get(UserFavorites.BOOKMARK) ?: false
+        _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, ! hasBookmarked)
         _tweetState.value = tweetState.value.copy(
-            bookmarkCount = if (tweetState.value.favorites?.get(UserFavorites.BOOKMARK) == false)
-                max(0, tweetState.value.bookmarkCount - 1) else tweetState.value.bookmarkCount + 1,
+            bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
+            else tweetState.value.bookmarkCount + 1,
         )
+        updateAppUser(tweetState.value, ! hasBookmarked)
+
+        /**
+         * Overwrite in-memory bookmark with result from database call that persists the change.
+         * */
         _tweetState.value = HproseInstance.bookmarkTweet(tweetState.value)
     }
 
