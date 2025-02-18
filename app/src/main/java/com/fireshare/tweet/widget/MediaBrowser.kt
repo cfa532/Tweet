@@ -113,7 +113,6 @@ fun MediaBrowser(
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
-    var initOffsetY by remember { mutableFloatStateOf(0f) }
     var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     // prevent double trigger of popBack event

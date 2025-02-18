@@ -478,7 +478,7 @@ fun VideoPreview(
             Icon(
                 painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
                 contentDescription = if (isMuted) "UnMute" else "Mute",
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier
                     .size(ButtonDefaults.IconSize)
             )
