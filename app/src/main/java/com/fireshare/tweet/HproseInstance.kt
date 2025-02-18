@@ -802,7 +802,7 @@ object HproseInstance {
     suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {
         val method = "toggle_following"
         val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last" +
-                    "&entry=$method&userid=$appUserId&otherid=${userId}"
+                    "&entry=$method&userid=$appUserId&otherid=$userId"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -813,7 +813,7 @@ object HproseInstance {
                 return@withRetry isFollowing    // following status after toggle
             }
         } catch (e: Exception) {
-            Timber.tag("toggleFollowing()").e(e.toString())
+            Timber.tag("toggleFollowing()").e("$url $e")
         }
         null
     } }
@@ -826,8 +826,8 @@ object HproseInstance {
     suspend fun toggleFollower(
         userId: MimeiId,
         isFollowing: Boolean,
-        followerId: MimeiId = appUser.mid )
-    { return withRetry {
+        followerId: MimeiId = appUser.mid
+    ) { return withRetry {
         val user = getUser(userId)
         val method = "toggle_follower"
         val url = "${user?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +

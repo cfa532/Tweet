@@ -142,7 +142,7 @@ class UserViewModel @AssistedInject constructor(
         _user.value = user.value.copy(followersCount = followers.value.size)
     }
     /**
-     * @param subjectUserId to be add/remove the following list
+     * @param subjectUserId to add/remove it to/from the following list
      * */
     suspend fun toggleFollowing(
         subjectUserId: MimeiId,

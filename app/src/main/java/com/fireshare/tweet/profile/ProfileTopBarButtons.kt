@@ -81,6 +81,7 @@ fun ProfileTopBarButton(
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                     appUserViewModel.toggleFollowing(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                            viewModel.toggleFollower(user.mid, it, appUser.mid)
                                             tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
                                         }
                                     }
