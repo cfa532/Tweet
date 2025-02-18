@@ -7,6 +7,7 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import com.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -62,4 +63,26 @@ object VideoCacheManager {
             }
         }
     }
+}
+
+object VideoDimensionsCache {
+    private val dimensionsCache = mutableMapOf<String, Pair<Int, Int>>()
+
+    fun getDimensions(key: String): Pair<Int, Int>? {
+        return dimensionsCache[key]
+    }
+
+    fun putDimensions(key: String, dimensions: Pair<Int, Int>) {
+        dimensionsCache[key] = dimensions
+    }
+}
+
+fun getCachedVideoDimensions(url: String): Pair<Int, Int>? {
+    val key = url.getMimeiKeyFromUrl()
+    return VideoDimensionsCache.getDimensions(key)
+}
+
+fun cacheVideoDimensions(url: String, dimensions: Pair<Int, Int>) {
+    val key = url.getMimeiKeyFromUrl()
+    VideoDimensionsCache.putDimensions(key, dimensions)
 }

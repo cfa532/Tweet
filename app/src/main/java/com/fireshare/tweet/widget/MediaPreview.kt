@@ -321,12 +321,18 @@ fun createExoPlayer(context: Context, url: String): ExoPlayer {
         .setUpstreamDataSourceFactory(dataSourceFactory)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
+    val cacheKey = url.getMimeiKeyFromUrl()
+    val mediaItem = androidx.media3.common.MediaItem.Builder()
+        .setUri(Uri.parse(url))
+        .setCustomCacheKey(cacheKey)  // This ensures the cache uses your unique key
+        .build()
+
     val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-        .createMediaSource(androidx.media3.common.MediaItem.fromUri(Uri.parse(url)))
+        .createMediaSource(mediaItem)
 
     return ExoPlayer.Builder(context).build().apply {
         setMediaSource(mediaSource)
-        prepare()
+        prepare()  // Prepares the player with the media source
     }
 }
 
@@ -416,12 +422,27 @@ fun VideoPreview(
     }
 
     LaunchedEffect(url.getMimeiKeyFromUrl()) {
-        val (width, height) = VideoCacheManager.getVideoDimensions(url) ?: Pair(400, 400)
-        aspectRatio = width.toFloat() / height.toFloat()
+        val cacheKey = url.getMimeiKeyFromUrl()
+        val cachedDimensions = VideoDimensionsCache.getDimensions(cacheKey)
+
+        if (cachedDimensions != null) {
+            // Use cached dimensions
+            val (width, height) = cachedDimensions
+            aspectRatio = width.toFloat() / height.toFloat()
+        } else {
+            // Calculate and cache dimensions if not already cached
+            val dimensions = VideoCacheManager.getVideoDimensions(url) ?: Pair(400, 400)
+            VideoDimensionsCache.putDimensions(cacheKey, dimensions)
+            val (width, height) = dimensions
+            aspectRatio = width.toFloat() / height.toFloat()
+        }
+
+        // Adjust aspect ratio for preview grid
         if (inPreviewGrid) {
             aspectRatio = max(1f, aspectRatio)
         }
     }
+
 
     LaunchedEffect(isVideoVisible) {
         if (isVideoVisible) {
