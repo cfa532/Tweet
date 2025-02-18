@@ -1300,14 +1300,14 @@ object HproseInstance {
             val mimeType = context.contentResolver.getType(uri)
             Timber.tag("uploadToIPFS()").d("cid=$cid $mimeType")
             val mediaType = when {
-                mimeType?.startsWith("image/") == true -> com.fireshare.tweet.widget.MediaType.Image
-                mimeType?.startsWith("video/") == true -> com.fireshare.tweet.widget.MediaType.Video
-                mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.widget.MediaType.Audio
-                mimeType == "application/pdf" -> com.fireshare.tweet.widget.MediaType.PDF
-                mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.widget.MediaType.Zip
-                mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.widget.MediaType.Word
+                mimeType?.startsWith("image/") == true -> com.fireshare.tweet.datamodel.MediaType.Image
+                mimeType?.startsWith("video/") == true -> com.fireshare.tweet.datamodel.MediaType.Video
+                mimeType?.startsWith("audio/") == true -> com.fireshare.tweet.datamodel.MediaType.Audio
+                mimeType == "application/pdf" -> com.fireshare.tweet.datamodel.MediaType.PDF
+                mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> com.fireshare.tweet.datamodel.MediaType.Zip
+                mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.fireshare.tweet.datamodel.MediaType.Word
                 // ... add more mappings for other MediaType values ...
-                else -> com.fireshare.tweet.widget.MediaType.Unknown
+                else -> com.fireshare.tweet.datamodel.MediaType.Unknown
             }
             // Return MimeiFileType
             return@withRetry MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp)

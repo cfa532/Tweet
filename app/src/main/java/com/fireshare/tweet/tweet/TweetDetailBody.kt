@@ -85,9 +85,9 @@ import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
-import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.datamodel.MediaItem
 import com.fireshare.tweet.widget.MediaItemView
-import com.fireshare.tweet.widget.MediaType
+import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

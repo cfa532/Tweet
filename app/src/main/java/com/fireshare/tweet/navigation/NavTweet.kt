@@ -4,7 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.navigation.NavType
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.widget.MediaItem
+import com.fireshare.tweet.datamodel.MediaItem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

@@ -1,7 +1,6 @@
 package com.fireshare.tweet.datamodel
 
 import android.content.Context
-import android.os.Parcel
 import android.os.Parcelable
 import androidx.room.Dao
 import androidx.room.Database
@@ -18,13 +17,25 @@ import androidx.room.TypeConverters
 import androidx.room.Update
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.widget.MediaType
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import kotlinx.parcelize.Parceler
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import java.util.Date
+
+
+@Serializable
+enum class MediaType {
+    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
+}
+
+@Serializable
+// url is in the format of http://ip/mm/mimei_id
+data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
+
+fun String.getMimeiKey(): String {
+    return this.substringAfterLast('/')
+}
 
 typealias MimeiId = String      // 27 or 64 character long string
 

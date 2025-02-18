@@ -65,6 +65,8 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MediaItem
+import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.tweet.BookmarkButton

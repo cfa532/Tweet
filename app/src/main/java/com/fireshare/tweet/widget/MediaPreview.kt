@@ -100,8 +100,11 @@ import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MediaItem
+import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
+import com.fireshare.tweet.datamodel.getMimeiKey
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -687,34 +690,6 @@ fun ImageViewer(
     }
 }
 
-@UnstableApi
-object VideoCacheManager {
-    private var simpleCache: SimpleCache? = null
-
-    fun getCache(context: Context): Cache {
-        if (simpleCache == null) {
-            val cacheDir = File(context.cacheDir, "video_cache")
-            val evictor = LeastRecentlyUsedCacheEvictor(1000L * 1024 * 1024)
-            val databaseProvider = StandaloneDatabaseProvider(context)
-            simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
-        }
-        return simpleCache!!
-    }
-
-    fun clearOldCachedVideos(context: Context, maxAgeInMillis: Long) {
-        val videoCacheDir = File(context.cacheDir, "video_cache")
-
-        if (videoCacheDir.exists() && videoCacheDir.isDirectory) {
-            val files = videoCacheDir.listFiles() ?: return
-            for (file in files) {
-                if (file.isFile && System.currentTimeMillis() - file.lastModified() > maxAgeInMillis) {
-                    file.delete()
-                }
-            }
-        }
-    }
-}
-
 /**
  * Check if a tweet is 70% visible in the screen.
  * */
@@ -732,53 +707,4 @@ fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70):
         return parentBottom - layoutTop > thresholdHeight && (parentTop < layoutBottom - thresholdHeight)
     }
     return false
-}
-
-/**
- * Allow app users to download Tweet image to local photo directory.
- * */
-suspend fun downloadImage(context: Context, imageUrl: String) {
-    withContext(Dispatchers.IO) {
-        try {
-            val url = URL(imageUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.doInput = true
-            connection.connect()
-
-            val inputStream = connection.inputStream
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val file = File(downloadsDir, "image_${System.currentTimeMillis()}.jpg")
-
-            val outputStream = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-
-            outputStream.flush()
-            outputStream.close()
-
-            withContext(Dispatchers.Main) {
-                // Show a toast or notification indicating download success
-                Toast.makeText(context, "Image downloaded to ${file.absolutePath}", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                // Show an error message
-                Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-}
-
-@Serializable
-enum class MediaType {
-    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
-}
-
-@Serializable
-// url is in the format of http://ip/mm/mimei_id
-data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
-
-fun String.getMimeiKey(): String {
-    return this.substringAfterLast('/')
 }
