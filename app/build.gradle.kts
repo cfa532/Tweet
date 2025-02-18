@@ -47,7 +47,7 @@ android {
             buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
             buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
             buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
-            buildConfigField("String", "ALPHA_ID", "\"GeNHEVHl-WXJUpssflXF2JRruNa\"")
+            buildConfigField("String", "ALPHA_ID", "\"aqLFQO2RjZrMsGVJ-6T_rqyoTHL\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
         }
         release {

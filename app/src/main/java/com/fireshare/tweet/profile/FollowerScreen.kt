@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
@@ -58,8 +59,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
-{
+fun FollowerScreen(
+    userId: MimeiId,
+    appUserViewModel: UserViewModel
+) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val viewModel =
@@ -101,7 +104,7 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
         },
         bottomBar = { BottomNavigationBar(navController, 0) }
     ) { innerPadding ->
-        val followersOfProfile by viewModel.fans.collectAsState()
+        val followersOfProfile by viewModel.followers.collectAsState()
 
         Surface(modifier = Modifier.padding(innerPadding))
         {
@@ -120,7 +123,7 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                     }
                 }
                 items(followersOfProfile, key = { it }) { userId ->
-                    FollowerItem(userId, navController, appUserViewModel)
+                    FollowerItem(userId, appUserViewModel)
                 }
             }
         }
@@ -128,8 +131,11 @@ fun FollowerScreen(userId: MimeiId, appUserViewModel: UserViewModel)
 }
 
 @Composable
-fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel) {
+fun FollowerItem(userId: MimeiId,
+                 appUserViewModel: UserViewModel
+) {
     val user = remember { mutableStateOf<User?>(null) }
+    val navController = LocalNavController.current
 
     LaunchedEffect(userId) {
         user.value = HproseInstance.getUser(userId)
@@ -169,7 +175,7 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
                         color = Color.Gray
                     )
                 }
-                ToggleFollowerButton(userId, appUserViewModel)
+                ToggleFollowingButton(userId, appUserViewModel)
             }
             Text(
                 text = user.value?.profile?.trim() ?: "",
@@ -180,47 +186,4 @@ fun FollowerItem(userId: MimeiId, navController: NavController, appUserViewModel
             )
         }
     }
-}
-
-@Composable
-fun ToggleFollowerButton(userId: MimeiId, appUserViewModel: UserViewModel) {
-    val followings by appUserViewModel.followings.collectAsState()
-    val isFollower = followings.contains(userId)
-    val followState = remember { mutableStateOf(isFollower) }
-    val navController = LocalNavController.current
-    val context = LocalContext.current
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-
-    LaunchedEffect(followings) {
-        followState.value = isFollower
-    }
-    Text(
-        text = if (followState.value) stringResource(R.string.unfollow) else stringResource(
-            R.string.follow
-        ),
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier
-            .clickable(onClick = {
-                if (appUser.mid == TW_CONST.GUEST_ID) {
-                    appUserViewModel.viewModelScope.launch {
-                        guestWarning(context, navController)
-                    }
-                    return@clickable
-                }
-                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                    appUserViewModel.toggleFollow(userId) {
-                        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-                            tweetFeedViewModel.updateFollowingsTweets(userId, it)
-                        }
-                    }
-                }
-            })
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-    )
 }

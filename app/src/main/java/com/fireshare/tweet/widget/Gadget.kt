@@ -206,7 +206,7 @@ object Gadget {
                 ipList.filter { isValidPublicIpAddress(it) }.forEach { ip ->
                     launch {
                         try {
-                            HproseInstance.getTweet(tweetId, authorId, ip)?.let {
+                            HproseInstance.getTweet(tweetId, authorId, "http://$ip")?.let {
                                 send(it) // Emit the user if found
                                 cancel()
                             }

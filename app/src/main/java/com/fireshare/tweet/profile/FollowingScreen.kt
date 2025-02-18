@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
@@ -58,16 +59,18 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
-{
+fun FollowingScreen(
+    userId: MimeiId,
+    appUserViewModel: UserViewModel
+) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
-    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        context as ComponentActivity, key = userId
-    ) { factory ->
-        factory.create(userId)
-    }
+        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+            context as ComponentActivity, key = userId
+        ) { factory ->
+            factory.create(userId)
+        }
     val followingsOfProfile by viewModel.followings.collectAsState()
     val userOfProfile by viewModel.user.collectAsState()
 
@@ -119,7 +122,7 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
                     }
                 }
                 items(followingsOfProfile, key = {it}) { userId ->
-                    FollowingItem(userId, navController, appUserViewModel)
+                    FollowingItem(userId, appUserViewModel)
                 }
             }
         }
@@ -127,7 +130,11 @@ fun FollowingScreen(userId: MimeiId, appUserViewModel: UserViewModel)
 }
 
 @Composable
-fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewModel: UserViewModel) {
+fun FollowingItem(
+    userId: MimeiId,
+    appUserViewModel: UserViewModel
+) {
+    val navController = LocalNavController.current
     val user = remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(userId) {
@@ -186,12 +193,21 @@ fun FollowingItem(userId: MimeiId, navController: NavController, appUserViewMode
 }
 
 @Composable
-fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
+fun ToggleFollowingButton(
+    userId: MimeiId,
+    appUserViewModel: UserViewModel
+) {
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+    val viewModel = if (userId == appUser.mid) appUserViewModel
+                    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                        context as ComponentActivity, key = userId
+                    ) { factory ->
+                        factory.create(userId)
+                    }
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollowing) }
-    val navController = LocalNavController.current
-    val context = LocalContext.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(followings) {
@@ -210,8 +226,9 @@ fun ToggleFollowingButton(userId: MimeiId, appUserViewModel: UserViewModel) {
                     return@clickable
                 }
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                    appUserViewModel.toggleFollow(userId) {
+                    appUserViewModel.toggleFollowing(userId) {
                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                            viewModel.toggleFollower(userId, it, appUser.mid)
                             tweetFeedViewModel.updateFollowingsTweets(userId, it)
                         }
                     }

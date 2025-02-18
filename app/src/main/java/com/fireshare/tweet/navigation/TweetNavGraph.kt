@@ -221,10 +221,16 @@ fun TweetNavGraph(
                 SystemSettings(navController, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Following> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
                 val user = it.toRoute<NavTweet.Following>()
                 FollowingScreen(user.userId, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Follower> {
+                val parentEntry = remember(it) {
+                    navController.getBackStackEntry(NavTwee)
+                }
                 val user = it.toRoute<NavTweet.Following>()
                 FollowerScreen(user.userId, sharedViewModel.appUserViewModel)
             }

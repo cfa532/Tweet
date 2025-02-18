@@ -3,7 +3,6 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
@@ -40,9 +39,9 @@ import kotlin.math.max
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
-    private val savedStateHandle: SavedStateHandle
+//    private val savedStateHandle: SavedStateHandle
 ): ViewModel(), TweetActionListener {
-    private val _user = MutableStateFlow(savedStateHandle.getStateFlow("user", appUser).value)
+    private val _user = MutableStateFlow(appUser)
     val user: StateFlow<User> get() = _user.asStateFlow()
 
     // unpinned tweets
@@ -53,8 +52,8 @@ class UserViewModel @AssistedInject constructor(
     private val _topTweets = MutableStateFlow<List<Tweet>>(emptyList())
     val topTweets: StateFlow<List<Tweet>> get() = _topTweets.asStateFlow()
 
-    private var _fans = MutableStateFlow(emptyList<MimeiId>())
-    val fans: StateFlow<List<MimeiId>> get() = _fans.asStateFlow()
+    private var _followers = MutableStateFlow(emptyList<MimeiId>())
+    val followers: StateFlow<List<MimeiId>> get() = _followers.asStateFlow()
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
@@ -82,7 +81,7 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshing.value = true
         startRank.value = 0
         Timber.tag("UserVM.loadNewerTweets")
-            .d("start rank=$startRank.value")
+            .d("start rank=${startRank.value}")
         getTweets()
         _isRefreshing.value = false
     }
@@ -91,7 +90,7 @@ class UserViewModel @AssistedInject constructor(
         _isRefreshingAtBottom.value = true
         startRank.value = 0
         Timber.tag("UserVM.loadOlderTweets")
-            .d("start rank=$startRank.value")
+            .d("start rank=${startRank.value}")
         getTweets()
         _isRefreshingAtBottom.value = false
     }
@@ -119,39 +118,59 @@ class UserViewModel @AssistedInject constructor(
         )?.let {
             HproseInstance.setUserAvatar(appUser, it.mid)   // Update appUser's avatar
             appUser = appUser.copy(avatar = it.mid)
-            savedStateHandle["user"] = appUser
+            _user.value = appUser
         }
         isLoading.value = false
     }
 
-    suspend fun toggleFollow(
+    /**
+     * @param userId calls this function to update its follower list
+     * @param isFollower indicates if appUser is a follower of userId or not.
+     * */
+    suspend fun toggleFollower(
+        userId: MimeiId,
+        isFollower: Boolean,
+        followerId: MimeiId
+    ) {
+        HproseInstance.toggleFollower(userId, isFollower, followerId)
+        _followers.update { list ->
+            if (isFollower)
+                listOf(followerId) + list
+            else
+                list.filterNot { it == followerId }
+        }
+        _user.value = user.value.copy(followersCount = followers.value.size)
+    }
+    /**
+     * @param subjectUserId to be add/remove the following list
+     * */
+    suspend fun toggleFollowing(
         subjectUserId: MimeiId,
-        appUserId: MimeiId = appUser.mid,
+        userId: MimeiId = appUser.mid,
         updateTweetFeed: (Boolean) -> Unit
     ) {
-        // update UI data without waiting for the server to respond.
-        _followings.update { list ->
-            if (list.contains(subjectUserId)) {
-                list.filter { id -> id != subjectUserId }
-            } else {
-                list + subjectUserId
-            }
-        }
         // toggle the Following status on the given UserId
-        HproseInstance.toggleFollowing(subjectUserId, appUserId)?.let { isFollowing ->
-            // Succeed. Now it is the other party's turn to update its followers.
-            HproseInstance.toggleFollower(subjectUserId, isFollowing, appUserId)
-            refreshFollowingsAndFans()
-            updateTweetFeed(isFollowing)    // callback to update tweet feed
+        HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
+            _followings.update { list ->
+                if (isFollowing)
+                    listOf(subjectUserId) + list
+                else
+                    list.filterNot { it == subjectUserId }
+            }
+            _user.value = user.value.copy(followingCount = followings.value.size)
+
+            // update cached followings of appUser
+            val userData = UserData(userId = userId, followings = followings.value)
+            tweetCache.tweetDao().insertOrUpdateUserData(userData)
+
+            // callback to update tweet feed. Load or remove tweets of the others.
+            updateTweetFeed(isFollowing)
         }
     }
 
     suspend fun refreshFollowingsAndFans() {
-        _fans.value = HproseInstance.getFans(user.value) ?: emptyList()
+        _followers.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
-        // update cached followings list of the user
-        val userData = UserData(userId = this.userId, followings = followings.value)
-        tweetCache.tweetDao().insertOrUpdateUserData(userData)
     }
 
     private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
@@ -221,7 +240,7 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                savedStateHandle["user"] = getUser(userId)
+                _user.value = getUser(userId) ?: appUser
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -230,7 +249,7 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         } else {
-            savedStateHandle["user"] = appUser
+            _user.value = appUser
         }
     }
 
@@ -321,7 +340,7 @@ class UserViewModel @AssistedInject constructor(
             } else {
                 appUser = ret.first as User
                 preferenceHelper.setUserId(appUser.mid)
-                savedStateHandle["user"] = appUser
+                _user.value = appUser
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
@@ -395,13 +414,10 @@ class UserViewModel @AssistedInject constructor(
                 return
             }
         }
-        var updatedUser = appUser.copy(
+        var updatedUser = User(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim(), avatar = appUser.avatar,
-            tweetCount = appUser.tweetCount, followersCount = appUser.followersCount,
-            followingCount = appUser.followingCount, bookmarksCount = appUser.bookmarksCount,
-            commentsCount = appUser.bookmarksCount, favoritesCount = appUser.favoritesCount
+            profile = profile.value?.trim(), avatar = appUser.avatar, mid = appUser.mid
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
@@ -423,7 +439,7 @@ class UserViewModel @AssistedInject constructor(
                     appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
-                    savedStateHandle["user"] = appUser
+                    _user.value = appUser
 
                     val event = SnackbarEvent(
                         message = context.getString(R.string.profile_update_ok)
@@ -446,7 +462,7 @@ class UserViewModel @AssistedInject constructor(
         val suggestions = mutableListOf<String>()
 
         // Check fans
-        fans.value.forEach { fanId ->
+        followers.value.forEach { fanId ->
             getUser(fanId)?.let { fan ->
                 if (fan.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(fan.username!!)

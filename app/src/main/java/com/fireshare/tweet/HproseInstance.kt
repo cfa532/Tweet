@@ -282,7 +282,8 @@ object HproseInstance {
         null
     } }
 
-    suspend fun getUserId(username: String): MimeiId? { return withRetry {
+    suspend fun getUserId(username: String): MimeiId?
+    { return withRetry {
         try {
             val entry = "get_userid"
             val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&username=$username"
@@ -305,30 +306,31 @@ object HproseInstance {
      * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    suspend fun login(username: String, password: String, context: Context): Pair<User?, String?> { return withRetry {
+    suspend fun login(
+        username: String,
+        password: String,
+        context: Context
+    ): Pair<User?, String?> { return withRetry {
         var reason = Pair(null, context.getString(R.string.login_error))
         try {
+            reason = Pair(null, context.getString(R.string.login_failed))
             val userId = getUserId(username) ?: return@withRetry reason
-            val user = getUser(userId)
-            if (user == null) {
-                reason = Pair(null, context.getString(R.string.login_failed))
-                return@withRetry reason
-            }
-            val url =
-                "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login&username=$username&password=$password"
+            val user = getUser(userId) ?: return@withRetry reason
+            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login" +
+                    "&username=$username&password=$password"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val ret = Gson().fromJson(response.bodyAsText(), Map::class.java)
-                if (ret != null) {
+                Gson().fromJson(response.bodyAsText(), Map::class.java)?.let { ret ->
                     if (ret["status"] == "success") {
                         return@withRetry Pair(user, null)
-                    } else reason
-                } else reason
-            } else reason
+                    }
+                }
+            }
         } catch (e: Exception) {
             Timber.tag("Hprose.Login").e("${e.message}")
             return@withRetry reason
         }
+        reason
     } }
 
     /**
@@ -390,6 +392,9 @@ object HproseInstance {
              * */
             val newHostId = userObj.hostIds?.first() ?: return@withRetry null
             if (newHostId != appUser.hostIds?.first()) {
+                /**
+                 * If the hostId is changed, try to sync User mimei to the new host first.
+                 * */
                 val hostIp = getHostIP(newHostId) ?: return@withRetry null
                 val targetUser = getUserCoreData(userObj.mid, hostIp)
                 if (targetUser == null) {
@@ -586,30 +591,29 @@ object HproseInstance {
     }
 
     /**
-     * Get only layer one data of the tweet. Do Not fetch its original tweet if there is any.
+     * Get core data of the tweet. Do Not fetch its original tweet if there is any.
      * Let the caller to decide if go further on the tweet hierarchy.
      * */
     suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
-        nodeIP: String? = null      // ip address where tweet can be found.
+        nodeUrl: String? = null      // ip address where tweet can be found.
     ): Tweet? { return withRetry {
+        // if there is a cached tweet, return it.
+        val cachedTweet = retrieveCachedTweet(tweetId)
+        if (cachedTweet != null) {
+            if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
+                return@withRetry null   // private tweet viewable only by author at profile screen.
+            else
+                return@withRetry cachedTweet
+        }
+        // author data could be null, for tweet could be provided by the others.
+        val author = getUser(authorId)
+        val hostIP = (nodeUrl ?: author?.baseUrl)?: return@withRetry null
+        // appUser is passed to sever, to check if the current user has liked or bookmarked.
+        val url = "$hostIP/entry?aid=$appId&ver=last&entry=get_tweet" +
+            "&tweetid=$tweetId&userid=${appUser.mid}"
         try {
-            // if there is a cached tweet, return it.
-            val cachedTweet = retrieveCachedTweet(tweetId)
-            if (cachedTweet != null) {
-                if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
-                    return@withRetry null   // private tweet viewable only by author at profile screen.
-                else
-                    return@withRetry cachedTweet
-            }
-            // author data could be null, for tweet could be provided by the others.
-            val author = getUser(authorId)
-            val hostIP = (nodeIP ?: author?.baseUrl)?: return@withRetry null
-            val url = StringBuilder("http://$hostIP/entry?aid=$appId&ver=last&entry=get_tweet")
-                .append("&tweetid=$tweetId")
-                // appUser is passed to sever, to check if the current user has liked or bookmarked.
-                .append("&userid=${appUser.mid}").toString()
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -625,12 +629,14 @@ object HproseInstance {
                     Timber.tag("getTweet").d("$tweet")
                     return@withRetry tweet
                 } else {
-                    if (nodeIP == null) {
+                    if (nodeUrl == null) {
                         // most likely the author cannot provide tweet data.
                         // Try to load the tweet some somewhere else, by tweetId alone.
                         getProviders(tweetId)?.let { ipList ->
                             tweet = getAccessibleTweet(ipList, tweetId, authorId)
                         }
+                        if (tweet == null)
+                            return@withRetry null
                         tweet.author = author
                         tweetCache.tweetDao().insertOrUpdateCachedTweet(
                             CachedTweet(tweet.mid, gson.toJson(tweet))
@@ -641,7 +647,7 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("getTweet").e("$tweetId $authorId $e")
+            Timber.tag("getTweet").e("$tweetId $authorId $url $nodeUrl $e")
         }
         null
     }}
@@ -751,11 +757,15 @@ object HproseInstance {
         try {
             var response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                // if there is an originalTweet, also decrease its retweet count
+                /**
+                 * If there is an originalTweetId, this is a retweet.
+                 * Also update the retweet count of the original tweet.
+                 * */
                 if (tweet.originalTweetId != null) {
-                    method = "retweet_remove"
+                    method = "retweet_removed"
                     url = "${tweet.originalTweet!!.author?.writableUrl()}/entry?aid=$appId&ver=last" +
-                            "&entry=$method&tweetid=${tweet.originalTweetId}&userid=${appUser.mid}"
+                            "&entry=$method&tweetid=${tweet.originalTweetId}&retweetid=${tweet.mid}" +
+                            "&userid=${tweet.originalAuthorId}"
                     response = httpClient.get(url)
                     if (response.status == HttpStatusCode.OK) {
                         callback(tweet.mid)
@@ -791,9 +801,8 @@ object HproseInstance {
      * */
     suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {
         val method = "toggle_following"
-        val url =
-            "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                    "&userid=$appUserId&otherid=${userId}"
+        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last" +
+                    "&entry=$method&userid=$appUserId&otherid=${userId}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -801,7 +810,7 @@ object HproseInstance {
                 getUser(userId)?.let { user ->
                     provide(user, user.mid, isFollowing)
                 }
-                return@withRetry isFollowing
+                return@withRetry isFollowing    // following status after toggle
             }
         } catch (e: Exception) {
             Timber.tag("toggleFollowing()").e(e.toString())
@@ -810,9 +819,9 @@ object HproseInstance {
     } }
 
     /**
-     * @param isFollowing indicates if the appUser is following this userId. Passing an argument
-     * instead of toggling the status of a follower because this way will not introduce a
-     * persistent inconsistency when something went wrong, which happens easily with the toggle method.
+     * @param isFollowing indicates if the appUser is following @param userId. Passing
+     * an argument instead of toggling the status of a follower, because toggling
+     * following/follower status happens on two different hosts.
      * */
     suspend fun toggleFollower(
         userId: MimeiId,
@@ -862,9 +871,14 @@ object HproseInstance {
         }
     } }
 
-    private suspend fun provide(user: User, mid: MimeiId, isProvider: Boolean
+    /**
+     * Provide or unprovide the given mid.
+     * @param owner is the user who published mid.
+     * */
+    private suspend fun provide(owner: User, mid: MimeiId, isProvider: Boolean
     ) { return withRetry {
-        if (appUser.hostIds == user.hostIds)
+        // Make sure that mid is not on the same host.
+        if (appUser.hostIds == owner.hostIds)
             return@withRetry
         val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=mimei_provide" +
                 "&mid=$mid&provide=$isProvider"
