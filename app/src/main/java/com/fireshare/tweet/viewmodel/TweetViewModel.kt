@@ -23,7 +23,6 @@ import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.UserFavorites
-import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.service.UploadCommentWorker
 import com.fireshare.tweet.widget.createExoPlayer
 import com.google.gson.Gson

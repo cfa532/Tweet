@@ -29,8 +29,8 @@ import com.fireshare.tweet.profile.EditProfileScreen
 import com.fireshare.tweet.profile.FollowerScreen
 import com.fireshare.tweet.profile.FollowingScreen
 import com.fireshare.tweet.profile.LoginScreen
-import com.fireshare.tweet.profile.SystemSettings
 import com.fireshare.tweet.profile.ProfileScreen
+import com.fireshare.tweet.profile.SystemSettings
 import com.fireshare.tweet.profile.UserBookmarks
 import com.fireshare.tweet.profile.UserFavorites
 import com.fireshare.tweet.service.SearchScreen

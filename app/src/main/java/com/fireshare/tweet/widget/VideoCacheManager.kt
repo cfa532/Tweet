@@ -1,21 +1,16 @@
 package com.fireshare.tweet.widget
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.os.Environment
-import android.widget.Toast
+import android.media.MediaMetadataRetriever
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 
 @UnstableApi
 object VideoCacheManager {
@@ -43,39 +38,27 @@ object VideoCacheManager {
             }
         }
     }
-}
 
-/**
- * Allow app users to download Tweet image to local photo directory.
- * */
-suspend fun downloadImage(context: Context, imageUrl: String) {
-    withContext(Dispatchers.IO) {
-        try {
-            val url = URL(imageUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.doInput = true
-            connection.connect()
-
-            val inputStream = connection.inputStream
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val file = File(downloadsDir, "image_${System.currentTimeMillis()}.jpg")
-
-            val outputStream = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-
-            outputStream.flush()
-            outputStream.close()
-
-            withContext(Dispatchers.Main) {
-                // Show a toast or notification indicating download success
-                Toast.makeText(context, "Image downloaded to ${file.absolutePath}", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                // Show an error message
-                Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+    suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
+        return withContext(IO) {
+            try {
+                val retriever = MediaMetadataRetriever()
+                retriever.setDataSource(videoUrl, HashMap())
+                val width =
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                        ?.toInt()
+                val height =
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                        ?.toInt()
+                retriever.release()
+                if (width != null && height != null) {
+                    Pair(width, height)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Timber.tag("GetVideoDimensions").e(e)
+                null
             }
         }
     }

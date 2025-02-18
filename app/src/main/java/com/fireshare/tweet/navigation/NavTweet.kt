@@ -3,8 +3,8 @@ package com.fireshare.tweet.navigation
 import android.net.Uri
 import android.os.Bundle
 import androidx.navigation.NavType
-import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.MediaItem
+import com.fireshare.tweet.datamodel.MimeiId
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

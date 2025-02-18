@@ -1,6 +1,5 @@
 package com.fireshare.tweet.widget
 
-import android.media.MediaMetadataRetriever
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -14,12 +13,10 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.User
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.net.Inet4Address
@@ -144,26 +141,6 @@ object Gadget {
             }
         }
         return ipAddresses
-    }
-
-    suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
-        return withContext(IO) {
-            try {
-                val retriever = MediaMetadataRetriever()
-                retriever.setDataSource(videoUrl, HashMap())
-                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()
-                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt()
-                retriever.release()
-                if (width != null && height != null) {
-                    Pair(width, height)
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                Timber.tag("GetVideoDimensions").e(e)
-                null
-            }
-        }
     }
 
     /**

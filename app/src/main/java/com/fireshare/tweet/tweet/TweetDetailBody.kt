@@ -75,6 +75,8 @@ import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.MediaItem
+import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
@@ -85,9 +87,7 @@ import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
-import com.fireshare.tweet.datamodel.MediaItem
 import com.fireshare.tweet.widget.MediaItemView
-import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

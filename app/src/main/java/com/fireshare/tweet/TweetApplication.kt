@@ -10,9 +10,7 @@ import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.service.CleanUpWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber

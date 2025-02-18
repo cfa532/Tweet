@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import coil.ImageLoader
@@ -16,6 +18,8 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class CacheManager(private val context: Context) {
 
@@ -140,5 +144,41 @@ class CacheManager(private val context: Context) {
         val cachedPath = getCachedImagePath(imageUrl, isPreview)
         val file = File(cachedPath)
         return file.exists()
+    }
+}
+
+/**
+ * Allow app users to download Tweet image to local photo directory.
+ * */
+suspend fun downloadImage(context: Context, imageUrl: String) {
+    withContext(Dispatchers.IO) {
+        try {
+            val url = URL(imageUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.doInput = true
+            connection.connect()
+
+            val inputStream = connection.inputStream
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val file = File(downloadsDir, "image_${System.currentTimeMillis()}.jpg")
+
+            val outputStream = FileOutputStream(file)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+
+            outputStream.flush()
+            outputStream.close()
+
+            withContext(Dispatchers.Main) {
+                // Show a toast or notification indicating download success
+                Toast.makeText(context, "Image downloaded to ${file.absolutePath}", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                // Show an error message
+                Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }

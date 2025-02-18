@@ -2,8 +2,6 @@ package com.fireshare.tweet.widget
 
 import android.app.DownloadManager
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
@@ -87,12 +85,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
-import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -109,18 +103,11 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
-import com.fireshare.tweet.widget.Gadget.getVideoDimensions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.math.max
 
 @Composable
@@ -429,7 +416,7 @@ fun VideoPreview(
     }
 
     LaunchedEffect(url.getMimeiKey()) {
-        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+        val (width, height) = VideoCacheManager.getVideoDimensions(url) ?: Pair(400, 400)
         aspectRatio = width.toFloat() / height.toFloat()
         if (inPreviewGrid) {
             aspectRatio = max(1f, aspectRatio)
