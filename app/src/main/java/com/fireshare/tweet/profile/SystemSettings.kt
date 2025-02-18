@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewModelScope
@@ -142,8 +143,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             Text("Version: ${BuildConfig.VERSION_NAME}",
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .padding(top = 8.dp))
+                modifier = Modifier.padding(top = 8.dp))
+            Text("SN: ${BuildConfig.APP_ID}",
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp))
         }
         if (showDialog) {
             BasicAlertDialog(
@@ -201,7 +205,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     centerHorizontallyTo(parent)
                                 },
                             ) {
-                                Text("Confirm")
+                                Text("Confirm",
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
