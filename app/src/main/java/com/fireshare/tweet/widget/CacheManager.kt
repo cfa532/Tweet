@@ -12,7 +12,7 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.fireshare.tweet.datamodel.getMimeiKey
+import com.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -33,9 +33,9 @@ class CacheManager(private val context: Context) {
      */
     fun getCachedImagePath(imageUrl: String, isPreview: Boolean = true): String {
         val fileName = if (isPreview) {
-            imageUrl.getMimeiKey() + "_preview.jpg"
+            imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
         } else {
-            imageUrl.getMimeiKey() + ".png"
+            imageUrl.getMimeiKeyFromUrl() + ".png"
         }
         return File(cacheDir, fileName).absolutePath
     }
@@ -74,9 +74,9 @@ class CacheManager(private val context: Context) {
                 val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
 
                 val fileName = if (isPreview) {
-                    imageUrl.getMimeiKey() + "_preview.jpg"
+                    imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
                 } else {
-                    imageUrl.getMimeiKey() + ".png"
+                    imageUrl.getMimeiKeyFromUrl() + ".png"
                 }
                 val cacheFile = File(cacheDir, fileName)
 

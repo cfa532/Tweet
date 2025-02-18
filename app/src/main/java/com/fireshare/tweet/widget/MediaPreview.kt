@@ -98,7 +98,7 @@ import com.fireshare.tweet.datamodel.MediaItem
 import com.fireshare.tweet.datamodel.MediaType
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.Tweet
-import com.fireshare.tweet.datamodel.getMimeiKey
+import com.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
@@ -415,7 +415,7 @@ fun VideoPreview(
         }
     }
 
-    LaunchedEffect(url.getMimeiKey()) {
+    LaunchedEffect(url.getMimeiKeyFromUrl()) {
         val (width, height) = VideoCacheManager.getVideoDimensions(url) ?: Pair(400, 400)
         aspectRatio = width.toFloat() / height.toFloat()
         if (inPreviewGrid) {
@@ -519,7 +519,7 @@ fun ImageViewer(
     val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Check if image is already cached. Use it directly if so.
-    val cachedImage = remember(imageUrl.getMimeiKey()) {
+    val cachedImage = remember(imageUrl.getMimeiKeyFromUrl()) {
         mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value))
     }
     val adjustedModifier = if (isPreview) {

@@ -33,7 +33,7 @@ enum class MediaType {
 // url is in the format of http://ip/mm/mimei_id
 data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
 
-fun String.getMimeiKey(): String {
+fun String.getMimeiKeyFromUrl(): String {
     return this.substringAfterLast('/')
 }
 
