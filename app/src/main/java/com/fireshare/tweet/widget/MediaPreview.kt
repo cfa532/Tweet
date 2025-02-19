@@ -47,6 +47,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -99,11 +100,13 @@ import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.Gadget.isElementVisible
+import com.fireshare.tweet.widget.VideoCacheManager.getVideoDimensions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
 @Composable
 fun MediaPreviewGrid(
@@ -433,7 +436,14 @@ fun VideoPreview(
             exoPlayer.stop()
         }
     }
-
+    var videoRatio by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(url.getMimeiKeyFromUrl()) {
+        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+        videoRatio = width.toFloat() / height.toFloat()
+        if (inPreviewGrid) {
+            videoRatio = max(1f, videoRatio)
+        }
+    }
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
@@ -454,7 +464,7 @@ fun VideoPreview(
                     hideController()
                 }
             },
-            modifier = modifier.aspectRatio(aspectRatio ?: 1f)
+            modifier = modifier.aspectRatio(aspectRatio ?: videoRatio)
         )
         // Mute button
         IconButton(

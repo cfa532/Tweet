@@ -800,6 +800,7 @@ object HproseInstance {
     } }
 
     /**
+     * Called when appUser clicks the Follow button.
      * @param userId is the user that appUser is following or unfollowing.
      * */
     suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {

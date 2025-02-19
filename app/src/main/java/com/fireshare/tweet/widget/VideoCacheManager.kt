@@ -8,6 +8,8 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 
@@ -55,6 +57,26 @@ object VideoCacheManager {
             null
         } finally {
             retriever.release()
+        }
+    }
+
+    suspend fun getVideoDimensions(videoUrl: String): Pair<Int, Int>? {
+        return withContext(IO) {
+            try {
+                val retriever = MediaMetadataRetriever()
+                retriever.setDataSource(videoUrl, HashMap())
+                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()
+                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt()
+                retriever.release()
+                if (width != null && height != null) {
+                    Pair(width, height)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Timber.tag("GetVideoDimensions").e(e)
+                null
+            }
         }
     }
 }
