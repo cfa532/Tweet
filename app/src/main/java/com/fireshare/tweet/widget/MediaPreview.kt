@@ -47,7 +47,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -57,15 +56,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -103,12 +98,12 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.MediaViewerParams
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.Gadget.isElementVisible
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.max
 
 @Composable
 fun MediaPreviewGrid(
@@ -192,11 +187,11 @@ fun MediaItemView(
             it.type
         )
     }
-    val mediaItem = attachments[index]
+    val attachment = attachments[index]
     val navController = LocalNavController.current
     /**
-     * Action to take when the Full Screen button is clicked. Different from image,
-     * which is opened in full screen automatically when clicked.
+     * Action to take when the Full Screen button on video is clicked.
+     * Image is opened in full screen automatically when clicked upon.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
         navController.navigate(
@@ -209,12 +204,19 @@ fun MediaItemView(
     Box(
         contentAlignment = Alignment.Center
     ) {
-        when (mediaItem.type) {
+        when (attachment.type) {
             MediaType.Image -> {
-                ImageViewer(mediaItem.url, modifier)
+                ImageViewer(attachment.url, modifier)
             }
             MediaType.Video -> {
-                VideoPreview(mediaItem.url, modifier, index, autoPlay, inPreviewGrid) {
+                VideoPreview(
+                    attachment.url,
+                    modifier,
+                    index,
+                    autoPlay,
+                    inPreviewGrid,
+                    mediaItems[index].aspectRatio,
+                ) {
                     goto(index)
                 }
             }
@@ -227,7 +229,7 @@ fun MediaItemView(
                 AudioPreview(mediaItems, index, backgroundModifier, tweet)
             }
             else -> {       // add link to download other file type
-                BlobLink(mediaItems[index], mediaItem.url, modifier)
+                BlobLink(mediaItems[index], attachment.url, modifier)
             }
         }
         if (numOfHiddenItems > 0) {
@@ -374,22 +376,22 @@ fun AudioPreview(
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
  * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
  *                       The aspect ratio shall be 1:1, otherwise use the video's real aspectRatio.
- * @param goto: callback function to be performed when video is closed.
+ * @param callback: callback function to be performed when video is closed.
  * **/
 @OptIn(UnstableApi::class)
 @Composable
 fun VideoPreview(
     url: String,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
     index: Int,
     autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
-    goto: (Int) -> Unit
+    aspectRatio: Float?,
+    callback: (Int) -> Unit
 ) {
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var aspectRatio by remember { mutableFloatStateOf(1f) }
     val exoPlayer = remember { createExoPlayer(context, url) }
 
     /**
@@ -420,29 +422,6 @@ fun VideoPreview(
             exoPlayer.release()
         }
     }
-
-    LaunchedEffect(url.getMimeiKeyFromUrl()) {
-        val cacheKey = url.getMimeiKeyFromUrl()
-        val cachedDimensions = VideoDimensionsCache.getDimensions(cacheKey)
-
-        if (cachedDimensions != null) {
-            // Use cached dimensions
-            val (width, height) = cachedDimensions
-            aspectRatio = width.toFloat() / height.toFloat()
-        } else {
-            // Calculate and cache dimensions if not already cached
-            val dimensions = VideoCacheManager.getVideoDimensions(url) ?: Pair(400, 400)
-            VideoDimensionsCache.putDimensions(cacheKey, dimensions)
-            val (width, height) = dimensions
-            aspectRatio = width.toFloat() / height.toFloat()
-        }
-
-        // Adjust aspect ratio for preview grid
-        if (inPreviewGrid) {
-            aspectRatio = max(1f, aspectRatio)
-        }
-    }
-
 
     LaunchedEffect(isVideoVisible) {
         if (isVideoVisible) {
@@ -475,7 +454,7 @@ fun VideoPreview(
                     hideController()
                 }
             },
-            modifier = modifier.aspectRatio(aspectRatio)
+            modifier = modifier.aspectRatio(aspectRatio ?: 1f)
         )
         // Mute button
         IconButton(
@@ -498,7 +477,7 @@ fun VideoPreview(
         if ( ! inPreviewGrid) {
             // Show full screen button
             IconButton(
-                onClick = { goto(index) },
+                onClick = { callback(index) },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
             ) {
@@ -696,23 +675,4 @@ fun ImageViewer(
             }
         }
     }
-}
-
-/**
- * Check if a tweet is 70% visible in the screen.
- * */
-fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70): Boolean {
-    val layoutHeight = layoutCoordinates.size.height
-    val thresholdHeight = layoutHeight * threshold / 100
-    val layoutTop = layoutCoordinates.positionInRoot().y
-    val layoutBottom = layoutTop + layoutHeight
-    val parent = layoutCoordinates.parentLayoutCoordinates
-
-    parent?.boundsInRoot()?.let { rect: Rect ->
-        val parentTop = rect.top
-        val parentBottom = rect.bottom
-
-        return parentBottom - layoutTop > thresholdHeight && (parentTop < layoutBottom - thresholdHeight)
-    }
-    return false
 }
