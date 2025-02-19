@@ -184,11 +184,12 @@ class UserViewModel @AssistedInject constructor(
             for (index in start until end) {
                 HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
                     _bookmarks.update { bs ->
-                        if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
+                        val updatedBookmarks = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
                             listOf(newTweet) + bs
                         } else {
                             bs
                         }
+                        updatedBookmarks.sortedByDescending { it.timestamp } // Or whatever sorting criteria you need
                     }
                 }
             }
@@ -211,11 +212,12 @@ class UserViewModel @AssistedInject constructor(
             for (index in start until end) {
                 HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
                     _favorites.update { bs ->
-                        if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
+                        val updated = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
                             listOf(newTweet) + bs
                         } else {
                             bs
                         }
+                        updated.sortedByDescending { it.timestamp }
                     }
                 }
             }
