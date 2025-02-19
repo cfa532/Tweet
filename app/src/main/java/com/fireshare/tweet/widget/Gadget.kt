@@ -255,7 +255,7 @@ object Gadget {
     /**
      * Check if a tweet is 70% visible in the screen.
      * */
-    fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70): Boolean {
+    fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 50): Boolean {
         val layoutHeight = layoutCoordinates.size.height
         val thresholdHeight = layoutHeight * threshold / 100
         val layoutTop = layoutCoordinates.positionInRoot().y
