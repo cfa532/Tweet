@@ -352,8 +352,9 @@ fun VideoPreview(
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
 
+    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
     Box(
-        modifier = modifier
+        modifier = boxModifier
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
@@ -366,11 +367,11 @@ fun VideoPreview(
                     controllerShowTimeoutMs = 2000
                     controllerAutoShow = !inPreviewGrid
                     hideController()
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
-            modifier = modifier.fillMaxSize()
-//                .aspectRatio(videoRatio)
+            modifier = modifier
+                .aspectRatio(videoRatio)
         )
         // Mute button
         IconButton(
