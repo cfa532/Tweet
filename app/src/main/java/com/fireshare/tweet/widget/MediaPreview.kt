@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -57,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.pointerInput
@@ -86,6 +88,7 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.fireshare.tweet.HproseInstance.getMediaUrl
 import com.fireshare.tweet.HproseInstance.preferenceHelper
@@ -107,6 +110,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.max
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 
 @Composable
 fun MediaPreviewGrid(
@@ -330,14 +338,15 @@ fun VideoPreview(
             exoPlayer.stop()
         }
     }
-    var videoRatio by remember { mutableFloatStateOf(1f) }
+
+    var videoRatio by remember { mutableFloatStateOf(aspectRatio?: 1f) }
     LaunchedEffect(url.getMimeiKeyFromUrl()) {
-        val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
-        videoRatio = width.toFloat() / height.toFloat()
-        if (inPreviewGrid) {
-            videoRatio = max(1f, videoRatio)
+        if (aspectRatio == null) {
+            val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
+            videoRatio = width.toFloat() / height.toFloat()
         }
     }
+
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
@@ -356,9 +365,12 @@ fun VideoPreview(
                     controllerShowTimeoutMs = 2000
                     controllerAutoShow = !inPreviewGrid
                     hideController()
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    ContentScale.Crop
                 }
             },
-            modifier = modifier.aspectRatio(aspectRatio ?: videoRatio)
+            modifier = modifier.fillMaxWidth()
+                .aspectRatio(videoRatio)
         )
         // Mute button
         IconButton(
