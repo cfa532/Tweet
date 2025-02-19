@@ -269,112 +269,6 @@ fun MediaItemView(
     }
 }
 
-@Composable
-fun BlobLink(
-    blobItem: MimeiFileType,
-    url: String,
-    modifier: Modifier
-) {
-    val annotatedText = buildAnnotatedString {
-        withStyle(
-            style = SpanStyle(
-                color = Color.Cyan,
-                textDecoration = TextDecoration.Underline
-            )
-        ) {
-            append(blobItem.fileName.toString())
-        }
-        addStringAnnotation(
-            tag = "URL",
-            annotation = url,
-            start = 0,
-            end = blobItem.fileName.toString().length
-        )
-    }
-
-    val context = LocalContext.current
-    Text(
-        text = annotatedText,
-        modifier = modifier.fillMaxWidth()
-            .padding(start = 4.dp)
-            .wrapContentWidth(Alignment.Start)
-            .clickable {
-                downloadFile(context, url, blobItem.fileName.toString())
-            }
-    )
-}
-
-fun downloadFile(context: Context, url: String, fileName: String) {
-    val request = DownloadManager.Request(Uri.parse(url))
-        .setTitle(fileName)
-        .setDescription("Downloading")
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-
-    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    downloadManager.enqueue(request)
-
-    Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
-}
-
-@OptIn(UnstableApi::class)
-fun createExoPlayer(context: Context, url: String): ExoPlayer {
-    val cache = VideoCacheManager.getCache(context)
-    val dataSourceFactory = DefaultDataSource.Factory(context)
-    val cacheDataSourceFactory = CacheDataSource.Factory()
-        .setCache(cache)
-        .setUpstreamDataSourceFactory(dataSourceFactory)
-        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-    val cacheKey = url.getMimeiKeyFromUrl()
-    val mediaItem = androidx.media3.common.MediaItem.Builder()
-        .setUri(Uri.parse(url))
-        .setCustomCacheKey(cacheKey)  // This ensures the cache uses your unique key
-        .build()
-
-    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-        .createMediaSource(mediaItem)
-
-    return ExoPlayer.Builder(context).build().apply {
-        setMediaSource(mediaSource)
-        prepare()  // Prepares the player with the media source
-    }
-}
-
-@OptIn(UnstableApi::class)
-@Composable
-fun AudioPreview(
-    mediaItems: List<MimeiFileType>,
-    index: Int,
-    modifier: Modifier = Modifier,
-    tweet: Tweet,
-) {
-    val navController = LocalNavController.current
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 2.dp)
-                .clickable {
-                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
-                },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.btn_play),
-                contentDescription = "Play",
-                modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = mediaItems[index].fileName ?: mediaItems[index].mid,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
  * @param inPreviewGrid: If the video is previewed in a Grid as part of tweet item in a list.
@@ -499,7 +393,113 @@ fun VideoPreview(
                         .size(ButtonDefaults.IconSize)
                 )
             }
-       }
+        }
+    }
+}
+
+@Composable
+fun BlobLink(
+    blobItem: MimeiFileType,
+    url: String,
+    modifier: Modifier
+) {
+    val annotatedText = buildAnnotatedString {
+        withStyle(
+            style = SpanStyle(
+                color = Color.Cyan,
+                textDecoration = TextDecoration.Underline
+            )
+        ) {
+            append(blobItem.fileName.toString())
+        }
+        addStringAnnotation(
+            tag = "URL",
+            annotation = url,
+            start = 0,
+            end = blobItem.fileName.toString().length
+        )
+    }
+
+    val context = LocalContext.current
+    Text(
+        text = annotatedText,
+        modifier = modifier.fillMaxWidth()
+            .padding(start = 4.dp)
+            .wrapContentWidth(Alignment.Start)
+            .clickable {
+                downloadFile(context, url, blobItem.fileName.toString())
+            }
+    )
+}
+
+fun downloadFile(context: Context, url: String, fileName: String) {
+    val request = DownloadManager.Request(Uri.parse(url))
+        .setTitle(fileName)
+        .setDescription("Downloading")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    downloadManager.enqueue(request)
+
+    Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
+}
+
+@OptIn(UnstableApi::class)
+fun createExoPlayer(context: Context, url: String): ExoPlayer {
+    val cache = VideoCacheManager.getCache(context)
+    val dataSourceFactory = DefaultDataSource.Factory(context)
+    val cacheDataSourceFactory = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(dataSourceFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+    val cacheKey = url.getMimeiKeyFromUrl()
+    val mediaItem = androidx.media3.common.MediaItem.Builder()
+        .setUri(Uri.parse(url))
+        .setCustomCacheKey(cacheKey)  // This ensures the cache uses your unique key
+        .build()
+
+    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+        .createMediaSource(mediaItem)
+
+    return ExoPlayer.Builder(context).build().apply {
+        setMediaSource(mediaSource)
+        prepare()  // Prepares the player with the media source
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+fun AudioPreview(
+    mediaItems: List<MimeiFileType>,
+    index: Int,
+    modifier: Modifier = Modifier,
+    tweet: Tweet,
+) {
+    val navController = LocalNavController.current
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 2.dp)
+                .clickable {
+                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.btn_play),
+                contentDescription = "Play",
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = mediaItems[index].fileName ?: mediaItems[index].mid,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
