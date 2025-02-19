@@ -1,6 +1,10 @@
 package com.fireshare.tweet.widget
 
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -246,5 +250,24 @@ object Gadget {
             }
             return false
         }
+    }
+
+    /**
+     * Check if a tweet is 70% visible in the screen.
+     * */
+    fun isElementVisible(layoutCoordinates: LayoutCoordinates, threshold: Int = 70): Boolean {
+        val layoutHeight = layoutCoordinates.size.height
+        val thresholdHeight = layoutHeight * threshold / 100
+        val layoutTop = layoutCoordinates.positionInRoot().y
+        val layoutBottom = layoutTop + layoutHeight
+        val parent = layoutCoordinates.parentLayoutCoordinates
+
+        parent?.boundsInRoot()?.let { rect: Rect ->
+            val parentTop = rect.top
+            val parentBottom = rect.bottom
+
+            return parentBottom - layoutTop > thresholdHeight && (parentTop < layoutBottom - thresholdHeight)
+        }
+        return false
     }
 }

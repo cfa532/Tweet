@@ -42,7 +42,7 @@ typealias MimeiId = String      // 27 or 64 character long string
 // some application wise constants
 object TW_CONST {
     const val GUEST_ID = "000000000000000000000000000"      // 27
-    const val CHUNK_SIZE = 1024 * 1024 // 1MB in bytes
+    const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
 }
 
 object UserFavorites {
@@ -67,7 +67,8 @@ data class MimeiFileType(
     val size: Long? = null,
     val fileName: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    var url: String? = null,
+    val aspectRatio: Float? = null,   // only used for video
+    var url: String? = null,    // will not be persisted.
 )
 
 @Serializable

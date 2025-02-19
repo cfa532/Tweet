@@ -3,7 +3,9 @@ package com.fireshare.tweet
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
+import androidx.media3.common.util.UnstableApi
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
@@ -22,6 +24,7 @@ import com.fireshare.tweet.widget.Gadget.getAccessibleIP
 import com.fireshare.tweet.widget.Gadget.getAccessibleTweet
 import com.fireshare.tweet.widget.Gadget.getAccessibleUser
 import com.fireshare.tweet.widget.Gadget.splitJson
+import com.fireshare.tweet.widget.VideoCacheManager.getVideoAspectRatio
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
@@ -1251,6 +1254,7 @@ object HproseInstance {
     /**
      * Upload media file to node and return its IPFS cid with its media type.
      * */
+    @OptIn(UnstableApi::class)
     suspend fun uploadToIPFS(context: Context, uri: Uri,
                              referenceId: MimeiId? = null): MimeiFileType? { return withRetry {
         val hproseClient = HproseClient.create("${appUser.writableUrl()}/webapi/")
@@ -1309,8 +1313,10 @@ object HproseInstance {
                 // ... add more mappings for other MediaType values ...
                 else -> com.fireshare.tweet.datamodel.MediaType.Unknown
             }
-            // Return MimeiFileType
-            return@withRetry MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp)
+            val aspectRatio = if (mediaType == com.fireshare.tweet.datamodel.MediaType.Video) {
+                getVideoAspectRatio(context, uri)
+            } else null
+            return@withRetry MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
             Timber.tag("uploadToIPFS()").e(e, "Error: ${e.message}")
         }

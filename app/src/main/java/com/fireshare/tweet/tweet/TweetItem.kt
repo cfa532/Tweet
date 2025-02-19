@@ -38,8 +38,8 @@ import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.Gadget.isElementVisible
 import com.fireshare.tweet.widget.MediaPreviewGrid
-import com.fireshare.tweet.widget.isElementVisible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
