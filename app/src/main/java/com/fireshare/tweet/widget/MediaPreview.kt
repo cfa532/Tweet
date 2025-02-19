@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -366,11 +367,10 @@ fun VideoPreview(
                     controllerAutoShow = !inPreviewGrid
                     hideController()
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    ContentScale.Crop
                 }
             },
-            modifier = modifier.fillMaxWidth()
-                .aspectRatio(videoRatio)
+            modifier = modifier.fillMaxSize()
+//                .aspectRatio(videoRatio)
         )
         // Mute button
         IconButton(
