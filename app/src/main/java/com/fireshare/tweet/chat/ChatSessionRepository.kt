@@ -25,7 +25,6 @@ class ChatSessionRepository(
 
     suspend fun updateChatSession(userId: String, receiptId: String, hasNews: Boolean) {
         val sessionEntity = chatSessionDao.getSession(userId, receiptId)
-
         val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
         lastMessageEntity?.let { messageEntity ->
             if (sessionEntity != null) {

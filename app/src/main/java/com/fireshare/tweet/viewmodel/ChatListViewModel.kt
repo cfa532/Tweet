@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatSession
@@ -22,18 +23,13 @@ import javax.inject.Inject
 class ChatListViewModel @Inject constructor(
     private val chatSessionRepository: ChatSessionRepository
 ) : ViewModel() {
-
+    // chat between pair of users
     private val _chatSessions = MutableStateFlow<List<ChatSession>>(emptyList())
     val chatSessions: StateFlow<List<ChatSession>> get() = _chatSessions.asStateFlow()
-
-    private val _userMap = MutableStateFlow<Map<MimeiId, User?>>(emptyMap())
-    val userMap: StateFlow<Map<MimeiId, User?>> get() = _userMap.asStateFlow()
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
             chatSessionRepository.getAllSessions().forEach { chatSession ->
-                val user = HproseInstance.getUser(chatSession.receiptId)
-                _userMap.update { it + (chatSession.receiptId to user) }
                 _chatSessions.update { it + chatSession }
             }
         }
@@ -112,10 +108,5 @@ class ChatListViewModel @Inject constructor(
             }
         }
         _chatSessions.value = updatedChatSessions
-    }
-
-    suspend fun updateUser(userId: MimeiId) {
-        val user = HproseInstance.getUser(userId) ?: return
-        _userMap.update { it + (user.mid to user) }
     }
 }

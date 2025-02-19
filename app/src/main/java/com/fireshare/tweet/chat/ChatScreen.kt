@@ -65,9 +65,7 @@ fun ChatScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val navController = LocalNavController.current
     val receipt by viewModel.receipt.collectAsState()
-
     val listState = rememberLazyListState()
-    val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }     // critical to not read layoutInfo directly
     val coroutineScope = rememberCoroutineScope()
 
     fun scrollToBottom() {
@@ -80,7 +78,7 @@ fun ChatScreen(
 
     LaunchedEffect(Unit) {
         // Assume user read new message when opening this chat screen.
-        // Upon opening of ChatBox, set new message flag to false in chatSession list.
+        // Upon opening ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, sessionId = viewModel.receiptId)
 
@@ -218,7 +216,7 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
 
 @Composable
 fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
-    val textState by viewModel.textState
+    val textState by viewModel.message
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -226,7 +224,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     ) {
         TextField(
             value = textState,
-            onValueChange = { viewModel.textState.value = it },
+            onValueChange = { viewModel.message.value = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 150.dp)
@@ -240,7 +238,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 onSend = {
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
                         viewModel.sendMessage()
-                        viewModel.textState.value = ""
+                        viewModel.message.value = ""
                     }
                 }
             ),
@@ -249,7 +247,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                     if (textState.isNotBlank()) {
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             viewModel.sendMessage()
-                            viewModel.textState.value = ""
+                            viewModel.message.value = ""
                         }
                     }
                 }) {

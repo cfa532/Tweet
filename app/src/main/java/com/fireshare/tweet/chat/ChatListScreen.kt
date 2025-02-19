@@ -39,14 +39,18 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.ChatSession
+import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.ChatListViewModel
+import com.fireshare.tweet.viewmodel.ChatViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,7 +114,7 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                 verticalArrangement = Arrangement.Top
             ) {
                 items(chatSessions, key = {it.receiptId}) { chatSession ->
-                    ChatSession(viewModel, chatSession, navController)
+                    ChatSession(chatSession, navController)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
                         thickness = 1.dp,
@@ -129,17 +133,15 @@ fun ChatListScreen(viewModel: ChatListViewModel)
 }
 
 @Composable
-fun ChatSession(viewModel: ChatListViewModel, chatSession: ChatSession, navController: NavController) {
+fun ChatSession(
+    chatSession: ChatSession,
+    navController: NavController,
+    viewModel: ChatViewModel = hiltViewModel<ChatViewModel, ChatViewModel.ChatViewModelFactory>(
+        key = chatSession.receiptId
+    ) {factory -> factory.create(chatSession.receiptId)}
+) {
     val chatMessage = chatSession.lastMessage
-    val userMap by viewModel.userMap.collectAsState()
-    var user = userMap[chatSession.receiptId]
-
-    LaunchedEffect(chatSession.receiptId) {
-        withContext(Dispatchers.IO) {
-            viewModel.updateUser(chatSession.receiptId)
-            user = userMap[chatSession.receiptId]
-        }
-    }
+    val user by viewModel.receipt.collectAsState()
 
     Row(modifier = Modifier.padding(8.dp)) {
         Box(

@@ -31,9 +31,11 @@ class ChatViewModel @AssistedInject constructor(
 {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
+
     private val _receipt = MutableStateFlow<User?>(null)
     val receipt: StateFlow<User?> get() = _receipt.asStateFlow()
-    var textState = mutableStateOf("")
+
+    var message = mutableStateOf("")
     var chatListViewModel: ChatListViewModel? = null
 
     init {
@@ -41,7 +43,8 @@ class ChatViewModel @AssistedInject constructor(
             _receipt.value = HproseInstance.getUser(receiptId)
 
             // get messages stored at local database
-            _chatMessages.value = loadChatMessages(receiptId).sortedBy { it.timestamp }
+            _chatMessages.value = loadChatMessages(receiptId)
+                .sortedBy { it.timestamp }
 
             // get unread messages from network
             fetchNewMessage()
@@ -53,10 +56,10 @@ class ChatViewModel @AssistedInject constructor(
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
-            content = textState.value.trim()
+            content = message.value.trim()
         )
-        _chatMessages.value += message
         // update message list in memory
+        _chatMessages.value += message
         chatRepository.insertMessage(message)       // update chat records in Room
         HproseInstance.sendMessage(receiptId, message)  // send it out on network
         chatSessionRepository.updateChatSession(    // update session in Room
