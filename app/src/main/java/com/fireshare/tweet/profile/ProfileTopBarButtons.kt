@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import android.widget.Toast
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -77,7 +78,8 @@ fun ProfileTopBarButton(
                     when (buttonText.value) {
                         context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                         else -> {
-                            if (appUser.mid != TW_CONST.GUEST_ID)
+                            if (appUser.mid != TW_CONST.GUEST_ID) {
+                                Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                     appUserViewModel.toggleFollowing(user.mid) {
                                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -86,6 +88,7 @@ fun ProfileTopBarButton(
                                         }
                                     }
                                 }
+                            }
                             else {
                                 val event = SnackbarEvent(
                                     message = context.getString(R.string.login_follow),

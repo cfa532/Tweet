@@ -1,5 +1,6 @@
 package com.fireshare.tweet.profile
 
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ToggleFollowingButton(
@@ -63,6 +65,7 @@ fun ToggleFollowingButton(
                     }
                     return@clickable
                 }
+                Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     appUserViewModel.toggleFollowing(userId, appUser.mid) {
                         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {

@@ -153,6 +153,8 @@ class TweetViewModel @AssistedInject constructor(
             .build()
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
+
+        // notify the user that comment is uploaded
         Toast.makeText(context, context.getString(R.string.upload_comment), Toast.LENGTH_SHORT).show()
 
         // Observe the work status

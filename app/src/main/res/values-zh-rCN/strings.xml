@@ -67,4 +67,5 @@
     <string name="upload_comment">后台上传评论。。。</string>
     <string name="your_followings">你的关注</string>
     <string name="recommendation">推荐内容</string>
+    <string name="update_following">更新关注。。。</string>
 </resources>
