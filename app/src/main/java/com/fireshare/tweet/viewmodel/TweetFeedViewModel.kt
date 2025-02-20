@@ -49,7 +49,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     lateinit var tweetActionListener: TweetActionListener
 
     companion object {
-        private const val THIRTY_DAYS_IN_MILLIS = 2_592_000_000L
+        private const val THIRTY_DAYS_IN_MILLIS = 648_000_000L  // 2_592_000_000L
         private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
         private const val ONE_DAY_IN_MILLIS = 86_400_000L
     }
