@@ -125,7 +125,7 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * @param userId calls this function to update its follower list
-     * @param isFollower indicates if appUser is a follower of userId or not.
+     * @param isFollower indicates if followerId is a follower or not.
      * */
     suspend fun toggleFollower(
         userId: MimeiId,
@@ -141,6 +141,7 @@ class UserViewModel @AssistedInject constructor(
         }
         _user.value = user.value.copy(followersCount = followers.value.size)
     }
+
     /**
      * @param subjectUserId to add/remove it to/from the following list
      * */
@@ -195,6 +196,7 @@ class UserViewModel @AssistedInject constructor(
             }
         }
     }
+
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
         if (isBookmarked) {
             _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount?.plus(1))
@@ -223,6 +225,7 @@ class UserViewModel @AssistedInject constructor(
             }
         }
     }
+
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
         if (isFavorite) {
             _user.value = user.value.copy(favoritesCount = user.value.favoritesCount?.plus(1))
@@ -258,15 +261,21 @@ class UserViewModel @AssistedInject constructor(
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getTweetListByRank(user.value, _tweets.value, startRank.value)
-            .collect { tweets ->
-                startRank.value += tweets.size  // for loading older tweets
-                _tweets.update { list -> (list + tweets)
-                    .filterNot { it.isPrivate && it.authorId != appUser.mid }
-                    .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
+        HproseInstance.getTweetListByRank(user.value, tweets.value, startRank.value)
+            .collect { newTweets ->
+                startRank.update { it + newTweets.size }  // for loading older tweets
+                _tweets.update { currentTweets ->
+                    val newTweetsMap = newTweets.associateBy { it.mid }
+                    // Replace with new tweet if mid exists in newTweets, otherwise keep the current tweet
+                    val updatedTweets = currentTweets.map { tweet ->
+                        newTweetsMap[tweet.mid] ?: tweet
+                    }
+                    (updatedTweets + newTweets)
+                        .filterNot { it.isPrivate && it.authorId != appUser.mid }
+                        .distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
                 }
-        }
+            }
 
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         HproseInstance.getTopList(user.value)?.forEach { map ->
@@ -285,12 +294,20 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         }
-        // 3. Filter tweetsList to exclude those in topTweets and _tweets, and update _tweets
-        _topTweets.update {
-            pinnedTweets.toList()
+        // 3. overwrite any tweet in _topTweets with one from pinnedTweets
+        _topTweets.update { currentTopTweets ->
+            val pinnedTweetsFiltered = pinnedTweets.toList()
                 .filterNot { it.isPrivate && it.authorId != appUser.mid }
                 .distinctBy { it.mid }
                 .sortedByDescending { it.timestamp }
+
+            val currentTopTweetsMap = currentTopTweets.associateBy { it.mid }.toMutableMap()
+
+            pinnedTweetsFiltered.forEach { pinnedTweet ->
+                currentTopTweetsMap[pinnedTweet.mid] = pinnedTweet // Overwrite or add
+            }
+
+            currentTopTweetsMap.values.toList() // Convert back to a list
         }
         initState.value = false
     }

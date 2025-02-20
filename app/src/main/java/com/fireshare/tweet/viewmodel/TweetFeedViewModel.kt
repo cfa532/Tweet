@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.getUser
+import com.fireshare.tweet.HproseInstance.loadCachedTweets
 import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
@@ -26,6 +27,7 @@ import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
 import com.fireshare.tweet.widget.Gadget.splitJson
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -162,6 +164,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
         followings: List<MimeiId>
     ) {
+        val cachedTweets = loadCachedTweets(startTimestamp, sinceTimestamp)
+        _tweets.update { currentTweets ->
+            // Use a Set to avoid duplicates based on Tweet ID.
+            val allTweets = (currentTweets
+                    + cachedTweets.map {
+                        Gson().fromJson(it.originalTweetJson, Tweet::class.java) })
+                .distinctBy { it.mid }
+            allTweets
+        }
+
         val batchSize = 10 // Adjust batch size as needed
         followings.chunked(batchSize).forEach { batch ->
             withContext(networkDispatcher) {
@@ -172,12 +184,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 user,
                                 tweets.value,
                                 startTimestamp,
-                                sinceTimestamp
-                            ).collect { tweets ->
-                                _tweets.update { list -> (list + tweets)
-                                    .filterNot { it.isPrivate }
-                                    .distinctBy { it.mid }
-                                    .sortedByDescending { it.timestamp }
+                                sinceTimestamp,
+                                cachedTweets
+                            ).collect { newTweets ->
+                                _tweets.update { currentTweets ->
+                                    val newTweetsMap = newTweets.associateBy { it.mid }
+                                    val updatedTweets = currentTweets.map { tweet ->
+                                        newTweetsMap[tweet.mid] ?: tweet
+                                    }
+                                    (updatedTweets + newTweets)
+                                        .filterNot { it.isPrivate }
+                                        .distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp }
                                 }
                             }
                         }
@@ -194,7 +212,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let { uid ->
-                HproseInstance.getTweetList(uid, tweets.value, startTimestamp.longValue, endTimestamp.longValue)
+                val startTime = System.currentTimeMillis()
+                val endTime = this.endTimestamp.longValue
+                val cachedTweets = loadCachedTweets(startTime, endTime)
+                HproseInstance.getTweetList(uid, tweets.value, startTime, endTime, cachedTweets)
                     .collect { tweets ->
                         _tweets.update { list -> (list + tweets)
                             .filterNot { it.isPrivate }
@@ -221,7 +242,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * When appUser toggles following state on a User, update followings list.
+     * When appUser toggles following status on a User, update followings list.
      * Remove it if unfollowing, add it if following. Update tweet feed list at the same time.
      * */
     suspend fun updateFollowingsTweets(userId: MimeiId, isFollowing: Boolean) {

@@ -19,11 +19,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Date
 
-
 // cache for tweets
 @Entity
 data class CachedTweet(
-    @PrimaryKey val mid: MimeiId,
+    @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
+    val uid: MimeiId,       // user Id
     val originalTweetJson: String? = null, // Store the original tweet as JSON
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
@@ -94,6 +94,14 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
+    @Query("SELECT * FROM CachedTweet WHERE timestamp BETWEEN :endTime AND :startTime" +
+            " ORDER BY timestamp DESC")
+    fun getCachedTweets(startTime: Long, endTime: Long): List<CachedTweet>
+
+    @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY timestamp DESC" +
+            " LIMIT :limit OFFSET :offset")
+    fun getCachedTweetsByUser(userId: MimeiId, limit: Int, offset: Int): List<CachedTweet>
+
     @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
 
@@ -123,7 +131,7 @@ interface CachedTweetDao {
     }
 }
 
-@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 2)
+@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 3)
 @TypeConverters(DateConverter::class, MimeiIdListConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao

@@ -45,6 +45,7 @@ import androidx.navigation.NavBackStackEntry
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,12 +97,17 @@ fun FollowingsTweet(
             }
     }
     LaunchedEffect(appUser.mid) {
-        if (!initState)
-            viewModel.refresh()
+        if (!initState) {
+            withContext(IO) {
+                viewModel.refresh()
+            }
+        }
     }
     LaunchedEffect(isAtBottom) {
         if (isAtBottom) {
-            viewModel.loadOlderTweets()
+            withContext(IO) {
+                viewModel.loadOlderTweets()
+            }
         }
     }
 
