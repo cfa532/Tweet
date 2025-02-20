@@ -3,6 +3,8 @@ package com.fireshare.tweet.widget
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ButtonDefaults
@@ -114,9 +116,9 @@ fun VideoPreview(
     }
 
     // When previewing a single video, limit its height to show more content.
-    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
+//    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
     Box(
-        modifier = boxModifier
+        modifier = modifier
             .clipToBounds()
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
@@ -130,10 +132,10 @@ fun VideoPreview(
                     controllerShowTimeoutMs = 2000
                     controllerAutoShow = !inPreviewGrid
                     hideController()
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 }
             },
-            modifier = modifier.aspectRatio(videoRatio)
+            modifier = modifier.fillMaxWidth()
         )
         // Mute button
         IconButton(
