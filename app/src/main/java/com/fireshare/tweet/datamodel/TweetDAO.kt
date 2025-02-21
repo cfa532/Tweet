@@ -32,7 +32,7 @@ data class CachedTweet(
 data class CachedUser(
     @PrimaryKey val userId: MimeiId = appUser.mid,
     val user: User,
-    val followings: List<MimeiId> = emptyList()
+    val followings: List<MimeiId>? = null
 )
 
 @Entity
@@ -90,7 +90,7 @@ class DateConverter {
 class MimeiIdListConverter {
     @TypeConverter
     fun fromMimeiIdList(list: List<MimeiId>?): String? {
-        return list?.joinToString(",")
+        return Gson().toJson(list)
     }
 
     @TypeConverter
