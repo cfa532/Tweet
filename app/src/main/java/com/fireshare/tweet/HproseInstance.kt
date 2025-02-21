@@ -7,6 +7,7 @@ import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.fireshare.tweet.datamodel.CachedTweet
+import com.fireshare.tweet.datamodel.CachedTweetDao
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -14,7 +15,6 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetCacheDatabase
-import com.fireshare.tweet.datamodel.TweetMidList
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.datamodel.UserFavorites
 import com.fireshare.tweet.datamodel.writableUrl
@@ -494,10 +494,8 @@ object HproseInstance {
      * */
     fun getTweetList(
         user: User,
-        tweets: List<Tweet>,
         startTimestamp: Long,
         endTimestamp: Long?,
-        cachedTweets: List<CachedTweet>
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // 1. Make network call to get tweet list from server
@@ -515,25 +513,12 @@ object HproseInstance {
                 // 2. Overwrite cached tweets of the user with a updated one, but keep its
                 // timestamp, which is when the tweet is cached, not when it's created.
                 tweetList?.forEach { tweet ->
-                    tweetCache.tweetDao().insertOrUpdateCachedTweet(
-                        CachedTweet(
-                            tweet.mid, user.mid, gson.toJson(tweet),
-                            cachedTweets.firstOrNull() { it.mid == tweet.mid }?.timestamp ?: Date()
-                        )
-                    )
-                }
-
-                // 3. Add any tweet not in _tweets into it.
-                tweetList?.filter { tweet ->
-                    tweets.none { it.mid == tweet.mid}
-                }?.map { unCachedTweet ->
-                    if (unCachedTweet.originalTweetId != null) {
-                        unCachedTweet.originalTweet = getTweet(unCachedTweet.originalTweetId!!, unCachedTweet.originalAuthorId!!)
+                    tweet.originalTweetId?.let { tid ->
+                        tweet.originalTweet = tweet.originalAuthorId?.let { getTweet(tid, it) }
                     }
-                    unCachedTweet
-                }?.let {
-                    send(it)
+                    updateCachedTweet(tweet)
                 }
+                send(tweetList)
             }
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
@@ -544,7 +529,6 @@ object HproseInstance {
      * */
     fun getTweetListByRank(
         user: User,
-        tweets: List<Tweet>,
         startRank: Int = 0,
         count: Int = 10
     ): Flow<List<Tweet>> = channelFlow {
@@ -553,7 +537,7 @@ object HproseInstance {
             val gson = Gson()
             val cachedTweets = tweetCache.tweetDao().getCachedTweetsByUser(user.mid, count, startRank)
             send(cachedTweets.map { t ->
-                    gson.fromJson(t.originalTweetJson, object : TypeToken<Tweet>() {}.type)
+                gson.fromJson(t.originalTweetJson, object : TypeToken<Tweet>() {}.type)
             } )
 
             // 2. Make network call to get tweet list from server
@@ -566,29 +550,16 @@ object HproseInstance {
                     response.bodyAsText(),
                     object : TypeToken<List<Tweet>?>() {}.type
                 )
-                send(tweetList)
 
                 // 3. Overwrite cached mid list of the user with a updated list
                 tweetList?.forEach { tweet ->
-                    tweetCache.tweetDao().insertOrUpdateCachedTweet(
-                        CachedTweet(
-                            tweet.mid, user.mid, gson.toJson(tweet),
-                            cachedTweets.firstOrNull() { it.mid == tweet.mid }?.timestamp ?: Date()
-                        )
-                    )
-                }
-
-                // 4. Add any tweet not in _tweets into it.
-                tweetList?.filter { tweet ->
-                    tweets.none { it.mid == tweet.mid}
-                }?.map { unCachedTweet ->
-                    if (unCachedTweet.originalTweetId != null) {
-                        unCachedTweet.originalTweet = getTweet(unCachedTweet.originalTweetId!!, unCachedTweet.originalAuthorId!!)
+                    tweet.originalTweetId?.let {tid ->
+                        tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
                     }
-                    unCachedTweet
-                }?.let {
-                    send(it)
+                    updateCachedTweet(tweet)
                 }
+                // send updated tweet list
+                send(tweetList)
             }
         } catch (e: Exception) {
             Timber.tag("getTweetListByRank").e(e.toString())
@@ -615,6 +586,7 @@ object HproseInstance {
         // author data could be null, for tweet could be provided by the others.
         val author = getUser(authorId)
         val hostIP = (nodeUrl ?: author?.baseUrl)?: return@withRetry null
+
         // appUser is passed to sever, to check if the current user has liked or bookmarked.
         val url = "$hostIP/entry?aid=$appId&ver=last&entry=get_tweet" +
             "&tweetid=$tweetId&userid=${appUser.mid}"
@@ -628,10 +600,6 @@ object HproseInstance {
                     /**
                      * Insert the tweet into the cache database.
                      * */
-                    tweetCache.tweetDao().insertOrUpdateCachedTweet(
-                        CachedTweet(tweet.mid, tweet.authorId, gson.toJson(tweet))
-                    )
-                    Timber.tag("getTweet").d("$tweet")
                     return@withRetry tweet
                 } else {
                     if (nodeUrl == null) {
@@ -643,9 +611,6 @@ object HproseInstance {
                         if (tweet == null)
                             return@withRetry null
                         tweet.author = author
-                        tweetCache.tweetDao().insertOrUpdateCachedTweet(
-                            CachedTweet(tweet.mid, tweet.authorId, gson.toJson(tweet))
-                        )
                         Timber.tag("getTweet").d("By tweetId alone. $tweet")
                         return@withRetry tweet
                     }
@@ -656,6 +621,14 @@ object HproseInstance {
         }
         null
     }}
+
+    fun updateCachedTweet(tweet: Tweet) {
+        val dao = tweetCache.tweetDao()
+        dao.insertOrUpdateCachedTweet(
+            CachedTweet(tweet.mid, tweet.authorId, Gson().toJson(tweet),
+                dao.getCachedTweet(tweet.mid)?.timestamp?:Date())
+        )
+    }
 
     /**
      * Get tweet from node Mimei DB to refresh cached tweet.
@@ -677,9 +650,7 @@ object HproseInstance {
                     /**
                      * update the tweet in the cache database.
                      * */
-                    tweetCache.tweetDao().updateCachedTweet(
-                        CachedTweet(tweet.mid, tweet.authorId, gson.toJson(tweet))
-                    )
+                    updateCachedTweet(tweet)
                     Timber.tag("refreshTweet").d("$tweet")
                     return@withRetry tweet
                 }
@@ -697,7 +668,6 @@ object HproseInstance {
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
     ): List<CachedTweet> {
         return tweetCache.tweetDao().getCachedTweets(startTimestamp, sinceTimestamp)
-//            .map { Gson().fromJson(it.originalTweetJson, Tweet::class.java) }
     }
 
     /**
@@ -873,10 +843,7 @@ object HproseInstance {
             addTweetToFeed(retweet)
 
             increaseRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
-                // update cached tweet in the database.
-                tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(tweet.mid, tweet.authorId, Gson().toJson(updatedTweet))
-                )
+                updateCachedTweet(tweet)
             }
             // become a provider for the original tweet
             tweet.author?.let { provide(it, tweet.mid, true) }
@@ -921,9 +888,8 @@ object HproseInstance {
                     likeCount = (res["count"] as Double).toInt()
                 )
                 // update cached tweet
-                tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(tweet.mid, tweet.authorId, gson.toJson(ret))
-                )
+                updateCachedTweet(tweet)
+
                 // become a provider of the tweet if like it.
                 tweet.author?.let { provide(it, tweet.mid, hasLiked) }
                 toggleMetaByUser(tweet.mid, "favorite")?.let { updatedUser ->
@@ -954,9 +920,8 @@ object HproseInstance {
                 val ret = tweet.copy(
                     bookmarkCount = (res["count"] as Double).toInt()
                 )
-                tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(tweet.mid, tweet.authorId, gson.toJson(ret))
-                )
+                updateCachedTweet(tweet)
+
                 /**
                  * Become a provider of the tweet if bookmarked it.
                  * Also update appUser's record of bookmarks.
@@ -1068,9 +1033,8 @@ object HproseInstance {
                 val updatedTweet = tweet.copy(
                     commentCount = (res["count"] as Double).toInt()
                 )
-                tweetCache.tweetDao().updateCachedTweet(
-                    CachedTweet(updatedTweet.mid, tweet.authorId, gson.toJson(updatedTweet))
-                )
+                updateCachedTweet(updatedTweet)
+
                 // become a provider of the tweet if commented it.
                 tweet.author?.let { provide(it, tweet.mid, true) }
                 toggleMetaByUser(comment.mid, "comment")?.let { updatedUser ->

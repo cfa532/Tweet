@@ -52,7 +52,8 @@ fun MainTopAppBar(
                         .clip(CircleShape)
                         .clickable(onClick = {
                             scope.launch {
-                                listState.animateScrollToItem(0)
+                                listState.scrollToItem(0)
+//                                listState.animateScrollToItem(0)
                             }
                         })
                 ) {

@@ -182,20 +182,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                         getUser(userId)?.let { user ->
                             HproseInstance.getTweetList(
                                 user,
-                                tweets.value,
                                 startTimestamp,
                                 sinceTimestamp,
-                                cachedTweets
                             ).collect { newTweets ->
                                 _tweets.update { currentTweets ->
+                                    val existingTweetsMap = currentTweets.associateBy { it.mid }
                                     val newTweetsMap = newTweets.associateBy { it.mid }
-                                    val updatedTweets = currentTweets.map { tweet ->
-                                        newTweetsMap[tweet.mid] ?: tweet
-                                    }
-                                    (updatedTweets + newTweets)
+                                    val mergedTweets = (newTweetsMap + existingTweetsMap).values
                                         .filterNot { it.isPrivate }
                                         .distinctBy { it.mid }
                                         .sortedByDescending { it.timestamp }
+                                    mergedTweets
                                 }
                             }
                         }
@@ -209,19 +206,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    // load tweets of the user during the time span.
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let { uid ->
                 val startTime = System.currentTimeMillis()
                 val endTime = this.endTimestamp.longValue
-                val cachedTweets = loadCachedTweets(startTime, endTime)
-                HproseInstance.getTweetList(uid, tweets.value, startTime, endTime, cachedTweets)
-                    .collect { tweets ->
-                        _tweets.update { list -> (list + tweets)
+                HproseInstance.getTweetList(
+                    uid,
+                    startTime,
+                    endTime,
+                ).collect { tweets ->
+                    _tweets.update { list ->
+                        val existingTweets = list.associateBy { it.mid }
+                        val newTweetsMap = tweets.associateBy { it.mid }
+                        val mergedTweets = (newTweetsMap + existingTweets).values // newTweets overwrite existing
                             .filterNot { it.isPrivate }
                             .distinctBy { it.mid }
-                            .sortedByDescending { it.timestamp } }
+                            .sortedByDescending { it.timestamp }
+                        mergedTweets
                     }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
@@ -270,7 +275,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * Add tweet to Feed list and user's viewModel. For display.
+     * Add tweet to Feed list and user's viewModel when new tweet uploaded.
      * */
     fun addTweetToFeed(newTweet: Tweet) {
         _tweets.update { currentTweets -> (listOf(newTweet) + currentTweets)

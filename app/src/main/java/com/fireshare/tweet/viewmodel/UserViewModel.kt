@@ -261,9 +261,9 @@ class UserViewModel @AssistedInject constructor(
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getTweetListByRank(user.value, tweets.value, startRank.value)
+        HproseInstance.getTweetListByRank(user.value, startRank.value)
             .collect { newTweets ->
-                startRank.update { it + newTweets.size }  // for loading older tweets
+                startRank.update { it + newTweets.size }  // for loading older tweets next time
                 _tweets.update { currentTweets ->
                     val newTweetsMap = newTweets.associateBy { it.mid }
                     // Replace with new tweet if mid exists in newTweets, otherwise keep the current tweet

@@ -73,8 +73,7 @@ fun TweetItem(
     ) {
         // Content body
         if (tweet.originalTweet != null) {
-            if ((tweet.content == null || tweet.content == "")
-                && (tweet.attachments == null || tweet.attachments!!.isEmpty()))
+            if (tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty())
             {
                 // this is a retweet of another tweet.
                 Surface(
