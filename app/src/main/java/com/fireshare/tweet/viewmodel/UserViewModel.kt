@@ -18,7 +18,7 @@ import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.datamodel.UserData
+import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.google.gson.Gson
@@ -161,8 +161,8 @@ class UserViewModel @AssistedInject constructor(
             _user.value = user.value.copy(followingCount = followings.value.size)
 
             // update cached followings of appUser
-            val userData = UserData(userId = userId, followings = followings.value)
-            tweetCache.tweetDao().insertOrUpdateUserData(userData)
+            val cachedUser = CachedUser(userId = userId, followings = followings.value)
+            tweetCache.tweetDao().insertOrUpdateUserData(cachedUser)
 
             // callback to update tweet feed. Load or remove tweets of the others.
             updateTweetFeed(isFollowing)

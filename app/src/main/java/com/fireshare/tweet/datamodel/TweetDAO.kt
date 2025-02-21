@@ -31,7 +31,7 @@ data class CachedTweet(
 
 // cache of appUser's followings list
 @Entity
-data class UserData(
+data class CachedUser(
     @PrimaryKey val userId: MimeiId = appUser.mid,
     val followings: List<MimeiId> = emptyList()
 )
@@ -40,6 +40,23 @@ data class TweetMidList(
     @PrimaryKey val userId: String,
     val tweetMidList: List<MimeiId> = emptyList()
 )
+
+class UserConverter {
+    @TypeConverter
+    fun fromUser(user: User): String {
+        return Gson().toJson(user)
+    }
+
+    @TypeConverter
+    fun toUser(str: String): User? {
+        return try {
+            Gson().fromJson(str, object : TypeToken<User?>() {}.type)
+        } catch (e: Exception) {
+            Timber.tag("toUser").e("$e")
+            null
+        }
+    }
+}
 
 class TweetConverter {
     @TypeConverter
@@ -88,11 +105,11 @@ interface CachedTweetDao {
     /**
      * Cache of appUser's followings list.
      * */
-    @Query("SELECT followings FROM UserData WHERE userId = :userId")
+    @Query("SELECT followings FROM CachedUser WHERE userId = :userId")
     suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
-    suspend fun insertOrUpdateUserData(userData: UserData)
+    suspend fun insertOrUpdateUserData(cachedUser: CachedUser)
 
     /**
      * Cache of tweet's mid list of a given user.
@@ -149,8 +166,9 @@ interface CachedTweetDao {
     }
 }
 
-@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 4)
-@TypeConverters(DateConverter::class, MimeiIdListConverter::class, TweetConverter::class)
+@Database(entities = [CachedTweet::class, CachedUser::class, TweetMidList::class], version = 5)
+@TypeConverters(DateConverter::class, MimeiIdListConverter::class,
+    TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
 

@@ -573,13 +573,13 @@ object HproseInstance {
         nodeUrl: String? = null      // ip address where tweet can be found.
     ): Tweet? { return withRetry {
         // if there is a cached tweet, return it.
-        val cachedTweet = retrieveCachedTweet(tweetId)
-        if (cachedTweet != null) {
+        loadCachedTweet(tweetId)?.let { cachedTweet ->
             if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
                 return@withRetry null   // private tweet viewable only by author at profile screen.
             else
                 return@withRetry cachedTweet
         }
+
         // author data could be null, for tweet could be provided by the others.
         val author = getUser(authorId)
         val hostIP = (nodeUrl ?: author?.baseUrl)?: return@withRetry null
@@ -619,6 +619,9 @@ object HproseInstance {
         null
     }}
 
+    /**
+     * Update cached but its timestamp when it was cached.
+     * */
     fun updateCachedTweet(tweet: Tweet) {
         val dao = tweetCache.tweetDao()
         dao.insertOrUpdateCachedTweet(
@@ -660,25 +663,32 @@ object HproseInstance {
         null
     }}
 
-    fun loadCachedTweets(
+    suspend fun loadCachedTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
-    ): List<CachedTweet> {
-        return tweetCache.tweetDao().getCachedTweets(startTimestamp, sinceTimestamp)
+    ): List<Tweet> {
+        return tweetCache.tweetDao().getCachedTweets(startTimestamp, sinceTimestamp).map { it ->
+            val tweet = it.originalTweet
+            tweet.originalTweetId?.let {t ->
+                tweet.originalTweet = getTweet(t, tweet.originalAuthorId!!)
+            }
+            tweet.author = getUser(tweet.authorId)
+            tweet
+        }
     }
 
     /**
      * Retrieve cached tweet from Mimei DB. User info is not cached in Room,
      * which changes frequently, so user data need to be loaded alive every time.
      * */
-    private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? {
+    private suspend fun loadCachedTweet(tweetId: MimeiId): Tweet? {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
         val tweet = cachedTweet.originalTweet
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =
                 getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: return null
         }
-        Timber.tag("retrieveCachedTweet").d("$tweet")
+        Timber.tag("loadCachedTweet").d("$tweet")
         tweet.author = getUser(tweet.authorId)
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =

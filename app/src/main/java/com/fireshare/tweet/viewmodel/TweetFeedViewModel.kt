@@ -22,12 +22,11 @@ import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
-import com.fireshare.tweet.datamodel.UserData
+import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
 import com.fireshare.tweet.widget.Gadget.splitJson
-import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -124,8 +123,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(startTimestamp.longValue, endTimestamp.longValue, unCachedFollowings)
 
         // update cached following list of the user
-        val userData = UserData(userId = appUser.mid, followings = followings.value)
-        tweetCache.tweetDao().insertOrUpdateUserData(userData)
+        val cachedUser = CachedUser(userId = appUser.mid, followings = followings.value)
+        tweetCache.tweetDao().insertOrUpdateUserData(cachedUser)
     }
 
     suspend fun loadNewerTweets() {
@@ -166,10 +165,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     ) {
         val cachedTweets = loadCachedTweets(startTimestamp, sinceTimestamp)
         _tweets.update { currentTweets ->
-            // Use a Set to avoid duplicates based on Tweet ID.
-            val allTweets = (currentTweets
-                    + cachedTweets.map { it.originalTweet }
-                .distinctBy { it.mid } )
+            val allTweets = (cachedTweets + currentTweets)
+                .filterNot { it.isPrivate }
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
             allTweets
         }
 
@@ -185,9 +184,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 sinceTimestamp,
                             ).collect { newTweets ->
                                 _tweets.update { currentTweets ->
-                                    val existingTweetsMap = currentTweets.associateBy { it.mid }
-                                    val newTweetsMap = newTweets.associateBy { it.mid }
-                                    val mergedTweets = (newTweetsMap + existingTweetsMap).values
+                                    // Order is important!! newTweets take priority over currentTweets
+                                    val mergedTweets = (newTweets + currentTweets)
                                         .filterNot { it.isPrivate }
                                         .distinctBy { it.mid }
                                         .sortedByDescending { it.timestamp }
@@ -217,9 +215,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     endTime,
                 ).collect { tweets ->
                     _tweets.update { list ->
-                        val existingTweets = list.associateBy { it.mid }
-                        val newTweetsMap = tweets.associateBy { it.mid }
-                        val mergedTweets = (newTweetsMap + existingTweets).values // newTweets overwrite existing
+                        val mergedTweets = (tweets + list)
                             .filterNot { it.isPrivate }
                             .distinctBy { it.mid }
                             .sortedByDescending { it.timestamp }
