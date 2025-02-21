@@ -46,6 +46,7 @@ import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -116,7 +117,7 @@ fun SearchScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = {
                         // Perform search here
-                        viewModel.viewModelScope.launch {
+                        viewModel.viewModelScope.launch(IO) {
                             viewModel.search(searchQuery.value)
                         }
                         focusManager.clearFocus()
@@ -126,7 +127,7 @@ fun SearchScreen(
                         IconButton(
                             onClick = {
                                 // Perform search here
-                                viewModel.viewModelScope.launch {
+                                viewModel.viewModelScope.launch(IO) {
                                     viewModel.search(searchQuery.value)
                                 }
                             },

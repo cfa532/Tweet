@@ -513,8 +513,9 @@ object HproseInstance {
                 // 2. Overwrite cached tweets of the user with a updated one, but keep its
                 // timestamp, which is when the tweet is cached, not when it's created.
                 tweetList?.forEach { tweet ->
+                    tweet.author = user
                     tweet.originalTweetId?.let { tid ->
-                        tweet.originalTweet = tweet.originalAuthorId?.let { getTweet(tid, it) }
+                        tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
                     }
                     updateCachedTweet(tweet)
                 }
@@ -550,6 +551,7 @@ object HproseInstance {
 
                 // 3. Overwrite cached mid list of the user with a updated list
                 tweetList?.forEach { tweet ->
+                    tweet.author = user
                     tweet.originalTweetId?.let {tid ->
                         tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
                     }
@@ -580,7 +582,8 @@ object HproseInstance {
                 return@withRetry cachedTweet
         }
 
-        // author data could be null, for tweet could be provided by the others.
+        // author data could be null, for tweet could be provided by the others,
+        // and original author has gone.
         val author = getUser(authorId)
         val hostIP = (nodeUrl ?: author?.baseUrl)?: return@withRetry null
 
@@ -591,25 +594,21 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                var tweet = gson.fromJson(response.bodyAsText(), Tweet::class.java)
+                val tweet = gson.fromJson(response.bodyAsText(), Tweet::class.java)
                 if (tweet != null) {
                     tweet.author = author
-                    /**
-                     * Insert the tweet into the cache database.
-                     * */
                     return@withRetry tweet
                 } else {
                     if (nodeUrl == null) {
                         // most likely the author cannot provide tweet data.
                         // Try to load the tweet some somewhere else, by tweetId alone.
                         getProviders(tweetId)?.let { ipList ->
-                            tweet = getAccessibleTweet(ipList, tweetId, authorId)
+                            getAccessibleTweet(ipList, tweetId, authorId)?.let { tweet ->
+                                tweet.author = author
+                                Timber.tag("getTweet").d("By tweetId alone. $tweet")
+                                return@withRetry tweet
+                            }
                         }
-                        if (tweet == null)
-                            return@withRetry null
-                        tweet.author = author
-                        Timber.tag("getTweet").d("By tweetId alone. $tweet")
-                        return@withRetry tweet
                     }
                 }
             }
@@ -662,17 +661,13 @@ object HproseInstance {
         null
     }}
 
-    suspend fun loadCachedTweets(
+    fun loadCachedTweets(
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
     ): List<Tweet> {
-        return dao.getCachedTweets(startTimestamp, sinceTimestamp).map { it ->
-            val tweet = it.originalTweet
-            tweet.originalTweetId?.let {t ->
-                tweet.originalTweet = getTweet(t, tweet.originalAuthorId!!)
-            }
-            tweet.author = getUser(tweet.authorId)
-            tweet
+        return dao.getCachedTweets(startTimestamp, sinceTimestamp).map {
+            // cached tweet is full object with everything.
+            it.originalTweet
         }
     }
 
@@ -680,20 +675,13 @@ object HproseInstance {
      * Retrieve cached tweet from Mimei DB. User info is not cached in Room,
      * which changes frequently, so user data need to be loaded alive every time.
      * */
-    private suspend fun loadCachedTweet(tweetId: MimeiId): Tweet? {
-        val cachedTweet = dao.getCachedTweet(tweetId) ?: return null
-        val tweet = cachedTweet.originalTweet
-        if (tweet.originalTweetId != null) {
-            tweet.originalTweet =
-                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: return null
+    private fun loadCachedTweet(tweetId: MimeiId): Tweet? {
+        dao.getCachedTweet(tweetId)?.let {
+            val tweet = it.originalTweet
+            Timber.tag("loadCachedTweet").d("$tweet")
+            return tweet
         }
-        Timber.tag("loadCachedTweet").d("$tweet")
-        tweet.author = getUser(tweet.authorId)
-        if (tweet.originalTweetId != null) {
-            tweet.originalTweet =
-                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-        }
-        return tweet
+        return null
     }
 
     /**

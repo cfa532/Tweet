@@ -45,6 +45,8 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +129,9 @@ fun FollowingItem(
     val user = remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(userId) {
-        user.value = HproseInstance.getUser(userId)
+        withContext(IO) {
+            user.value = HproseInstance.getUser(userId)
+        }
     }
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),

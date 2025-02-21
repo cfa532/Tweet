@@ -160,6 +160,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(startTimestamp, sinceTimestamp)
+
         _tweets.update { currentTweets ->
             val allTweets = (cachedTweets + currentTweets)
                 .filterNot { it.isPrivate }
@@ -202,11 +203,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // load tweets of the user during the time span.
     private suspend fun getTweets(userId: MimeiId) {
         try {
-            getUser(userId)?.let { uid ->
+            getUser(userId)?.let { user ->
                 val startTime = System.currentTimeMillis()
                 val endTime = this.endTimestamp.longValue
                 HproseInstance.getTweetList(
-                    uid,
+                    user,
                     startTime,
                     endTime,
                 ).collect { newTweets ->
