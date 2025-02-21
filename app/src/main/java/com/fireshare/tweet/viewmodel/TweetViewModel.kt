@@ -17,6 +17,7 @@ import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
 import com.fireshare.tweet.HproseInstance.tweetCache
+import com.fireshare.tweet.HproseInstance.updateCachedTweet
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -190,9 +191,7 @@ class TweetViewModel @AssistedInject constructor(
 
                                     // update cached tweet in the database.
                                     viewModelScope.launch(Dispatchers.IO) {
-                                        tweetCache.tweetDao().updateCachedTweet(
-                                            CachedTweet(tweet.mid, Gson().toJson(updatedTweet))
-                                        )
+                                        updateCachedTweet(updatedTweet)
                                     }
                                 }
                             } catch (e: Exception) {

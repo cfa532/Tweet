@@ -7,7 +7,6 @@ import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.fireshare.tweet.datamodel.CachedTweet
-import com.fireshare.tweet.datamodel.CachedTweetDao
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -536,9 +535,7 @@ object HproseInstance {
             // 1. Retrieve cached tweet list for this user and send them to _tweets.
             val gson = Gson()
             val cachedTweets = tweetCache.tweetDao().getCachedTweetsByUser(user.mid, count, startRank)
-            send(cachedTweets.map { t ->
-                gson.fromJson(t.originalTweetJson, object : TypeToken<Tweet>() {}.type)
-            } )
+            send(cachedTweets.map { it.originalTweet } )
 
             // 2. Make network call to get tweet list from server
             val method = "get_tweets_by_rank"
@@ -625,7 +622,7 @@ object HproseInstance {
     fun updateCachedTweet(tweet: Tweet) {
         val dao = tweetCache.tweetDao()
         dao.insertOrUpdateCachedTweet(
-            CachedTweet(tweet.mid, tweet.authorId, Gson().toJson(tweet),
+            CachedTweet(tweet.mid, tweet.authorId, tweet,
                 dao.getCachedTweet(tweet.mid)?.timestamp?:Date())
         )
     }
@@ -676,7 +673,7 @@ object HproseInstance {
      * */
     private suspend fun retrieveCachedTweet(tweetId: MimeiId): Tweet? {
         val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
-        val tweet = Gson().fromJson(cachedTweet.originalTweetJson, Tweet::class.java)
+        val tweet = cachedTweet.originalTweet
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =
                 getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: return null

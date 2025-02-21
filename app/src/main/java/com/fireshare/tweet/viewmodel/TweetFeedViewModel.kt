@@ -168,9 +168,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets ->
             // Use a Set to avoid duplicates based on Tweet ID.
             val allTweets = (currentTweets
-                    + cachedTweets.map {
-                        Gson().fromJson(it.originalTweetJson, Tweet::class.java) })
-                .distinctBy { it.mid }
+                    + cachedTweets.map { it.originalTweet }
+                .distinctBy { it.mid } )
             allTweets
         }
 

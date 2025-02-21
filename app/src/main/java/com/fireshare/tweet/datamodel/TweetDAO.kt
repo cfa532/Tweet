@@ -17,6 +17,7 @@ import androidx.room.Update
 import com.fireshare.tweet.HproseInstance.appUser
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import timber.log.Timber
 import java.util.Date
 
 // cache for tweets
@@ -24,7 +25,7 @@ import java.util.Date
 data class CachedTweet(
     @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
     val uid: MimeiId,       // user Id
-    val originalTweetJson: String? = null, // Store the original tweet as JSON
+    val originalTweet: Tweet, // Store the original tweet as JSON
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
 
@@ -39,6 +40,23 @@ data class TweetMidList(
     @PrimaryKey val userId: String,
     val tweetMidList: List<MimeiId> = emptyList()
 )
+
+class TweetConverter {
+    @TypeConverter
+    fun fromTweet(tweet: Tweet): String {
+        return Gson().toJson(tweet)
+    }
+
+    @TypeConverter
+    fun toTweet(str: String): Tweet? {
+        return try {
+            Gson().fromJson(str, object : TypeToken<Tweet?>() {}.type)
+        } catch (e: Exception) {
+            Timber.tag("toTweet").e("$e")
+            null
+        }
+    }
+}
 
 class DateConverter {
     @TypeConverter
@@ -131,8 +149,8 @@ interface CachedTweetDao {
     }
 }
 
-@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 3)
-@TypeConverters(DateConverter::class, MimeiIdListConverter::class)
+@Database(entities = [CachedTweet::class, UserData::class, TweetMidList::class], version = 4)
+@TypeConverters(DateConverter::class, MimeiIdListConverter::class, TweetConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
 
