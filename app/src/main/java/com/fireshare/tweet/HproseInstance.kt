@@ -659,7 +659,7 @@ object HproseInstance {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
         }
         // if cannot get tweet from node, delete it from cache.
-        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweetId, authorId)
+        tweetCache.tweetDao().deleteCachedTweet(tweetId)
         null
     }}
 
@@ -739,8 +739,7 @@ object HproseInstance {
      * Callback() update the in-memory original tweet.
      * */
     suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
-        tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(tweet.mid)
-
+        tweetCache.tweetDao().deleteCachedTweet(tweet.mid)
         var method = "delete_tweet"
         var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                     "&tweetid=${tweet.mid}&authorid=${appUser.mid}"

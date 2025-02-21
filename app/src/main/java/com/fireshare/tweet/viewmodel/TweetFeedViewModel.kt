@@ -259,9 +259,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    suspend fun reset() {
+    fun reset() {
         tweets.value.forEach {
-            tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
+            tweetCache.tweetDao().deleteCachedTweet(it.mid)
         }
         _tweets.value = emptyList()
         _followings.value = HproseInstance.getAlphaIds()

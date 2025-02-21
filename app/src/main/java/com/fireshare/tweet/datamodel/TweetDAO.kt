@@ -143,30 +143,11 @@ interface CachedTweetDao {
     @Query("DELETE FROM CachedTweet")
     fun clearAllCachedTweets()
 
-    @Update
-    fun updateCachedTweet(cachedTweet: CachedTweet)
-
     @Query("DELETE FROM CachedTweet WHERE mid = :tweetId")
     fun deleteCachedTweet(tweetId: MimeiId)
-
-    @Transaction
-    suspend fun deleteCachedTweetAndRemoveFromMidList(
-        tweetId: MimeiId,
-        authorId: MimeiId = appUser.mid
-    ) {
-        // 1. Delete the CachedTweet
-        deleteCachedTweet(tweetId)
-
-        // 2. Remove the tweetId from TweetMidList
-        val tweetMidList = getCachedTweetMidList(authorId) // Assuming appUser.mid is the userId
-        if (tweetMidList != null) {
-            val updatedMidList = tweetMidList.toMutableList().apply { remove(tweetId) }
-            insertOrUpdateTweetMidList(TweetMidList(authorId, updatedMidList))
-        }
-    }
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, TweetMidList::class], version = 5)
+@Database(entities = [CachedTweet::class, CachedUser::class, TweetMidList::class], version = 6)
 @TypeConverters(DateConverter::class, MimeiIdListConverter::class,
     TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {

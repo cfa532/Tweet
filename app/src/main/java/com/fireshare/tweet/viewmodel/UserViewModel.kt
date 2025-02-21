@@ -382,7 +382,7 @@ class UserViewModel @AssistedInject constructor(
          _tweets.value = emptyList()
          _topTweets.value = emptyList()
          tweets.value.forEach {
-             tweetCache.tweetDao().deleteCachedTweetAndRemoveFromMidList(it.mid, it.authorId)
+             tweetCache.tweetDao().deleteCachedTweet(it.mid)
          }
          popBack()
      }
