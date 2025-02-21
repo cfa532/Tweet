@@ -7,11 +7,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.dao
 import com.fireshare.tweet.HproseInstance.getSortedMetaByUser
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.getUserId
 import com.fireshare.tweet.HproseInstance.preferenceHelper
-import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -161,7 +161,7 @@ class UserViewModel @AssistedInject constructor(
             _user.value = user.value.copy(followingCount = followings.value.size)
 
             // update cached followings of appUser
-            tweetCache.tweetDao().insertOrUpdateUserData(
+            dao.insertOrUpdateCachedUser(
                 CachedUser(userId, appUser, followings.value)
             )
             // callback to update tweet feed. Load or remove tweets of the others.
@@ -373,19 +373,19 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-     suspend fun logout(popBack: () -> Unit) {
-         preferenceHelper.setUserId(null)
-         appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-         /**
-          * Do NOT clear the UserViewModel object. It will be reused by other users.
-          * */
-         _tweets.value = emptyList()
-         _topTweets.value = emptyList()
-         tweets.value.forEach {
-             tweetCache.tweetDao().deleteCachedTweet(it.mid)
-         }
-         popBack()
-     }
+    fun logout(popBack: () -> Unit) {
+        preferenceHelper.setUserId(null)
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        /**
+         * Do NOT clear the UserViewModel object. It will be reused by other users.
+         * */
+        _tweets.value = emptyList()
+        _topTweets.value = emptyList()
+        tweets.value.forEach {
+            dao.deleteCachedTweet(it.mid)
+        }
+        popBack()
+    }
 
     /**
      * Handle both register and update of user profile. Username, password are required.

@@ -16,10 +16,8 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.HproseInstance.updateCachedTweet
 import com.fireshare.tweet.R
-import com.fireshare.tweet.datamodel.CachedTweet
 import com.fireshare.tweet.datamodel.MimeiFileType
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.Tweet

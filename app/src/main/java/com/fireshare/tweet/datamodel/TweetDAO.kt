@@ -10,10 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import androidx.room.Update
 import com.fireshare.tweet.HproseInstance.appUser
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -111,7 +109,10 @@ interface CachedTweetDao {
     suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
-    suspend fun insertOrUpdateUserData(cachedUser: CachedUser)
+    suspend fun insertOrUpdateCachedUser(cachedUser: CachedUser)
+
+    @Query("SELECT * FROM CachedUser WHERE userId = :userId")
+    fun getCachedUser(userId: MimeiId): CachedUser?
 
     /**
      * Cache of tweet's mid list of a given user.

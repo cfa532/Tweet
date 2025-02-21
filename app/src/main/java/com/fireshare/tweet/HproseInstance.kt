@@ -7,6 +7,8 @@ import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.fireshare.tweet.datamodel.CachedTweet
+import com.fireshare.tweet.datamodel.CachedTweetDao
+import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.datamodel.ChatDatabase
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.MimeiFileType
@@ -52,16 +54,18 @@ object HproseInstance {
     private var appId: MimeiId = BuildConfig.APP_ID
     lateinit var preferenceHelper: PreferenceHelper
     lateinit var appUser: User
-
+    
     // in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private lateinit var chatDatabase: ChatDatabase
-    lateinit var tweetCache: TweetCacheDatabase
+    lateinit var dao: CachedTweetDao
 
     suspend fun init(context: Context) {
         this.preferenceHelper = PreferenceHelper(context)
         chatDatabase = ChatDatabase.getInstance(context)
-        tweetCache = TweetCacheDatabase.getInstance(context)
+        val tweetCache = TweetCacheDatabase.getInstance(context)
+        dao = tweetCache.tweetDao()
+        
         appUser = User(mid = TW_CONST.GUEST_ID,
             baseUrl = preferenceHelper.getAppUrls().first())
         initAppEntry()
@@ -374,42 +378,39 @@ object HproseInstance {
         null
     } }
 
+    /**
+     * Register a new user or update an existing user account.
+     * */
     suspend fun setUserData(userObj: User): Map<*, *>? { return withRetry {
         var url: String
-        val user = userObj.copy(fansList = null, followingList = null)  // remove memory only lists
-        if (user.mid == TW_CONST.GUEST_ID) {
-            /**
-             * Register a new user.
-             * */
-            user.followingList = getAlphaIds()
-            url =
-                "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
-                    URLEncoder.encode(Json.encodeToString(user), "utf-8")
-                }"
-        } else {
-            /**
-             * Update existing user account.
-             * If hostId is changed, check if the new host has the user mimei.
-             * If not, sync user mimei on new node first.
-             * */
-            val newHostId = userObj.hostIds?.first() ?: return@withRetry null
-            if (newHostId != appUser.hostIds?.first()) {
+        val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
+        try {
+            if (user.mid == TW_CONST.GUEST_ID) {
                 /**
-                 * If the hostId is changed, try to sync User mimei to the new host first.
+                 * Register a new user.
                  * */
-                val hostIp = getHostIP(newHostId) ?: return@withRetry null
-                val targetUser = getUserCoreData(userObj.mid, hostIp)
-                if (targetUser == null) {
-                    url = "http://$hostIp/entry?aid=$appId&ver=last&entry=sync_user&mid=${appUser.mid}"
+                user.followingList = getAlphaIds()
+                url =
+                    "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=register&user=${
+                        URLEncoder.encode(Json.encodeToString(user), "utf-8")
+                    }"
+            } else {
+                /**
+                 * Update existing user account.
+                 * If hostId is changed, sync user mimei on new node first.
+                 * */
+                val newHostId = userObj.hostIds?.first() ?: return@withRetry null
+                if (newHostId != appUser.hostIds?.first()) {
+                    val hostIp = getHostIP(newHostId) ?: return@withRetry null
+                    url = "http://$hostIp/entry?aid=$appId&ver=last&entry=sync_user" +
+                            "&mid=${appUser.mid}"
                     httpClient.get(url)
                 }
+                val method = "set_author_core_data"
+                url = "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&user=${
+                    URLEncoder.encode(Json.encodeToString(user), "utf-8")
+                }"
             }
-            val method = "set_author_core_data"
-            url = "${user.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&user=${
-                URLEncoder.encode(Json.encodeToString(user), "utf-8")
-            }"
-        }
-        try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val updatedUser = Gson().fromJson(response.bodyAsText(), Map::class.java)
@@ -533,8 +534,7 @@ object HproseInstance {
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // 1. Retrieve cached tweet list for this user and send them to _tweets.
-            val gson = Gson()
-            val cachedTweets = tweetCache.tweetDao().getCachedTweetsByUser(user.mid, count, startRank)
+            val cachedTweets = dao.getCachedTweetsByUser(user.mid, count, startRank)
             send(cachedTweets.map { it.originalTweet } )
 
             // 2. Make network call to get tweet list from server
@@ -623,7 +623,6 @@ object HproseInstance {
      * Update cached but its timestamp when it was cached.
      * */
     fun updateCachedTweet(tweet: Tweet) {
-        val dao = tweetCache.tweetDao()
         dao.insertOrUpdateCachedTweet(
             CachedTweet(tweet.mid, tweet.authorId, tweet,
                 dao.getCachedTweet(tweet.mid)?.timestamp?:Date())
@@ -659,7 +658,7 @@ object HproseInstance {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
         }
         // if cannot get tweet from node, delete it from cache.
-        tweetCache.tweetDao().deleteCachedTweet(tweetId)
+        dao.deleteCachedTweet(tweetId)
         null
     }}
 
@@ -667,7 +666,7 @@ object HproseInstance {
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
     ): List<Tweet> {
-        return tweetCache.tweetDao().getCachedTweets(startTimestamp, sinceTimestamp).map { it ->
+        return dao.getCachedTweets(startTimestamp, sinceTimestamp).map { it ->
             val tweet = it.originalTweet
             tweet.originalTweetId?.let {t ->
                 tweet.originalTweet = getTweet(t, tweet.originalAuthorId!!)
@@ -682,7 +681,7 @@ object HproseInstance {
      * which changes frequently, so user data need to be loaded alive every time.
      * */
     private suspend fun loadCachedTweet(tweetId: MimeiId): Tweet? {
-        val cachedTweet = tweetCache.tweetDao().getCachedTweet(tweetId) ?: return null
+        val cachedTweet = dao.getCachedTweet(tweetId) ?: return null
         val tweet = cachedTweet.originalTweet
         if (tweet.originalTweetId != null) {
             tweet.originalTweet =
@@ -740,7 +739,7 @@ object HproseInstance {
      * */
     suspend fun delTweet(tweet: Tweet, callback: () -> Unit) { return withRetry {
         // delete cached tweet
-        tweetCache.tweetDao().deleteCachedTweet(tweet.mid)
+        dao.deleteCachedTweet(tweet.mid)
 
         var method = "delete_tweet"
         var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
@@ -1097,6 +1096,11 @@ object HproseInstance {
                         val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         getAccessibleUser(hostIPs, userId)?.let { user ->
                             cachedUsers.add(user)
+                            dao.insertOrUpdateCachedUser(
+                                CachedUser(userId, user,
+                                    dao.getCachedUser(userId)?.followings?: emptyList()
+                                )
+                            )
                             return@withRetry user
                         }
                     }
@@ -1105,7 +1109,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("getUser").e("${appUser.baseUrl} $userId $e")
         }
-        null
+        dao.getCachedUser(userId)?.user
     } }
 
     suspend fun getUserCoreData(mid: MimeiId, ip: String): User? { return withRetry {

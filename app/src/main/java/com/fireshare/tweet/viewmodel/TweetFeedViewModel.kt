@@ -14,11 +14,11 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.dao
 import com.fireshare.tweet.HproseInstance.getAlphaIds
 import com.fireshare.tweet.HproseInstance.getFollowings
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.loadCachedTweets
-import com.fireshare.tweet.HproseInstance.tweetCache
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
@@ -28,7 +28,6 @@ import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker
-import com.fireshare.tweet.widget.Gadget.splitJson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -87,7 +86,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // current time, end time is earlier in time, therefore smaller than current time.
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
-    private val dao = tweetCache.tweetDao()
 
     init {
         // init tweet feed. Need to disable loadNewer and loadOlderTweets() to prevent
@@ -118,7 +116,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
 
         // update cached following list of the user
-        dao.insertOrUpdateUserData(
+        dao.insertOrUpdateCachedUser(
             CachedUser(appUser.mid, appUser, followings.value))
     }
 

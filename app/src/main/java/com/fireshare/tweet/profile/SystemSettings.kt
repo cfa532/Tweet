@@ -43,6 +43,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.fireshare.tweet.BuildConfig
 import com.fireshare.tweet.HproseInstance
+import com.fireshare.tweet.HproseInstance.dao
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
@@ -122,7 +123,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Text("Clear all cached data")
                 Button(onClick = {
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                        HproseInstance.tweetCache.tweetDao().clearAllCachedTweets()
+                        dao.clearAllCachedTweets()
                         isCachedCleared = true
                     } },
                     enabled = !isCachedCleared

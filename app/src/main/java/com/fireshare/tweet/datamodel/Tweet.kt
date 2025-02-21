@@ -159,7 +159,8 @@ suspend fun User.writableUrl(): String? {
         }
     }
 }
-// Do Not update baseUrl, used when no need to sync written data
+// Make change to a node, but do Not update baseUrl,
+// used when no need to sync written data.
 suspend fun User.writableUrl2(): String? {
     return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
         writableUrl
