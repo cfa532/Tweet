@@ -33,8 +33,10 @@ data class CachedTweet(
 @Entity
 data class CachedUser(
     @PrimaryKey val userId: MimeiId = appUser.mid,
+    val user: User,
     val followings: List<MimeiId> = emptyList()
 )
+
 @Entity
 data class TweetMidList(
     @PrimaryKey val userId: String,
@@ -106,7 +108,7 @@ interface CachedTweetDao {
      * Cache of appUser's followings list.
      * */
     @Query("SELECT followings FROM CachedUser WHERE userId = :userId")
-    suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>?
+    suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
     suspend fun insertOrUpdateUserData(cachedUser: CachedUser)
@@ -137,6 +139,7 @@ interface CachedTweetDao {
             " LIMIT :limit OFFSET :offset")
     fun getCachedTweetsByUser(userId: MimeiId, limit: Int, offset: Int): List<CachedTweet>
 
+    // Delete tweets older than 30 days.
     @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
 

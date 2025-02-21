@@ -738,8 +738,10 @@ object HproseInstance {
      * Delete a tweet. If it has original tweet, decrease its retweet count.
      * Callback() update the in-memory original tweet.
      * */
-    suspend fun delTweet(tweet: Tweet, callback: (MimeiId) -> Unit) { return withRetry {
+    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) { return withRetry {
+        // delete cached tweet
         tweetCache.tweetDao().deleteCachedTweet(tweet.mid)
+
         var method = "delete_tweet"
         var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
                     "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
@@ -757,10 +759,9 @@ object HproseInstance {
                             "&userid=${tweet.originalAuthorId}"
                     response = httpClient.get(url)
                     if (response.status == HttpStatusCode.OK) {
-                        callback(tweet.mid)
+                        callback()  // update retweet count of original tweet
                     }
-                } else
-                    callback(tweet.mid)
+                }
             }
         } catch (e: Exception) {
             Timber.tag("delTweet()").e("$e $appUser $tweet $url")

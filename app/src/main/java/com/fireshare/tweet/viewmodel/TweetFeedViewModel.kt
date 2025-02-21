@@ -14,6 +14,8 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
+import com.fireshare.tweet.HproseInstance.getAlphaIds
+import com.fireshare.tweet.HproseInstance.getFollowings
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.loadCachedTweets
 import com.fireshare.tweet.HproseInstance.tweetCache
@@ -85,6 +87,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // current time, end time is earlier in time, therefore smaller than current time.
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
+    private val dao = tweetCache.tweetDao()
 
     init {
         // init tweet feed. Need to disable loadNewer and loadOlderTweets() to prevent
@@ -101,37 +104,29 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh() {
-        // get cached followings and load cached tweets.
-        val cachedFollowings = tweetCache.tweetDao().getCachedFollowings()?.let {
-            splitJson(it)
-        }?: emptyList()
         _tweets.value = emptyList()
-        startTimestamp.longValue = System.currentTimeMillis()
-        endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-        getTweets(startTimestamp.longValue, endTimestamp.longValue, cachedFollowings)
-
         // get followings from server and load tweets not cached.
-        _followings.value = HproseInstance.getFollowings(appUser) ?: emptyList()
+        _followings.value = getFollowings(appUser) ?: dao.getCachedFollowings(appUser.mid)
+
         // add default system users' tweets and remember to watch oneself.
-        _followings.update { list -> (list + HproseInstance.getAlphaIds() ).toSet().toList() }
+        _followings.update { list -> (list + getAlphaIds() ).toSet().toList() }
         if (appUser.mid !== TW_CONST.GUEST_ID)
             _followings.update { list -> (list + appUser.mid ).toSet().toList() }
 
-        val unCachedFollowings = followings.value.filterNot {
-            cachedFollowings.contains(it)
-        }
-        getTweets(startTimestamp.longValue, endTimestamp.longValue, unCachedFollowings)
+        startTimestamp.longValue = System.currentTimeMillis()
+        endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
+        getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
 
         // update cached following list of the user
-        val cachedUser = CachedUser(userId = appUser.mid, followings = followings.value)
-        tweetCache.tweetDao().insertOrUpdateUserData(cachedUser)
+        dao.insertOrUpdateUserData(
+            CachedUser(appUser.mid, appUser, followings.value))
     }
 
     suspend fun loadNewerTweets() {
         // prevent unnecessary run at first load when number of tweets are small
         if (initState.value) return
-        _isRefreshingAtTop.value = true
         try {
+            _isRefreshingAtTop.value = true
             startTimestamp.longValue = System.currentTimeMillis()
             val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
             Timber.tag("loadNewerTweets")
@@ -144,8 +139,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     suspend fun loadOlderTweets() {
         if (initState.value) return
-        _isRefreshingAtBottom.value = true
         try {
+            _isRefreshingAtBottom.value = true
             val startTimestamp = endTimestamp.longValue
             endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
             Timber.tag("loadOlderTweets")
@@ -163,6 +158,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
         followings: List<MimeiId>
     ) {
+        /**
+         * Show cached tweets before loading from net.
+         * */
         val cachedTweets = loadCachedTweets(startTimestamp, sinceTimestamp)
         _tweets.update { currentTweets ->
             val allTweets = (cachedTweets + currentTweets)
@@ -213,9 +211,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     uid,
                     startTime,
                     endTime,
-                ).collect { tweets ->
+                ).collect { newTweets ->
                     _tweets.update { list ->
-                        val mergedTweets = (tweets + list)
+                        val mergedTweets = (newTweets + list)
                             .filterNot { it.isPrivate }
                             .distinctBy { it.mid }
                             .sortedByDescending { it.timestamp }
@@ -232,8 +230,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweet.mid }
         }
-        tweetActionListener.onTweetDeleted(tweet.mid)   // remove from userViewModel's feed
-        tweetCache.tweetDao().deleteCachedTweet(tweet.mid)
+        tweetActionListener.onTweetDeleted(tweet.mid)   // remove from appUserViewModel's feed
+        dao.deleteCachedTweet(tweet.mid)
 
         HproseInstance.delTweet(tweet) {
             // If there is an original tweet, update its viewModel.
@@ -247,7 +245,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     suspend fun updateFollowingsTweets(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
-            // Get the tweets of a user after following it.
+            // add the tweets of a user after following it.
             _followings.update { list -> list + userId }
             getTweets(userId)
         } else {
@@ -261,7 +259,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     fun reset() {
         tweets.value.forEach {
-            tweetCache.tweetDao().deleteCachedTweet(it.mid)
+            dao.deleteCachedTweet(it.mid)
         }
         _tweets.value = emptyList()
         _followings.value = HproseInstance.getAlphaIds()

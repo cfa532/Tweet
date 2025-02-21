@@ -161,9 +161,9 @@ class UserViewModel @AssistedInject constructor(
             _user.value = user.value.copy(followingCount = followings.value.size)
 
             // update cached followings of appUser
-            val cachedUser = CachedUser(userId = userId, followings = followings.value)
-            tweetCache.tweetDao().insertOrUpdateUserData(cachedUser)
-
+            tweetCache.tweetDao().insertOrUpdateUserData(
+                CachedUser(userId, appUser, followings.value)
+            )
             // callback to update tweet feed. Load or remove tweets of the others.
             updateTweetFeed(isFollowing)
         }
