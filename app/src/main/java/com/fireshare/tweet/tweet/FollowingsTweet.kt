@@ -102,7 +102,7 @@ fun FollowingsTweet(
     LaunchedEffect(appUser.mid) {
         if (!initState) {
             withContext(IO) {
-                viewModel.reset()
+//                viewModel.reset()
                 viewModel.refresh()
             }
         }

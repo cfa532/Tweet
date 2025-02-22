@@ -116,18 +116,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         endTime: Long = startTime - THIRTY_DAYS_IN_MILLIS
     ) {
         // get followings from server and load tweets not cached.
-        _followings.value = getFollowings(appUser) ?: dao.getCachedFollowings(appUser.mid)
+        _followings.value = if (appUser.mid == TW_CONST.GUEST_ID) getAlphaIds() else
+            getFollowings(appUser)
 
         // add default system users' tweets and remember to watch oneself.
         _followings.update { list -> (list + getAlphaIds() ).toSet().toList() }
         if (appUser.mid !== TW_CONST.GUEST_ID)
             _followings.update { list -> (list + appUser.mid ).toSet().toList() }
 
-        getTweets(startTime, endTime, followings.value)
+        dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
 
-        // update cached following list of the user
-        dao.insertOrUpdateCachedUser(
-            CachedUser(appUser.mid, appUser, followings.value))
+        getTweets(startTime, endTime, followings.value)
     }
 
     suspend fun loadNewerTweets() {

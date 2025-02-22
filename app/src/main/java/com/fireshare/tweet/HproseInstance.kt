@@ -67,7 +67,9 @@ object HproseInstance {
         dao = tweetCache.tweetDao()
         
         appUser = User(mid = TW_CONST.GUEST_ID,
-            baseUrl = preferenceHelper.getAppUrls().first())
+            baseUrl = preferenceHelper.getAppUrls().first(),
+            followingList = getAlphaIds()
+        )
         initAppEntry()
     }
     val httpClient = HttpClient(CIO) {
@@ -122,7 +124,7 @@ object HproseInstance {
                          * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
                         val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP(hostIPs)
-                        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = "http://$firstIp")
+                        appUser = appUser.copy(baseUrl = "http://$firstIp")
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
                             /**
@@ -442,7 +444,7 @@ object HproseInstance {
     }
 
     // get Ids of users who the current user is following
-    suspend fun getFollowings(user: User): List<MimeiId>? { return withRetry {
+    suspend fun getFollowings(user: User): List<MimeiId> { return withRetry {
         try {
             if (user.mid != TW_CONST.GUEST_ID) {
                 val method = "get_followings_sorted"
@@ -460,7 +462,7 @@ object HproseInstance {
             e.printStackTrace()
             Timber.tag("Hprose.getFollowings").e(e.toString())
         }
-        null
+        getAlphaIds()
     } }
 
     // get fans list of an user
@@ -549,7 +551,7 @@ object HproseInstance {
                     object : TypeToken<List<Tweet>?>() {}.type
                 )
 
-                // 3. Overwrite cached mid list of the user with a updated list
+                // 3. Overwrite cached tweet list of the user with a updated list
                 tweetList?.forEach { tweet ->
                     tweet.author = user
                     tweet.originalTweetId?.let {tid ->
@@ -561,7 +563,7 @@ object HproseInstance {
                 send(tweetList)
             }
         } catch (e: Exception) {
-            Timber.tag("getTweetListByRank").e(e.toString())
+            Timber.tag("getTweetListByRank").e("$e")
         }
     }
 
@@ -1085,9 +1087,7 @@ object HproseInstance {
                         getAccessibleUser(hostIPs, userId)?.let { user ->
                             cachedUsers.add(user)
                             dao.insertOrUpdateCachedUser(
-                                CachedUser(userId, user,
-                                    dao.getCachedUser(userId)?.followings?: emptyList()
-                                )
+                                CachedUser(userId, user)
                             )
                             return@withRetry user
                         }

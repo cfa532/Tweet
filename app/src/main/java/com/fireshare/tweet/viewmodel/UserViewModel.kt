@@ -159,11 +159,8 @@ class UserViewModel @AssistedInject constructor(
                     list.filterNot { it == subjectUserId }
             }
             _user.value = user.value.copy(followingCount = followings.value.size)
+            dao.insertOrUpdateCachedUser(CachedUser(userId, appUser))
 
-            // update cached followings of appUser
-            dao.insertOrUpdateCachedUser(
-                CachedUser(userId, appUser, followings.value)
-            )
             // callback to update tweet feed. Load or remove tweets of the others.
             updateTweetFeed(isFollowing)
         }
@@ -171,7 +168,7 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun refreshFollowingsAndFans() {
         _followers.value = HproseInstance.getFans(user.value) ?: emptyList()
-        _followings.value = HproseInstance.getFollowings(user.value) ?: emptyList()
+        _followings.value = HproseInstance.getFollowings(user.value)
     }
 
     private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
@@ -260,13 +257,11 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
-        val pinnedTweets = mutableSetOf<Tweet>()
         HproseInstance.getTweetListByRank(user.value, startRank.value)
             .collect { newTweets ->
                 startRank.update { it + newTweets.size }  // for loading older tweets next time
                 _tweets.update { currentTweets ->
                     val newTweetsMap = newTweets.associateBy { it.mid }
-                    // Replace with new tweet if mid exists in newTweets, otherwise keep the current tweet
                     val updatedTweets = currentTweets.map { tweet ->
                         newTweetsMap[tweet.mid] ?: tweet
                     }
@@ -278,6 +273,7 @@ class UserViewModel @AssistedInject constructor(
             }
 
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
+        val pinnedTweets = mutableSetOf<Tweet>()
         HproseInstance.getTopList(user.value)?.forEach { map ->
             val tweet = tweets.value.find { it.mid == map["tweetId"] }
             if (tweet != null) {
@@ -375,15 +371,14 @@ class UserViewModel @AssistedInject constructor(
 
     fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl,
+            followingList = HproseInstance.getAlphaIds())
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * */
         _tweets.value = emptyList()
         _topTweets.value = emptyList()
-        tweets.value.forEach {
-            dao.deleteCachedTweet(it.mid)
-        }
+        dao.clearAllCachedTweets()
         popBack()
     }
 

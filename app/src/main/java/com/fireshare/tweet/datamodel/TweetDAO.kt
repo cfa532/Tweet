@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
@@ -19,26 +20,18 @@ import timber.log.Timber
 import java.util.Date
 
 // cache for tweets
-@Entity
+@Entity(indices = [Index(value = ["uid"])])
 data class CachedTweet(
     @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
     val uid: MimeiId,       // user Id
-    val originalTweet: Tweet, // Store the original tweet as JSON
+    val originalTweet: Tweet,
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
 
-// cache of appUser's followings list
 @Entity
 data class CachedUser(
     @PrimaryKey val userId: MimeiId = appUser.mid,
     val user: User,
-    val followings: List<MimeiId>? = null
-)
-
-@Entity
-data class TweetMidList(
-    @PrimaryKey val userId: String,
-    val tweetMidList: List<MimeiId> = emptyList()
 )
 
 class UserConverter {
@@ -87,41 +80,16 @@ class DateConverter {
     }
 }
 
-class MimeiIdListConverter {
-    @TypeConverter
-    fun fromMimeiIdList(list: List<MimeiId>?): String? {
-        return Gson().toJson(list)
-    }
-
-    @TypeConverter
-    fun toMimeiIdList(str: String?): List<MimeiId>? {
-        val type = object : TypeToken<List<MimeiId>>() {}.type
-        return Gson().fromJson(str, type)
-    }
-}
-
 @Dao
 interface CachedTweetDao {
     /**
-     * Cache of appUser's followings list.
+     * Cache of User list.
      * */
-    @Query("SELECT followings FROM CachedUser WHERE userId = :userId")
-    suspend fun getCachedFollowings(userId: MimeiId = appUser.mid): List<MimeiId>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
     suspend fun insertOrUpdateCachedUser(cachedUser: CachedUser)
 
     @Query("SELECT * FROM CachedUser WHERE userId = :userId")
     fun getCachedUser(userId: MimeiId): CachedUser?
-
-    /**
-     * Cache of tweet's mid list of a given user.
-     * */
-    @Query("SELECT tweetMidList FROM TweetMidList WHERE userId = :userId")
-    suspend fun getCachedTweetMidList(userId: MimeiId): List<MimeiId>?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdateTweetMidList(tweetMidList: TweetMidList)
 
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
@@ -151,9 +119,8 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, TweetMidList::class], version = 6)
-@TypeConverters(DateConverter::class, MimeiIdListConverter::class,
-    TweetConverter::class, UserConverter::class)
+@Database(entities = [CachedTweet::class, CachedUser::class], version = 6)
+@TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
 

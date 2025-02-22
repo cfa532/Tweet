@@ -10,8 +10,11 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Serializable
 data class ChatMessage(
@@ -140,7 +143,7 @@ interface ChatSessionDao {
     suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 3)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 4)
 @TypeConverters(MimeiIdListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
@@ -161,5 +164,17 @@ abstract class ChatDatabase : RoomDatabase() {
                 instance
             }
         }
+    }
+}
+
+class MimeiIdListConverter {
+    @TypeConverter
+    fun fromList(list: List<MimeiId>?): String? {
+        return list?.let { Json.encodeToString(it) }
+    }
+
+    @TypeConverter
+    fun toList(data: String?): List<MimeiId>? {
+        return data?.let { Json.decodeFromString<List<MimeiId>>(it) }
     }
 }

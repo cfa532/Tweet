@@ -1,27 +1,11 @@
 package com.fireshare.tweet.datamodel
 
-import android.content.Context
 import android.os.Parcelable
-import androidx.room.Dao
-import androidx.room.Database
 import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.room.Transaction
-import androidx.room.TypeConverter
-import androidx.room.TypeConverters
-import androidx.room.Update
 import com.fireshare.tweet.HproseInstance
-import com.fireshare.tweet.HproseInstance.appUser
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
-import java.util.Date
 
 
 @Serializable
