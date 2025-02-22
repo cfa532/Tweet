@@ -86,10 +86,13 @@ import com.fireshare.tweet.navigation.SharedViewModel
 import com.fireshare.tweet.share.ShareScreenshotButton
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.TweetViewModel
+import com.fireshare.tweet.widget.AudioPlayer
 import com.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import com.fireshare.tweet.widget.MediaItemView
+import com.fireshare.tweet.widget.SelectableText
 import com.fireshare.tweet.widget.UserAvatar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -207,113 +210,6 @@ fun TweetDetailBody(
     }
 }
 
-@OptIn(UnstableApi::class)
-@Composable
-fun AudioPlayer(
-    attachments: List<MimeiFileType>,
-    initialIndex: Int = 0,
-) {
-    val context = LocalContext.current
-    val aspectRatio by remember { mutableFloatStateOf(16 / 9f) }
-    var currentIndex by remember { mutableIntStateOf(initialIndex) }
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
-
-    // Create a Player.Listener outside the DisposableEffect
-    val playerListener = remember {
-        object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && currentIndex < attachments.size - 1) {
-                    currentIndex = (currentIndex + 1) % attachments.size
-                    exoPlayer.seekTo(currentIndex, 0)
-                    exoPlayer.playWhenReady = true
-                }
-            }
-        }
-    }
-    // Create a list of MediaItems from the attachments
-    val mediaItems = remember {
-        attachments.map {
-            androidx.media3.common.MediaItem.fromUri(it.url!!)
-        }
-    }
-    // Add the media items to the ExoPlayer
-    LaunchedEffect(key1 = mediaItems) {
-        exoPlayer.addMediaItems(mediaItems)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-    }
-    LaunchedEffect(currentIndex) {
-        println("current index = $currentIndex")
-    }
-    // Listen for playback completion
-    DisposableEffect(exoPlayer) {
-        exoPlayer.addListener(playerListener)
-        onDispose {
-            exoPlayer.removeListener(playerListener)
-            exoPlayer.release()
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .heightIn(max = 800.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        contentPadding = PaddingValues(vertical = 8.dp) // Add padding to the top and bottom
-    ) {
-        items(attachments, key = { it.mid }) {
-            val isSelected = currentIndex == attachments.indexOf(it)
-            Row(
-                modifier = Modifier.fillMaxWidth()
-                    .clickable {
-                        currentIndex = attachments.indexOf(it)
-                        exoPlayer.seekTo(currentIndex, 0) // Seek to the selected track
-                        exoPlayer.playWhenReady = true
-                    }
-                    .background(
-                        if (isSelected) {
-                            Color.LightGray
-                        } else {
-                            Color.Transparent
-                        }
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.btn_play),
-                    contentDescription = "Play",
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = it.fileName ?: it.mid,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        AndroidView(
-            factory = {
-                PlayerView(context).apply {
-                    player = exoPlayer
-                    useController = true
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    controllerShowTimeoutMs = -1    // show controls all the time.
-                    controllerAutoShow = true
-                }
-            },
-            modifier = Modifier.aspectRatio(aspectRatio)
-        )
-    }
-}
-
 @Composable
 fun MediaGrid(
     mediaItems: List<MimeiFileType>,
@@ -404,10 +300,14 @@ fun TweetDropdownMenu(
             if (parentTweet != null) {
                 // this is a retweet. Allow the author to delete it.
                 if (parentTweet.authorId == appUser.mid) {
-                    TweetDropdownMenuItems(parentTweet, parentEntry) { expanded = false }
+                    TweetDropdownMenuItems(parentTweet, parentEntry) {
+                        expanded = false
+                    }
                 }
             } else {
-                TweetDropdownMenuItems(tweet, parentEntry) { expanded = false }
+                TweetDropdownMenuItems(tweet, parentEntry) {
+                    expanded = false
+                }
             }
         }
     }
@@ -432,14 +332,13 @@ fun TweetDropdownMenuItems(
                 parentEntry, key = tweet.originalTweetId
             ) { factory -> factory.create(tweet.originalTweet!!) }
         } else null
-//        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                appUserViewModel.viewModelScope.launch(IO) {
                     tweetFeedViewModel.delTweet(tweet) {
-                        // if this a re-tweet, refresh the original tweet after deletion.
-                        originTweetViewModel?.viewModelScope?.launch(Dispatchers.IO) {
+                        // if this a re-tweet, reload the original tweet after deletion.
+                        originTweetViewModel?.viewModelScope?.launch(IO) {
                             originTweetViewModel.refreshTweet()
                         }
                     }
@@ -495,60 +394,6 @@ fun TweetDropdownMenuItems(
                     )
                 }
             },
-        )
-    }
-}
-
-@Composable
-fun SelectableText(text: String,
-                   maxLines: Int = Int.MAX_VALUE,
-                   modifier: Modifier = Modifier,
-                   style: TextStyle = MaterialTheme.typography.bodyLarge,
-                   color: Color = MaterialTheme.colorScheme.onSurface,
-                   callback: (String)->Unit = {})
-{
-    // fold text content up to 10 lines. Open it upon user click.
-    var isExpanded by remember { mutableStateOf(false) }
-    var lineCount by remember { mutableIntStateOf(0) }
-
-    val annotatedText = buildAnnotatedText(text)
-    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    SelectionContainer {
-        Text(
-            text = annotatedText,
-            maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
-            onTextLayout = { textLayoutResult ->
-                lineCount = textLayoutResult.lineCount
-                layoutResult = textLayoutResult
-            },
-            style = style,
-            color = color,
-            modifier = modifier
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        layoutResult?.let { textLayoutResult ->
-                            val position = textLayoutResult.getOffsetForPosition(offset)
-                            val annotations = annotatedText.getStringAnnotations(
-                                tag = "USERNAME_CLICK",
-                                start = position,
-                                end = position
-                            )
-                            if (annotations.isNotEmpty()) {
-                                val username = annotations[0].item
-                                callback(username)  // navigate to the user account
-                            }
-                        }
-                    }
-                },
-        )
-    }
-    if (!isExpanded && lineCount >= maxLines) {
-        Text(
-            text = stringResource(R.string.show_more),
-            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
-            modifier = modifier.clickable {
-                isExpanded = true
-            }
         )
     }
 }

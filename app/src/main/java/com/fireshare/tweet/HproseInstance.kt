@@ -722,7 +722,7 @@ object HproseInstance {
     } }
 
     /**
-     * Delete a tweet. If it has original tweet, decrease its retweet count.
+     * Delete a tweet. If it has an original tweet, decrease its retweet count.
      * Callback() update the in-memory original tweet.
      * */
     suspend fun delTweet(tweet: Tweet, callback: () -> Unit) { return withRetry {

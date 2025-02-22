@@ -25,6 +25,7 @@ import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet
 import com.fireshare.tweet.viewmodel.TweetViewModel
 import com.fireshare.tweet.widget.MediaPreviewGrid
+import com.fireshare.tweet.widget.SelectableText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,7 +77,7 @@ fun TweetItemBody(
                         }
                     }
                     // there are attached media files
-                    if (!tweet.attachments.isNullOrEmpty()) {
+                    if (! tweet.attachments.isNullOrEmpty()) {
                         Surface (
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 8.dp)

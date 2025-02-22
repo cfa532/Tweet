@@ -54,12 +54,13 @@ import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.NavTweet
-import com.fireshare.tweet.tweet.SelectableText
 import com.fireshare.tweet.tweet.guestWarning
 import com.fireshare.tweet.viewmodel.TweetFeedViewModel
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.ImageViewer
+import com.fireshare.tweet.widget.SelectableText
 import com.fireshare.tweet.widget.UserAvatar
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -171,7 +172,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 onClick = {
                                     viewModel.viewModelScope.launch {
                                         viewModel.logout {
-                                            tweetFeedViewModel.viewModelScope.launch {
+                                            tweetFeedViewModel.viewModelScope.launch(IO) {
                                                 tweetFeedViewModel.reset()
                                             }
                                             navController.navigate(NavTweet.TweetFeed)

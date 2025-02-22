@@ -229,9 +229,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweet.mid }
         }
+        dao.deleteCachedTweet(tweet.mid)    // remove cached tweet
         tweetActionListener.onTweetDeleted(tweet.mid)   // remove from appUserViewModel's feed
-        dao.deleteCachedTweet(tweet.mid)
-
         HproseInstance.delTweet(tweet) {
             // If there is an original tweet, update its viewModel.
             updateOriginTweet()
