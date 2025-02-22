@@ -3,6 +3,7 @@ package com.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -86,13 +87,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // current time, end time is earlier in time, therefore smaller than current time.
     private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
     private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
+    private var retryCount = mutableIntStateOf(0)
 
     init {
         // init tweet feed. Need to disable loadNewer and loadOlderTweets() to prevent
         // duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
-            refresh()
-            delay(2000)
+            _tweets.value = emptyList()
+            while(retryCount.intValue < 10 && tweets.value.size < 4) {
+                refresh(startTimestamp.longValue, endTimestamp.longValue)
+                delay(1000)
+                retryCount.intValue++
+                startTimestamp.longValue = endTimestamp.longValue
+                endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
+            }
+            // reset startTime, keep endTime as is.
+            startTimestamp.longValue = System.currentTimeMillis()
             initState.value = false
         }
     }
@@ -101,8 +111,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh() {
-        _tweets.value = emptyList()
+    suspend fun refresh(
+        startTime: Long = System.currentTimeMillis(),
+        endTime: Long = startTime - THIRTY_DAYS_IN_MILLIS
+    ) {
         // get followings from server and load tweets not cached.
         _followings.value = getFollowings(appUser) ?: dao.getCachedFollowings(appUser.mid)
 
@@ -111,9 +123,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (appUser.mid !== TW_CONST.GUEST_ID)
             _followings.update { list -> (list + appUser.mid ).toSet().toList() }
 
-        startTimestamp.longValue = System.currentTimeMillis()
-        endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-        getTweets(startTimestamp.longValue, endTimestamp.longValue, followings.value)
+        getTweets(startTime, endTime, followings.value)
 
         // update cached following list of the user
         dao.insertOrUpdateCachedUser(
@@ -260,7 +270,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             dao.deleteCachedTweet(it.mid)
         }
         _tweets.value = emptyList()
-        _followings.value = HproseInstance.getAlphaIds()
+        _followings.value = getAlphaIds()
         startTimestamp = mutableLongStateOf(System.currentTimeMillis())
         endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
     }

@@ -50,6 +50,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Tweets of the followings of current user.
+ * */
 @Composable
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun FollowingsTweet(
@@ -99,6 +102,7 @@ fun FollowingsTweet(
     LaunchedEffect(appUser.mid) {
         if (!initState) {
             withContext(IO) {
+                viewModel.reset()
                 viewModel.refresh()
             }
         }
