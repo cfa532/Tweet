@@ -21,11 +21,11 @@ import com.fireshare.tweet.HproseInstance.getFollowings
 import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.loadCachedTweets
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
-import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.fireshare.tweet.service.UploadTweetWorker

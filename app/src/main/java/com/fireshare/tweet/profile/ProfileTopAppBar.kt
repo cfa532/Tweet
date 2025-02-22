@@ -60,7 +60,6 @@ import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.ImageViewer
 import com.fireshare.tweet.widget.SelectableText
 import com.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

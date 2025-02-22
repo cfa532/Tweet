@@ -2,6 +2,7 @@ package com.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,12 +14,12 @@ import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.HproseInstance.getUserId
 import com.fireshare.tweet.HproseInstance.preferenceHelper
 import com.fireshare.tweet.R
+import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.datamodel.MimeiId
 import com.fireshare.tweet.datamodel.TW_CONST
 import com.fireshare.tweet.datamodel.Tweet
 import com.fireshare.tweet.datamodel.TweetActionListener
 import com.fireshare.tweet.datamodel.User
-import com.fireshare.tweet.datamodel.CachedUser
 import com.fireshare.tweet.service.SnackbarController
 import com.fireshare.tweet.service.SnackbarEvent
 import com.google.gson.Gson
@@ -64,7 +65,7 @@ class UserViewModel @AssistedInject constructor(
     private var initState = MutableStateFlow(true)      // initial load state
 
     // current rank of tweet in DB. Retrieve 10 tweets each time start from it.
-    private var startRank = MutableStateFlow(0)
+    private var startRank = mutableIntStateOf(0)
 
     // variable for login management
     var username = mutableStateOf(appUser.username)
@@ -79,18 +80,18 @@ class UserViewModel @AssistedInject constructor(
     suspend fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
-        startRank.value = 0
+        startRank.intValue = 0
         Timber.tag("UserVM.loadNewerTweets")
-            .d("start rank=${startRank.value}")
+            .d("start rank=${startRank.intValue}")
         getTweets()
         _isRefreshing.value = false
     }
     suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
-        startRank.value = 0
+        startRank.intValue = 0
         Timber.tag("UserVM.loadOlderTweets")
-            .d("start rank=${startRank.value}")
+            .d("start rank=${startRank.intValue}")
         getTweets()
         _isRefreshingAtBottom.value = false
     }
@@ -257,9 +258,9 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun getTweets() {
         // 1. Fetch all tweets of the author and update _tweets
-        HproseInstance.getTweetListByRank(user.value, startRank.value)
+        HproseInstance.getTweetListByRank(user.value, startRank.intValue)
             .collect { newTweets ->
-                startRank.update { it + newTweets.size }  // for loading older tweets next time
+                startRank.intValue += newTweets.size   // for loading older tweets next time
                 _tweets.update { currentTweets ->
                     val newTweetsMap = newTweets.associateBy { it.mid }
                     val updatedTweets = currentTweets.map { tweet ->

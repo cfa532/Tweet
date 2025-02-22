@@ -4,12 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.chat.ChatSessionRepository
 import com.fireshare.tweet.datamodel.ChatMessage
 import com.fireshare.tweet.datamodel.ChatSession
 import com.fireshare.tweet.datamodel.MimeiId
-import com.fireshare.tweet.datamodel.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

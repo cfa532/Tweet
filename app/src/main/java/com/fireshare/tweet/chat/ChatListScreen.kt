@@ -42,10 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.fireshare.tweet.HproseInstance.appUser
-import com.fireshare.tweet.HproseInstance.getUser
 import com.fireshare.tweet.R
 import com.fireshare.tweet.datamodel.ChatSession
-import com.fireshare.tweet.datamodel.User
 import com.fireshare.tweet.navigation.BottomNavigationBar
 import com.fireshare.tweet.navigation.LocalNavController
 import com.fireshare.tweet.navigation.NavTweet

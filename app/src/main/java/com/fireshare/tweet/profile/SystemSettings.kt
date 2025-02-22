@@ -42,7 +42,6 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.fireshare.tweet.BuildConfig
-import com.fireshare.tweet.HproseInstance
 import com.fireshare.tweet.HproseInstance.dao
 import com.fireshare.tweet.viewmodel.UserViewModel
 import com.fireshare.tweet.widget.UserAvatar
