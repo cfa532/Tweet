@@ -90,8 +90,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private var retryCount = mutableIntStateOf(0)
 
     init {
-        // init tweet feed. Need to disable loadNewer and loadOlderTweets() to prevent
-        // duplicated loading of tweets.
+        // init tweet feed. Need to disable loadNewer and loadOlderTweets()
+        // to prevent duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             _tweets.value = emptyList()
             while(retryCount.intValue < 10 && tweets.value.size < 4) {
