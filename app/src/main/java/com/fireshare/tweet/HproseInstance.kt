@@ -500,33 +500,50 @@ object HproseInstance {
         endTimestamp: Long?,
     ): Flow<List<Tweet>> = channelFlow {
         try {
-            // 1. Make network call to get tweet list from server
-            val method = "get_tweets"
-            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
-                "&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp&gid=${appUser.mid}"
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                val gson = Gson()
-                val tweetList = gson.fromJson<List<Tweet>?>(
-                    response.bodyAsText(),
-                    object : TypeToken<List<Tweet>?>() {}.type
-                )
+            // Wrap the network call with withRetry
+            val tweetList = withRetry {
+                // 1. Make network call to get tweet list from server
+                val method = "get_tweets"
+                val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                        "&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp&gid=${appUser.mid}"
+                val response = httpClient.get(url)
+                if (response.status == HttpStatusCode.OK) {
+                    val gson = Gson()
+                    gson.fromJson<List<Tweet>?>(
+                        response.bodyAsText(),
+                        object : TypeToken<List<Tweet>?>() {}.type
+                    )
+                } else {
+                    // Handle non-OK status codes appropriately.  Crucially important.
+                    Timber.e("HTTP request failed with status: ${response.status}")
+                    null // Or throw an exception, depending on your error handling strategy
+                }
+            }
 
+            // Process the tweetList if it's not null
+            tweetList?.let {
                 // 2. Overwrite cached tweets of the user with a updated one, but keep its
                 // timestamp, which is when the tweet is cached, not when it's created.
-                tweetList?.forEach { tweet ->
+                it.forEach { tweet ->
                     tweet.author = user
                     tweet.originalTweetId?.let { tid ->
                         tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
                     }
                     updateCachedTweet(tweet)
                 }
-                send(tweetList)
+                send(it)
+            } ?: run {
+                // Handle the case where tweetList is null (e.g., due to a failed HTTP request)
+                Timber.w("Tweet list is null after network call.")
+                send(emptyList()) // Or send a default value, or throw an exception
             }
         } catch (e: Exception) {
             Timber.tag("getTweetList").e(e.toString())
+            // Consider sending an empty list or re-throwing the exception, depending on your needs.
+            send(emptyList()) // Or re-throw: throw e
         }
     }
+
     /**
      * Load 10 tweets of an User each time.
      * */
@@ -538,32 +555,43 @@ object HproseInstance {
         try {
             // 1. Retrieve cached tweet list for this user and send them to _tweets.
             val cachedTweets = dao.getCachedTweetsByUser(user.mid, count, startRank)
-            send(cachedTweets.map { it.originalTweet } )
+            send(cachedTweets.map { it.originalTweet })
 
-            // 2. Make network call to get tweet list from server
-            val method = "get_tweets_by_rank"
-            val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&gid=${appUser.mid}" +
-                    "&userid=${user.mid}&start=$startRank&end=${startRank+count}"
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                val tweetList = Gson().fromJson<List<Tweet>?>(
-                    response.bodyAsText(),
-                    object : TypeToken<List<Tweet>?>() {}.type
-                )
+            // 2. Make network call to get tweet list from server, wrapped with retry logic
+            val tweetList = withRetry {
+                val method = "get_tweets_by_rank"
+                val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&gid=${appUser.mid}" +
+                        "&userid=${user.mid}&start=$startRank&end=${startRank + count}"
+                val response = httpClient.get(url)
+                if (response.status == HttpStatusCode.OK) {
+                    Gson().fromJson<List<Tweet>?>(
+                        response.bodyAsText(),
+                        object : TypeToken<List<Tweet>?>() {}.type
+                    )
+                } else {
+                    Timber.e("HTTP request failed with status: ${response.status}")
+                    null // Or throw an exception, depending on your error handling strategy
+                }
+            }
 
-                // 3. Overwrite cached tweet list of the user with a updated list
-                tweetList?.forEach { tweet ->
+            // 3. Process the tweetList if it's not null
+            tweetList?.let {
+                it.forEach { tweet ->
                     tweet.author = user
-                    tweet.originalTweetId?.let {tid ->
+                    tweet.originalTweetId?.let { tid ->
                         tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
                     }
                     updateCachedTweet(tweet)
                 }
                 // send updated tweet list
-                send(tweetList)
+                send(it)
+            } ?: run {
+                Timber.w("Tweet list is null after network call.")
+                send(emptyList()) // Or send a default value, or throw an exception
             }
         } catch (e: Exception) {
             Timber.tag("getTweetListByRank").e("$e")
+            send(emptyList()) // Or re-throw: throw e
         }
     }
 
