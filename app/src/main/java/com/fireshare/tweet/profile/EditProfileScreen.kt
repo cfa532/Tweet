@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -120,7 +121,7 @@ fun EditProfileScreen(
                 )
             }
             // AppUser avatar
-            AppUserAvatar(launcher)
+            AppUserAvatar(launcher, viewModel)
 
             Spacer(modifier = Modifier.height(16.dp))
             Column {
@@ -249,7 +250,9 @@ fun EyeSlashButton(
 @Composable
 fun AppUserAvatar(
     launcher: ManagedActivityResultLauncher<String, Uri?>,
+    viewModel: UserViewModel
 ) {
+    val user by viewModel.user.collectAsState()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -263,7 +266,7 @@ fun AppUserAvatar(
                     .clip(CircleShape)
                     .clickable(onClick = { launcher.launch("image/*") })
             ) {
-                UserAvatar(appUser, 120)
+                UserAvatar(user, 120)
             }
             IconButton(
                 onClick = { launcher.launch("image/*") },

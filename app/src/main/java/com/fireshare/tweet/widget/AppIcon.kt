@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -31,11 +34,11 @@ fun AppIcon() {
 
 @Composable
 fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
-    val avatarUrl = remember { mutableStateOf<String?>(null) }
+    var avatarUrl by remember { mutableStateOf(getMediaUrl(user?.avatar, user?.baseUrl)) }
     LaunchedEffect(user?.avatar) {
-        avatarUrl.value = getMediaUrl(user?.avatar, user?.baseUrl)
+        avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
     }
-    avatarUrl.value?.let {
+    avatarUrl?.let {
         ImageViewer(
             it,
             modifier = modifier
