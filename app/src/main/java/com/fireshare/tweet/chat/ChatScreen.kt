@@ -188,7 +188,7 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
         horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (!isSentByCurrentUser) {
+        if (! isSentByCurrentUser) {
             UserAvatar(user = receipt, size = 32)
             Spacer(modifier = Modifier.width(8.dp))
         }
