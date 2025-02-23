@@ -89,7 +89,7 @@ class UserViewModel @AssistedInject constructor(
     suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
-        startRank.intValue = 0
+        startRank.intValue = tweets.value.size
         Timber.tag("UserVM.loadOlderTweets")
             .d("start rank=${startRank.intValue}")
         getTweets()
@@ -257,10 +257,9 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun getTweets() {
-        // 1. Fetch all tweets of the author and update _tweets
+        // 1. Fetch tweets of the author and update _tweets
         HproseInstance.getTweetListByRank(user.value, startRank.intValue)
             .collect { newTweets ->
-                startRank.intValue += newTweets.size   // for loading older tweets next time
                 _tweets.update { currentTweets ->
                     val newTweetsMap = newTweets.associateBy { it.mid }
                     val updatedTweets = currentTweets.map { tweet ->
@@ -272,6 +271,7 @@ class UserViewModel @AssistedInject constructor(
                         .sortedByDescending { it.timestamp }
                 }
             }
+        startRank.intValue = tweets.value.size   // for loading older tweets next time
 
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         val pinnedTweets = mutableSetOf<Tweet>()

@@ -557,7 +557,7 @@ object HproseInstance {
             val cachedTweets = dao.getCachedTweetsByUser(user.mid, count, startRank)
             send(cachedTweets.map { it.originalTweet })
 
-            // 2. Make network call to get tweet list from server, wrapped with retry logic
+            // 2. Make network call to get tweets from server, wrapped with retry logic
             val tweetList = withRetry {
                 val method = "get_tweets_by_rank"
                 val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&gid=${appUser.mid}" +
