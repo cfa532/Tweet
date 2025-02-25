@@ -177,7 +177,7 @@ class TweetViewModel @AssistedInject constructor(
 
                                 // Original tweet with the newly added comment.
                                 val updatedTweet = gson.fromJson(map["updatedTweet"].toString(), Tweet::class.java)
-                                Timber.tag("UploadComment").d("Updated tweet: $updatedTweet")
+                                Timber.tag("UploadComment").d("Update tweet: $updatedTweet")
                                 _tweetState.value = updatedTweet
 
                                 // the comment is also posted as an tweet.
