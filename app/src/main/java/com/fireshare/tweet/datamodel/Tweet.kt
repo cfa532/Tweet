@@ -7,54 +7,6 @@ import com.fireshare.tweet.HproseInstance
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 
-
-@Serializable
-enum class MediaType {
-    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
-}
-
-@Serializable
-// url is in the format of http://ip/mm/mimei_id
-data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
-
-fun String.getMimeiKeyFromUrl(): String {
-    return this.substringAfterLast('/')
-}
-
-typealias MimeiId = String      // 27 or 64 character long string
-
-// some application wise constants
-object TW_CONST {
-    const val GUEST_ID = "000000000000000000000000000"      // 27
-    const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
-}
-
-object UserFavorites {
-    const val LIKE_TWEET = 0
-    const val BOOKMARK = 1
-    const val RETWEET = 2
-}
-
-/**
- * When tweet is added or removed from the tweet feed list,
- * update tweet list in ProfileScreen, also add or remove it.
- * */
-interface TweetActionListener {
-    fun onTweetAdded(tweet: Tweet)
-    fun onTweetDeleted(tweetId: MimeiId)
-}
-
-@Serializable
-data class MimeiFileType(
-    val mid: MimeiId,
-    var type: MediaType,
-    val size: Long? = null,
-    val fileName: String? = null,
-    val timestamp: Long = System.currentTimeMillis(),
-    val aspectRatio: Float? = null,   // only used for video
-    var url: String? = null,    // will not be persisted.
-)
-
 @Serializable
 @Entity(tableName = "tweets")
 data class Tweet(
@@ -104,6 +56,7 @@ data class User(
     var email: String? = null,
     var profile: String? = null,
     var timestamp: Long = System.currentTimeMillis(),
+    var lastLogin: Long? = System.currentTimeMillis(),
 
     var tweetCount: Int = 0,
     var followingCount: Int? = null,
@@ -158,3 +111,50 @@ suspend fun User.writableUrl2(): String? {
         }
     }
 }
+
+@Serializable
+enum class MediaType {
+    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
+}
+
+@Serializable
+// url is in the format of http://ip/mm/mimei_id
+data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
+
+fun String.getMimeiKeyFromUrl(): String {
+    return this.substringAfterLast('/')
+}
+
+typealias MimeiId = String      // 27 or 64 character long string
+
+// some application wise constants
+object TW_CONST {
+    const val GUEST_ID = "000000000000000000000000000"      // 27
+    const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
+}
+
+object UserFavorites {
+    const val LIKE_TWEET = 0
+    const val BOOKMARK = 1
+    const val RETWEET = 2
+}
+
+/**
+ * When tweet is added or removed from the tweet feed list,
+ * update tweet list in ProfileScreen, also add or remove it.
+ * */
+interface TweetActionListener {
+    fun onTweetAdded(tweet: Tweet)
+    fun onTweetDeleted(tweetId: MimeiId)
+}
+
+@Serializable
+data class MimeiFileType(
+    val mid: MimeiId,
+    var type: MediaType,
+    val size: Long? = null,
+    val fileName: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+    val aspectRatio: Float? = null,   // only used for video
+    var url: String? = null,    // will not be persisted.
+)
