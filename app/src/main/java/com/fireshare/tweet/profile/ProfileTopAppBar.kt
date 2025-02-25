@@ -173,9 +173,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 onClick = {
                                     viewModel.viewModelScope.launch(IO) {
                                         viewModel.logout {
-//                                            tweetFeedViewModel.viewModelScope.launch(IO) {
-//                                                tweetFeedViewModel.reset()
-//                                            }
+                                            tweetFeedViewModel.viewModelScope.launch(IO) {
+                                                tweetFeedViewModel.reset()
+                                            }
                                             viewModel.viewModelScope.launch(Main) {
                                                 navController.navigate(NavTweet.TweetFeed)
                                             }
