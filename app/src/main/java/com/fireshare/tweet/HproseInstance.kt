@@ -668,8 +668,10 @@ object HproseInstance {
     ): Tweet? { return withRetry {
         try {
             val author = getUser(authorId) ?: return@withRetry null
-            val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=get_tweet" +
-                "&tweetid=$tweetId&userid=${appUser.mid}"
+            val entry = "refresh_tweet"
+            val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                    "&tweetid=$tweetId&appuserid=${appUser.mid}&nodeid=${author.nodeId}" +
+                    "&hostid=${author.hostIds?.first()}&userid=${author.mid}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -721,7 +723,8 @@ object HproseInstance {
     suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
         val method = "retweet_add"
         val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId"
+                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId" +
+                "&authorid=${tweet.authorId}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -789,7 +792,7 @@ object HproseInstance {
         val method = "delete_comment"
         val url =
             "${parentTweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                    "&tweetid=${parentTweet.mid}&commentid=$commentId"
+                    "&tweetid=${parentTweet.mid}&commentid=$commentId&userid=${appUser.mid}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -815,9 +818,12 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val isFollowing = Gson().fromJson(response.bodyAsText(), Boolean::class.java)
-                getUser(userId)?.let { user ->
-                    provide(user, user.mid, isFollowing)
-                }
+                /**
+                 * Do NOT update provider status when toggle following. Leave it to user decision.
+                 * */
+//                getUser(userId)?.let { user ->
+//                    provide(user, user.mid, isFollowing)
+//                }
                 return@withRetry isFollowing    // following status after toggle
             }
         } catch (e: Exception) {
@@ -879,6 +885,7 @@ object HproseInstance {
     /**
      * Provide or unprovide the given mid.
      * @param owner is the user who published mid.
+     * @param isProvider whether to provide or unprovide the given mid
      * */
     private suspend fun provide(owner: User, mid: MimeiId, isProvider: Boolean
     ) { return withRetry {
@@ -930,7 +937,8 @@ object HproseInstance {
     suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
         val method = "toggle_bookmark"
         val url = "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last" +
-                "&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}"
+                "&entry=$method&tweetid=${tweet.mid}&userid=${appUser.mid}" +
+                "&authorid=${tweet.authorId}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -1038,11 +1046,11 @@ object HproseInstance {
      * The mid of "comment" tweet is updated here. Return the updated parent tweet.
      * */
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
-        val method = "add_comment"
+        val entry = "add_comment"
         val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
         val url =
-            "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                    "&tweetid=${tweet.mid}&comment=$json"
+            "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
+                    "&tweetid=${tweet.mid}&comment=$json&userid=${appUser.mid}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {

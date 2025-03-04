@@ -40,15 +40,15 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
-            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
-            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
-            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
-//            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
-//            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
+//            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
+//            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
 //            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
-//            buildConfigField("String", "ALPHA_ID", "\"aqLFQO2RjZrMsGVJ-6T_rqyoTHL\"")
-            buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
+//            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
+            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
+            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
+            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
+            buildConfigField("String", "ALPHA_ID", "\"ygPr715o88shmCOOWQ8gLYTvvdA\"")
+            buildConfigField("String", "ENTRY_URLS", "\"1x7Dh9mJfN5zSyPM5TRX3Sro_wQna\"")
         }
         release {
             isMinifyEnabled = true

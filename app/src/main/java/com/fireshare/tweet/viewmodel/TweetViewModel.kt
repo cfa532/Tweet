@@ -95,6 +95,9 @@ class TweetViewModel @AssistedInject constructor(
             }
         }
     }
+    /**
+     * Reload Tweet from database instead of cache.
+     * */
     suspend fun refreshTweet() {
         HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
             if (tweet.originalTweetId != null) {

@@ -67,7 +67,7 @@ fun TweetItem(
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
             .onGloballyPositioned { layoutCoordinates ->
-                isVisible = isElementVisible(layoutCoordinates, 20)
+                isVisible = isElementVisible(layoutCoordinates, 30)
             }
             .padding(bottom = 1.dp),
         tonalElevation = 0.dp
@@ -208,7 +208,7 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
     val refreshIntervalMillis = 5 * 60 * 1000L // 5 minutes
     val initialDelayMillis = 1000L
     val minTimeSinceLastRefreshMillis = 3 * 60 * 1000L // 3 minutes
-    val minVisibilityDurationMillis = 950L
+    val minVisibilityDurationMillis = 1000L // Changed to 1 second
 
     // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
     val scope = rememberCoroutineScope()
@@ -218,14 +218,17 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
     LaunchedEffect(isVisible) {
         if (isVisible) {
             visibilityStartTime = System.currentTimeMillis()
-            delay(initialDelayMillis)
 
-            val currentTime = System.currentTimeMillis()
-            val timeSinceVisibilityStart = currentTime - visibilityStartTime
-            val timeSinceLastRefresh = currentTime - lastRefreshTime
+            // Launch a coroutine to handle the initial refresh after the delay
+            val initialRefreshJob = scope.launch(Dispatchers.IO) {
+                delay(initialDelayMillis)
 
-            if (timeSinceVisibilityStart >= minVisibilityDurationMillis && timeSinceLastRefresh >= minTimeSinceLastRefreshMillis) {
-                withContext(Dispatchers.IO) {
+                val currentTime = System.currentTimeMillis()
+                val timeSinceVisibilityStart = currentTime - visibilityStartTime
+                val timeSinceLastRefresh = currentTime - lastRefreshTime
+
+                // Check if the composable has been visible for at least 1 second
+                if (timeSinceVisibilityStart >= minVisibilityDurationMillis && timeSinceLastRefresh >= minTimeSinceLastRefreshMillis) {
                     viewModel.refreshTweet()
                     lastRefreshTime = currentTime
                 }
@@ -233,6 +236,9 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
 
             // Start periodic refresh after initial refresh
             refreshJob = scope.launch(Dispatchers.IO) {
+                // Wait for the initial refresh to complete before starting the periodic refresh
+                initialRefreshJob.join()
+
                 while (isActive) {
                     delay(refreshIntervalMillis)
                     viewModel.refreshTweet()

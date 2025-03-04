@@ -30,16 +30,15 @@ data class Tweet(
 
     var bookmarkCount: Int = 0, // Number of bookmarks
 
-    // List of retweets ID, without comments.
+    // retweets ID, without comments.
     var retweetCount: Int = 0,  // Number of retweets
 
-    // List of comments (tweets) Id on this tweet.
+    // comments (tweets) Id on this tweet.
     var commentCount: Int = 0,  // Number of comments
 
     // List of media IDs attached to the tweet
     var attachments: List<MimeiFileType>? = null,
-
-    var isPrivate: Boolean = false,     // Viewable by the author only if true.
+    var isPrivate: Boolean = false,     // Viewable by the author only, if true.
     val downloadable: Boolean? = false,  // only used in web version.
 )
 
@@ -65,17 +64,17 @@ data class User(
     var favoritesCount: Int? = null,
     var commentsCount: Int? = null,
 
-    var hostIds: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
+    var nodeId: MimeiId? = null,        // host from which the user data is loaded.
+    var hostIds: List<MimeiId>? = null,
     var publicKey: String? = null,
 
-    var fansList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-    var followingList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-    var bookmarkedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-    var likedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-    var repliedTweets: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-    var commentsList: List<MimeiId>? = null,  // Ensure MimeiId is Parcelable
-
-    var topTweets: List<MimeiId>? = null  // Ensure MimeiId is Parcelable
+    var fansList: List<MimeiId>? = null,
+    var followingList: List<MimeiId>? = null,
+    var bookmarkedTweets: List<MimeiId>? = null,
+    var likedTweets: List<MimeiId>? = null,
+    var repliedTweets: List<MimeiId>? = null,
+    var commentsList: List<MimeiId>? = null,
+    var topTweets: List<MimeiId>? = null    // pinned tweets by the user.
 ) : Parcelable
 
 /**

@@ -206,6 +206,9 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * Get favorite Tweets of the user.
+     * */
     suspend fun getFavorites(start: Int) {
         getSortedMetaByUser(user.value, "favorite")?.let { list ->
             val end = (start + 10).coerceAtMost(list.size)
