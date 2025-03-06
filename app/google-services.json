@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "22577482908",
-    "project_id": "tweet-c64e9",
-    "storage_bucket": "tweet-c64e9.firebasestorage.app"
+    "project_number": "899399707736",
+    "project_id": "tweetgplay",
+    "storage_bucket": "tweetgplay.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:22577482908:android:898b5486e8e12b9ef17159",
+        "mobilesdk_app_id": "1:899399707736:android:a0aa511f450b05b5be2e2d",
         "android_client_info": {
-          "package_name": "com.fireshare.tweet"
+          "package_name": "us.fireshare.tweet"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyArNsp4cuFOcrQSls6HlWOcnMxI42dG7v8"
+          "current_key": "AIzaSyAYtY_ZsGovTNpfWbbaQcm9QhFfUF6FpIA"
         }
       ],
       "services": {
@@ -26,34 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:22577482908:android:22d43aea9b6639b4f17159",
+        "mobilesdk_app_id": "1:899399707736:android:8b7edc058085bcdfbe2e2d",
         "android_client_info": {
-          "package_name": "com.fireshare.tweet.debug"
+          "package_name": "us.fireshare.tweet.debug"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyArNsp4cuFOcrQSls6HlWOcnMxI42dG7v8"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:22577482908:android:6dc0a6b3e698cecbf17159",
-        "android_client_info": {
-          "package_name": "com.fireshare.tweet.dev"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyArNsp4cuFOcrQSls6HlWOcnMxI42dG7v8"
+          "current_key": "AIzaSyAYtY_ZsGovTNpfWbbaQcm9QhFfUF6FpIA"
         }
       ],
       "services": {

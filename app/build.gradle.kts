@@ -11,12 +11,12 @@ plugins {
 }
 
 android {
-    namespace = "com.fireshare.tweet"
+    namespace = "us.fireshare.tweet"
     compileSdk = 35
     ndkVersion = "28.0.12433566"
 
     defaultConfig {
-        applicationId = "com.fireshare.tweet"
+        applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
         versionCode = 18    // Google Play store version code
