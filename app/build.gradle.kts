@@ -19,8 +19,8 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 18    // Google Play store version code
-        versionName = "29"   // compared with App Mimei version to check for upgrade.
+        versionCode = 22    // Google Play store version code
+        versionName = "30"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -40,10 +40,6 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-//            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
-//            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
-//            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
-//            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
             buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
             buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
             buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")

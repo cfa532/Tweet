@@ -56,6 +56,7 @@ import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.ui.theme.TweetTheme
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import java.util.concurrent.TimeUnit
+import androidx.core.net.toUri
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -157,7 +158,7 @@ class ActivityViewModel: ViewModel() {
     private val _isDownloading = MutableStateFlow(false)
 
     fun checkForUpgrade(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(IO) {
             try {
                 delay(10000)
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
@@ -204,7 +205,7 @@ class ActivityViewModel: ViewModel() {
 
     private fun downloadAndInstall(context: Context, downloadUrl: String) {
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val request = DownloadManager.Request(Uri.parse(downloadUrl))
+        val request = DownloadManager.Request(downloadUrl.toUri())
             .setMimeType("application/octet-stream") // Set appropriate MIME type if known
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -212,7 +213,7 @@ class ActivityViewModel: ViewModel() {
 
         val downloadId = downloadManager.enqueue(request)
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(IO) {
             var finishDownload = false
             while (!finishDownload) {
                 val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))

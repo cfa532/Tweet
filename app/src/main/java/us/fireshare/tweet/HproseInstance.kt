@@ -37,6 +37,7 @@ import us.fireshare.tweet.datamodel.writableUrl
 import us.fireshare.tweet.datamodel.writableUrl2
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP
+import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.Gadget.getAccessibleTweet
 import us.fireshare.tweet.widget.Gadget.getAccessibleUser
 import us.fireshare.tweet.widget.VideoCacheManager.getVideoAspectRatio
@@ -123,7 +124,7 @@ object HproseInstance {
                          *
                          * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
-                        val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP(hostIPs)
+                        val firstIp = getAccessibleIP2(hostIPs) ?: getAccessibleIP2(hostIPs)
                         appUser = appUser.copy(baseUrl = "http://$firstIp")
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
@@ -369,7 +370,7 @@ object HproseInstance {
                 response.bodyAsText().trim().trim('"').trim(',')
                     .split(',').let { ips ->
                     if (ips.isNotEmpty()) {
-                        val accessibleIp = getAccessibleIP(ips)
+                        val accessibleIp = getAccessibleIP2(ips)
                         return@withRetry accessibleIp
                     }
                 }
@@ -1187,7 +1188,7 @@ object HproseInstance {
     suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>?
     { return withRetry {
         val entry = "get_providers"
-        val url =  "$baseUrl/entry?aid=$appId&ver=last&entry=$entry&mid=$mid"
+        val url = "$baseUrl/entry?aid=$appId&ver=last&entry=$entry&mid=$mid"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {

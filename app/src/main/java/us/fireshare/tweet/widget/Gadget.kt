@@ -224,6 +224,41 @@ object Gadget {
             }
         }
     }
+    fun getAccessibleIP2(ipList: List<String>): String? {
+        var ip4: String? = null;
+        var ip6: String? = null
+        ipList.forEach {
+            val i = it.substringBeforeLast(":").trim('[').trim(']')
+            val p: Int = it.substringAfterLast(":").toInt()
+            // only accept port number in a range
+            if (p !in 8000..8999)
+                return@forEach
+            if (InetAddressUtils.isIPv6Address(i)) {
+                ip6 = "[$i]:$p"
+            } else {
+                // Check for invalid format using a regular expression
+                if (!i.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
+                    return@forEach
+                }
+                try {
+                    val address = InetAddress.getByName(i) as Inet4Address
+                    val addressBytes = address.address
+
+                    // Check if the IP falls within the local IP ranges
+                    when {
+                        addressBytes[0] == 10.toByte() -> return@forEach // 10.0.0.0/8
+                        addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> return@forEach // 172.16.0.0/12
+                        addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> return@forEach // 192.168.0.0/16
+                        else -> ip4 = "$i:$p"
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("isValidIP").e("${e.message}")
+                    return@forEach
+                }
+            }
+        }
+        return ip4?: ip6
+    }
 
     private fun isValidPublicIpAddress(fullIp: String): Boolean {
         val ip = fullIp.substringBeforeLast(":").trim('[').trim(']')
