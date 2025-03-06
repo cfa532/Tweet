@@ -1,12 +1,12 @@
 [versions]
 accompanistPager = "0.36.0"
 accompanistSystemuicontroller = "0.36.0"
-agp = "8.8.2"
+agp = "8.9.0"
 assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
 core = "3.5.3"
-coreSplashscreen = "1.2.0-alpha02"
-firebaseBom = "33.9.0"
+coreSplashscreen = "1.2.0-beta01"
+firebaseBom = "33.10.0"
 hiltAndroid = "2.54"
 hiltNavigationCompose = "1.2.0"
 kotlin = "2.1.0"
@@ -17,12 +17,12 @@ espressoCore = "3.6.1"
 kotlinxCoroutinesCore = "1.10.1"
 kotlinxSerializationJson = "1.7.3"
 lifecycleRuntimeKtx = "2.8.7"
-activityCompose = "1.10.0"
-composeBom = "2025.01.01"
-materialIconsCore = "1.7.7"
+activityCompose = "1.10.1"
+composeBom = "2025.02.00"
+materialIconsCore = "1.7.8"
 materialIconsExtendedAndroid = "1.7.8"
-navigationRuntimeKtx = "2.8.6"
-navigationCompose = "2.8.6"
+navigationRuntimeKtx = "2.8.8"
+navigationCompose = "2.8.8"
 hproseJava = "2.0.38"
 media3Exoplayer = "1.5.1"
 media3Ui = "1.5.1"
@@ -36,12 +36,12 @@ timber = "5.0.1"
 workRuntime = "2.10.0"
 workRuntimeKtx = "2.10.0"
 hiltCommon = "1.2.0"
-constraintlayoutCompose = "1.1.0"
+constraintlayoutCompose = "1.1.1"
 hiltWork = "1.2.0"
 firebaseCrashlyticsBuildtools = "3.0.3"
 roomCompiler = "2.6.1"
 ktor= "3.0.3"
-firebaseAnalytics = "22.2.0"
+firebaseAnalytics = "22.3.0"
 
 [libraries]
 accompanist-systemuicontroller = { module = "com.google.accompanist:accompanist-systemuicontroller", version.ref = "accompanistSystemuicontroller" }
@@ -58,7 +58,7 @@ androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref =
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-material = { module = "androidx.compose.material:material", version.ref = "materialIconsCore" }
 androidx-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIconsCore" }
-androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version = "2.8.6" }
+androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version = "2.8.8" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
@@ -86,7 +86,7 @@ androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest", version = "1.7.7" }
+androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest", version = "1.7.8" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-navigation-runtime-ktx = { group = "androidx.navigation", name = "navigation-runtime-ktx", version.ref = "navigationRuntimeKtx" }
