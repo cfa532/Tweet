@@ -1,0 +1,149 @@
+package us.fireshare.tweet.service
+
+import android.content.Context
+import android.net.Uri
+import android.os.PowerManager
+import androidx.hilt.work.HiltWorker
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.increaseRetweetCount
+import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.datamodel.Tweet
+import com.google.gson.Gson
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import timber.log.Timber
+
+@HiltWorker
+class UploadCommentWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
+) : CoroutineWorker(appContext, workerParams) {
+
+    override suspend fun doWork(): Result {
+        return try {
+            val tweetString = inputData.getString("tweet") ?: return Result.failure()
+            val originalTweet = Json.decodeFromString<Tweet>(tweetString)
+
+            // whether the comment is also posted as a tweet.
+            val isChecked = inputData.getBoolean("isChecked", false)
+            val commentContent = inputData.getString("content")
+            val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
+
+            val attachments = withContext(Dispatchers.IO) {
+                attachmentUris.mapNotNull { uri ->
+                    try {
+                        uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                    } catch (e: Exception) {
+                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
+                        null // Return null in case of error
+                    }
+                }
+            }
+            if (attachmentUris.size != attachments.size) {
+                Timber.tag("UploadCommentWorker").e("Attachments upload failure")
+                return Result.failure()
+            }
+            val comment = Tweet(
+                mid = System.currentTimeMillis().toString(),  // placeholder
+                authorId = appUser.mid,
+                content = commentContent,
+                attachments = attachments,
+                timestamp = System.currentTimeMillis()
+            )
+
+            HproseInstance.uploadComment(originalTweet, comment).let { updatedTweet: Tweet ->
+                // updatedTweet is the original tweet with new comment. After uploading comment,
+                // !!!comment.mid is updated inside uploadComment() with newly created mid!!!
+                // retweet is a new tweet with the comment as its content.
+                val retweet = if (isChecked) {
+                    comment.originalTweetId = originalTweet.mid
+                    comment.originalAuthorId = originalTweet.authorId
+                    HproseInstance.uploadTweet(comment)?.let { retweet ->
+                        increaseRetweetCount(originalTweet, retweet.mid)?.let {
+                            updatedTweet.retweetCount = it.retweetCount
+                        }
+                        retweet
+                    }
+                } else null
+
+                val gson = Gson()
+                val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
+                    "updatedTweet" to gson.toJson(updatedTweet))
+                Timber.tag("UploadCommentWorker").d(map.toString())
+                val outputData = workDataOf("commentedTweet" to gson.toJson(map))
+                return Result.success(outputData)
+            }
+        } catch (e: Exception) {
+            Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
+            Result.failure()
+        }
+    }
+}
+
+@HiltWorker
+class UploadTweetWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
+) : CoroutineWorker(appContext, workerParams) {
+
+    override suspend fun doWork(): Result {
+        return try {
+            val tweetContent = inputData.getString("tweetContent")
+            val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
+            val isPrivate = inputData.getBoolean("isPrivate", false)
+
+            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Tweet:UploadWakeLockTag"
+            )
+            wakeLock.acquire(10*60*1000L /*10 minutes*/)
+            try {
+                val attachments = withContext(Dispatchers.IO) {
+                    attachmentUris.mapNotNull { uri ->
+                        try {
+                            uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                        } catch (e: Exception) {
+                            Timber.tag("UploadCommentWorker")
+                                .e(e, "Error uploading attachment: $uri")
+                            null // Return null in case of error
+                        }
+                    }
+                }
+                if (attachmentUris.size != attachments.size) {
+                    Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                    return Result.failure()
+                }
+                val tweet = Tweet(
+                    mid = System.currentTimeMillis().toString(),  // placeholder
+                    authorId = appUser.mid,
+                    content = tweetContent ?: " ",
+                    attachments = attachments,
+                    isPrivate = isPrivate
+                )
+                // might make the upload less error prone
+                withContext(Dispatchers.IO) {
+                    HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
+                        Timber.tag("UploadTweetWorker").d(tweet.toString())
+                        val gson = Gson()
+                        val outputData = workDataOf("tweet" to gson.toJson(t))
+                        return@withContext Result.success(outputData)
+                    }
+                    return@withContext Result.failure()
+                }
+            } finally {
+                wakeLock.release()
+            }
+        } catch (e: Exception) {
+            Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
+            Result.failure()
+        }
+    }
+}
