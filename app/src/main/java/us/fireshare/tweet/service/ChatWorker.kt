@@ -6,10 +6,10 @@ import androidx.work.ListenableWorker
 import androidx.work.Worker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
-import us.fireshare.tweet.viewmodel.BottomBarViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import timber.log.Timber
+import us.fireshare.tweet.viewmodel.BottomBarViewModel
 
 @HiltWorker
 class ChatWorker @AssistedInject constructor(

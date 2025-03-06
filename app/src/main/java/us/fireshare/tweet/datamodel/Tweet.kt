@@ -3,9 +3,9 @@ package us.fireshare.tweet.datamodel
 import android.os.Parcelable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import us.fireshare.tweet.HproseInstance
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
+import us.fireshare.tweet.HproseInstance
 
 @Serializable
 @Entity(tableName = "tweets")

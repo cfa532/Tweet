@@ -38,14 +38,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
-import us.fireshare.tweet.R
-import us.fireshare.tweet.navigation.BottomNavigationBar
-import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.viewmodel.TweetViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.R
+import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.viewmodel.TweetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

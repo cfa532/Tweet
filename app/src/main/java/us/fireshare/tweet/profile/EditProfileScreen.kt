@@ -50,14 +50,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * Register and edit user profile.

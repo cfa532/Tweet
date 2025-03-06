@@ -1,10 +1,10 @@
 package us.fireshare.tweet.chat
 
+import com.google.gson.Gson
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatMessageEntity
 import us.fireshare.tweet.datamodel.toEntity
-import com.google.gson.Gson
 
 class ChatRepository(private val chatMessageDao: ChatMessageDao) {
     suspend fun loadMessages(userId: String, receiptId: String, limit: Int): List<ChatMessageEntity> {

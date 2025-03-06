@@ -12,10 +12,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
-import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.User
 import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.channelFlow
@@ -23,6 +19,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.User
 import java.net.Inet4Address
 import java.net.InetAddress
 

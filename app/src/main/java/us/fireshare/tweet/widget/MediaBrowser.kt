@@ -63,6 +63,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -75,7 +76,6 @@ import us.fireshare.tweet.tweet.LikeButton
 import us.fireshare.tweet.tweet.RetweetButton
 import us.fireshare.tweet.tweet.ShareButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(UnstableApi::class)

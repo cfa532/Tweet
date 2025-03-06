@@ -40,12 +40,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
  * Download and compress image in cache

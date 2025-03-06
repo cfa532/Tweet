@@ -2,12 +2,6 @@ package us.fireshare.tweet.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.chat.ChatSessionRepository
-import us.fireshare.tweet.datamodel.ChatMessage
-import us.fireshare.tweet.datamodel.ChatSession
-import us.fireshare.tweet.datamodel.MimeiId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +9,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.chat.ChatSessionRepository
+import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.ChatSession
+import us.fireshare.tweet.datamodel.MimeiId
 import javax.inject.Inject
 
 @HiltViewModel

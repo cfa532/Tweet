@@ -12,10 +12,10 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection

@@ -42,13 +42,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
-import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 /**
  * Tweets of the followings of current user.

@@ -27,11 +27,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.BottomBarViewModel
-import kotlinx.coroutines.launch
 
 @Composable
 fun BottomNavigationBar(

@@ -34,14 +34,6 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
-import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getProviders
-import us.fireshare.tweet.navigation.TweetNavGraph
-import us.fireshare.tweet.service.NetworkCheckJobService
-import us.fireshare.tweet.service.ObserveAsEvents
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.ui.theme.TweetTheme
-import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import dagger.hilt.android.AndroidEntryPoint
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
@@ -55,6 +47,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.getProviders
+import us.fireshare.tweet.navigation.TweetNavGraph
+import us.fireshare.tweet.service.NetworkCheckJobService
+import us.fireshare.tweet.service.ObserveAsEvents
+import us.fireshare.tweet.service.SnackbarController
+import us.fireshare.tweet.ui.theme.TweetTheme
+import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint

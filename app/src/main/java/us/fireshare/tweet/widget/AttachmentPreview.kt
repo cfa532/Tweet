@@ -26,10 +26,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import us.fireshare.tweet.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.R
 
 @Composable
 fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {

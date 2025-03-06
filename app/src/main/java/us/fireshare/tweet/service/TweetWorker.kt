@@ -7,11 +7,6 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.increaseRetweetCount
-import us.fireshare.tweet.HproseInstance.uploadToIPFS
-import us.fireshare.tweet.datamodel.Tweet
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -19,6 +14,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.increaseRetweetCount
+import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.datamodel.Tweet
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(

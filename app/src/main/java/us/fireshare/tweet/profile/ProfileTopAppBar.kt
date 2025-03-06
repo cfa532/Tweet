@@ -48,6 +48,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
@@ -60,9 +63,6 @@ import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

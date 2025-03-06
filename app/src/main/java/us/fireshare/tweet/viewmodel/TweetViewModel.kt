@@ -14,16 +14,6 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.updateCachedTweet
-import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.MimeiFileType
-import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.UserFavorites
-import us.fireshare.tweet.service.UploadCommentWorker
-import us.fireshare.tweet.widget.createExoPlayer
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -36,6 +26,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.updateCachedTweet
+import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.service.UploadCommentWorker
+import us.fireshare.tweet.widget.createExoPlayer
 import java.lang.Integer.max
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)

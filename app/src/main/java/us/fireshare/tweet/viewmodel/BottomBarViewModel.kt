@@ -2,11 +2,11 @@ package us.fireshare.tweet.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import us.fireshare.tweet.HproseInstance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.HproseInstance
 import kotlin.concurrent.timer
 
 class BottomBarViewModel : ViewModel() {

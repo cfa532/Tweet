@@ -2,6 +2,11 @@ package us.fireshare.tweet
 
 import android.content.Context
 import androidx.room.Room
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import us.fireshare.tweet.chat.ChatRepository
 import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatDatabase
@@ -11,11 +16,6 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SearchViewModel
 import us.fireshare.tweet.viewmodel.BottomBarViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module

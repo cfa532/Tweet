@@ -6,14 +6,14 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.service.CleanUpWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.service.CleanUpWorker
 import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp

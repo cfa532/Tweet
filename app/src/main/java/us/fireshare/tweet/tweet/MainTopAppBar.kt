@@ -21,12 +21,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.widget.AppIcon
 import us.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

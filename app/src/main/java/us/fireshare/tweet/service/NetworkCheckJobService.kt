@@ -3,13 +3,13 @@ package us.fireshare.tweet.service
 import android.app.job.JobParameters
 import android.app.job.JobService
 import androidx.lifecycle.viewModelScope
-import us.fireshare.tweet.viewmodel.BottomBarViewModel
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.viewmodel.BottomBarViewModel
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @AndroidEntryPoint
 class NetworkCheckJobService : JobService() {

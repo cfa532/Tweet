@@ -5,10 +5,10 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import timber.log.Timber
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.widget.CacheManager
 import us.fireshare.tweet.widget.VideoCacheManager
-import timber.log.Timber
 import java.util.Calendar
 
 class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {

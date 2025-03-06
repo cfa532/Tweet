@@ -60,6 +60,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SnackbarAction
@@ -68,7 +69,6 @@ import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
 import us.fireshare.tweet.widget.UserAvatar
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
