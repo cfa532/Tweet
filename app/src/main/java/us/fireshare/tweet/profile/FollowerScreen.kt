@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
@@ -52,15 +53,13 @@ import us.fireshare.tweet.widget.UserAvatar
 @Composable
 fun FollowerScreen(
     userId: MimeiId,
+    parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
-    val context = LocalContext.current
-    val viewModel =
-        if (userId == appUser.mid)
-            appUserViewModel
+    val viewModel = if (userId == appUser.mid) appUserViewModel
         else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            context as ComponentActivity, key = userId
+            parentEntry, key = userId
         ) { factory ->
             factory.create(userId)
         }
@@ -114,7 +113,7 @@ fun FollowerScreen(
                     }
                 }
                 items(followersOfProfile, key = { it }) { userId ->
-                    FollowerItem(userId, appUserViewModel)
+                    FollowerItem(userId, parentEntry, appUserViewModel)
                 }
             }
         }
@@ -122,8 +121,10 @@ fun FollowerScreen(
 }
 
 @Composable
-fun FollowerItem(userId: MimeiId,
-                 appUserViewModel: UserViewModel
+fun FollowerItem(
+    userId: MimeiId,
+    parentEntry: NavBackStackEntry,
+    appUserViewModel: UserViewModel
 ) {
     val user = remember { mutableStateOf<User?>(null) }
     val navController = LocalNavController.current
@@ -168,7 +169,7 @@ fun FollowerItem(userId: MimeiId,
                         color = Color.Gray
                     )
                 }
-                ToggleFollowingButton(userId, appUserViewModel)
+                ToggleFollowingButton(userId, parentEntry, appUserViewModel)
             }
             Text(
                 text = user.value?.profile?.trim() ?: "",

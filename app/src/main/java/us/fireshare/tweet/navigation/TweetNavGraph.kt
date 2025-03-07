@@ -225,14 +225,14 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val user = it.toRoute<NavTweet.Following>()
-                FollowingScreen(user.userId, sharedViewModel.appUserViewModel)
+                FollowingScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Follower> {
                 val parentEntry = remember(it) {
                     navController.getBackStackEntry(NavTwee)
                 }
                 val user = it.toRoute<NavTweet.Following>()
-                FollowerScreen(user.userId, sharedViewModel.appUserViewModel)
+                FollowerScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Search> {
                 val parentEntry = remember(it) {

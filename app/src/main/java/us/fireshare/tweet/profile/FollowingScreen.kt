@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
@@ -52,15 +53,15 @@ import us.fireshare.tweet.widget.UserAvatar
 @Composable
 fun FollowingScreen(
     userId: MimeiId,
+    parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
-    val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
         else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            context as ComponentActivity, key = userId
+            parentEntry, key = userId
         ) { factory ->
-            factory.create(userId)
+                factory.create(userId)
         }
     val followingsOfProfile by viewModel.followings.collectAsState()
     val userOfProfile by viewModel.user.collectAsState()
@@ -113,7 +114,7 @@ fun FollowingScreen(
                     }
                 }
                 items(followingsOfProfile, key = {it}) { userId ->
-                    FollowingItem(userId, appUserViewModel)
+                    FollowingItem(userId, parentEntry, appUserViewModel)
                 }
             }
         }
@@ -123,6 +124,7 @@ fun FollowingScreen(
 @Composable
 fun FollowingItem(
     userId: MimeiId,
+    parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
@@ -171,7 +173,7 @@ fun FollowingItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    ToggleFollowingButton(userId, appUserViewModel)
+                    ToggleFollowingButton(userId, parentEntry, appUserViewModel)
                 }
             }
             Text(

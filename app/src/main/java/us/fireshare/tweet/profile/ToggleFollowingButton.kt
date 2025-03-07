@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
@@ -34,13 +35,14 @@ import us.fireshare.tweet.viewmodel.UserViewModel
 @Composable
 fun ToggleFollowingButton(
     userId: MimeiId,
+    parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
     else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        context as ComponentActivity, key = userId
+        parentEntry, key = userId
     ) { factory ->
         factory.create(userId)
     }
@@ -67,7 +69,7 @@ fun ToggleFollowingButton(
                 Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                     appUserViewModel.toggleFollowing(userId, appUser.mid) {
-                        tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
                             viewModel.toggleFollower(userId, it, appUser.mid)
                             tweetFeedViewModel.updateFollowingsTweets(userId, it)
                         }
