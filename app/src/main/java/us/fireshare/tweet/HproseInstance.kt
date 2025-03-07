@@ -850,7 +850,7 @@ object HproseInstance {
         try {
             httpClient.get(url)
         } catch (e: Exception) {
-            Timber.tag("toggleFollower()").e(e.toString())
+            Timber.tag("toggleFollower()").e("$e $url $user")
         }
     } }
 

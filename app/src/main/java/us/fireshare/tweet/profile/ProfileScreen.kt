@@ -2,7 +2,6 @@ package us.fireshare.tweet.profile
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,7 +63,7 @@ fun ProfileScreen(
     val context = LocalContext.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
         else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
+            parentEntry, key = userId
         ) { factory ->
             factory.create(userId)
         }
