@@ -121,29 +121,44 @@ object Gadget {
      * */
     fun filterIpAddresses(nodeList: ArrayList<*>): List<String> {
         val ipAddresses = mutableListOf<String>()
-        // iterate over the node list
+
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
             var ipv6: String? = null
             var ipv4: String? = null
-            // iterate over the node's IP list. Prefer IPv6 address over IPv4.
-            nodeIps.forEach lit@{
-                val pair = it as ArrayList<*>;
+
+            // First pass: look for a valid IPv4 address
+            for (ipData in nodeIps) {
+                val pair = ipData as ArrayList<*>
                 val ip = pair[0].toString()
-                if (InetAddressUtils.isIPv6Address(ip.getIP())) {
-                    ipv6 = ip
-                } else {
-                    if (ip.getIP()?.let { it1 -> isValidPublicIpAddress(it1) } == true) {
-                        ipv4 = ip
-                        ipAddresses += ip
-                        return@lit
+
+                if (!InetAddressUtils.isIPv6Address(ip.getIP()) &&
+                    ip.getIP()?.let { isValidPublicIpAddress(it) } == true) {
+                    ipv4 = ip
+                    break  // Found a valid IPv4, no need to check more IPs for this node
+                }
+            }
+
+            // If no IPv4 found, look for IPv6
+            if (ipv4 == null) {
+                for (ipData in nodeIps) {
+                    val pair = ipData as ArrayList<*>
+                    val ip = pair[0].toString()
+
+                    if (InetAddressUtils.isIPv6Address(ip.getIP())) {
+                        ipv6 = ip
+                        break  // Found an IPv6, no need to check more
                     }
                 }
             }
-            if (ipv4 == null && ipv6 != null) {
-                ipAddresses += ipv6.toString()
+
+            // Add the preferred IP to the result list
+            when {
+                ipv4 != null -> ipAddresses.add(ipv4)
+                ipv6 != null -> ipAddresses.add(ipv6)
             }
         }
+
         return ipAddresses
     }
 

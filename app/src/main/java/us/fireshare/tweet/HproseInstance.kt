@@ -124,7 +124,7 @@ object HproseInstance {
                          *
                          * hostIPs is a list of node's IP that is a Mimei provider for this App.
                          */
-                        val firstIp = getAccessibleIP2(hostIPs) ?: getAccessibleIP2(hostIPs)
+                        val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP2(hostIPs)
                         appUser = appUser.copy(baseUrl = "http://$firstIp")
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
@@ -168,11 +168,11 @@ object HproseInstance {
             try {
                 return block() // Return the result of the block
             } catch (e: IOException) { // Catch only IOException (network exception)
-                Timber.tag("HproseInstance").e("Network error: ${e.message}")
+                Timber.tag("HproseInstance").e("IOException: ${e.message}")
                 retryCount++
                 initAppEntry()
             } catch (e: ProtocolException) { // Catch only ProtocolException (network exception)
-                Timber.tag("HproseInstance").e("Network error: ${e.message}")
+                Timber.tag("HproseInstance").e("ProtocolException: ${e.message}")
                 retryCount++
                 initAppEntry()
             }
@@ -1120,6 +1120,7 @@ object HproseInstance {
                 if (matcher.find()) {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
+                        // Get a list of IP addresses, one IP per host.
                         val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
                         getAccessibleUser(hostIPs, userId)?.let { user ->
                             cachedUsers.add(user)
@@ -1198,7 +1199,7 @@ object HproseInstance {
                 return@withRetry ips.toSet().toList()
             }
         } catch (e: Exception) {
-            Timber.tag("getProviders").e("$e")
+            Timber.tag("getProviders").e("$e $url")
         }
         null
     } }

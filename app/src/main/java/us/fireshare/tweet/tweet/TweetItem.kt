@@ -58,17 +58,16 @@ fun TweetItem(
     ) { factory ->
         factory.create(tweet)
     }
-    var isVisible by remember { mutableStateOf(false) }
-
-    TweetRefreshHandler(isVisible, viewModel)
+//    var isVisible by remember { mutableStateOf(false) }
+//    TweetRefreshHandler(isVisible, viewModel)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
-            .onGloballyPositioned { layoutCoordinates ->
-                isVisible = isElementVisible(layoutCoordinates, 30)
-            }
+//            .onGloballyPositioned { layoutCoordinates ->
+//                isVisible = isElementVisible(layoutCoordinates, 30)
+//            }
             .padding(bottom = 1.dp),
         tonalElevation = 0.dp
     ) {

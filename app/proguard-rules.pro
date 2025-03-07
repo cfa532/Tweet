@@ -20,10 +20,10 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
--keep class com.fireshare.tweet.HproseInstance { *; }
--keep class com.fireshare.tweet.HproseService { *; }
--keep class com.fireshare.tweet.ScorePair { *; }
--keep class com.fireshare.tweet.widget.Gadget { *; }
--keep class com.fireshare.tweet.viewmodel.** { *; }
+-keep class us.fireshare.tweet.HproseInstance { *; }
+-keep class us.fireshare.tweet.HproseService { *; }
+-keep class us.fireshare.tweet.ScorePair { *; }
+-keep class us.fireshare.tweet.widget.Gadget { *; }
+-keep class us.fireshare.tweet.viewmodel.** { *; }
 -keep class hprose.client.** { *; }
--keep class com.fireshare.tweet.** { *; }
+-keep class us.fireshare.tweet.** { *; }
