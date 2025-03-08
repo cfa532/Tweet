@@ -126,14 +126,20 @@ fun FollowerItem(
     parentEntry: NavBackStackEntry,
     appUserViewModel: UserViewModel
 ) {
-    val user = remember { mutableStateOf<User?>(null) }
+    val viewModel = if (userId == appUser.mid) appUserViewModel
+    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = userId
+    ) { factory ->
+        factory.create(userId)
+    }
+    val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    LaunchedEffect(userId) {
-        withContext(IO) {
-            user.value = HproseInstance.getUser(userId)
-        }
-    }
+//    LaunchedEffect(userId) {
+//        withContext(IO) {
+//            user.value = HproseInstance.getUser(userId)
+//        }
+//    }
 
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
@@ -147,9 +153,9 @@ fun FollowerItem(
             .fillMaxWidth()
     ) {
         IconButton(onClick = {
-            user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
+            navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-            UserAvatar(user.value, 40)
+            UserAvatar(user, 40)
         }
         Column {
             Row(
@@ -159,12 +165,12 @@ fun FollowerItem(
             ) {
                 Column {
                     Text(
-                        text = user.value?.name ?: "No One",
+                        text = user.name ?: "No One",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "@${user.value?.username}",
+                        text = "@${user.username}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
                     )
@@ -172,7 +178,7 @@ fun FollowerItem(
                 ToggleFollowingButton(userId, parentEntry, appUserViewModel)
             }
             Text(
-                text = user.value?.profile?.trim() ?: "",
+                text = user.profile?.trim() ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
                 maxLines = 3,
