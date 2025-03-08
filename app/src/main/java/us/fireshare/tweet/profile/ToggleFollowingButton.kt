@@ -1,7 +1,6 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding

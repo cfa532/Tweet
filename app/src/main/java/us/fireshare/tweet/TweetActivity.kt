@@ -8,7 +8,6 @@ import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import androidx.activity.ComponentActivity
@@ -30,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
+import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
@@ -40,7 +40,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -56,7 +55,6 @@ import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.ui.theme.TweetTheme
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import java.util.concurrent.TimeUnit
-import androidx.core.net.toUri
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
