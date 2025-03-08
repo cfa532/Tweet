@@ -59,6 +59,7 @@ android {
             }
             buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
+            // Sync APP_ID_HASH to the same nodes of APP_ID manually for it to work.
             buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
