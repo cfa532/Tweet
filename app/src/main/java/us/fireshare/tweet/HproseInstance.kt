@@ -206,7 +206,7 @@ object HproseInstance {
         val encodedMsg = URLEncoder.encode(Json.encodeToString(msg), "utf-8")
         var url =
             "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}" +
-                    "&receiptid=$receiptId&msg=$encodedMsg"
+                    "&receiptid=$receiptId&msg=$encodedMsg&hostid=${appUser.hostIds?.first()}"
         // write outgoing message to user's Mimei db
         try {
             val response: HttpResponse = httpClient.get(url)
@@ -252,24 +252,25 @@ object HproseInstance {
      * Get a list of unread incoming messages. Only check, do not fetch them.
      * */
     suspend fun checkNewMessages(): List<ChatMessage>? { return withRetry {
-        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
-        try {
-            val entry = "message_check"
-            val url =
-                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}"
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                val list = Gson().fromJson(
-                    response.bodyAsText(),
-                    object : TypeToken<List<ChatMessage>>() {}.type
-                ) as List<ChatMessage>?
-                return@withRetry list
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Timber.tag("checkNewMessages").e(appUser.toString())
-        }
-        null
+        return@withRetry null
+//        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
+//        try {
+//            val entry = "message_check"
+//            val url =
+//                "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${appUser.mid}"
+//            val response = httpClient.get(url)
+//            if (response.status == HttpStatusCode.OK) {
+//                val list = Gson().fromJson(
+//                    response.bodyAsText(),
+//                    object : TypeToken<List<ChatMessage>>() {}.type
+//                ) as List<ChatMessage>?
+//                return@withRetry list
+//            }
+//        } catch (e: Exception) {
+//            e.printStackTrace()
+//            Timber.tag("checkNewMessages").e(appUser.toString())
+//        }
+//        null
     } }
 
     suspend fun checkUpgrade(): Map<String, String>? { return withRetry {
@@ -328,7 +329,6 @@ object HproseInstance {
                 null,
                 context.getString(R.string.login_failed)
             )
-            user.baseUrl = "http://183.158.77.245:8002"
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login" +
                     "&username=$username&password=$password"
             val response = httpClient.get(url)
@@ -663,13 +663,19 @@ object HproseInstance {
     }}
 
     /**
-     * Update cached but its timestamp when it was cached.
+     * Update cached but keep its timestamp when it was cached.
      * */
     fun updateCachedTweet(tweet: Tweet) {
-        dao.insertOrUpdateCachedTweet(
-            CachedTweet(tweet.mid, tweet.authorId, tweet,
-                dao.getCachedTweet(tweet.mid)?.timestamp?:Date())
-        )
+        try {
+            dao.insertOrUpdateCachedTweet(
+                CachedTweet(
+                    tweet.mid, tweet.authorId, tweet,
+                    dao.getCachedTweet(tweet.mid)?.timestamp ?: Date()
+                )
+            )
+        } catch (e: Exception) {
+            Timber.tag("updateCachedTweet").e("$e")
+        }
     }
 
     /**
@@ -685,7 +691,7 @@ object HproseInstance {
             val entry = "refresh_tweet"
             val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                     "&tweetid=$tweetId&appuserid=${appUser.mid}&nodeid=${author.nodeId}" +
-                    "&hostid=${author.hostIds?.first()}&userid=${author.mid}"
+                    "&userid=${author.mid}&hostid=${author.hostIds?.first()}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
@@ -711,10 +717,15 @@ object HproseInstance {
         startTimestamp: Long,
         sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
     ): List<Tweet> {
-        return dao.getCachedTweets(startTimestamp, sinceTimestamp).map {
-            // cached tweet is full object with everything.
-            it.originalTweet
+        try {
+            return dao.getCachedTweets(startTimestamp, sinceTimestamp).map {
+                // cached tweet is full object with everything.
+                it.originalTweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedTweets").e("$e")
         }
+        return emptyList()
     }
 
     /**
@@ -722,10 +733,14 @@ object HproseInstance {
      * which changes frequently, so user data need to be loaded alive every time.
      * */
     private fun loadCachedTweet(tweetId: MimeiId): Tweet? {
-        dao.getCachedTweet(tweetId)?.let {
-            val tweet = it.originalTweet
-            Timber.tag("loadCachedTweet").d("$tweet")
-            return tweet
+        try {
+            dao.getCachedTweet(tweetId)?.let {
+                val tweet = it.originalTweet
+                Timber.tag("loadCachedTweet").d("$tweet")
+                return tweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedTweet").e("$e")
         }
         return null
     }
@@ -752,9 +767,10 @@ object HproseInstance {
 
     // Store an object in a Mimei file and return its MimeiId.
     suspend fun uploadTweet(tweet: Tweet): Tweet? { return withRetry {
-        val method = "upload_tweet"
+        val method = "add_tweet"
         val json = URLEncoder.encode(Json.encodeToString(tweet), "utf-8")
-        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method&tweet=$json"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                "&tweet=$json&hostid=${appUser.hostIds?.first()}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -777,8 +793,9 @@ object HproseInstance {
         dao.deleteCachedTweet(tweet.mid)
 
         var method = "delete_tweet"
-        var url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                    "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
+        var url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                "&tweetid=${tweet.mid}&authorid=${appUser.mid}" +
+                "&hostid=${appUser.hostIds?.first()}"
         try {
             var response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -804,9 +821,9 @@ object HproseInstance {
 
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) { return withRetry {
         val method = "delete_comment"
-        val url =
-            "${parentTweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$method" +
-                    "&tweetid=${parentTweet.mid}&commentid=$commentId&userid=${appUser.mid}"
+        val url = "${parentTweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                "&tweetid=${parentTweet.mid}&commentid=$commentId&userid=${appUser.mid}" +
+                "&hostid=${parentTweet.author?.hostIds?.first()}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -1014,8 +1031,9 @@ object HproseInstance {
         type: String    // favorite, bookmark or comment
     ): User? { return withRetry {
         val entry = "toggle_meta_by_user"
-        val url = "${appUser.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
-                "&mid=$mid&userid=${appUser.mid}&type=$type"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&mid=$mid&userid=${appUser.mid}&type=$type" +
+                "&hostid=${appUser.hostIds?.first()}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -1057,14 +1075,15 @@ object HproseInstance {
     } }
 
     /**
-     * The mid of "comment" tweet is updated here. Return the updated parent tweet.
+     * The mid of "comment" is updated here, used to be null.
+     * @Return the updated parent tweet.
      * */
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet { return withRetry {
         val entry = "add_comment"
         val json = URLEncoder.encode(Json.encodeToString(comment), "utf-8")
-        val url =
-            "${tweet.author?.writableUrl()}/entry?aid=$appId&ver=last&entry=$entry" +
-                    "&tweetid=${tweet.mid}&comment=$json&userid=${appUser.mid}"
+        val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&tweetid=${tweet.mid}&comment=$json&userid=${appUser.mid}" +
+                "&hostid=${tweet.author?.hostIds?.first()}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -1148,7 +1167,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("getUser").e("${appUser.baseUrl} $userId $e")
         }
-        dao.getCachedUser(userId)?.user
+        null
     } }
 
     suspend fun getUserCoreData(mid: MimeiId, ip: String): User? { return withRetry {

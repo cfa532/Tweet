@@ -66,7 +66,7 @@ fun TweetDetailScreen(
     }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(5 * 60 * 1000) // Delay for 5 minutes
+            delay(1 * 60 * 1000) // Delay for 5 minutes
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweet()
                 viewModel.loadComments(tweet)
