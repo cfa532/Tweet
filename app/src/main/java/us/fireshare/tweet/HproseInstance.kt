@@ -320,11 +320,15 @@ object HproseInstance {
         password: String,
         context: Context
     ): Pair<User?, String?> { return withRetry {
-        var reason = Pair(null, context.getString(R.string.login_error))
         try {
-            reason = Pair(null, context.getString(R.string.login_failed))
-            val userId = getUserId(username) ?: return@withRetry reason
-            val user = getUser(userId) ?: return@withRetry reason
+            val userId = getUserId(username) ?: return@withRetry Pair(
+                null,
+                context.getString(R.string.login_failed)
+            )
+            val user = getUser(userId) ?: return@withRetry Pair(
+                null,
+                context.getString(R.string.login_failed)
+            )
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login" +
                     "&username=$username&password=$password"
             val response = httpClient.get(url)
@@ -336,10 +340,10 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("Hprose.Login").e("${e.message}")
-            return@withRetry reason
+            Timber.tag("Login").e("$e")
+            return@withRetry Pair(null, context.getString(R.string.login_failed))
         }
-        reason
+        Pair(null, context.getString(R.string.login_error))
     } }
 
     /**
