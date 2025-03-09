@@ -525,14 +525,19 @@ object HproseInstance {
             tweetList?.let {
                 // 2. Overwrite cached tweets of the user with a updated one, but keep its
                 // timestamp, which is when the tweet is cached, not when it's created.
-                it.forEach { tweet ->
+                val list = it.mapNotNull { tweet ->
                     tweet.author = user
-                    tweet.originalTweetId?.let { tid ->
-                        tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
+
+                    if (tweet.originalTweetId != null) {
+                        val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            ?: return@mapNotNull null
+                        tweet.originalTweet = originalTweet
                     }
+
                     updateCachedTweet(tweet)
+                    tweet
                 }
-                send(it)
+                send(list)
             } ?: run {
                 // Handle the case where tweetList is null (e.g., due to a failed HTTP request)
                 Timber.w("Tweet list is null after network call.")
@@ -577,15 +582,19 @@ object HproseInstance {
 
             // 3. Process the tweetList if it's not null
             tweetList?.let {
-                it.forEach { tweet ->
+                val list = it.mapNotNull { tweet ->
                     tweet.author = user
-                    tweet.originalTweetId?.let { tid ->
-                        tweet.originalTweet = getTweet(tid, tweet.originalAuthorId!!)
+
+                    if (tweet.originalTweetId != null) {
+                        val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            ?: return@mapNotNull null
+                        tweet.originalTweet = originalTweet
                     }
+
                     updateCachedTweet(tweet)
+                    tweet
                 }
-                // send updated tweet list
-                send(it)
+                send(list)
             } ?: run {
                 Timber.w("Tweet list is null after network call.")
                 send(emptyList()) // Or send a default value, or throw an exception
@@ -773,7 +782,7 @@ object HproseInstance {
                  * If there is an originalTweetId, this is a retweet.
                  * Also update the retweet count of the original tweet.
                  * */
-                if (tweet.originalTweetId != null) {
+                if (tweet.originalTweetId != null && tweet.originalTweet != null) {
                     method = "retweet_removed"
                     url = "${tweet.originalTweet!!.author?.writableUrl()}/entry?aid=$appId&ver=last" +
                             "&entry=$method&tweetid=${tweet.originalTweetId}&retweetid=${tweet.mid}" +

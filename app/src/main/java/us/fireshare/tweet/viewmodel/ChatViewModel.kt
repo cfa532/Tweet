@@ -70,6 +70,9 @@ class ChatViewModel @AssistedInject constructor(
         chatListViewModel?.updateSession(message, hasNews = false)  // update session list in memory
     }
 
+    /**
+     * Check new messages on writable host of an user.
+     * */
     suspend fun fetchNewMessage(numOfMsgs: Int = 500) {
         val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs) ?: return
         val news = fetchedMessages.toMutableList()
