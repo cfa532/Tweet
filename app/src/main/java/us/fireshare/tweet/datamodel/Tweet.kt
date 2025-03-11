@@ -64,7 +64,6 @@ data class User(
     var favoritesCount: Int? = null,
     var commentsCount: Int? = null,
 
-    var nodeId: MimeiId? = null,        // host from which the user data is loaded.
     var hostIds: List<MimeiId>? = null,
     var publicKey: String? = null,
 
@@ -89,22 +88,7 @@ suspend fun User.writableUrl(): String? {
             HproseInstance.getHostIP(hostId)?.let { hostIP ->
                 "http://$hostIP".also { newUrl ->
                     this.writableUrl = newUrl
-                    this.baseUrl = newUrl
-                }
-            } ?: baseUrl
-        }
-    }
-}
-// Make change to a node, but do Not update baseUrl,
-// used when no need to sync written data.
-suspend fun User.writableUrl2(): String? {
-    return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
-        writableUrl
-    } else {
-        hostIds?.firstOrNull()?.let { hostId ->
-            HproseInstance.getHostIP(hostId)?.let { hostIP ->
-                "http://$hostIP".also { newUrl ->
-                    this.writableUrl = newUrl
+//                    this.baseUrl = newUrl
                 }
             } ?: baseUrl
         }
