@@ -1228,6 +1228,7 @@ object HproseInstance {
     }
 
     suspend fun logging(msg: String) { return withRetry {
+        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry
         val url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=logging&msg=${
                 URLEncoder.encode(msg, "utf-8")
