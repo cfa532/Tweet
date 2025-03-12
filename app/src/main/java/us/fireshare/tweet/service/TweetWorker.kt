@@ -60,7 +60,7 @@ class UploadCommentWorker @AssistedInject constructor(
 
             HproseInstance.uploadComment(originalTweet, comment).let { updatedTweet: Tweet ->
                 // updatedTweet is the original tweet with new comment. After uploading comment,
-                // !!!comment.mid is updated inside uploadComment() with newly created mid!!!
+                // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 // retweet is a new tweet with the comment as its content.
                 val retweet = if (isChecked) {
                     comment.originalTweetId = originalTweet.mid

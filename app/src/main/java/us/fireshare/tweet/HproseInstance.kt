@@ -134,7 +134,6 @@ object HproseInstance {
                              * */
                             getProviders(userId, "http://$firstIp")?.let { ips ->
                                 appUser = getAccessibleUser(ips, userId) ?: appUser
-                                appUser.baseUrl = "http://192.168.10.12:8081"
                                 cachedUsers.add(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                             }
@@ -388,7 +387,7 @@ object HproseInstance {
      * Register a new user or update an existing user account.
      * */
     suspend fun setUserData(userObj: User): Map<*, *>? { return withRetry {
-        var url: String
+        val url: String
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
         try {
             if (user.mid == TW_CONST.GUEST_ID) {
@@ -396,10 +395,9 @@ object HproseInstance {
                  * Register a new user.
                  * */
                 user.followingList = getAlphaIds()
-                url =
-                    "${user.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
-                        URLEncoder.encode(Json.encodeToString(user), "utf-8")
-                    }"
+                url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=register&user=${
+                    URLEncoder.encode(Json.encodeToString(user), "utf-8")
+                }"
             } else {
                 /**
                  * Update existing user account.
@@ -825,9 +823,9 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 delComment(commentId)
-                updateUserMeta(commentId, "comment")?.let { updatedUser ->
-                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
-                }
+//                updateUserMeta(commentId, "comment")?.let { updatedUser ->
+//                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
+//                }
             }
         } catch (e: Exception) {
             Timber.tag("delComment()").e(e.toString())
@@ -969,15 +967,6 @@ object HproseInstance {
                 )
                 appUser = appUser.copy(bookmarksCount = (res["user"] as User).bookmarksCount)
                 updateCachedTweet(tweet)
-
-                /**
-                 * Become a provider of the tweet if bookmarked it.
-                 * Also update appUser's record of bookmarks.
-                 * */
-//                tweet.author?.let { provide(it, tweet.mid, hasBookmarked) }
-//                updateUserMeta(tweet.mid, "bookmark")?.let { updatedUser ->
-//                    appUser = appUser.copy(bookmarksCount = updatedUser.bookmarksCount)
-//                }
                 return@withRetry ret
             }
         } catch (e: Exception) {
@@ -1009,39 +998,13 @@ object HproseInstance {
     } }
 
     /**
-     * Add or remove Favorite, Bookmark or Comment make by appUser.
-     * */
-    private suspend fun updateUserMeta(
-        mid: MimeiId,   // tweetId bookmarked or favored by appUser,
-                        // or commentId to be recorded in user activity.
-        type: String    // favorite, bookmark or comment
-    ): User? { return withRetry {
-        val entry = "toggle_meta_by_user"
-        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
-                "&mid=$mid&userid=${appUser.mid}&type=$type" +
-                "&hostid=${appUser.hostIds?.first()}"
-        try {
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                val updatedUser = Gson().fromJson(
-                    response.bodyAsText(),
-                    User::class.java)
-                return@withRetry updatedUser
-            }
-        } catch (e: Exception) {
-            Timber.tag("updateUserMeta").e("${e.message} $url")
-        }
-        null
-    } }
-
-    /**
      * Load all comments of a tweet.
      * @param pageNumber
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0): List<Tweet>? { return withRetry {
         try {
             if (tweet.author == null)
-                tweet.author = getUser(tweet.authorId)  // deep link
+                tweet.author = getUser(tweet.authorId)  // for the case of deep link
             val pageSize = 50
             val method = "get_comments"
             val url = StringBuilder("${tweet.author?.baseUrl}/entry?aid=$appId&ver=last")
@@ -1085,12 +1048,6 @@ object HproseInstance {
                     commentCount = (res["count"] as Double).toInt()
                 )
                 updateCachedTweet(updatedTweet)
-
-                // become a provider of the tweet if commented it.
-//                tweet.author?.let { provide(it, tweet.mid, true) }
-                updateUserMeta(comment.mid, "comment")?.let { updatedUser ->
-                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
-                }
                 updatedTweet
             } else {
                 tweet

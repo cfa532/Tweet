@@ -425,9 +425,10 @@ class UserViewModel @AssistedInject constructor(
             }
         }
         var updatedUser = User(
+            baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim(), avatar = appUser.avatar, mid = appUser.mid
+            profile = profile.value?.trim()
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
@@ -488,7 +489,6 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         }
-
         return suggestions.distinct()
     }
 
