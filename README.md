@@ -1,4 +1,4 @@
-
+# A Web3 twitter application
 Tweet is a Web3 application that leverages blockchain technology for bookkeeping. However it does not run on blockchain, it operates on a lightweight cloud OS called Leither, which supports decentralized storage, databases and a lightweight webserver.
 
 Unlike traditional apps, Tweet is a decentralized platform. It offers standard app features but empowers users to host their own nodes on personal devices, such as a PC, Mac, NAS, or spared Android phone, creating a IPFS based network. User accounts are decentralized, backed by the combined resources of the users and their followers.
@@ -11,3 +11,6 @@ Coming soon...lol
 
 In this pilot run, anyone interested in setting up a serving node can take a look at the following links.
 <https://github.com/cfa532/Leither/blob/main/README_EN.md>
+
+## Setup a node
+  1. Setup a server that is accessible from the internet. Make sure the port# is **between 8000~9000**, which is so setup as a provisional solution to filter certain router glitch.
