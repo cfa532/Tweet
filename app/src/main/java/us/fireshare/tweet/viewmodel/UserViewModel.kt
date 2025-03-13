@@ -136,7 +136,7 @@ class UserViewModel @AssistedInject constructor(
         HproseInstance.toggleFollower(userId, isFollower, followerId)
         _followers.update { list ->
             if (isFollower)
-                listOf(followerId) + list
+                (listOf(followerId) + list).toSet().toList()
             else
                 list.filterNot { it == followerId }
         }
@@ -155,7 +155,7 @@ class UserViewModel @AssistedInject constructor(
         HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
             _followings.update { list ->
                 if (isFollowing)
-                    listOf(subjectUserId) + list
+                    (listOf(subjectUserId) + list).toSet().toList()
                 else
                     list.filterNot { it == subjectUserId }
             }

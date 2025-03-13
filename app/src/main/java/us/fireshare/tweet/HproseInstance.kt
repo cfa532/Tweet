@@ -834,12 +834,14 @@ object HproseInstance {
 
     /**
      * Called when appUser clicks the Follow button.
-     * @param userId is the user that appUser is following or unfollowing.
+     * @param followedId is the user that appUser is following or unfollowing.
      * */
-    suspend fun toggleFollowing(userId: MimeiId, appUserId: MimeiId = appUser.mid): Boolean? { return withRetry {
-        val method = "toggle_following"
-        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last" +
-                    "&entry=$method&userid=$appUserId&otherid=$userId"
+    suspend fun toggleFollowing(followedId: MimeiId, followingId: MimeiId = appUser.mid): Boolean? { return withRetry {
+        val followedUser = getUser(followedId)
+        val entry = "toggle_following"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
+                "&userid=$followingId&otherid=$followedId" +
+                "&otherhostid=${followedUser?.hostIds?.first()}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -869,8 +871,8 @@ object HproseInstance {
         followerId: MimeiId = appUser.mid
     ) { return withRetry {
         val user = getUser(userId)
-        val method = "toggle_follower"
-        val url = "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+        val entry = "toggle_follower"
+        val url = "${user?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                     "&otherid=$followerId&userid=${userId}&isfollower=$isFollowing"
         try {
             httpClient.get(url)
