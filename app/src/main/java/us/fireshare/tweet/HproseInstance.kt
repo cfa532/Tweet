@@ -931,7 +931,6 @@ object HproseInstance {
                     likeCount = (res["count"] as Double).toInt()
                 )
                 appUser = appUser.copy(favoritesCount = (res["user"] as User).favoritesCount)
-                // update cached tweet
                 updateCachedTweet(tweet)
 
                 // become a provider of the tweet if like it.
