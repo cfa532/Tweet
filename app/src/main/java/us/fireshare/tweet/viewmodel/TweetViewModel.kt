@@ -241,18 +241,20 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Update favorite count and icon right away for better user experience.
      * */
-    suspend fun likeTweet(updateAppUser: (Tweet, Boolean) -> Unit) {
-        val hasLiked = tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
-        _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, ! hasLiked)
+    suspend fun likeTweet(
+        updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
+    ) {
+        val isFavorite = tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+        _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, ! isFavorite)
         _tweetState.value = tweetState.value.copy(
-            likeCount = if (hasLiked) max(0, tweetState.value.likeCount - 1)
-            else tweetState.value.likeCount + 1,
+            favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
+            else tweetState.value.favoriteCount + 1,
         )
-        updateAppUser(tweetState.value, ! hasLiked)
+        updateAppUser(tweetState.value, ! isFavorite)
         /**
          * Overwrite in-memory favorites with result from database call that persists the change.
          * */
-        _tweetState.value = HproseInstance.likeTweet(tweetState.value)
+        _tweetState.value = HproseInstance.toggleFavorite(tweetState.value)
     }
 
     /**
@@ -270,7 +272,7 @@ class TweetViewModel @AssistedInject constructor(
         /**
          * Overwrite in-memory bookmark with result from database call that persists the change.
          * */
-        _tweetState.value = HproseInstance.bookmarkTweet(tweetState.value)
+        _tweetState.value = HproseInstance.toggleBookmark(tweetState.value)
     }
 
     fun updateRetweetCount() {

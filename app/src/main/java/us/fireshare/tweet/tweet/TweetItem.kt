@@ -18,12 +18,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -31,9 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
@@ -42,30 +40,33 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 
 @Composable
 fun TweetItem(
     tweet: Tweet,
-    parentEntry: NavBackStackEntry // navGraph scoped
+    parentEntry: NavBackStackEntry, // navGraph scoped
+    onDeleteClick: () -> Unit
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }
-//    var isVisible by remember { mutableStateOf(false) }
-//    TweetRefreshHandler(isVisible, viewModel)
+    var isVisible by remember { mutableStateOf(false) }
+    TweetRefreshHandler(isVisible, viewModel)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
-//            .onGloballyPositioned { layoutCoordinates ->
-//                isVisible = isElementVisible(layoutCoordinates, 30)
-//            }
+            .onGloballyPositioned { layoutCoordinates ->
+                isVisible = isElementVisible(layoutCoordinates, 30)
+            }
             .padding(bottom = 1.dp),
         tonalElevation = 0.dp
     ) {
@@ -82,7 +83,8 @@ fun TweetItem(
                             parentEntry, key = tweet.originalTweetId
                         ) { factory -> factory.create(tweet.originalTweet!!) }
 
-                    TweetItemBody(originalTweetViewModel, parentEntry, parentTweet = tweet)
+                    TweetItemBody(originalTweetViewModel, parentEntry,
+                        parentTweet = tweet, onDeleteClick = onDeleteClick)
 
                     // Label: Forward by user, on top of original tweet
                     Box {
@@ -122,7 +124,7 @@ fun TweetItem(
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
-                        TweetItemHeader(viewModel, parentEntry)
+                        TweetItemHeader(viewModel, onDeleteClick = onDeleteClick)
 
                         tweet.content?.let {
                             SelectableText(it,
@@ -164,7 +166,8 @@ fun TweetItem(
                                     factory.create(tweet.originalTweet!!)
                                 },
                                 parentEntry,
-                                isQuoted = true
+                                isQuoted = true,
+                                onDeleteClick = onDeleteClick
                             )
                         }
                         Row(
@@ -186,7 +189,7 @@ fun TweetItem(
             }
         } else {
             // original tweet by user.
-            TweetItemBody(viewModel, parentEntry)
+            TweetItemBody(viewModel, parentEntry, onDeleteClick = onDeleteClick)
         }
     }
 }
@@ -199,53 +202,18 @@ fun TweetItem(
  */
 @Composable
 fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
-    // Use remember to persist the state across recompositions.
-    var lastRefreshTime by remember { mutableLongStateOf(0L) }
-    var visibilityStartTime by remember { mutableLongStateOf(0L) }
-    val refreshIntervalMillis = 5 * 60 * 1000L // 5 minutes
-    val initialDelayMillis = 1000L
-    val minTimeSinceLastRefreshMillis = 3 * 60 * 1000L // 3 minutes
-    val minVisibilityDurationMillis = 1000L // Changed to 1 second
+    val refreshIntervalMillis = 3000L // 2 seconds
 
     // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
     val scope = rememberCoroutineScope()
-    // Use remember to persist the job across recompositions.
-    var refreshJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
-            visibilityStartTime = System.currentTimeMillis()
-
-            // Launch a coroutine to handle the initial refresh after the delay
-            val initialRefreshJob = scope.launch(Dispatchers.IO) {
-                delay(initialDelayMillis)
-
-                val currentTime = System.currentTimeMillis()
-                val timeSinceVisibilityStart = currentTime - visibilityStartTime
-                val timeSinceLastRefresh = currentTime - lastRefreshTime
-
-                // Check if the composable has been visible for at least 1 second
-                if (timeSinceVisibilityStart >= minVisibilityDurationMillis && timeSinceLastRefresh >= minTimeSinceLastRefreshMillis) {
-                    viewModel.refreshTweet()
-                    lastRefreshTime = currentTime
-                }
+            // Launch a coroutine to handle the refresh after the delay
+            scope.launch(Dispatchers.IO) {
+                delay(refreshIntervalMillis)
+                viewModel.refreshTweet()
             }
-
-            // Start periodic refresh after initial refresh
-            refreshJob = scope.launch(Dispatchers.IO) {
-                // Wait for the initial refresh to complete before starting the periodic refresh
-                initialRefreshJob.join()
-
-                while (isActive) {
-                    delay(refreshIntervalMillis)
-                    viewModel.refreshTweet()
-                    lastRefreshTime = System.currentTimeMillis()
-                }
-            }
-        } else {
-            // Cancel the periodic refresh when the composable becomes invisible
-            refreshJob?.cancel()
-            refreshJob = null
         }
     }
 }

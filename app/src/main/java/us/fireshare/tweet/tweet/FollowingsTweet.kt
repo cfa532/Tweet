@@ -48,7 +48,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetViewModel
 
 /**
  * Tweets of the followings of current user.
@@ -59,7 +61,7 @@ fun FollowingsTweet(
     parentEntry: NavBackStackEntry,
     listState: LazyListState,
     scrollBehavior: TopAppBarScrollBehavior,
-    viewModel: TweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    viewModel: TweetFeedViewModel
 ) {
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
     val tweets by viewModel.tweets.collectAsState()
@@ -122,6 +124,8 @@ fun FollowingsTweet(
                 viewModel.setScrollingState(it)
             }
     }
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -136,11 +140,24 @@ fun FollowingsTweet(
             contentPadding = PaddingValues(bottom = 60.dp) // Adjust this value
         ) {
             items(tweets, key = { it.mid }) { tweet ->
-                if (!tweet.isPrivate)
-                    TweetItem(
-                        tweet = tweet,
-                        parentEntry = parentEntry
-                    )
+                val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                        parentEntry, key = tweet.originalTweetId
+                    ) { factory -> factory.create(tweet.originalTweet!!) }
+                } else null
+                if (!tweet.isPrivate) {
+                    TweetItem(tweet, parentEntry) {
+                        // function to delete the tweetItem
+                        viewModel.viewModelScope.launch(IO) {
+                            viewModel.delTweet(tweet) {
+                                viewModel.viewModelScope.launch(IO) {
+                                    sharedViewModel.appUserViewModel.onTweetDeleted(tweet.mid)
+                                    originTweetViewModel?.refreshTweet()
+                                }
+                            }
+                        }
+                    }
+                }
             }
             item {
                 if (refreshingAtTop) {

@@ -26,7 +26,7 @@ data class Tweet(
     // if the current user has liked or bookmarked this tweet
     var favorites: MutableList<Boolean>? = mutableListOf(false, false, false),
 
-    var likeCount: Int = 0,     // Number of likes
+    var favoriteCount: Int = 0,     // Number of likes
 
     var bookmarkCount: Int = 0, // Number of bookmarks
 
@@ -70,7 +70,7 @@ data class User(
     var fansList: List<MimeiId>? = null,
     var followingList: List<MimeiId>? = null,
     var bookmarkedTweets: List<MimeiId>? = null,
-    var likedTweets: List<MimeiId>? = null,
+    var favoriteTweets: List<MimeiId>? = null,
     var repliedTweets: List<MimeiId>? = null,
     var commentsList: List<MimeiId>? = null,
     var topTweets: List<MimeiId>? = null    // pinned tweets by the user.
@@ -81,7 +81,7 @@ data class User(
  * */
 suspend fun User.writableUrl(): String? {
     return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
-        this.baseUrl = writableUrl
+//        this.baseUrl = writableUrl
         writableUrl
     } else {
         hostIds?.firstOrNull()?.let { hostId ->
@@ -128,7 +128,7 @@ object UserFavorites {
  * */
 interface TweetActionListener {
     fun onTweetAdded(tweet: Tweet)
-    fun onTweetDeleted(tweetId: MimeiId)
+    suspend fun onTweetDeleted(tweetId: MimeiId)
 }
 
 @Serializable

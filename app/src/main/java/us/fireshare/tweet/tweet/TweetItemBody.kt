@@ -36,6 +36,7 @@ fun TweetItemBody(
     parentEntry: NavBackStackEntry,
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
+    onDeleteClick: () -> Unit
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -56,7 +57,7 @@ fun TweetItemBody(
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(viewModel, parentEntry, parentTweet)
+            TweetItemHeader(viewModel, parentTweet, onDeleteClick)
 
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border

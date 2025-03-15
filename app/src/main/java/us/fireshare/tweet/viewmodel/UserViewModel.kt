@@ -64,6 +64,11 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
     private var initState = MutableStateFlow(true)      // initial load state
 
+    private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
+    val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
+    private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
+    val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
+
     // current rank of tweet in DB. Retrieve 10 tweets each time start from it.
     private var startRank = mutableIntStateOf(0)
 
@@ -172,15 +177,13 @@ class UserViewModel @AssistedInject constructor(
         _followings.value = HproseInstance.getFollowings(user.value)
     }
 
-    private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
-    val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
-    private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
-    val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
-
-    suspend fun getBookmarks(start: Int) {
+    /**
+     * Load a batch of bookmarks from backend.
+     * */
+    suspend fun getBookmarks(start: Int, end: Int = -1) {
         getSortedMetaByUser(user.value, "bookmark")?.let { list ->
-            val end = (start + 10).coerceAtMost(list.size)
-            for (index in start until end) {
+            val span = if (end > -1) list.size else (start + 10).coerceAtMost(list.size)
+            for (index in start until span) {
                 HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
                     _bookmarks.update { bs ->
                         val updatedBookmarks = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
@@ -188,7 +191,7 @@ class UserViewModel @AssistedInject constructor(
                         } else {
                             bs
                         }
-                        updatedBookmarks.sortedByDescending { it.timestamp } // Or whatever sorting criteria you need
+                        updatedBookmarks.sortedByDescending { it.timestamp }
                     }
                 }
             }
@@ -207,12 +210,12 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Get favorite Tweets of the user.
+     * Get batches of favorite Tweets of the user.
      * */
-    suspend fun getFavorites(start: Int) {
+    suspend fun getFavorites(start: Int, end: Int = -1) {
         getSortedMetaByUser(user.value, "favorite")?.let { list ->
-            val end = (start + 10).coerceAtMost(list.size)
-            for (index in start until end) {
+            val span = if (end > -1) list.size else (start + 10).coerceAtMost(list.size)
+            for (index in start until span) {
                 HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
                     _favorites.update { bs ->
                         val updated = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
@@ -317,7 +320,7 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun pinToTop(tweetId: MimeiId) {
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.toggleTopList(tweetId)?.forEach { map ->
+        HproseInstance.togglePinnedTweet(tweetId)?.forEach { map ->
             val tweet = tweets.value.find { it.mid == map["tweetId"] }
             if (tweet != null) {
                 // add tweet to topTweets, update its timestamp to when it is pinned.
@@ -528,8 +531,21 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    override fun onTweetDeleted(tweetId: MimeiId) {
+    /**
+     * A tweet is deleted by appUser, remove it from all tweet lists that has the tweet.
+     * */
+    override suspend fun onTweetDeleted(tweetId: MimeiId) {
         _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+
+        // Try to remove it from Favorite list of User in Mimei, even if it may not in the list.
+        HproseInstance.updateFavoriteOfUser(tweetId)
+        HproseInstance.updateBookmarkOfUser(tweetId)
+
+        // remove deleted tweet from favorite list, if it is there.
+        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        _user.value.favoritesCount = favorites.value.size
+        _user.value.bookmarksCount = bookmarks.value.size
     }
 }

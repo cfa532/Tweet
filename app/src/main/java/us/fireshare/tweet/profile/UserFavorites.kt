@@ -38,9 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
@@ -48,6 +50,8 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.TweetItem
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.UserAvatar
 
@@ -61,6 +65,7 @@ fun UserFavorites(
     val start = remember { mutableIntStateOf(0) }
     val favorites by viewModel.favorites.collectAsState()
     val user = appUser
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(Unit) {
         // load bookmarked tweets
@@ -134,7 +139,21 @@ fun UserFavorites(
                 state = listState
             ) {
                 items(favorites, key = { it.mid }) { tweet ->
-                    TweetItem(tweet, parentEntry)
+                    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry, key = tweet.originalTweetId
+                        ) { factory -> factory.create(tweet.originalTweet!!) }
+                    } else null
+                    TweetItem(tweet, parentEntry) {
+                        tweetFeedViewModel.viewModelScope.launch(IO) {
+                            tweetFeedViewModel.delTweet(tweet) {
+                                tweetFeedViewModel.viewModelScope.launch(IO) {
+                                    viewModel.onTweetDeleted(tweet.mid)
+                                }
+                            }
+                            originTweetViewModel?.refreshTweet()
+                        }
+                    }
                 }
 
                 item {

@@ -891,26 +891,65 @@ object HproseInstance {
         try {
             // upload the retweet, simply a few dozen bytes.
             val retweet = uploadTweet( Tweet(
-                mid = System.currentTimeMillis().toString(),    // placeholder
+                mid = TW_CONST.GUEST_ID,    // placeholder
                 content = "",
                 authorId = appUser.mid,
                 originalTweetId = tweet.mid,
                 originalAuthorId = tweet.authorId
             )) ?: return@withRetry
+
             retweet.originalTweet = tweet
             addTweetToFeed(retweet)
 
             increaseRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
                 updateCachedTweet(updatedTweet)
             }
-            // become a provider for the original tweet
-//            tweet.author?.let { provide(it, tweet.mid, true) }
         } catch (e: Exception) {
             Timber.e("toggleRetweet()", e.toString())
         }
     } }
 
-    suspend fun likeTweet(tweet: Tweet): Tweet { return withRetry {
+    suspend fun updateFavoriteOfUser(
+        tweetId: MimeiId,
+        isFavorite: Boolean = false
+    ) { return withRetry {
+        val entry = "toggle_favorite_by_user"
+        val url = """
+            ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
+            &tweetid=$tweetId&userid=${appUser.mid}&isfavorite=$isFavorite
+        """.trimIndent()
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val res: User? = Gson().fromJson(response.bodyAsText(), User::class.java)
+                appUser = appUser.copy(favoritesCount = res?.favoritesCount)
+            }
+        } catch (e: Exception) {
+            Timber.tag("updateFavoriteOfUser()").e(e, "${e.message} $url")
+        }
+    } }
+
+    suspend fun updateBookmarkOfUser(
+        tweetId: MimeiId,
+        isBookmarked: Boolean = false
+    ) { return withRetry {
+        val entry = "toggle_bookmark_by_user"
+        val url = """
+            ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
+            &tweetid=$tweetId&userid=${appUser.mid}&isbookmarked=$isBookmarked
+        """.trimIndent()
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                val res: User? = Gson().fromJson(response.bodyAsText(), User::class.java)
+                appUser = appUser.copy(bookmarksCount = res?.bookmarksCount)
+            }
+        } catch (e: Exception) {
+            Timber.tag("updateBookmarkOfUser()").e(e, "${e.message} $url")
+        }
+    } }
+
+    suspend fun toggleFavorite(tweet: Tweet): Tweet { return withRetry {
         val entry = "toggle_favorite"
         val url = """
             ${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
@@ -924,29 +963,26 @@ object HproseInstance {
                 val res = gson.fromJson(
                     response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any?>
-                val hasLiked = res["hasLiked"] as Boolean
-                tweet.favorites?.set(UserFavorites.LIKE_TWEET, hasLiked)
+                ) as Map<String, Any>?
+                val isFavorite = res?.get("isFavorite") as Boolean
+                tweet.favorites?.set(UserFavorites.LIKE_TWEET, isFavorite)
                 val ret = tweet.copy(
-                    likeCount = (res["count"] as Double).toInt()
+                    favoriteCount = (res["count"] as Double).toInt()
                 )
-                appUser = appUser.copy(favoritesCount = (res["user"] as User).favoritesCount)
+                if (res["user"] != null) {
+                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                    appUser = appUser.copy(favoritesCount = user.favoritesCount)
+                }
                 updateCachedTweet(tweet)
-
-                // become a provider of the tweet if like it.
-//                tweet.author?.let { provide(it, tweet.mid, hasLiked) }
-//                updateUserMeta(tweet.mid, "favorite")?.let { updatedUser ->
-//                    appUser = appUser.copy(favoritesCount = updatedUser.favoritesCount)
-//                }
                 return@withRetry ret
             }
         } catch (e: Exception) {
-            Timber.tag("likeTweet()").e(e, "Error: ${e.message} $tweet $url")
+            Timber.tag("toggleFavorite()").e(e, "Error: ${e.message} $tweet $url")
         }
         tweet
     } }
 
-    suspend fun bookmarkTweet(tweet: Tweet): Tweet { return withRetry {
+    suspend fun toggleBookmark(tweet: Tweet): Tweet { return withRetry {
         val entry = "toggle_bookmark"
         val url = """
             ${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
@@ -959,19 +995,22 @@ object HproseInstance {
                 val gson = Gson()
                 val res = gson.fromJson( response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any?>
+                ) as Map<String, Any>?
 
-                val hasBookmarked = res["hasBookmarked"] as Boolean
+                val hasBookmarked = res?.get("hasBookmarked") as Boolean
                 tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
                 val ret = tweet.copy(
                     bookmarkCount = (res["count"] as Double).toInt()
                 )
-                appUser = appUser.copy(bookmarksCount = (res["user"] as User).bookmarksCount)
+                if (res["user"] != null) {
+                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                    appUser = appUser.copy(bookmarksCount = user.bookmarksCount)
+                }
                 updateCachedTweet(tweet)
                 return@withRetry ret
             }
         } catch (e: Exception) {
-            Timber.tag("bookmarkTweet()").e(e, "Error: ${e.message} $tweet $url")
+            Timber.tag("toggleBookmark()").e(e, "Error: ${e.message} $tweet $url")
         }
         tweet
     } }
@@ -1183,7 +1222,7 @@ object HproseInstance {
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    suspend fun toggleTopList(tweetId: MimeiId): List<Map<*,*>>? { return withRetry {
+    suspend fun togglePinnedTweet(tweetId: MimeiId): List<Map<*,*>>? { return withRetry {
         val entry = "toggle_top_tweets"
         val url =  "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&userid=${appUser.mid}&tweetid=$tweetId"
@@ -1195,7 +1234,7 @@ object HproseInstance {
                     object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>?
             }
         } catch (e: Exception) {
-            Timber.tag("toggleTopList").e("$e")
+            Timber.tag("togglePinnedTweet").e("$e")
         }
         null
     } }
@@ -1233,7 +1272,7 @@ object HproseInstance {
         val url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=logging&msg=${
                 URLEncoder.encode(msg, "utf-8")
-            }&hostid=${appUser.hostIds?.first()}"
+            }"
         try {
             httpClient.get(url)
         } catch (_: Exception) {

@@ -138,8 +138,8 @@ fun RetweetButton(viewModel: TweetViewModel) {
 @Composable
 fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
-    val count = tweet.likeCount
-    val hasLiked = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+    val count = tweet.favoriteCount
+    val isFavorite = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()
@@ -159,16 +159,16 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     } ) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = if (hasLiked) R.drawable.ic_heart_fill else R.drawable.ic_heart),
+                painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
                 contentDescription = "Like",
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (hasLiked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+                tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "$count",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (hasLiked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+                color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
         }
     }

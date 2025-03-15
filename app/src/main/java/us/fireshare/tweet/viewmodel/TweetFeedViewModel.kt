@@ -234,15 +234,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    suspend fun delTweet(tweet: Tweet, updateOriginTweet: () -> Unit) {
+    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) {
+        // 1. Remove the tweet from TweetFeed right away for better user experience.
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweet.mid }
         }
-        dao.deleteCachedTweet(tweet.mid)    // remove cached tweet
-        tweetActionListener.onTweetDeleted(tweet.mid)   // remove from appUserViewModel's feed
+        // 2. remove cached tweet
+        dao.deleteCachedTweet(tweet.mid)
+
+        // 3. remove from appUserViewModel's profile feed, favorites, bookmarks,
+        tweetActionListener.onTweetDeleted(tweet.mid)
+
+        // 4, delete tweet mimei from backend.
         HproseInstance.delTweet(tweet) {
-            // If there is an original tweet, update its viewModel.
-            updateOriginTweet()
+            callback()  // remove it from appUser's viewModel
         }
     }
 

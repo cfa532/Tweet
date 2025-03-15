@@ -31,8 +31,8 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun TweetItemHeader(
     viewModel: TweetViewModel,
-    parentEntry: NavBackStackEntry,
-    parentTweet: Tweet? = null
+    parentTweet: Tweet? = null,
+    onDeleteClick: () -> Unit
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -80,7 +80,7 @@ fun TweetItemHeader(
         /**
          * The 3 dots at the right end
          * */
-        TweetDropdownMenu(tweet, parentEntry, parentTweet)
+        TweetDropdownMenu(tweet, parentTweet, onDeleteClick)
     }
 }
 

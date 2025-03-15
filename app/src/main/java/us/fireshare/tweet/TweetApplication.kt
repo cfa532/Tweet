@@ -8,7 +8,10 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
@@ -18,6 +21,10 @@ import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class TweetApplication : Application(){
+    companion object {
+        // Use SupervisorJob to prevent one child's failure from cancelling others
+        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -38,6 +45,12 @@ class TweetApplication : Application(){
             ExistingPeriodicWorkPolicy.KEEP,
             cleanUpRequest
         )
+
+        fun onTerminate() {
+            super.onTerminate()
+            // Cancel the scope when the application is terminating (rare in modern Android)
+            applicationScope.cancel()
+        }
     }
 }
 

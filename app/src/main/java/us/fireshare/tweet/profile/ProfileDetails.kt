@@ -43,6 +43,9 @@ fun ProfileDetail(
     val profile by remember { derivedStateOf { user.profile } }
     val bookmarksCount by remember { derivedStateOf { user.bookmarksCount } }
     val favoritesCount by remember { derivedStateOf { user.favoritesCount } }
+    val followingsCount by remember { derivedStateOf { user.followingCount } }
+    val followersCount by remember { derivedStateOf { user.followersCount } }
+    val tweetCount by remember { derivedStateOf { user.tweetCount } }
 
     LaunchedEffect(appUserFollowings) {
         withContext(Dispatchers.IO) {
@@ -69,7 +72,7 @@ fun ProfileDetail(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${stringResource(R.string.fans)} ${user.followersCount?:0}",
+                    text = "${stringResource(R.string.fans)} $followersCount",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.clickable(
                         onClick = {
@@ -77,7 +80,7 @@ fun ProfileDetail(
                         }
                     ))
                 Text(
-                    text = "${stringResource(R.string.followings)} ${user.followingCount?:0}",
+                    text = "${stringResource(R.string.followings)} $followingsCount",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
                         .clickable(onClick = {
@@ -85,7 +88,7 @@ fun ProfileDetail(
                         }),
                 )
                 Text(
-                    text = "${stringResource(R.string.posts)} ${user.tweetCount}",
+                    text = "${stringResource(R.string.posts)} $tweetCount",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 // show the following buttons only on appUser's profile

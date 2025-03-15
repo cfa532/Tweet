@@ -43,6 +43,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
@@ -50,6 +51,8 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.TweetItem
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -67,8 +70,9 @@ fun ProfileScreen(
         ) { factory ->
             factory.create(userId)
         }
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
-    val topTweets by viewModel.topTweets.collectAsState()
+    val pinnedTweets by viewModel.topTweets.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -125,7 +129,7 @@ fun ProfileScreen(
                     // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
                 }
-                if (topTweets.isNotEmpty()) {
+                if (pinnedTweets.isNotEmpty()) {
                     item {
                         Surface( modifier = Modifier.fillMaxWidth(),
                             tonalElevation = 100.dp,
@@ -142,8 +146,22 @@ fun ProfileScreen(
                         }
                     }
 
-                    items(topTweets, key = { it.timestamp }) { tweet ->
-                        TweetItem(tweet, parentEntry)
+                    items(pinnedTweets, key = { it.timestamp }) { tweet ->
+                        val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                parentEntry, key = tweet.originalTweetId
+                            ) { factory -> factory.create(tweet.originalTweet!!) }
+                        } else null
+                        TweetItem(tweet, parentEntry) {
+                            appUserViewModel.viewModelScope.launch(IO) {
+                                tweetFeedViewModel.delTweet(tweet) {
+                                    appUserViewModel.viewModelScope.launch(IO) {
+                                        appUserViewModel.onTweetDeleted(tweet.mid)
+                                        originTweetViewModel?.refreshTweet()
+                                    }
+                                }
+                            }
+                        }
                     }
                     item {
                         HorizontalDivider(
@@ -155,7 +173,21 @@ fun ProfileScreen(
                 }
 
                 items(tweets, key = { it.timestamp }) { tweet ->
-                    TweetItem(tweet, parentEntry)
+                    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry, key = tweet.originalTweetId
+                        ) { factory -> factory.create(tweet.originalTweet!!) }
+                    } else null
+                    TweetItem(tweet, parentEntry) {
+                        appUserViewModel.viewModelScope.launch(IO) {
+                            tweetFeedViewModel.delTweet(tweet) {
+                                appUserViewModel.viewModelScope.launch(IO) {
+                                    appUserViewModel.onTweetDeleted(tweet.mid)
+                                    originTweetViewModel?.refreshTweet()
+                                }
+                            }
+                        }
+                    }
                 }
 
                 item {
