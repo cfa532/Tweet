@@ -137,22 +137,8 @@ fun UserBookmarks(
                 state = listState
             ) {
                 items(bookmarks, key = { it.mid }) { tweet ->
-                    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
-                        ) { factory -> factory.create(tweet.originalTweet!!) }
-                    } else null
-                    TweetItem(tweet, parentEntry) {
-                        tweetFeedViewModel.viewModelScope.launch(IO) {
-                            tweetFeedViewModel.delTweet(tweet) {
-                                tweetFeedViewModel.viewModelScope.launch(IO) {
-                                    originTweetViewModel?.refreshTweet()
-                                }
-                            }
-                        }
-                    }
+                    TweetItem(tweet, parentEntry)
                 }
-
                 item {
                     if (refreshingAtTop) {
                         CircularProgressIndicator(

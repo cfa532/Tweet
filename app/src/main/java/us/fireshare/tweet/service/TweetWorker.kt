@@ -16,17 +16,17 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.increaseRetweetCount
+import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
 import us.fireshare.tweet.datamodel.Tweet
 import androidx.core.net.toUri
+import us.fireshare.tweet.datamodel.MimeiId
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
-
     override suspend fun doWork(): Result {
         return try {
             val tweetString = inputData.getString("tweet") ?: return Result.failure()
@@ -67,7 +67,7 @@ class UploadCommentWorker @AssistedInject constructor(
                     comment.originalTweetId = originalTweet.mid
                     comment.originalAuthorId = originalTweet.authorId
                     HproseInstance.uploadTweet(comment)?.let { retweet ->
-                        increaseRetweetCount(originalTweet, retweet.mid)?.let {
+                        updateRetweetCount(originalTweet, retweet.mid)?.let {
                             updatedTweet.retweetCount = it.retweetCount
                         }
                         retweet
@@ -93,7 +93,6 @@ class UploadTweetWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
-
     override suspend fun doWork(): Result {
         return try {
             val tweetContent = inputData.getString("tweetContent")
@@ -144,6 +143,41 @@ class UploadTweetWorker @AssistedInject constructor(
             }
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
+            Result.failure()
+        }
+    }
+}
+
+
+@HiltWorker
+class DeleteTweetWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
+) : CoroutineWorker(appContext, workerParams) {
+    override suspend fun doWork(): Result {
+        return try {
+            val tweetId: MimeiId = inputData.getString("tweetId").toString()
+            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Tweet:UploadWakeLockTag"
+            )
+            wakeLock.acquire(10*60*1000L /*10 minutes*/)
+            try {
+                // might make the upload less error prone
+                withContext(Dispatchers.IO) {
+                    HproseInstance.delTweet(tweetId)?.let { tweetId: MimeiId ->
+                        Timber.tag("DeleteTweetWorker").d("Tweet $tweetId deleted.")
+                        val outputData = workDataOf("tweetId" to tweetId)
+                        return@withContext Result.success(outputData)
+                    }
+                    return@withContext Result.failure()
+                }
+            } finally {
+                wakeLock.release()
+            }
+        } catch (e: Exception) {
+            Timber.tag("DeleteTweetWorker").e(e, "Error in doWork")
             Result.failure()
         }
     }

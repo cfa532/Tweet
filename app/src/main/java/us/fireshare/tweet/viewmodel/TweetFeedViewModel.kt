@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,7 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
+import us.fireshare.tweet.service.DeleteTweetWorker
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -234,22 +236,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) {
-        // 1. Remove the tweet from TweetFeed right away for better user experience.
-        _tweets.update { currentTweets ->
-            currentTweets.filterNot { it.mid == tweet.mid }
-        }
-        // remove from appUserViewModel's profile feed, favorites, bookmarks,
-        tweetActionListener.onTweetDeleted(tweet.mid)
-
-        // 2. remove cached tweet
-        dao.deleteCachedTweet(tweet.mid)
-
-        // 3, delete tweet mimei from backend.
-        HproseInstance.delTweet(tweet) {
-            callback()  // refresh the original tweet if there is any.
-        }
-    }
+//    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) {
+//        // 1. Remove the tweet from TweetFeed right away for better user experience.
+//        _tweets.update { currentTweets ->
+//            currentTweets.filterNot { it.mid == tweet.mid }
+//        }
+//        // remove from appUserViewModel's profile feed, favorites, bookmarks,
+//        tweetActionListener.onTweetDeleted(tweet.mid)
+//
+//        // 2. remove cached tweet
+//        dao.deleteCachedTweet(tweet.mid)
+//
+//        // 3, delete tweet mimei from backend.
+//        HproseInstance.delTweet(tweet) {
+//            callback()  // refresh the original tweet if there is any.
+//        }
+//    }
 
     /**
      * When appUser toggles following status on a User, update followings list.
@@ -299,6 +301,71 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         HproseInstance.retweet(t) {
             addTweetToFeed(it)
         }
+    }
+
+    fun delTweet(
+        context: Context,
+        tweetId: MimeiId,
+        updateOriginalTweet: () -> Unit
+    ) {
+        val data = workDataOf("tweetId" to tweetId)
+        val deleteRequest = OneTimeWorkRequest.Builder(DeleteTweetWorker::class.java)
+            .setInputData(data)
+            .build()
+        val workManager = WorkManager.getInstance(context)
+        workManager.enqueue(deleteRequest)
+
+        workManager.getWorkInfoByIdLiveData(deleteRequest.id)
+            .observe(context as LifecycleOwner) { workInfo ->
+                if (workInfo != null) {
+                    when (workInfo.state) {
+                        WorkInfo.State.SUCCEEDED -> {
+                            try {
+                                val deletedId: MimeiId = workInfo.outputData.getString("tweetId").toString()
+                                // Handle the success and update UI
+                                Timber.tag("DeleteTweet").d("Tweet deleted successfully: $deletedId")
+
+                                // 1. Remove the tweet from TweetFeed right away for better user experience.
+                                _tweets.update { currentTweets ->
+                                    currentTweets.filterNot { it.mid == deletedId }
+                                }
+                                // 2. remove from appUserViewModel's profile feed, favorites, bookmarks,
+                                viewModelScope.launch(IO) {
+                                    tweetActionListener.onTweetDeleted(deletedId)
+                                    // 3. remove cached tweet
+                                    dao.deleteCachedTweet(deletedId)
+                                }
+
+                                // refresh the original tweet if there is any.
+                                updateOriginalTweet()
+
+                                // notify user the result of tweet upload
+                                Toast.makeText(context, "Tweet deleted", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Timber.tag("DeleteTweet").e("$e")
+                            }
+                        }
+                        WorkInfo.State.FAILED -> {
+                            // Handle the failure and update UI
+                            Timber.tag("DeleteTweet").e("Tweet deletion failed")
+                            (context as? LifecycleOwner)?.lifecycleScope?.launch {
+                                SnackbarController.sendEvent(
+                                    event = SnackbarEvent(
+                                        message = "Delete tweet failed"
+                                    )
+                                )
+                            }
+                        }
+                        WorkInfo.State.RUNNING -> {
+                            // Optionally, show a progress indicator
+                            Timber.tag("DeleteTweet").d("Tweet deletion in progress")
+                        }
+                        else -> {
+                            // Handle other states if necessary
+                        }
+                    }
+                }
+            }
     }
 
     /**

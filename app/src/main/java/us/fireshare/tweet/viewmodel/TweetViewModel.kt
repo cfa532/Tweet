@@ -275,7 +275,16 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = HproseInstance.toggleBookmark(tweetState.value)
     }
 
-    fun updateRetweetCount() {
+    fun increaseRetweetCount() {
         _tweetState.value = tweetState.value.copy(retweetCount = tweetState.value.retweetCount + 1)
+    }
+
+    /**
+     * Update retweet account on the original tweet after retweet is deleted.
+     * */
+    suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
+        HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
+            _tweetState.value = it
+        }
     }
 }

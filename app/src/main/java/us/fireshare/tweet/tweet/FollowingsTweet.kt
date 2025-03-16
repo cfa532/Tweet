@@ -124,7 +124,6 @@ fun FollowingsTweet(
                 viewModel.setScrollingState(it)
             }
     }
-    val sharedViewModel: SharedViewModel = hiltViewModel()
 
     Box(
         modifier = Modifier
@@ -140,22 +139,8 @@ fun FollowingsTweet(
             contentPadding = PaddingValues(bottom = 60.dp) // Adjust this value
         ) {
             items(tweets, key = { it.mid }) { tweet ->
-                val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweet.originalTweetId
-                    ) { factory -> factory.create(tweet.originalTweet!!) }
-                } else null
                 if (!tweet.isPrivate) {
-                    TweetItem(tweet, parentEntry) {
-                        // function to delete the tweetItem
-                        viewModel.viewModelScope.launch(IO) {
-                            viewModel.delTweet(tweet) {
-                                viewModel.viewModelScope.launch(IO) {
-                                    originTweetViewModel?.refreshTweet()
-                                }
-                            }
-                        }
-                    }
+                    TweetItem(tweet, parentEntry)
                 }
             }
             item {

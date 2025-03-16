@@ -113,8 +113,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
                 // update retweet count in this viewModel right away
-                viewModel.updateRetweetCount()
-
+                viewModel.increaseRetweetCount()
                 tweetFeedViewModel.addRetweet(tweet)    // update Mimei
             } }
     ) {

@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -72,13 +73,13 @@ import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.MediaItemView
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @Composable
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
     gridColumns: Int,
-    onDeleteClick: () -> Unit
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -116,7 +117,7 @@ fun TweetDetailBody(
                     Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, onDeleteClick = onDeleteClick)
+                TweetDropdownMenu(tweet, parentEntry)
             }
             // Tweet detail's content
             Surface(
@@ -130,7 +131,7 @@ fun TweetDetailBody(
                             modifier = Modifier.padding(bottom = 8.dp),
                             text = it
                         ) { username ->
-                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            viewModel.viewModelScope.launch(IO) {
                                 HproseInstance.getUserId(username)?.let {
                                     withContext(Dispatchers.Main) {
                                         navController.navigate(NavTweet.UserProfile(it))
@@ -165,8 +166,7 @@ fun TweetDetailBody(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory -> factory.create(tweet.originalTweet!!) },
                                 true,
-                                null,
-                                onDeleteClick
+                                parentEntry
                             )
                         }
                     }
@@ -247,8 +247,8 @@ fun MediaGrid(
 @Composable
 fun TweetDropdownMenu(
     tweet: Tweet,
+    parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,
-    onDeleteClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -280,12 +280,12 @@ fun TweetDropdownMenu(
             if (parentTweet != null) {
                 // this is a retweet. Allow the author to delete it.
                 if (parentTweet.authorId == appUser.mid) {
-                    TweetDropdownMenuItems(parentTweet, onDeleteClick) {
+                    TweetDropdownMenuItems(parentTweet, parentEntry) {
                         expanded = false
                     }
                 }
             } else {
-                TweetDropdownMenuItems(tweet, onDeleteClick) {
+                TweetDropdownMenuItems(tweet, parentEntry) {
                     expanded = false
                 }
             }
@@ -296,11 +296,19 @@ fun TweetDropdownMenu(
 @Composable
 fun TweetDropdownMenuItems(
     tweet: Tweet,
-    onDeleteClick: () -> Unit,
+    parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
+    val context = LocalContext.current
+    val navController = LocalNavController.current
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+            parentEntry, key = tweet.originalTweetId
+        ) { factory -> factory.create(tweet.originalTweet!!) }
+    } else null
 
     // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
     // unless the user unpins it first.
@@ -308,25 +316,20 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                onDeleteClick()
-                onDismissRequest()
-//                appUserViewModel.viewModelScope.launch(IO) {
-//                    tweetFeedViewModel.delTweet(tweet) {
-//                        // if this a re-tweet, reload the original tweet after deletion.
-//                        originTweetViewModel?.viewModelScope?.launch(IO) {
-//                            originTweetViewModel.refreshTweet()
-//                        }
-//                    }
-//                    // if current route is TweetDetail. Go back to TweetFeed
-//                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-//                        withContext(Dispatchers.Main) {
-//                            navController.popBackStack()
-//                        }
-//                    } else {
-//                        // close the dropdown menu
-//                        onDismissRequest()
-//                    }
-//                }
+                tweetFeedViewModel.delTweet(context, tweet.mid) {
+                    tweetFeedViewModel.viewModelScope.launch(IO) {
+                        originTweetViewModel?.updateRetweetCount(
+                            tweet.originalTweet!!,      // original tweet
+                            tweet.mid,      // retweet Id
+                            -1
+                        )
+                    }
+                }
+                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                    navController.popBackStack()
+                } else {
+                    onDismissRequest()
+                }
             },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

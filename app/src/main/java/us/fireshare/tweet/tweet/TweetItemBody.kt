@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,8 +34,8 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetItemBody(
     viewModel: TweetViewModel,
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
+    parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
-    onDeleteClick: () -> Unit
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -55,7 +56,7 @@ fun TweetItemBody(
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
             // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(viewModel, parentTweet, onDeleteClick)
+            TweetItemHeader(viewModel, parentEntry, parentTweet)
 
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border

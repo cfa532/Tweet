@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -62,8 +63,6 @@ fun TweetDetailScreen(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val sharedViewModel: SharedViewModel = hiltViewModel()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -152,21 +151,7 @@ fun TweetDetailScreen(
                         parentEntry, key = tweet.originalTweetId
                     ) { factory -> factory.create(tweet.originalTweet!!) }
                 } else null
-                TweetDetailBody(viewModel, parentEntry, gridColumns) {
-                    // delete the current tweet to navigate back to main screen
-                    tweetFeedViewModel.viewModelScope.launch(IO) {
-                        tweetFeedViewModel.delTweet(tweet) {
-                            tweetFeedViewModel.viewModelScope.launch(IO) {
-                                originTweetViewModel?.refreshTweet()
-                            }
-                        }
-                        if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                            withContext(Dispatchers.Main) {
-                                navController.popBackStack()
-                            }
-                        }
-                    }
-                }
+                TweetDetailBody(viewModel, parentEntry, gridColumns)
 
                 // divider between tweet and its comment list
                 HorizontalDivider(

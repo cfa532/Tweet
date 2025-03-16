@@ -736,11 +736,18 @@ object HproseInstance {
 
     /**
      * Increase the retweetCount of the original tweet mimei.
+     * @param tweet is the original tweet
+     * @param retweetId of the retweet.
+     * @param flag to indicate increase or decrease retweet count.
      * @return updated original tweet.
      * */
-    suspend fun increaseRetweetCount(tweet: Tweet, retweetId: MimeiId): Tweet? { return withRetry {
-        val method = "retweet_added"
-        val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+    suspend fun updateRetweetCount(
+        tweet: Tweet,
+        retweetId: MimeiId,
+        flag: Int = 1
+    ): Tweet? { return withRetry {
+        val entry = if (flag == 1) "retweet_added" else "retweet_removed"
+        val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId" +
                 "&authorid=${tweet.authorId}"
         try {
@@ -749,7 +756,7 @@ object HproseInstance {
                 return@withRetry Gson().fromJson(response.bodyAsText(), Tweet::class.java)
             }
         } catch (e: Exception) {
-            Timber.tag("increaseRetweetCount()").e("$e $url")
+            Timber.tag("updateRetweetCount()").e("$e $url")
         }
         null
     } }
@@ -774,40 +781,24 @@ object HproseInstance {
     } }
 
     /**
-     * Delete a tweet. If it has an original tweet, decrease its retweet count.
-     * Callback() update the in-memory original tweet.
+     * Delete a tweet.
      * */
-    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) { return withRetry {
-        // delete cached tweet
-        dao.deleteCachedTweet(tweet.mid)
-
-        var method = "delete_tweet"
-        var url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
-                "&tweetid=${tweet.mid}&authorid=${appUser.mid}"
+    suspend fun delTweet(tweetId: MimeiId): MimeiId? {
+        val method = "delete_tweet"
+        val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
+                "&tweetid=$tweetId&authorid=${appUser.mid}"
         try {
-            var response = httpClient.get(url)
+            val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                /**
-                 * If there is an originalTweetId, this is a retweet.
-                 * Also update the retweet count of the original tweet.
-                 * */
-                if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                    method = "retweet_removed"
-                    url = "${tweet.originalTweet!!.author?.baseUrl}/entry?aid=$appId&ver=last" +
-                            "&entry=$method&tweetid=${tweet.originalTweetId}&retweetid=${tweet.mid}" +
-                            "&userid=${tweet.originalAuthorId}"
-                    response = httpClient.get(url)
-                    if (response.status == HttpStatusCode.OK) {
-                        callback()  // update retweet count of original tweet
-                    }
-                }
+                return Gson().fromJson(response.bodyAsText(), MimeiId::class.java)
             }
-        } catch (e: Exception) {
-            Timber.tag("delTweet").e("$e $appUser $tweet $url")
+        }catch (e: Exception) {
+            Timber.tag("delTweet").e("$e $appUser $tweetId $url")
         }
-    } }
+        return null
+    }
 
-    suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, delComment: (MimeiId) -> Unit) { return withRetry {
+    suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) { return withRetry {
         val method = "delete_comment"
         val url = "${parentTweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
                 "&tweetid=${parentTweet.mid}&commentid=$commentId&userid=${appUser.mid}" +
@@ -815,10 +806,7 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                delComment(commentId)
-//                updateUserMeta(commentId, "comment")?.let { updatedUser ->
-//                    appUser = appUser.copy(commentsCount = updatedUser.commentsCount)
-//                }
+                callback(commentId)
             }
         } catch (e: Exception) {
             Timber.tag("delComment()").e(e.toString())
@@ -888,7 +876,7 @@ object HproseInstance {
             retweet.originalTweet = tweet
             addTweetToFeed(retweet)
 
-            increaseRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
+            updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
                 updateCachedTweet(updatedTweet)
             }
         } catch (e: Exception) {

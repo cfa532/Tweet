@@ -144,22 +144,8 @@ fun ProfileScreen(
                             )
                         }
                     }
-
                     items(pinnedTweets, key = { it.timestamp }) { tweet ->
-                        val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                parentEntry, key = tweet.originalTweetId
-                            ) { factory -> factory.create(tweet.originalTweet!!) }
-                        } else null
-                        TweetItem(tweet, parentEntry) {
-                            appUserViewModel.viewModelScope.launch(IO) {
-                                tweetFeedViewModel.delTweet(tweet) {
-                                    appUserViewModel.viewModelScope.launch(IO) {
-                                        originTweetViewModel?.refreshTweet()
-                                    }
-                                }
-                            }
-                        }
+                        TweetItem(tweet, parentEntry)
                     }
                     item {
                         HorizontalDivider(
@@ -169,23 +155,8 @@ fun ProfileScreen(
                         )
                     }
                 }
-
                 items(tweets, key = { it.timestamp }) { tweet ->
-                    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
-                        ) { factory -> factory.create(tweet.originalTweet!!) }
-                    } else null
-                    TweetItem(tweet, parentEntry) {
-                        appUserViewModel.viewModelScope.launch(IO) {
-                            tweetFeedViewModel.delTweet(tweet) {
-                                appUserViewModel.viewModelScope.launch(IO) {
-                                    appUserViewModel.onTweetDeleted(tweet.mid)
-                                    originTweetViewModel?.refreshTweet()
-                                }
-                            }
-                        }
-                    }
+                    TweetItem(tweet, parentEntry)
                 }
 
                 item {

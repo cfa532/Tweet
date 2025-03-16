@@ -49,7 +49,6 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
-    onDeleteClick: () -> Unit
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
@@ -83,8 +82,9 @@ fun TweetItem(
                         ) { factory -> factory.create(tweet.originalTweet!!) }
 
                     TweetItemBody(
-                        originalTweetViewModel, parentTweet = tweet,
-                        onDeleteClick = onDeleteClick
+                        originalTweetViewModel,
+                        parentTweet = tweet,
+                        parentEntry = parentEntry
                     )
 
                     // Label: Forward by user, on top of original tweet
@@ -125,7 +125,7 @@ fun TweetItem(
                             })
                     ) {
                         // Tweet header: Icon, name, timestamp, more actions
-                        TweetItemHeader(viewModel, onDeleteClick = onDeleteClick)
+                        TweetItemHeader(viewModel, parentEntry)
 
                         tweet.content?.let {
                             SelectableText(
@@ -168,7 +168,7 @@ fun TweetItem(
                                     factory.create(tweet.originalTweet!!)
                                 },
                                 isQuoted = true,
-                                onDeleteClick = onDeleteClick
+                                parentEntry = parentEntry
                             )
                         }
                         Row(
@@ -190,7 +190,7 @@ fun TweetItem(
             }
         } else {
             // original tweet by user.
-            TweetItemBody(viewModel, onDeleteClick = onDeleteClick)
+            TweetItemBody(viewModel, parentEntry = parentEntry)
         }
     }
 }

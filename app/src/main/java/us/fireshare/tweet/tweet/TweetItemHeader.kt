@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavBackStackEntry
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
@@ -30,8 +31,8 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun TweetItemHeader(
     viewModel: TweetViewModel,
+    parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,
-    onDeleteClick: () -> Unit
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -75,11 +76,10 @@ fun TweetItemHeader(
             Text(text = localizedTimeDifference(tweet.timestamp),
                 style = MaterialTheme.typography.labelMedium)
         }
-
         /**
          * The 3 dots at the right end
          * */
-        TweetDropdownMenu(tweet, parentTweet, onDeleteClick)
+        TweetDropdownMenu(tweet, parentEntry, parentTweet)
     }
 }
 
