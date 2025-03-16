@@ -119,7 +119,8 @@ fun FollowingScreen(
                         ) { factory ->
                             factory.create(userId)
                         },
-                        appUserViewModel)
+                        appUserViewModel
+                    )
                 }
             }
         }
