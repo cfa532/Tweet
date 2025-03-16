@@ -50,7 +50,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +74,7 @@ fun SearchScreen(
                 ),
                 title = {
                     Column {
-                        UserAvatar(appUser, 36)
+                        UserAvatar(user = appUser, size = 36)
                     }
                 },
                 navigationIcon = {
@@ -159,7 +159,7 @@ fun UserSearchResult(user: User, navController: NavController) {
             // Navigate to user profile
             navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-            UserAvatar(user, 32)
+            UserAvatar(user = user, size = 32)
         }
         Column {
             Text(
@@ -184,7 +184,7 @@ fun TweetSearchResult(tweet: Tweet) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        UserAvatar(tweet.author, 20)
+        UserAvatar(user = tweet.author, size = 20)
         Text(
             text = "${tweet.content}",
             style = MaterialTheme.typography.bodyMedium,

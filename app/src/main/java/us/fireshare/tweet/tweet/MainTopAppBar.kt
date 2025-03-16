@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.widget.AppIcon
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.AppIcon
+import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +67,7 @@ fun MainTopAppBar(
                     NavTweet.UserProfile(appUser.mid)
                 )
             }) {
-                UserAvatar(appUser, 32)
+                UserAvatar(user = appUser, size = 32)
             }
         },
         actions = {

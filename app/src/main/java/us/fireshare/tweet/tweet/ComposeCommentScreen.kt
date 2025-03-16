@@ -68,7 +68,7 @@ import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -207,7 +207,7 @@ fun ComposeCommentScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        UserAvatar(author, 36)
+                        UserAvatar(user = author, size = 36)
                         Spacer(modifier = Modifier.padding(4.dp))
                         Text(
                             text = "Reply to @${author?.username}",

@@ -53,7 +53,6 @@ import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -107,7 +106,7 @@ fun UserBookmarks(
                 ),
                 title = {
                     Column {
-                        UserAvatar(user, 36)
+                        UserAvatar(user = user, size = 36)
                         Text(
                             text = stringResource(R.string.user_bookmarks),
                             style = MaterialTheme.typography.bodyMedium,

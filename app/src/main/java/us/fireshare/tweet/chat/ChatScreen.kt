@@ -52,7 +52,7 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,7 +124,7 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            UserAvatar(receipt, 32)
+                            UserAvatar(user = receipt, size = 32)
                             Text(
                                 text = receipt?.profile ?: " ",
                                 style = MaterialTheme.typography.bodySmall

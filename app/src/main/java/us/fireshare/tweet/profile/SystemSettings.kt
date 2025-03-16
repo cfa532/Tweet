@@ -46,7 +46,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +62,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 ),
                 title = {
                     Column {
-                        UserAvatar(appUser, 36)
+                        UserAvatar(user = appUser, size = 36)
                         Text(
                             text = appUser.name ?: "",
                             style = MaterialTheme.typography.bodyMedium,

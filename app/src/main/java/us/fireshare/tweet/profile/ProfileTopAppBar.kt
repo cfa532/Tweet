@@ -62,7 +62,6 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,11 +93,12 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
                     }
-                    UserAvatar(user,
-                        size = (80 - (scrollFraction * 20)).toInt(),
+                    UserAvatar(
                         modifier = Modifier.clickable {
                             showDialog = true
-                        }
+                        },
+                        user,
+                        size = (80 - (scrollFraction * 20)).toInt()
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)
                     ) {

@@ -57,7 +57,6 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.UserAvatar
 
 /**
  * Register and edit user profile.
@@ -266,7 +265,7 @@ fun AppUserAvatar(
                     .clip(CircleShape)
                     .clickable(onClick = { launcher.launch("image/*") })
             ) {
-                UserAvatar(user, 120)
+                UserAvatar(user = user, size = 120)
             }
             IconButton(
                 onClick = { launcher.launch("image/*") },

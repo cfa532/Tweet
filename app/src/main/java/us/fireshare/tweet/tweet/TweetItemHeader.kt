@@ -23,7 +23,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import java.util.concurrent.TimeUnit
 
 // Tweet header when displayed as an item in a list.
@@ -63,7 +63,7 @@ fun TweetItemHeader(
                     navController.navigate(NavTweet.UserProfile(tweet.authorId))
                 }
             }) {
-                UserAvatar(if (author?.mid == appUser.mid) appUser else author, 36)
+                UserAvatar(user = if (author?.mid == appUser.mid) appUser else author, size = 36)
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),

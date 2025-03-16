@@ -71,7 +71,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.MediaItemView
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 
 @Composable
 fun TweetDetailBody(
@@ -106,7 +106,7 @@ fun TweetDetailBody(
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
-                        UserAvatar(author, 40)
+                        UserAvatar(user = author, size = 40)
                     }
                     Text(
                         text = author?.name ?: "No One",

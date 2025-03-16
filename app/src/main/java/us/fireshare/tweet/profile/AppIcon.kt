@@ -1,4 +1,4 @@
-package us.fireshare.tweet.widget
+package us.fireshare.tweet.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
@@ -18,6 +18,7 @@ import coil.compose.rememberAsyncImagePainter
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.widget.ImageViewer
 
 @Composable
 fun AppIcon() {
@@ -32,7 +33,7 @@ fun AppIcon() {
 }
 
 @Composable
-fun UserAvatar(user: User?, size: Int = 40, modifier: Modifier = Modifier) {
+fun UserAvatar(modifier: Modifier = Modifier, user: User?, size: Int = 40) {
     var avatarUrl by remember { mutableStateOf(getMediaUrl(user?.avatar, user?.baseUrl)) }
     LaunchedEffect(user?.avatar) {
         avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)

@@ -45,7 +45,6 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,7 +72,7 @@ fun FollowingScreen(
                 ),
                 title = {
                     Column {
-                        UserAvatar(userOfProfile, 36)
+                        UserAvatar(user = userOfProfile, size = 36)
                         Text(
                             text = userOfProfile.name ?: "No One",
                             style = MaterialTheme.typography.bodyLarge,
@@ -147,7 +146,7 @@ fun FollowingItem(
         IconButton(onClick = {
             user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
         }) {
-            UserAvatar(user.value, 40)
+            UserAvatar(user = user.value, size = 40)
         }
         Column {
             Row(

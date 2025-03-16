@@ -51,7 +51,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
-import us.fireshare.tweet.widget.UserAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,7 +79,7 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    UserAvatar(appUser, 40)
+                    UserAvatar(user = appUser, size = 40)
                 },
                 navigationIcon = {
                     IconButton(onClick = {
@@ -151,7 +151,7 @@ fun ChatSession(
                     }
                 })
         ) {
-            UserAvatar(user)
+            UserAvatar(user = user)
 
             // show badge of new incoming message
             if (chatSession.hasNews) {
