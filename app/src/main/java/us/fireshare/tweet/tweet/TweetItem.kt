@@ -129,7 +129,7 @@ fun TweetItem(
                             SelectableText(
                                 modifier = Modifier
                                     .padding(start = 16.dp),
-                                it,
+                                text = it,
                                 maxLines = 10
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {

@@ -19,6 +19,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.increaseRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
 import us.fireshare.tweet.datamodel.Tweet
+import androidx.core.net.toUri
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(
@@ -39,7 +40,7 @@ class UploadCommentWorker @AssistedInject constructor(
             val attachments = withContext(Dispatchers.IO) {
                 attachmentUris.mapNotNull { uri ->
                     try {
-                        uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                        uploadToIPFS(applicationContext, uri.toString().toUri())
                     } catch (e: Exception) {
                         Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
                         null // Return null in case of error
@@ -109,7 +110,7 @@ class UploadTweetWorker @AssistedInject constructor(
                 val attachments = withContext(Dispatchers.IO) {
                     attachmentUris.mapNotNull { uri ->
                         try {
-                            uploadToIPFS(applicationContext, Uri.parse(uri.toString()))
+                            uploadToIPFS(applicationContext, uri.toString().toUri())
                         } catch (e: Exception) {
                             Timber.tag("UploadCommentWorker")
                                 .e(e, "Error uploading attachment: $uri")

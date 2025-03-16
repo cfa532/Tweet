@@ -128,7 +128,7 @@ fun TweetDetailBody(
                      tweet.content?.let {
                         SelectableText(
                             modifier = Modifier.padding(bottom = 8.dp),
-                            it
+                            text = it
                         ) { username ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 HproseInstance.getUserId(username)?.let {

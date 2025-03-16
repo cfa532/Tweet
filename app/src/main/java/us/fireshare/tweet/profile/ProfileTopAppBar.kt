@@ -232,7 +232,7 @@ fun ImageModalDialog(
                 }
                 SelectableText(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
-                    user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
+                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
