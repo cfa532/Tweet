@@ -53,7 +53,7 @@ object HproseInstance {
 
     private var appId: MimeiId = BuildConfig.APP_ID
     lateinit var preferenceHelper: PreferenceHelper
-    lateinit var appUser: User
+    var appUser: User = User(mid = TW_CONST.GUEST_ID)
     
     // in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()

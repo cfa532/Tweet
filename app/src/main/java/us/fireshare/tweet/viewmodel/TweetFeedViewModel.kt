@@ -242,13 +242,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         // 2. remove cached tweet
         dao.deleteCachedTweet(tweet.mid)
 
-        // 3. remove from appUserViewModel's profile feed, favorites, bookmarks,
-        tweetActionListener.onTweetDeleted(tweet.mid)
-
-        // 4, delete tweet mimei from backend.
+        // 3, delete tweet mimei from backend.
         HproseInstance.delTweet(tweet) {
             callback()  // remove it from appUser's viewModel
         }
+
+        // 4. remove from appUserViewModel's profile feed, favorites, bookmarks,
+        tweetActionListener.onTweetDeleted(tweet.mid)
     }
 
     /**

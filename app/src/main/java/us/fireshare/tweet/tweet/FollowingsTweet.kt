@@ -151,7 +151,6 @@ fun FollowingsTweet(
                         viewModel.viewModelScope.launch(IO) {
                             viewModel.delTweet(tweet) {
                                 viewModel.viewModelScope.launch(IO) {
-                                    sharedViewModel.appUserViewModel.onTweetDeleted(tweet.mid)
                                     originTweetViewModel?.refreshTweet()
                                 }
                             }

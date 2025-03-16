@@ -157,7 +157,6 @@ fun TweetDetailScreen(
                     tweetFeedViewModel.viewModelScope.launch(IO) {
                         tweetFeedViewModel.delTweet(tweet) {
                             tweetFeedViewModel.viewModelScope.launch(IO) {
-                                sharedViewModel.appUserViewModel.onTweetDeleted(tweet.mid)
                                 originTweetViewModel?.refreshTweet()
                             }
                         }

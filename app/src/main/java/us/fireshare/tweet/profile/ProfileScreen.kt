@@ -123,7 +123,6 @@ fun ProfileScreen(
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 state = listState
             ) {
-
                 // the belt where user details and Pin are displayed.
                 item {
                     // Display user name, profile, number of followers....
@@ -156,7 +155,6 @@ fun ProfileScreen(
                             appUserViewModel.viewModelScope.launch(IO) {
                                 tweetFeedViewModel.delTweet(tweet) {
                                     appUserViewModel.viewModelScope.launch(IO) {
-                                        appUserViewModel.onTweetDeleted(tweet.mid)
                                         originTweetViewModel?.refreshTweet()
                                     }
                                 }

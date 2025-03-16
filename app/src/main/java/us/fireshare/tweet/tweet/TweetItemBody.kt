@@ -18,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,7 +32,6 @@ import us.fireshare.tweet.widget.SelectableText
 @Composable
 fun TweetItemBody(
     viewModel: TweetViewModel,
-    parentEntry: NavBackStackEntry,
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
     onDeleteClick: () -> Unit

@@ -70,6 +70,7 @@ fun TweetNavGraph(
             factory.create(appUser.mid)
     }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    // callback to add/remove tweet from appUserViewModel.
     tweetFeedViewModel.tweetActionListener = sharedViewModel.appUserViewModel
 
     // Handle deeplink

@@ -147,10 +147,9 @@ fun UserFavorites(
                         tweetFeedViewModel.viewModelScope.launch(IO) {
                             tweetFeedViewModel.delTweet(tweet) {
                                 tweetFeedViewModel.viewModelScope.launch(IO) {
-                                    viewModel.onTweetDeleted(tweet.mid)
+                                    originTweetViewModel?.refreshTweet()
                                 }
                             }
-                            originTweetViewModel?.refreshTweet()
                         }
                     }
                 }

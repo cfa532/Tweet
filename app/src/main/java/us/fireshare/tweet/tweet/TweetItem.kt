@@ -82,8 +82,10 @@ fun TweetItem(
                             parentEntry, key = tweet.originalTweetId
                         ) { factory -> factory.create(tweet.originalTweet!!) }
 
-                    TweetItemBody(originalTweetViewModel, parentEntry,
-                        parentTweet = tweet, onDeleteClick = onDeleteClick)
+                    TweetItemBody(
+                        originalTweetViewModel, parentTweet = tweet,
+                        onDeleteClick = onDeleteClick
+                    )
 
                     // Label: Forward by user, on top of original tweet
                     Box {
@@ -165,7 +167,6 @@ fun TweetItem(
                                 ) { factory ->
                                     factory.create(tweet.originalTweet!!)
                                 },
-                                parentEntry,
                                 isQuoted = true,
                                 onDeleteClick = onDeleteClick
                             )
@@ -189,7 +190,7 @@ fun TweetItem(
             }
         } else {
             // original tweet by user.
-            TweetItemBody(viewModel, parentEntry, onDeleteClick = onDeleteClick)
+            TweetItemBody(viewModel, onDeleteClick = onDeleteClick)
         }
     }
 }

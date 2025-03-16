@@ -164,7 +164,6 @@ fun TweetDetailBody(
                                 hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory -> factory.create(tweet.originalTweet!!) },
-                                parentEntry,
                                 true,
                                 null,
                                 onDeleteClick
