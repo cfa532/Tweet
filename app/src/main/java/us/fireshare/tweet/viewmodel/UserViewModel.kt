@@ -529,6 +529,7 @@ class UserViewModel @AssistedInject constructor(
             .distinctBy { it.mid }
             .sortedByDescending { it.timestamp }
         }
+        _user.value = user.value.copy(tweetCount = tweets.value.size)
     }
 
     /**
@@ -545,7 +546,11 @@ class UserViewModel @AssistedInject constructor(
         // remove deleted tweet from favorite list, if it is there.
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _user.value.favoritesCount = favorites.value.size
-        _user.value.bookmarksCount = bookmarks.value.size
+
+        _user.value = user.value.copy(
+            favoritesCount = favorites.value.size,
+            bookmarksCount = bookmarks.value.size,
+            tweetCount = tweets.value.size
+        )
     }
 }
