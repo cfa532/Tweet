@@ -40,7 +40,6 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
