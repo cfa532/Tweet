@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.ImageViewer
 
@@ -34,7 +35,9 @@ fun AppIcon() {
 
 @Composable
 fun UserAvatar(modifier: Modifier = Modifier, user: User?, size: Int = 40) {
-    var avatarUrl by remember { mutableStateOf(getMediaUrl(user?.avatar, user?.baseUrl)) }
+    var avatarUrl by remember {
+        mutableStateOf(getMediaUrl(user?.avatar, user?.baseUrl))
+    }
     LaunchedEffect(user?.avatar) {
         avatarUrl = getMediaUrl(user?.avatar, user?.baseUrl)
     }
@@ -48,7 +51,10 @@ fun UserAvatar(modifier: Modifier = Modifier, user: User?, size: Int = 40) {
             imageSize = size
         )
     } ?: Image(
-        painter = painterResource(id = R.drawable.ic_user_avatar),
+        painter = painterResource(id =
+            if (user?.mid == TW_CONST.GUEST_ID) R.drawable.ic_app_logo
+            else R.drawable.ic_user_avatar
+        ),
         contentDescription = "Placeholder Avatar",
         modifier = modifier
             .size(size.dp)
