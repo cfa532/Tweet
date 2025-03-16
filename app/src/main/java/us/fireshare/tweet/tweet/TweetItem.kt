@@ -126,10 +126,11 @@ fun TweetItem(
                         TweetItemHeader(viewModel, onDeleteClick = onDeleteClick)
 
                         tweet.content?.let {
-                            SelectableText(it,
-                                maxLines = 10,
+                            SelectableText(
                                 modifier = Modifier
-                                    .padding(start = 16.dp)
+                                    .padding(start = 16.dp),
+                                it,
+                                maxLines = 10
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     HproseInstance.getUserId(username)?.let {

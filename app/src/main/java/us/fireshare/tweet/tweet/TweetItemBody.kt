@@ -67,7 +67,7 @@ fun TweetItemBody(
                 Column {
                     // Text content of the tweet
                     tweet.content?.let {
-                        SelectableText(it, maxLines = 10) { username ->
+                        SelectableText(text = it, maxLines = 10) { username ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 HproseInstance.getUserId(username)?.let {
                                     withContext(Dispatchers.Main) {

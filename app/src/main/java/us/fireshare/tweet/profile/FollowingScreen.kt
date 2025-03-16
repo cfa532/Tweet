@@ -111,7 +111,15 @@ fun FollowingScreen(
                     }
                 }
                 items(followingsOfProfile, key = {it}) { userId ->
-                    FollowingItem(userId, viewModel, appUserViewModel)
+                    FollowingItem(
+                        userId,
+                        if (userId == appUser.mid) appUserViewModel
+                        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                            parentEntry, key = userId
+                        ) { factory ->
+                            factory.create(userId)
+                        },
+                        appUserViewModel)
                 }
             }
         }
@@ -124,14 +132,14 @@ fun FollowingItem(
     viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
+    val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
-    val user = remember { mutableStateOf<User?>(null) }
 
-    LaunchedEffect(userId) {
-        withContext(IO) {
-            user.value = HproseInstance.getUser(userId)
-        }
-    }
+//    LaunchedEffect(userId) {
+//        withContext(IO) {
+//            user.value = HproseInstance.getUser(userId)
+//        }
+//    }
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
@@ -144,9 +152,9 @@ fun FollowingItem(
             .fillMaxWidth()
     ) {
         IconButton(onClick = {
-            user.value?.let { navController.navigate(NavTweet.UserProfile(it.mid)) }
+            navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-            UserAvatar(user = user.value, size = 40)
+            UserAvatar(user = user, size = 40)
         }
         Column {
             Row(
@@ -156,25 +164,20 @@ fun FollowingItem(
             ) {
                 Column {
                     Text(
-                        text = user.value?.name ?: "No One",
+                        text = user.name ?: "No One",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "@${user.value?.username}",
+                        text = "@${user.username}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
                     )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    ToggleFollowingButton(userId, viewModel, appUserViewModel)
-                }
+                ToggleFollowingButton(userId, viewModel, appUserViewModel)
             }
             Text(
-                text = user.value?.profile?.trim() ?: "",
+                text = user.profile?.trim() ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
                 maxLines = 3,

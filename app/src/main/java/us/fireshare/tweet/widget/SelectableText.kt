@@ -21,12 +21,14 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 
 @Composable
-fun SelectableText(text: String,
-                   maxLines: Int = Int.MAX_VALUE,
-                   modifier: Modifier = Modifier,
-                   style: TextStyle = MaterialTheme.typography.bodyLarge,
-                   color: Color = MaterialTheme.colorScheme.onSurface,
-                   callback: (String)->Unit = {})
+fun SelectableText(
+    modifier: Modifier = Modifier,
+    text: String,
+    maxLines: Int = Int.MAX_VALUE,
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    callback: (String) -> Unit = {}
+)
 {
     // fold text content up to 10 lines. Open it upon user click.
     var isExpanded by remember { mutableStateOf(false) }

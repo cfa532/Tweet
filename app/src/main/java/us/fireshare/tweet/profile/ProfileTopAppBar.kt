@@ -230,8 +230,9 @@ fun ImageModalDialog(
                 getMediaUrl(user.avatar, user.baseUrl)?.let {
                     ImageViewer(it, isPreview = false)
                 }
-                SelectableText(user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
+                SelectableText(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+                    user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )

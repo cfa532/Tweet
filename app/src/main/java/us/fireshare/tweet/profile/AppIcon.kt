@@ -52,7 +52,7 @@ fun UserAvatar(modifier: Modifier = Modifier, user: User?, size: Int = 40) {
         )
     } ?: Image(
         painter = painterResource(id =
-            if (user?.mid == TW_CONST.GUEST_ID) R.drawable.ic_app_logo
+            if (user?.mid == TW_CONST.GUEST_ID) R.drawable.ic_splash
             else R.drawable.ic_user_avatar
         ),
         contentDescription = "Placeholder Avatar",

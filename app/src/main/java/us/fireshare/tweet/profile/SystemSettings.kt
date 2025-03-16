@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.SelectableText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,10 +144,12 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp))
-            Text("SN: ${BuildConfig.APP_ID}",
+            SelectableText(
+                modifier = Modifier.padding(top = 8.dp),
+                text = appUser.mid,
                 color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp))
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
         if (showDialog) {
             BasicAlertDialog(
