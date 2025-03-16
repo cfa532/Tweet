@@ -403,13 +403,6 @@ object HproseInstance {
                  * Update existing user account.
                  * If hostId is changed, sync user mimei on new node first.
                  * */
-//                val newHostId = userObj.hostIds?.first() ?: return@withRetry null
-//                if (newHostId != appUser.hostIds?.first()) {
-//                    val hostIp = getHostIP(newHostId) ?: return@withRetry null
-//                    url = "http://$hostIp/entry?aid=$appId&ver=last&entry=sync_user" +
-//                            "&mid=${appUser.mid}"
-//                    httpClient.get(url)
-//                }
                 val entry = "set_author_core_data"
                 url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&user=${
                     URLEncoder.encode(Json.encodeToString(user), "utf-8")
@@ -846,12 +839,6 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val isFollowing = Gson().fromJson(response.bodyAsText(), Boolean::class.java)
-                /**
-                 * Do NOT update provider status when toggle following. Leave it to user decision.
-                 * */
-//                getUser(userId)?.let { user ->
-//                    provide(user, user.mid, isFollowing)
-//                }
                 return@withRetry isFollowing    // following status after toggle
             }
         } catch (e: Exception) {
@@ -963,21 +950,19 @@ object HproseInstance {
                 val res = gson.fromJson(
                     response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any>?
-                val isFavorite = res?.get("isFavorite") as Boolean
+                ) as Map<String, Any>
+                val isFavorite = res["isFavorite"] as Boolean
                 tweet.favorites?.set(UserFavorites.LIKE_TWEET, isFavorite)
                 val ret = tweet.copy(
                     favoriteCount = (res["count"] as Double).toInt()
                 )
-                if (res["user"] != null) {
-                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
-                    appUser = appUser.copy(favoritesCount = user.favoritesCount)
-                }
+                val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                appUser = appUser.copy(favoritesCount = user.favoritesCount)
                 updateCachedTweet(tweet)
                 return@withRetry ret
             }
         } catch (e: Exception) {
-            Timber.tag("toggleFavorite()").e(e, "Error: ${e.message} $tweet $url")
+            Timber.tag("toggleFavorite").e(e, "Error: ${e.message} $tweet $url")
         }
         tweet
     } }
@@ -995,17 +980,15 @@ object HproseInstance {
                 val gson = Gson()
                 val res = gson.fromJson( response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any>?
+                ) as Map<String, Any>
 
-                val hasBookmarked = res?.get("hasBookmarked") as Boolean
+                val hasBookmarked = res["hasBookmarked"] as Boolean
                 tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
                 val ret = tweet.copy(
                     bookmarkCount = (res["count"] as Double).toInt()
                 )
-                if (res["user"] != null) {
-                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
-                    appUser = appUser.copy(bookmarksCount = user.bookmarksCount)
-                }
+                val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                appUser = appUser.copy(bookmarksCount = user.bookmarksCount)
                 updateCachedTweet(tweet)
                 return@withRetry ret
             }
