@@ -34,17 +34,11 @@ import us.fireshare.tweet.viewmodel.UserViewModel
 @Composable
 fun ToggleFollowingButton(
     userId: MimeiId,
-    parentEntry: NavBackStackEntry,
+    viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val viewModel = if (userId == appUser.mid) appUserViewModel
-    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
-    ) { factory ->
-        factory.create(userId)
-    }
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     val followState = remember { mutableStateOf(isFollowing) }

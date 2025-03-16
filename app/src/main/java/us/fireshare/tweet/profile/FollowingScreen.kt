@@ -112,7 +112,7 @@ fun FollowingScreen(
                     }
                 }
                 items(followingsOfProfile, key = {it}) { userId ->
-                    FollowingItem(userId, parentEntry, appUserViewModel)
+                    FollowingItem(userId, viewModel, appUserViewModel)
                 }
             }
         }
@@ -122,7 +122,7 @@ fun FollowingScreen(
 @Composable
 fun FollowingItem(
     userId: MimeiId,
-    parentEntry: NavBackStackEntry,
+    viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
     val navController = LocalNavController.current
@@ -171,7 +171,7 @@ fun FollowingItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    ToggleFollowingButton(userId, parentEntry, appUserViewModel)
+                    ToggleFollowingButton(userId, viewModel, appUserViewModel)
                 }
             }
             Text(

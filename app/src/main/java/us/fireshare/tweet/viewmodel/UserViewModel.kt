@@ -42,7 +42,7 @@ class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
 //    private val savedStateHandle: SavedStateHandle
 ): ViewModel(), TweetActionListener {
-    private val _user = MutableStateFlow(appUser)
+    private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
     // unpinned tweets

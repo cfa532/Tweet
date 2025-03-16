@@ -104,7 +104,16 @@ fun FollowerScreen(
                     }
                 }
                 items(followersOfProfile, key = { it }) { userId ->
-                    FollowerItem(userId, parentEntry, appUserViewModel)
+                    FollowerItem(
+                        userId,
+                        if (userId == appUser.mid) appUserViewModel
+                        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+                            parentEntry, key = userId
+                        ) { factory ->
+                            factory.create(userId)
+                        },
+                        appUserViewModel
+                    )
                 }
             }
         }
@@ -114,15 +123,9 @@ fun FollowerScreen(
 @Composable
 fun FollowerItem(
     userId: MimeiId,
-    parentEntry: NavBackStackEntry,
+    viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
-    val viewModel = if (userId == appUser.mid) appUserViewModel
-    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-        parentEntry, key = userId
-    ) { factory ->
-        factory.create(userId)
-    }
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
@@ -166,7 +169,7 @@ fun FollowerItem(
                         color = Color.Gray
                     )
                 }
-                ToggleFollowingButton(userId, parentEntry, appUserViewModel)
+                ToggleFollowingButton(userId, viewModel, appUserViewModel)
             }
             Text(
                 text = user.profile?.trim() ?: "",
