@@ -536,13 +536,9 @@ class UserViewModel @AssistedInject constructor(
     /**
      * A tweet is deleted by appUser, remove it from all tweet lists that has the tweet.
      * */
-    override suspend fun onTweetDeleted(tweetId: MimeiId) {
+    override fun onTweetDeleted(tweetId: MimeiId) {
         _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-
-        // Try to remove it from Favorite list of User in Mimei, even if it may not in the list.
-        HproseInstance.removeFavoriteOfUser(tweetId)
-        HproseInstance.removeBookmarkOfUser(tweetId)
 
         // remove deleted tweet from favorite list, if it is there.
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }

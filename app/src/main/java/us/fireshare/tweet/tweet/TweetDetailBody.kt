@@ -53,10 +53,12 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -312,25 +314,29 @@ fun TweetDropdownMenuItems(
         ) { factory -> factory.create(tweet.originalTweet!!) }
     } else null
 
-    // Only author can delete a tweet, but if the tweet is pinned to top, it can't be deleted
-    // unless the user unpins it first.
+    // Only author can delete a tweet
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
                 tweetFeedViewModel.delTweet(context, tweet.mid) {
+                    // callback function to clean up.
                     tweetFeedViewModel.viewModelScope.launch(IO) {
+                        // causing check-fail problem.
+//                        HproseInstance.removeFavoriteOfUser(tweet.mid)
+//                        HproseInstance.removeBookmarkOfUser(tweet.mid)
+                        dao.deleteCachedTweet(tweet.mid)
                         originTweetViewModel?.updateRetweetCount(
                             tweet.originalTweet!!,      // original tweet
                             tweet.mid,      // retweet Id
                             -1
                         )
                     }
-                }
-                if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                    navController.popBackStack()
-                } else {
-                    onDismissRequest()
+                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                        navController.popBackStack()
+                    } else {
+                        onDismissRequest()
+                    }
                 }
             },
             text = {

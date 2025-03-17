@@ -15,7 +15,6 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +34,6 @@ import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.isGuest
@@ -307,8 +305,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     fun delTweet(
         context: Context,
         tweetId: MimeiId,
-        updateOriginalTweet: () -> Unit
+        callback: () -> Unit
     ) {
+        // remove the tweet from in memory tweet list right away.
+        // including tweet feed, profile, favorites and bookmarks
+        _tweets.update { currentTweets ->
+            currentTweets.filterNot { it.mid == tweetId }
+        }
+        tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+
         val data = workDataOf("tweetId" to tweetId)
         val deleteRequest = OneTimeWorkRequest.Builder(DeleteTweetWorker::class.java)
             .setInputData(data)
@@ -326,19 +331,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 // Handle the success and update UI
                                 Timber.tag("DeleteTweet").d("Tweet deleted successfully: $deletedId")
 
-                                // 1. Remove the tweet from TweetFeed right away for better user experience.
-                                _tweets.update { currentTweets ->
-                                    currentTweets.filterNot { it.mid == deletedId }
-                                }
-                                // 2. remove from appUserViewModel's profile feed, favorites, bookmarks,
-                                viewModelScope.launch(IO) {
-                                    tweetActionListener.onTweetDeleted(deletedId)
-                                    // 3. remove cached tweet
-                                    dao.deleteCachedTweet(deletedId)
-                                }
-
-                                // refresh the original tweet if there is any.
-                                updateOriginalTweet()
+                                // callback function to clear up.
+                                callback()
 
                                 // notify user the result of tweet upload
                                 Toast.makeText(context, "Tweet deleted", Toast.LENGTH_SHORT).show()
