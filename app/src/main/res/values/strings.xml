@@ -67,4 +67,5 @@
     <string name="your_followings">Your followings</string>
     <string name="recommendation">Recommendation</string>
     <string name="update_following">Update following status</string>
+    <string name="delete_tweet">Deleting tweet</string>
 </resources>

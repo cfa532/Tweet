@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +59,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -305,7 +305,6 @@ fun TweetDropdownMenuItems(
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val context = LocalContext.current
     val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
@@ -313,26 +312,30 @@ fun TweetDropdownMenuItems(
             parentEntry, key = tweet.originalTweetId
         ) { factory -> factory.create(tweet.originalTweet!!) }
     } else null
+    val context = LocalContext.current
 
     // Only author can delete a tweet
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                tweetFeedViewModel.delTweet(context, tweet.mid) {
+                Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
+                tweetFeedViewModel.delTweet(tweet.mid) {
                     tweetFeedViewModel.viewModelScope.launch(IO) {
+                        tweetFeedViewModel.cleanupDeletedTweet(tweet.mid)
                         originTweetViewModel?.updateRetweetCount(
                             tweet.originalTweet!!,      // original tweet
                             tweet.mid,      // retweet Id
                             -1
                         )
-                    }
-                    if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                        navController.popBackStack()
-                    } else {
-                        onDismissRequest()
+                        tweetFeedViewModel.viewModelScope.launch(Main) {
+                            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                                navController.popBackStack()
+                            }
+                        }
                     }
                 }
+                onDismissRequest()
             },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

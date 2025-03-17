@@ -39,10 +39,10 @@ fun UserAvatar(
     user: User,
     size: Int = 40
 ) {
-    var avatarUrl by remember(user.avatar) {
+    var avatarUrl by remember(key1 = user.avatar) {
         mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
     }
-    LaunchedEffect(user.avatar) {
+    LaunchedEffect(key1 = user.avatar) {
         avatarUrl = getMediaUrl(user.avatar, user.baseUrl)
     }
     avatarUrl?.let {

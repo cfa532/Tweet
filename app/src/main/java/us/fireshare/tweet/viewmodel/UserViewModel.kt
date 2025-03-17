@@ -547,7 +547,6 @@ class UserViewModel @AssistedInject constructor(
         // remove deleted tweet from favorite list, if it is there. May not be loaded yet.
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        dao.deleteCachedTweet(tweetId)
 
         /**
          * Remove bookmark and favorite from User mimei, if there are any.
@@ -556,7 +555,8 @@ class UserViewModel @AssistedInject constructor(
         val updatedUser = HproseInstance.updateBookmarkOfUser(tweetId, false)
         _user.value = user.value.copy(
             favoritesCount = updatedUser.favoritesCount,
-            bookmarksCount = updatedUser.bookmarksCount
+            bookmarksCount = updatedUser.bookmarksCount,
+            tweetCount = tweets.value.size
         )
     }
 }

@@ -782,7 +782,7 @@ object HproseInstance {
     } }
 
     /**
-     * Delete a tweet.
+     * Delete a tweet and returned the deleted tweetId
      * */
     suspend fun delTweet(tweetId: MimeiId): MimeiId? {
         val method = "delete_tweet"

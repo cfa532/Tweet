@@ -38,7 +38,6 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.isGuest
-import us.fireshare.tweet.service.DeleteTweetWorker
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -304,66 +303,21 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     fun delTweet(
-        context: Context,
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
-        // remove the tweet from in memory tweet list right away.
-        // including tweet feed, profile, favorites and bookmarks
+        viewModelScope.launch(IO) {
+            HproseInstance.delTweet(tweetId)
+            callback()
+        }
+    }
+
+    suspend fun cleanupDeletedTweet(tweetId: MimeiId) {
+        dao.deleteCachedTweet(tweetId)
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweetId }
         }
-        viewModelScope.launch(IO) {
-            tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
-        }
-
-        val data = workDataOf("tweetId" to tweetId)
-        val deleteRequest = OneTimeWorkRequest.Builder(DeleteTweetWorker::class.java)
-            .setInputData(data)
-            .build()
-        val workManager = WorkManager.getInstance(context)
-        workManager.enqueue(deleteRequest)
-
-        workManager.getWorkInfoByIdLiveData(deleteRequest.id)
-            .observe(context as LifecycleOwner) { workInfo ->
-                if (workInfo != null) {
-                    when (workInfo.state) {
-                        WorkInfo.State.SUCCEEDED -> {
-                            try {
-                                val deletedId: MimeiId = workInfo.outputData.getString("tweetId").toString()
-                                // Handle the success and update UI
-                                Timber.tag("DeleteTweet").d("Tweet deleted successfully: $deletedId")
-
-                                // callback function to clear up.
-                                callback()
-
-                                // notify user the result of tweet upload
-                                Toast.makeText(context, "Tweet deleted", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Timber.tag("DeleteTweet").e("$e")
-                            }
-                        }
-                        WorkInfo.State.FAILED -> {
-                            // Handle the failure and update UI
-                            Timber.tag("DeleteTweet").e("Tweet deletion failed")
-                            (context as? LifecycleOwner)?.lifecycleScope?.launch {
-                                SnackbarController.sendEvent(
-                                    event = SnackbarEvent(
-                                        message = "Delete tweet failed"
-                                    )
-                                )
-                            }
-                        }
-                        WorkInfo.State.RUNNING -> {
-                            // Optionally, show a progress indicator
-                            Timber.tag("DeleteTweet").d("Tweet deletion in progress")
-                        }
-                        else -> {
-                            // Handle other states if necessary
-                        }
-                    }
-                }
-            }
+        tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
     }
 
     /**
