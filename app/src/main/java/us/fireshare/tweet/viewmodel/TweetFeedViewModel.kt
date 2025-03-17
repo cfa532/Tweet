@@ -302,14 +302,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    fun delTweet(
+    suspend fun delTweet(
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
-        viewModelScope.launch(IO) {
-            HproseInstance.delTweet(tweetId)
-            callback()
-        }
+        HproseInstance.delTweet(tweetId)
+        callback()
     }
 
     suspend fun cleanupDeletedTweet(tweetId: MimeiId) {
