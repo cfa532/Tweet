@@ -323,9 +323,9 @@ fun TweetDropdownMenuItems(
                     // callback function to clean up.
                     tweetFeedViewModel.viewModelScope.launch(IO) {
                         // causing check-fail problem.
-//                        HproseInstance.removeFavoriteOfUser(tweet.mid)
-//                        HproseInstance.removeBookmarkOfUser(tweet.mid)
                         dao.deleteCachedTweet(tweet.mid)
+                        HproseInstance.removeFavoriteOfUser(tweet.mid)
+                        HproseInstance.removeBookmarkOfUser(tweet.mid)
                         originTweetViewModel?.updateRetweetCount(
                             tweet.originalTweet!!,      // original tweet
                             tweet.mid,      // retweet Id
