@@ -34,7 +34,11 @@ fun AppIcon() {
 }
 
 @Composable
-fun UserAvatar(modifier: Modifier = Modifier, user: User, size: Int = 40) {
+fun UserAvatar(
+    modifier: Modifier = Modifier,
+    user: User,
+    size: Int = 40
+) {
     var avatarUrl by remember(user.avatar) {
         mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
     }

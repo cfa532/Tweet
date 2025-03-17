@@ -132,7 +132,7 @@ object UserFavorites {
  * */
 interface TweetActionListener {
     fun onTweetAdded(tweet: Tweet)
-    fun onTweetDeleted(tweetId: MimeiId)
+    suspend fun onTweetDeleted(tweetId: MimeiId)
 }
 
 @Serializable

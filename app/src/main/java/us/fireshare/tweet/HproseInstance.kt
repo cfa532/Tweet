@@ -885,10 +885,10 @@ object HproseInstance {
         }
     } }
 
-    suspend fun removeFavoriteOfUser(
+    suspend fun updateFavoriteOfUser(
         tweetId: MimeiId,
         isFavorite: Boolean = false
-    ) { return withRetry {
+    ): User { return withRetry {
         val entry = "toggle_favorite_by_user"
         val url = """
             ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
@@ -897,18 +897,18 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val res = Gson().fromJson(response.bodyAsText(), User::class.java)
-                appUser = appUser.copy(favoritesCount = res.favoritesCount)
+                return@withRetry Gson().fromJson(response.bodyAsText(), User::class.java)
             }
         } catch (e: Exception) {
-            Timber.tag("removeFavoriteOfUser()").e(e, "${e.message} $url")
+            Timber.tag("updateFavoriteOfUser()").e(e, "${e.message} $url")
         }
+        appUser
     } }
 
-    suspend fun removeBookmarkOfUser(
+    suspend fun updateBookmarkOfUser(
         tweetId: MimeiId,
         isBookmarked: Boolean = false
-    ) { return withRetry {
+    ): User { return withRetry {
         val entry = "toggle_bookmark_by_user"
         val url = """
             ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
@@ -917,12 +917,12 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val res = Gson().fromJson(response.bodyAsText(), User::class.java)
-                appUser = appUser.copy(bookmarksCount = res.bookmarksCount)
+                return@withRetry Gson().fromJson(response.bodyAsText(), User::class.java)
             }
         } catch (e: Exception) {
-            Timber.tag("removeBookmarkOfUser()").e(e, "${e.message} $url")
+            Timber.tag("updateBookmarkOfUser()").e(e, "${e.message} $url")
         }
+        appUser
     } }
 
     suspend fun toggleFavorite(tweet: Tweet): Tweet { return withRetry {

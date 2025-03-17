@@ -68,7 +68,6 @@ fun ProfileScreen(
         ) { factory ->
             factory.create(userId)
         }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.topTweets.collectAsState()
     val scrollBehavior =

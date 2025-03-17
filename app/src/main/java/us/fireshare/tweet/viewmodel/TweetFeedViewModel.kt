@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -312,7 +313,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweetId }
         }
-        tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+        viewModelScope.launch(IO) {
+            tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+        }
 
         val data = workDataOf("tweetId" to tweetId)
         val deleteRequest = OneTimeWorkRequest.Builder(DeleteTweetWorker::class.java)

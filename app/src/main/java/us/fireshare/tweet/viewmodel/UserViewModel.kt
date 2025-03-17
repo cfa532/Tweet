@@ -199,6 +199,10 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * Update in-memory bookmark data for display.
+     * if bookmarks screen of an user never opened, the bookmarks are empty.
+     * */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
         if (isBookmarked) {
             _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount?.plus(1))
@@ -250,7 +254,7 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value = getUser(userId) ?: appUser
+                _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -536,18 +540,23 @@ class UserViewModel @AssistedInject constructor(
     /**
      * A tweet is deleted by appUser, remove it from all tweet lists that has the tweet.
      * */
-    override fun onTweetDeleted(tweetId: MimeiId) {
+    override suspend fun onTweetDeleted(tweetId: MimeiId) {
         _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
 
-        // remove deleted tweet from favorite list, if it is there.
+        // remove deleted tweet from favorite list, if it is there. May not be loaded yet.
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        dao.deleteCachedTweet(tweetId)
 
+        /**
+         * Remove bookmark and favorite from User mimei, if there are any.
+         * */
+        HproseInstance.updateFavoriteOfUser(tweetId, false)
+        val updatedUser = HproseInstance.updateBookmarkOfUser(tweetId, false)
         _user.value = user.value.copy(
-            favoritesCount = favorites.value.size,
-            bookmarksCount = bookmarks.value.size,
-            tweetCount = tweets.value.size
+            favoritesCount = updatedUser.favoritesCount,
+            bookmarksCount = updatedUser.bookmarksCount
         )
     }
 }

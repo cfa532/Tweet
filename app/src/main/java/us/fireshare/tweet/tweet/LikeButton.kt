@@ -152,8 +152,8 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.likeTweet {tweet, isLiking ->
-                    appUserViewModel.updateFavorite(tweet, isLiking)
+                viewModel.likeTweet {tweet, isFavorite ->
+                    appUserViewModel.updateFavorite(tweet, isFavorite)
                 }
             }
     } ) {
