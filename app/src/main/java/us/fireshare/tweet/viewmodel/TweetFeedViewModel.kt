@@ -302,20 +302,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
+    // order of deletion is critical here.
     suspend fun delTweet(
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
         HproseInstance.delTweet(tweetId)
-        callback()
-    }
-
-    suspend fun cleanupDeletedTweet(tweetId: MimeiId) {
         dao.deleteCachedTweet(tweetId)
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweetId }
         }
         tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+        callback()
     }
 
     /**
