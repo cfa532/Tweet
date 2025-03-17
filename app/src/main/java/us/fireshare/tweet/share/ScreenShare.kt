@@ -53,6 +53,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -76,7 +77,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
         )
     }
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }

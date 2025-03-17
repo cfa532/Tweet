@@ -95,6 +95,10 @@ suspend fun User.writableUrl(): String? {
     }
 }
 
+fun User.isGuest(): Boolean {
+    return mid == TW_CONST.GUEST_ID
+}
+
 @Serializable
 enum class MediaType {
     Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown

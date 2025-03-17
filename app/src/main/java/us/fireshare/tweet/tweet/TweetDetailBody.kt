@@ -62,18 +62,20 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.share.ShareScreenshotButton
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.MediaItemView
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.profile.UserAvatar
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @Composable
 fun TweetDetailBody(
@@ -107,7 +109,7 @@ fun TweetDetailBody(
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
-                        UserAvatar(user = author, size = 40)
+                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 40)
                     }
                     Text(
                         text = author?.name ?: "No One",

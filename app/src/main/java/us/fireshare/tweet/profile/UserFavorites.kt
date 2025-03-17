@@ -42,7 +42,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
@@ -51,7 +50,6 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -125,7 +123,7 @@ fun UserFavorites(
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 0) }
+        bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
         Box(
             modifier = Modifier.fillMaxSize()

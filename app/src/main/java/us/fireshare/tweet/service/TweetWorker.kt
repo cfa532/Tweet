@@ -3,6 +3,7 @@ package us.fireshare.tweet.service
 import android.content.Context
 import android.net.Uri
 import android.os.PowerManager
+import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -18,9 +19,9 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
-import us.fireshare.tweet.datamodel.Tweet
-import androidx.core.net.toUri
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.Tweet
 
 @HiltWorker
 class UploadCommentWorker @AssistedInject constructor(
@@ -52,7 +53,7 @@ class UploadCommentWorker @AssistedInject constructor(
                 return Result.failure()
             }
             val comment = Tweet(
-                mid = System.currentTimeMillis().toString(),  // placeholder
+                mid = TW_CONST.GUEST_ID,  // placeholder
                 authorId = appUser.mid,
                 content = commentContent,
                 attachments = attachments,

@@ -61,14 +61,17 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.service.SnackbarAction
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
-import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -207,7 +210,7 @@ fun ComposeCommentScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        UserAvatar(user = author, size = 36)
+                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 36)
                         Spacer(modifier = Modifier.padding(4.dp))
                         Text(
                             text = "Reply to @${author?.username}",

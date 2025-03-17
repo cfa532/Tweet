@@ -49,9 +49,9 @@ import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
-import us.fireshare.tweet.profile.UserAvatar
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -98,7 +98,7 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 1) }
+        bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 1) }
     ) { innerPadding ->
         Surface(
             modifier = Modifier

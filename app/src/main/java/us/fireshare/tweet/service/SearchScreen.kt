@@ -45,7 +45,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserId
-import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
@@ -94,7 +93,10 @@ fun SearchScreen(
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, selectedBottomBarItemIndex) }
+        bottomBar = { BottomNavigationBar(
+            navController = navController,
+            selectedIndex = selectedBottomBarItemIndex
+        ) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -173,23 +175,6 @@ fun UserSearchResult(user: User, navController: NavController) {
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
-    }
-}
-
-@Composable
-fun TweetSearchResult(tweet: Tweet) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        UserAvatar(user = tweet.author, size = 20)
-        Text(
-            text = "${tweet.content}",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(start = 8.dp)
-        )
     }
 }
 

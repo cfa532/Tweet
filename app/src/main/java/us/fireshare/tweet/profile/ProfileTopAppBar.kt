@@ -56,6 +56,7 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -132,16 +133,12 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }
         },
         actions = {
-            if (appUser.mid != TW_CONST.GUEST_ID) {
+            if (! appUser.isGuest()) {
                 if (appUser.mid != user.mid) {
                     val context = LocalContext.current
                     IconButton(onClick = {
-                        if (appUser.mid != TW_CONST.GUEST_ID)
-                            navController.navigate(NavTweet.ChatBox(user.mid))
-                        else {
-                            viewModel.viewModelScope.launch {
-                                guestWarning(context, navController)
-                            }
+                        viewModel.viewModelScope.launch {
+                            guestWarning(context, navController)
                         }
                     }) {
                         Icon(

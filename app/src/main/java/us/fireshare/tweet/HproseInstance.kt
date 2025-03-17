@@ -33,6 +33,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.datamodel.writableUrl
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP
@@ -251,7 +252,7 @@ object HproseInstance {
      * Get a list of unread incoming messages. Only check, do not fetch them.
      * */
     suspend fun checkNewMessages(): List<ChatMessage>? { return withRetry {
-        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry null
+        if (appUser.isGuest()) return@withRetry null
         try {
             val entry = "message_check"
             val url =
@@ -390,7 +391,7 @@ object HproseInstance {
         val url: String
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
         try {
-            if (user.mid == TW_CONST.GUEST_ID) {
+            if (user.isGuest()) {
                 /**
                  * Register a new user.
                  * */
@@ -441,7 +442,7 @@ object HproseInstance {
     // get Ids of users who the current user is following
     suspend fun getFollowings(user: User): List<MimeiId> { return withRetry {
         try {
-            if (user.mid != TW_CONST.GUEST_ID) {
+            if (! user.isGuest()) {
                 val method = "get_followings_sorted"
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
@@ -463,7 +464,7 @@ object HproseInstance {
     // get fans list of an user
     suspend fun getFans(user: User): List<MimeiId>? { return withRetry {
         try {
-            if (user.mid != TW_CONST.GUEST_ID) {
+            if (! user.isGuest()) {
                 val entry = "get_followers_sorted"
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
@@ -866,7 +867,7 @@ object HproseInstance {
         try {
             // upload the retweet, simply a few dozen bytes.
             val retweet = uploadTweet( Tweet(
-                mid = TW_CONST.GUEST_ID,    // placeholder
+                mid = TW_CONST.GUEST_ID,    // placeholder will be replaced in backend.
                 content = "",
                 authorId = appUser.mid,
                 originalTweetId = tweet.mid,
@@ -896,8 +897,8 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val res: User? = Gson().fromJson(response.bodyAsText(), User::class.java)
-                appUser = appUser.copy(favoritesCount = res?.favoritesCount)
+                val res = Gson().fromJson(response.bodyAsText(), User::class.java)
+                appUser = appUser.copy(favoritesCount = res.favoritesCount)
             }
         } catch (e: Exception) {
             Timber.tag("updateFavoriteOfUser()").e(e, "${e.message} $url")
@@ -916,8 +917,8 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val res: User? = Gson().fromJson(response.bodyAsText(), User::class.java)
-                appUser = appUser.copy(bookmarksCount = res?.bookmarksCount)
+                val res = Gson().fromJson(response.bodyAsText(), User::class.java)
+                appUser = appUser.copy(bookmarksCount = res.bookmarksCount)
             }
         } catch (e: Exception) {
             Timber.tag("updateBookmarkOfUser()").e(e, "${e.message} $url")
@@ -1239,7 +1240,7 @@ object HproseInstance {
     }
 
     suspend fun logging(msg: String) { return withRetry {
-        if (appUser.mid == TW_CONST.GUEST_ID) return@withRetry
+        if (appUser.isGuest()) return@withRetry
         val url =
             "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=logging&msg=${
                 URLEncoder.encode(msg, "utf-8")

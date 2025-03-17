@@ -137,11 +137,11 @@ fun TweetFeedScreen(
         }
         // Place the BottomNavigationBar on top of the LazyColumn
         BottomNavigationBar(
-            navController,
-            selectedBottomBarItemIndex,
             Modifier
                 .alpha(bottomBarTransparency.value)
-                .align(Alignment.BottomCenter)
+                .align(Alignment.BottomCenter),
+            navController,
+            selectedBottomBarItemIndex
         )
     }
 }

@@ -38,6 +38,7 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.DeleteTweetWorker
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -118,12 +119,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         endTime: Long = startTime - THIRTY_DAYS_IN_MILLIS
     ) {
         // get followings from server and load tweets not cached.
-        _followings.value = if (appUser.mid == TW_CONST.GUEST_ID) getAlphaIds() else
+        _followings.value = if (appUser.isGuest()) getAlphaIds() else
             getFollowings(appUser)
 
         // add default system users' tweets and remember to watch oneself.
         _followings.update { list -> (list + getAlphaIds() ).toSet().toList() }
-        if (appUser.mid !== TW_CONST.GUEST_ID)
+        if (! appUser.isGuest())
             _followings.update { list -> (list + appUser.mid ).toSet().toList() }
 
         dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))

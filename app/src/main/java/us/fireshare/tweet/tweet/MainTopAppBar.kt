@@ -24,6 +24,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon
 import us.fireshare.tweet.profile.UserAvatar
@@ -63,7 +64,7 @@ fun MainTopAppBar(
         },
         navigationIcon = {
             IconButton(onClick = {
-                if (appUser.mid == TW_CONST.GUEST_ID) navController.navigate(NavTweet.Login) else navController.navigate(
+                if (appUser.isGuest()) navController.navigate(NavTweet.Login) else navController.navigate(
                     NavTweet.UserProfile(appUser.mid)
                 )
             }) {

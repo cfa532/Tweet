@@ -47,13 +47,15 @@ import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.profile.UserAvatar
 
 @Composable
 fun CommentItem(
@@ -70,7 +72,7 @@ fun CommentItem(
     ) { factory ->
         factory.create(comment)
     }
-    val author = comment.author
+    val author = comment.author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
 
     Column(
         modifier = Modifier

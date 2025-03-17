@@ -33,6 +33,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import kotlin.math.max
@@ -437,7 +438,7 @@ class UserViewModel @AssistedInject constructor(
             if (ret["status"] == "success") {
                 val gson = Gson()
                 val type = object : TypeToken<User>() {}.type
-                if (appUser.mid == TW_CONST.GUEST_ID) {
+                if (appUser.isGuest()) {
                     val newUser: User = gson.fromJson(ret["user"].toString(), type)
                     /**
                      * Set the newly created user as followers of admin users.

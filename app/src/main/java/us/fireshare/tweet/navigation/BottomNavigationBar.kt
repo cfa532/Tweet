@@ -29,15 +29,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.BottomBarViewModel
 
 @Composable
 fun BottomNavigationBar(
+    modifier: Modifier = Modifier,
     navController: NavController,
     selectedIndex: Int = 100,
-    modifier: Modifier = Modifier,
     bottomBarViewModel: BottomBarViewModel = hiltViewModel()
 ) {
     var selectedItemIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -85,7 +85,7 @@ fun BottomNavigationBar(
 //                label = { Text(text = item.title) },
                 onClick = {
                     selectedItemIndex = index
-                    if (appUser.mid == TW_CONST.GUEST_ID && index > 0) {
+                    if (appUser.isGuest() && index > 0) {
                         bottomBarViewModel.viewModelScope.launch {
                             guestWarning(context, navController)
                         }

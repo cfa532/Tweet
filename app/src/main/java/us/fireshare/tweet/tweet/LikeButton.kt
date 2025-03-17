@@ -35,6 +35,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -68,7 +69,7 @@ fun CommentButton(viewModel: TweetViewModel) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
@@ -106,7 +107,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
@@ -145,7 +146,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val appUserViewModel = sharedViewModel.appUserViewModel
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
@@ -184,7 +185,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val appUserViewModel = sharedViewModel.appUserViewModel
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
@@ -221,7 +222,7 @@ fun ShareButton(viewModel: TweetViewModel) {
     val scope = rememberCoroutineScope()
 
     IconButton(onClick = {
-        if (appUser.mid == TW_CONST.GUEST_ID) {
+        if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }

@@ -47,14 +47,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.UserViewModel
 
@@ -120,8 +122,16 @@ fun EditProfileScreen(
                 )
             }
             // AppUser avatar
-            AppUserAvatar(launcher, viewModel)
-
+            if (!appUser.isGuest()) {
+                AppUserAvatar(launcher, viewModel)
+            } else {
+                Text(text = stringResource(R.string.register),
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(top = 8.dp),
+                    textAlign = TextAlign.Center,
+                    fontSize = 24.sp
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Column {
                 OutlinedTextField(
@@ -132,13 +142,13 @@ fun EditProfileScreen(
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     singleLine = true,
-                    enabled = appUser.mid == TW_CONST.GUEST_ID  // register new user
+                    enabled = appUser.isGuest()  // register new user
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.onPasswordChange(it) },
                     label = { Text(
-                        if (appUser.mid == TW_CONST.GUEST_ID) stringResource(R.string.password)
+                        if (appUser.isGuest()) stringResource(R.string.password)
                         else stringResource(R.string.use_current_pswd) ) },
                     modifier = Modifier
                         .padding(top = 8.dp)

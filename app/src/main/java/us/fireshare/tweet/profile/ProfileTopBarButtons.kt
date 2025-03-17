@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -78,7 +79,7 @@ fun ProfileTopBarButton(
                     when (buttonText.value) {
                         context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                         else -> {
-                            if (appUser.mid != TW_CONST.GUEST_ID) {
+                            if (! appUser.isGuest()) {
                                 Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
                                 appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                     appUserViewModel.toggleFollowing(user.mid) {

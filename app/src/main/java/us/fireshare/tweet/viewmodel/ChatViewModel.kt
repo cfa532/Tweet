@@ -19,6 +19,7 @@ import us.fireshare.tweet.chat.ChatRepository
 import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.toChatMessage
 
@@ -32,8 +33,8 @@ class ChatViewModel @AssistedInject constructor(
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> get() = _chatMessages.asStateFlow()
 
-    private val _receipt = MutableStateFlow<User?>(null)
-    val receipt: StateFlow<User?> get() = _receipt.asStateFlow()
+    private val _receipt = MutableStateFlow<User>(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
+    val receipt: StateFlow<User> get() = _receipt.asStateFlow()
 
     var message = mutableStateOf("")
     var chatListViewModel: ChatListViewModel? = null
@@ -41,6 +42,7 @@ class ChatViewModel @AssistedInject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             _receipt.value = HproseInstance.getUser(receiptId)
+                ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
 
             // get messages stored at local database
             _chatMessages.value = loadChatMessages(receiptId)

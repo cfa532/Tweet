@@ -50,9 +50,9 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
-import us.fireshare.tweet.profile.UserAvatar
 import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)

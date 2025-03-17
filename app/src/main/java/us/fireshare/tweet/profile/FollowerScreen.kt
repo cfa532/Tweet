@@ -82,7 +82,7 @@ fun FollowerScreen(
                 },
             )
         },
-        bottomBar = { BottomNavigationBar(navController, 0) }
+        bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
         val followersOfProfile by viewModel.followers.collectAsState()
 
