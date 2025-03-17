@@ -68,4 +68,6 @@
     <string name="recommendation">Recommendation</string>
     <string name="update_following">Update following status</string>
     <string name="delete_tweet">Deleting tweet</string>
+    <string name="login_getuserid_fail">Cannot get user Id</string>
+    <string name="login_getuser_fail">Cannot get User</string>
 </resources>

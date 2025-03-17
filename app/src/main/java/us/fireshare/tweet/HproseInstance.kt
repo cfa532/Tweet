@@ -322,11 +322,11 @@ object HproseInstance {
         try {
             val userId = getUserId(username) ?: return@withRetry Pair(
                 null,
-                context.getString(R.string.login_failed)
+                context.getString(R.string.login_getuserid_fail)
             )
             val user = getUser(userId) ?: return@withRetry Pair(
                 null,
-                context.getString(R.string.login_failed)
+                context.getString(R.string.login_getuser_fail)
             )
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login" +
                     "&username=$username&password=$password"

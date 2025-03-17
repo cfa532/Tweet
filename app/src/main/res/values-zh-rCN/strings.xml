@@ -69,4 +69,6 @@
     <string name="recommendation">推荐内容</string>
     <string name="update_following">更新关注。。。</string>
     <string name="delete_tweet">删除推文。。。</string>
+    <string name="login_getuserid_fail">无法获取用户 Id</string>
+    <string name="login_getuser_fail">无法获取用户</string>
 </resources>
