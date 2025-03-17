@@ -885,7 +885,7 @@ object HproseInstance {
         }
     } }
 
-    suspend fun updateFavoriteOfUser(
+    suspend fun removeFavoriteOfUser(
         tweetId: MimeiId,
         isFavorite: Boolean = false
     ) { return withRetry {
@@ -901,11 +901,11 @@ object HproseInstance {
                 appUser = appUser.copy(favoritesCount = res.favoritesCount)
             }
         } catch (e: Exception) {
-            Timber.tag("updateFavoriteOfUser()").e(e, "${e.message} $url")
+            Timber.tag("removeFavoriteOfUser()").e(e, "${e.message} $url")
         }
     } }
 
-    suspend fun updateBookmarkOfUser(
+    suspend fun removeBookmarkOfUser(
         tweetId: MimeiId,
         isBookmarked: Boolean = false
     ) { return withRetry {
@@ -921,7 +921,7 @@ object HproseInstance {
                 appUser = appUser.copy(bookmarksCount = res.bookmarksCount)
             }
         } catch (e: Exception) {
-            Timber.tag("updateBookmarkOfUser()").e(e, "${e.message} $url")
+            Timber.tag("removeBookmarkOfUser()").e(e, "${e.message} $url")
         }
     } }
 

@@ -541,8 +541,8 @@ class UserViewModel @AssistedInject constructor(
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
 
         // Try to remove it from Favorite list of User in Mimei, even if it may not in the list.
-        HproseInstance.updateFavoriteOfUser(tweetId)
-        HproseInstance.updateBookmarkOfUser(tweetId)
+        HproseInstance.removeFavoriteOfUser(tweetId)
+        HproseInstance.removeBookmarkOfUser(tweetId)
 
         // remove deleted tweet from favorite list, if it is there.
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
