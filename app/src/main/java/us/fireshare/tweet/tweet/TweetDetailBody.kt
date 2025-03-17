@@ -321,9 +321,9 @@ fun TweetDropdownMenuItems(
             onClick = {
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
                 tweetFeedViewModel.viewModelScope.launch(IO) {
+                    tweetFeedViewModel.cleanupDeletedTweet(tweet.mid)
                     tweetFeedViewModel.delTweet(tweet.mid) {
                         tweetFeedViewModel.viewModelScope.launch(IO) {
-                            tweetFeedViewModel.cleanupDeletedTweet(tweet.mid)
                             originTweetViewModel?.updateRetweetCount(
                                 tweet.originalTweet!!,      // original tweet
                                 tweet.mid,      // retweet Id
