@@ -9,6 +9,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,6 +17,7 @@ import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -304,15 +306,23 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     // order of deletion is critical here.
     suspend fun delTweet(
+        navController: NavController,
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
-        HproseInstance.delTweet(tweetId)
+        // update UI first for better user experience.
+        viewModelScope.launch(Main) {
+            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                navController.popBackStack()
+            }
+        }
         dao.deleteCachedTweet(tweetId)
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweetId }
         }
         tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+
+        HproseInstance.delTweet(tweetId)
         callback()
     }
 
