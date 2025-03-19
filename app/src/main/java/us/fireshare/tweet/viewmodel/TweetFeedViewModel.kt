@@ -311,17 +311,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         callback: () -> Unit
     ) {
         // update UI first for better user experience.
-        viewModelScope.launch(Main) {
-            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                navController.popBackStack()
-            }
-        }
         dao.deleteCachedTweet(tweetId)
         _tweets.update { currentTweets ->
             currentTweets.filterNot { it.mid == tweetId }
         }
         tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
-
+        viewModelScope.launch(Main) {
+            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                navController.popBackStack()
+            }
+        }
         HproseInstance.delTweet(tweetId)
         callback()
     }

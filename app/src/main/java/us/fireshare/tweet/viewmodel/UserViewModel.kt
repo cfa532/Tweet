@@ -551,12 +551,12 @@ class UserViewModel @AssistedInject constructor(
         /**
          * Remove bookmark and favorite from User mimei, if there are any.
          * */
-        HproseInstance.updateFavoriteOfUser(tweetId, false)
-        val updatedUser = HproseInstance.updateBookmarkOfUser(tweetId, false)
-        _user.value = user.value.copy(
-            favoritesCount = updatedUser.favoritesCount,
-            bookmarksCount = updatedUser.bookmarksCount,
-            tweetCount = tweets.value.size
-        )
+//        HproseInstance.updateFavoriteOfUser(tweetId, false)
+//        val updatedUser = HproseInstance.updateBookmarkOfUser(tweetId, false)
+//        _user.value = user.value.copy(
+//            favoritesCount = updatedUser.favoritesCount,
+//            bookmarksCount = updatedUser.bookmarksCount,
+//            tweetCount = tweets.value.size
+//        )
     }
 }
