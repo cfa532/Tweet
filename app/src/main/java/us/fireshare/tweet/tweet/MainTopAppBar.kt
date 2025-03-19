@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon

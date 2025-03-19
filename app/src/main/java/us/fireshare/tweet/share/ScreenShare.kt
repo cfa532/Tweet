@@ -51,7 +51,6 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
-import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.LocalNavController

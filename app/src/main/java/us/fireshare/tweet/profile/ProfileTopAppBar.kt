@@ -54,7 +54,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.NavTweet

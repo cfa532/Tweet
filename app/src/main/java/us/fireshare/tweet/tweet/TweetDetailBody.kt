@@ -54,7 +54,6 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
@@ -320,20 +319,13 @@ fun TweetDropdownMenuItems(
             modifier = Modifier.alpha(0.8f),
             onClick = {
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
-                tweetFeedViewModel.viewModelScope.launch(IO) {
-                    tweetFeedViewModel.delTweet(navController, tweet.mid) {
-                        tweetFeedViewModel.viewModelScope.launch(IO) {
-                            originTweetViewModel?.updateRetweetCount(
-                                tweet.originalTweet!!,      // original tweet
-                                tweet.mid,      // retweet Id
-                                -1
-                            )
-                        }
-//                        tweetFeedViewModel.viewModelScope.launch(Main) {
-//                            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-//                                navController.popBackStack()
-//                            }
-//                        }
+                tweetFeedViewModel.delTweet(navController, tweet.mid) {
+                    tweetFeedViewModel.viewModelScope.launch(IO) {
+                        originTweetViewModel?.updateRetweetCount(
+                            tweet.originalTweet!!,      // original tweet
+                            tweet.mid,      // retweet Id
+                            -1
+                        )
                     }
                 }
                 onDismissRequest()

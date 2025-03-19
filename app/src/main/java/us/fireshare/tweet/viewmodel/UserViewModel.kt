@@ -540,7 +540,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * A tweet is deleted by appUser, remove it from all tweet lists that has the tweet.
      * */
-    override suspend fun onTweetDeleted(tweetId: MimeiId) {
+    override fun onTweetDeleted(tweetId: MimeiId) {
         _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
 

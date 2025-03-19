@@ -305,24 +305,26 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     // order of deletion is critical here.
-    suspend fun delTweet(
+    fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
         // update UI first for better user experience.
-        dao.deleteCachedTweet(tweetId)
-        _tweets.update { currentTweets ->
-            currentTweets.filterNot { it.mid == tweetId }
+        viewModelScope.launch(IO) {
+            dao.deleteCachedTweet(tweetId)
+            _tweets.update { currentTweets ->
+                currentTweets.filterNot { it.mid == tweetId }
+            }
+            tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
+            HproseInstance.delTweet(tweetId)
+            callback()
         }
-        tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
         viewModelScope.launch(Main) {
             if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                 navController.popBackStack()
             }
         }
-        HproseInstance.delTweet(tweetId)
-        callback()
     }
 
     /**

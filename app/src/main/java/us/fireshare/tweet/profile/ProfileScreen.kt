@@ -50,7 +50,6 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.TweetItem
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
