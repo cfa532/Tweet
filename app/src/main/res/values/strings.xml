@@ -70,4 +70,5 @@
     <string name="delete_tweet">Deleting tweet</string>
     <string name="login_getuserid_fail">Cannot get user Id</string>
     <string name="login_getuser_fail">Cannot get User</string>
+    <string name="pin">Pin</string>
 </resources>

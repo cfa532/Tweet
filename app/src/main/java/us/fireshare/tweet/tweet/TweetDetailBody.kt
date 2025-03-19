@@ -366,7 +366,7 @@ fun TweetDropdownMenuItems(
                     Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
                     Text(
                         text = if (appUserViewModel.hasPinned(tweet)) stringResource(R.string.unpin)
-                        else stringResource(R.string.pinToTop),
+                        else stringResource(R.string.pin),
                         color = MaterialTheme.colorScheme.surfaceTint
                     )
                 }

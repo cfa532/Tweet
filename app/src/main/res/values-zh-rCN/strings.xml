@@ -71,4 +71,5 @@
     <string name="delete_tweet">删除推文。。。</string>
     <string name="login_getuserid_fail">无法获取用户 Id</string>
     <string name="login_getuser_fail">无法获取用户</string>
+    <string name="pin">置顶</string>
 </resources>
