@@ -328,6 +328,9 @@ object HproseInstance {
                 null,
                 context.getString(R.string.login_getuser_fail)
             )
+//            val user = appUser.copy(baseUrl = "http://125.229.161.122:8080", username="test",
+//                mid = "G3OacoFCzrtuOHwIbHUsApZC6VZ", hostIds = listOf("5TVMyFk-DsUH8n_FeF927OEoZSZ"))
+//            return@withRetry Pair(user, null)
             val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=login" +
                     "&username=$username&password=$password"
             val response = httpClient.get(url)

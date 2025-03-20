@@ -35,6 +35,7 @@ import us.fireshare.tweet.HproseInstance.getFollowings
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
+import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
@@ -311,7 +312,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         callback: () -> Unit
     ) {
         // update UI first for better user experience.
-        viewModelScope.launch(IO) {
+        applicationScope.launch(IO) {
             dao.deleteCachedTweet(tweetId)
             _tweets.update { currentTweets ->
                 currentTweets.filterNot { it.mid == tweetId }
@@ -320,7 +321,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             HproseInstance.delTweet(tweetId)
             callback()
         }
-        viewModelScope.launch(Main) {
+        applicationScope.launch(Main) {
             if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                 navController.popBackStack()
             }

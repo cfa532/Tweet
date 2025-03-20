@@ -60,6 +60,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
+import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
@@ -320,7 +321,7 @@ fun TweetDropdownMenuItems(
             onClick = {
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
                 tweetFeedViewModel.delTweet(navController, tweet.mid) {
-                    tweetFeedViewModel.viewModelScope.launch(IO) {
+                    applicationScope.launch(IO) {
                         originTweetViewModel?.updateRetweetCount(
                             tweet.originalTweet!!,      // original tweet
                             tweet.mid,      // retweet Id
