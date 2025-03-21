@@ -414,14 +414,6 @@ class UserViewModel @AssistedInject constructor(
                 isLoading.value = false
                 return
             }
-            // check if the name has been taken.
-            // !!! Potential username clash may happen!!!
-            val userId = getUserId(username.value!!) ?: return
-            getUser(userId)?.let {
-                showSnackbar(SnackbarEvent(message = context.getString(R.string.username_taken)))
-                isLoading.value = false
-                return
-            }
             // Find IP of the desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
@@ -441,9 +433,9 @@ class UserViewModel @AssistedInject constructor(
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
                 val gson = Gson()
-                val type = object : TypeToken<User>() {}.type
+                val userType = object : TypeToken<User>() {}.type
                 if (appUser.isGuest()) {
-                    val newUser: User = gson.fromJson(ret["user"].toString(), type)
+                    val newUser: User = gson.fromJson(ret["user"].toString(), userType)
                     /**
                      * Set the newly created user as followers of admin users.
                      * */
@@ -454,7 +446,7 @@ class UserViewModel @AssistedInject constructor(
                     popBack()
                 } else {
                     // update user profile
-                    updatedUser = gson.fromJson(ret["user"].toString(), type)
+                    updatedUser = gson.fromJson(ret["user"].toString(), userType)
                     appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
