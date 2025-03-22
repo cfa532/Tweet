@@ -267,6 +267,11 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    suspend fun refreshUser() {
+        HproseInstance.removeCachedUser(userId)
+        _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+    }
+
     suspend fun getTweets() {
         // 1. Fetch tweets of the author and update _tweets
         HproseInstance.getTweetListByRank(user.value, startRank.intValue)

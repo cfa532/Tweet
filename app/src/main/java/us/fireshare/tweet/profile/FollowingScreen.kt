@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import androidx.navigation.NavBackStackEntry
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -129,11 +131,14 @@ fun FollowingItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-//    LaunchedEffect(userId) {
-//        withContext(IO) {
-//            user.value = HproseInstance.getUser(userId)
-//        }
-//    }
+    if (user.isGuest()) {
+        // Try to reload the user data when this item would be visible
+        LaunchedEffect(userId) {
+            viewModel.refreshUser()
+        }
+        return
+    }
+
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,
