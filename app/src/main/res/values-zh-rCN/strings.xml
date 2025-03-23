@@ -5,8 +5,8 @@
     <string name="delete">删除</string>
     <string name="login">登录</string>
     <string name="register">注册</string>
-    <string name="username">用户名（必填）</string>
-    <string name="password">密码（必填）</string>
+    <string name="username">用户名（*）</string>
+    <string name="password">密码（*）</string>
     <string name="no_account">还没有账号？</string>
     <string name="name">昵称</string>
     <string name="profile">简介</string>
@@ -69,7 +69,7 @@
     <string name="recommendation">推荐内容</string>
     <string name="update_following">更新关注。。。</string>
     <string name="delete_tweet">删除推文。。。</string>
-    <string name="login_getuserid_fail">无法获取用户 Id</string>
+    <string name="login_getuserid_fail">无法获取用户ID</string>
     <string name="login_getuser_fail">无法获取用户</string>
     <string name="pin">置顶</string>
 </resources>
