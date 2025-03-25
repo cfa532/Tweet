@@ -39,6 +39,7 @@ import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.tweet.localizedTimeDifference
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,7 +137,6 @@ fun FollowerItem(
         LaunchedEffect(userId) {
             viewModel.refreshUser()
         }
-        return
     }
 
     HorizontalDivider(
@@ -168,7 +168,7 @@ fun FollowerItem(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "@${user.username}",
+                        text = "@${user.username} - ${localizedTimeDifference(user.timestamp)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
                     )
