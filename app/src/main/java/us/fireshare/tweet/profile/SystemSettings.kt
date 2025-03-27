@@ -22,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,7 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
@@ -43,8 +47,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.dao
+import us.fireshare.tweet.R
+import us.fireshare.tweet.TweetApplication.Companion.applicationScope
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
 
@@ -88,29 +97,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             .padding(horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-//            var appUrl by remember { mutableStateOf(HproseInstance.preferenceHelper.getAppUrls() ?: "") }
-//            val focusRequester = remember { FocusRequester() }
-//            OutlinedTextField(
-//                value = appUrl ?: "",
-//                onValueChange = { appUrl = it },
-//                label = { Text("App Url") },
-//                modifier = Modifier
-//                    .padding(top = 8.dp)
-//                    .fillMaxWidth()
-//                    .focusRequester(focusRequester),
-//                singleLine = true,
-//            )
-//            Button(onClick = {
-//                HproseInstance.preferenceHelper.setAppUrls(
-//                    appUrl ?: HproseInstance.preferenceHelper.getAppUrls()!!
-//                ) },
-//                modifier = Modifier
-//                    .padding(top = 16.dp)
-//                    .width(intrinsicSize = IntrinsicSize.Max)
-//                    .align(Alignment.CenterHorizontally)
-//            ) {
-//                Text(stringResource(R.string.save))
-//            }
             var isCachedCleared by remember { mutableStateOf(false) }
             Row(
                 modifier = Modifier
@@ -130,6 +116,48 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text("Clear")
                 }
             }
+            // save cloud port# to user object
+            var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
+            val focusRequester = remember { FocusRequester() }
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedTextField(
+                    value = cloudPort ?: "",
+                    onValueChange = { cloudPort = it },
+                    label = { Text("Cloud Port") },
+                    modifier = Modifier
+                        .width(width = 160.dp)
+                        .focusRequester(focusRequester),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        HproseInstance.preferenceHelper.setCloudPort(cloudPort)
+                        if (!appUser.isGuest()) {
+                            try {
+                                appUser.cloudDrivePort = cloudPort?.toInt()
+                                applicationScope.launch(Dispatchers.IO) {
+                                    HproseInstance.setUserData(appUser)
+                                }
+                            } catch (e: NumberFormatException) {
+                                Timber.tag("SystemSettings").e("Invalid cloudPort value: $cloudPort - ${e.message}")
+                            } catch (e: Exception) {
+                                Timber.tag("SystemSettings").e("An unexpected error occurred: $e")
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .width(intrinsicSize = IntrinsicSize.Max)
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
             Text("Privacy policy",
                 modifier = Modifier
