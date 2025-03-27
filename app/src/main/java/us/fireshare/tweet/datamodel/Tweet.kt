@@ -56,6 +56,7 @@ data class User(
     var profile: String? = null,
     var timestamp: Long = System.currentTimeMillis(),
     var lastLogin: Long? = System.currentTimeMillis(),
+    var cloudDrivePort: Int? = 8964,
 
     var tweetCount: Int = 0,
     var followingCount: Int? = null,
