@@ -1258,8 +1258,11 @@ object HproseInstance {
      * Upload media file to node and return its IPFS cid with its media type.
      * */
     @OptIn(UnstableApi::class)
-    suspend fun uploadToIPFS(context: Context, uri: Uri,
-                             referenceId: MimeiId? = null): MimeiFileType? { return withRetry {
+    suspend fun uploadToIPFS(
+        context: Context,
+        uri: Uri,
+        referenceId: MimeiId? = null
+    ): MimeiFileType? { return withRetry {
         val hproseClient = HproseClient.create("${appUser.writableUrl()}/webapi/")
             .useService(HproseService::class.java)
         var offset = 0L

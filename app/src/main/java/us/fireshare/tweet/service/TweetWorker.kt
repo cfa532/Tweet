@@ -11,7 +11,11 @@ import androidx.work.workDataOf
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -19,6 +23,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -97,38 +102,60 @@ class UploadTweetWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             val tweetContent = inputData.getString("tweetContent")
-            val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
+            val attachmentUris =
+                inputData.getStringArray("attachmentUris")?.toList() ?: emptyList()
             val isPrivate = inputData.getBoolean("isPrivate", false)
 
-            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val powerManager =
+                applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Tweet:UploadWakeLockTag"
             )
-            wakeLock.acquire(10*60*1000L /*10 minutes*/)
+            wakeLock.acquire(10 * 60 * 1000L /*10 minutes*/)
             try {
-                val attachments = withContext(Dispatchers.IO) {
-                    attachmentUris.mapNotNull { uri ->
-                        try {
-                            uploadToIPFS(applicationContext, uri.toString().toUri())
-                        } catch (e: Exception) {
-                            Timber.tag("UploadCommentWorker")
-                                .e(e, "Error uploading attachment: $uri")
-                            null // Return null in case of error
+                val attachments = mutableListOf<MimeiFileType>() // Changed to MimeiFileType
+                val uriPairs = attachmentUris.chunked(2)
+                for (pair in uriPairs) {
+                    val deferreds = mutableListOf<Deferred<MimeiFileType?>>() // Changed to MimeiFileType?
+                    for (uriString in pair) {
+                        val deferred = CoroutineScope(Dispatchers.IO).async {
+                            try {
+                                uploadToIPFS(applicationContext, uriString.toUri())
+                            } catch (e: Exception) {
+                                Timber.tag("UploadCommentWorker")
+                                    .e(e, "Error uploading attachment: $uriString")
+                                null // Return null in case of error
+                            }
+                        }
+                        deferreds.add(deferred)
+                    }
+                    val results = deferreds.awaitAll()
+                    results.forEach { result ->
+                        if (result != null) {
+                            attachments.add(result)
+                        } else {
+                            Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair")
+                            wakeLock.release()
+                            return Result.failure() // Fail if any upload in the pair fails
                         }
                     }
                 }
+
                 if (attachmentUris.size != attachments.size) {
                     Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                    wakeLock.release()
                     return Result.failure()
                 }
+
                 val tweet = Tweet(
-                    mid = System.currentTimeMillis().toString(),  // placeholder
+                    mid = System.currentTimeMillis().toString(), // placeholder
                     authorId = appUser.mid,
                     content = tweetContent ?: " ",
-                    attachments = attachments,
+                    attachments = attachments, // Now a List<MimeiFileType>
                     isPrivate = isPrivate
                 )
+
                 // might make the upload less error prone
                 withContext(Dispatchers.IO) {
                     HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
@@ -144,11 +171,10 @@ class UploadTweetWorker @AssistedInject constructor(
             }
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
-            Result.failure()
+            return Result.failure()
         }
     }
 }
-
 
 @HiltWorker
 class DeleteTweetWorker @AssistedInject constructor(
