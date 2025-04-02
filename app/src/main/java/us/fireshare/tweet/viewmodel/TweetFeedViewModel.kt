@@ -177,12 +177,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let { user ->
-                val startTime = System.currentTimeMillis()
-                val endTime = this.endRank.longValue
-                HproseInstance.getTweetList(
+                HproseInstance.getTweetListByRank(
                     user,
-                    startTime,
-                    endTime,
+                    0,
                 ).collect { newTweets ->
                     _tweets.update { list ->
                         val mergedTweets = (newTweets + list)
