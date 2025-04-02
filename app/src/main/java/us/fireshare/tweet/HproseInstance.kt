@@ -495,8 +495,8 @@ object HproseInstance {
      * */
     fun getTweetList(
         user: User,
-        startTimestamp: Long,
-        endTimestamp: Long?,
+        startRank: Long,
+        endRank: Long?,
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // Wrap the network call with withRetry
@@ -504,7 +504,7 @@ object HproseInstance {
                 // 1. Make network call to get tweet list from server
                 val method = "get_tweets"
                 val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
-                        "&userid=${user.mid}&start=$startTimestamp&end=$endTimestamp&gid=${appUser.mid}"
+                        "&userid=${user.mid}&start=$startRank&end=$endRank&gid=${appUser.mid}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
                     val gson = Gson()
@@ -707,12 +707,12 @@ object HproseInstance {
     }}
 
     fun loadCachedTweets(
-        startTimestamp: Long,
-        sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
+        startRank: Long,
+        endRank: Long, // earlier in time, therefore smaller timestamp
     ): List<Tweet> {
         try {
-            return dao.getCachedTweets(startTimestamp, sinceTimestamp).map {
-                // cached tweet is full object with everything.
+            return dao.getCachedTweets(startRank, endRank).map {
+                // cached tweet is full object with original tweet.
                 it.originalTweet
             }
         } catch (e: Exception) {

@@ -3,7 +3,6 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -18,20 +17,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getAlphaIds
-import us.fireshare.tweet.HproseInstance.getFollowings
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
@@ -40,7 +36,6 @@ import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -56,9 +51,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     lateinit var tweetActionListener: TweetActionListener
 
     companion object {
-        private const val THIRTY_DAYS_IN_MILLIS = 648_000_000L  // 2_592_000_000L
-        private const val SEVEN_DAYS_IN_MILLIS = 648_000_000L
-        private const val ONE_DAY_IN_MILLIS = 86_400_000L
+        private const val TWEET_COUNT = 30
     }
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
@@ -89,24 +82,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
     // current time, end time is earlier in time, therefore smaller than current time.
-    private var startTimestamp = mutableLongStateOf(System.currentTimeMillis())
-    private var endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
-    private var retryCount = mutableIntStateOf(0)
+    private var startRank = mutableLongStateOf(0)   // most recent tweet
+    private var endRank = mutableLongStateOf(startRank.longValue + TWEET_COUNT)
 
     init {
         // init tweet feed. Need to disable loadNewer and loadOlderTweets()
         // to prevent duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             _tweets.value = emptyList()
-            while(retryCount.intValue < 10 && tweets.value.size < 4) {
-                refresh(startTimestamp.longValue, endTimestamp.longValue)
-                delay(1000)
-                retryCount.intValue++
-                startTimestamp.longValue = endTimestamp.longValue
-                endTimestamp.longValue = startTimestamp.longValue - THIRTY_DAYS_IN_MILLIS
-            }
+            refresh(startRank.longValue, endRank.longValue)
             // reset startTime, keep endTime as is.
-            startTimestamp.longValue = System.currentTimeMillis()
+            startRank.longValue = 0
             initState.value = false
         }
     }
@@ -116,21 +102,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh(
-        startTime: Long = System.currentTimeMillis(),
-        endTime: Long = startTime - THIRTY_DAYS_IN_MILLIS
+        startRank: Long,
+        endRank: Long = startRank + TWEET_COUNT
     ) {
-        // get followings from server and load tweets not cached.
-        _followings.value = if (appUser.isGuest()) getAlphaIds() else
-            getFollowings(appUser)
-
-        // add default system users' tweets and remember to watch oneself.
-        _followings.update { list -> (list + getAlphaIds() ).toSet().toList() }
-        if (! appUser.isGuest())
-            _followings.update { list -> (list + appUser.mid ).toSet().toList() }
-
         dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
-
-        getTweets(startTime, endTime, followings.value)
+        getTweets(startRank, endRank)
     }
 
     suspend fun loadNewerTweets() {
@@ -138,11 +114,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtTop.value = true
-            startTimestamp.longValue = System.currentTimeMillis()
-            val endTimestamp = startTimestamp.longValue - ONE_DAY_IN_MILLIS
+            startRank.longValue = 0
+            val endRank = startRank.longValue + TWEET_COUNT
             Timber.tag("loadNewerTweets")
-                .d("startTimestamp=${startTimestamp.longValue}, endTimestamp=$endTimestamp")
-            getTweets(startTimestamp.longValue, endTimestamp, followings.value)
+                .d("start=${startRank.longValue}, end=$endRank")
+            getTweets(startRank.longValue, endRank)
         } finally {
             _isRefreshingAtTop.value = false
         }
@@ -152,28 +128,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtBottom.value = true
-            val startTimestamp = endTimestamp.longValue
-            endTimestamp.longValue = startTimestamp - SEVEN_DAYS_IN_MILLIS
+            val startRank = endRank.longValue
+            endRank.longValue = startRank + TWEET_COUNT
             Timber.tag("loadOlderTweets")
-                .d("startTimestamp=$startTimestamp, endTimestamp=${endTimestamp.longValue}")
-            getTweets(startTimestamp, endTimestamp.longValue, followings.value)
+                .d("start=$startRank, end=${endRank.longValue}")
+            getTweets(startRank, endRank.longValue)
         } finally {
             _isRefreshingAtBottom.value = false // Ensure state is reset
         }
     }
 
     // Define a custom scope to ensure tweet deletion job not cancelled.
-    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private suspend fun getTweets(
-        startTimestamp: Long,
-        sinceTimestamp: Long, // earlier in time, therefore smaller timestamp
-        followings: List<MimeiId>
+        startRank: Long,   // starting backward to retrieve tweets.
+        endRank: Long, // earlier in time, therefore smaller timestamp
     ) {
         /**
          * Show cached tweets before loading from net.
          * */
-        val cachedTweets = loadCachedTweets(startTimestamp, sinceTimestamp)
-
+        val cachedTweets = loadCachedTweets(startRank, endRank)
         _tweets.update { currentTweets ->
             val allTweets = (cachedTweets + currentTweets)
                 .filterNot { it.isPrivate }
@@ -181,34 +154,21 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 .sortedByDescending { it.timestamp }
             allTweets
         }
-
-        val batchSize = 10 // Adjust batch size as needed
-        followings.chunked(batchSize).forEach { batch ->
-            withContext(networkDispatcher) {
-                batch.forEach { userId ->
-                    try {
-                        getUser(userId)?.let { user ->
-                            HproseInstance.getTweetList(
-                                user,
-                                startTimestamp,
-                                sinceTimestamp,
-                            ).collect { newTweets ->
-                                _tweets.update { currentTweets ->
-                                    // Order is important!! newTweets take priority over currentTweets
-                                    val mergedTweets = (newTweets + currentTweets)
-                                        .filterNot { it.isPrivate }
-                                        .distinctBy { it.mid }
-                                        .sortedByDescending { it.timestamp }
-                                    mergedTweets
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("GetTweets in TFVM")
-                            .e(e, "Error fetching tweets for user: $userId")
-                        HproseInstance.removeCachedUser(userId)
-                    }
-                }
+        /**
+         * Load tweet from network
+         * */
+        HproseInstance.getTweetList(
+            appUser,
+            startRank,
+            endRank,
+        ).collect { newTweets ->
+            _tweets.update { currentTweets ->
+                // Order is important!! newTweets take priority over currentTweets
+                val mergedTweets = (newTweets + currentTweets)
+                    .filterNot { it.isPrivate }
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+                mergedTweets
             }
         }
     }
@@ -218,7 +178,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         try {
             getUser(userId)?.let { user ->
                 val startTime = System.currentTimeMillis()
-                val endTime = this.endTimestamp.longValue
+                val endTime = this.endRank.longValue
                 HproseInstance.getTweetList(
                     user,
                     startTime,
@@ -237,23 +197,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
         }
     }
-
-//    suspend fun delTweet(tweet: Tweet, callback: () -> Unit) {
-//        // 1. Remove the tweet from TweetFeed right away for better user experience.
-//        _tweets.update { currentTweets ->
-//            currentTweets.filterNot { it.mid == tweet.mid }
-//        }
-//        // remove from appUserViewModel's profile feed, favorites, bookmarks,
-//        tweetActionListener.onTweetDeleted(tweet.mid)
-//
-//        // 2. remove cached tweet
-//        dao.deleteCachedTweet(tweet.mid)
-//
-//        // 3, delete tweet mimei from backend.
-//        HproseInstance.delTweet(tweet) {
-//            callback()  // refresh the original tweet if there is any.
-//        }
-//    }
 
     /**
      * When appUser toggles following status on a User, update followings list.
@@ -279,8 +222,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
         _tweets.value = emptyList()
         _followings.value = getAlphaIds()
-        startTimestamp = mutableLongStateOf(System.currentTimeMillis())
-        endTimestamp = mutableLongStateOf(System.currentTimeMillis() - THIRTY_DAYS_IN_MILLIS)  // 30 days
+        startRank.longValue = 0
+        endRank.longValue = startRank.longValue + TWEET_COUNT  // 30 days
     }
 
     /**

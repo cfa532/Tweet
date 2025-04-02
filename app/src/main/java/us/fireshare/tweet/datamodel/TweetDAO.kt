@@ -100,9 +100,8 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
-    @Query("SELECT * FROM CachedTweet WHERE timestamp BETWEEN :endTime AND :startTime" +
-            " ORDER BY timestamp DESC")
-    fun getCachedTweets(startTime: Long, endTime: Long): List<CachedTweet>
+    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :endRank OFFSET :startRank")
+    fun getCachedTweets(startRank: Long, endRank: Long): List<CachedTweet>
 
     @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY timestamp DESC" +
             " LIMIT :limit OFFSET :offset")

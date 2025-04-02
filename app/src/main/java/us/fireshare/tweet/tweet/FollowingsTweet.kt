@@ -102,7 +102,7 @@ fun FollowingsTweet(
         if (!initState) {
             withContext(IO) {
 //                viewModel.reset()
-                viewModel.refresh()
+                viewModel.refresh(0)
             }
         }
     }

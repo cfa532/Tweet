@@ -75,6 +75,7 @@ data class User(
     var repliedTweets: List<MimeiId>? = null,
     var commentsList: List<MimeiId>? = null,
     var topTweets: List<MimeiId>? = null    // pinned tweets by the user.
+
 ) : Parcelable
 
 /**
