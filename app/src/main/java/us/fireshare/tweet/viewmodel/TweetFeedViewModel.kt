@@ -115,10 +115,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         try {
             _isRefreshingAtTop.value = true
             startRank.longValue = 0
-            val endRank = startRank.longValue + TWEET_COUNT
+            endRank.longValue = startRank.longValue + TWEET_COUNT
             Timber.tag("loadNewerTweets")
-                .d("start=${startRank.longValue}, end=$endRank")
-            getTweets(startRank.longValue, endRank)
+                .d("start=${startRank.longValue}, end=${endRank.longValue
+                }")
+            getTweets(startRank.longValue, endRank.longValue)
         } finally {
             _isRefreshingAtTop.value = false
         }
@@ -128,7 +129,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtBottom.value = true
-            val startRank = endRank.longValue
+            val startRank = tweets.value.size.toLong()
             endRank.longValue = startRank + TWEET_COUNT
             Timber.tag("loadOlderTweets")
                 .d("start=$startRank, end=${endRank.longValue}")
@@ -138,7 +139,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    // Define a custom scope to ensure tweet deletion job not cancelled.
+    /**
+     * Given a range to load all tweets of user's followings.
+     * */
     private suspend fun getTweets(
         startRank: Long,   // starting backward to retrieve tweets.
         endRank: Long, // earlier in time, therefore smaller timestamp
@@ -155,9 +158,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             allTweets
         }
         /**
-         * Load tweet from network
+         * Load tweet feed from network
          * */
-        HproseInstance.getTweetList(
+        HproseInstance.getTweetFeed(
             appUser,
             startRank,
             endRank,
@@ -173,7 +176,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
     }
 
-    // load tweets of the user during the time span.
+    /**
+     * Given an user Id, load its tweets during a range.
+     * */
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let { user ->

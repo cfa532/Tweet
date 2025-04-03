@@ -490,10 +490,10 @@ object HproseInstance {
     } }
 
     /**
-     * Get tweets of a given author in a given span of time.
+     * Get tweets feed in a given timestamp range.
      * Update tweets state flow directly.
      * */
-    fun getTweetList(
+    fun getTweetFeed(
         user: User,
         startRank: Long,
         endRank: Long?,
@@ -524,7 +524,7 @@ object HproseInstance {
                 // 2. Overwrite cached tweets of the user with a updated one, but keep its
                 // timestamp, which is when the tweet is cached, not when it's created.
                 val list = it.mapNotNull { tweet ->
-                    tweet.author = user
+                    tweet.author = getUser(tweet.authorId)
 
                     if (tweet.originalTweetId != null) {
                         val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
@@ -542,7 +542,7 @@ object HproseInstance {
                 send(emptyList()) // Or send a default value, or throw an exception
             }
         } catch (e: Exception) {
-            Timber.tag("getTweetList").e(e.toString())
+            Timber.tag("getTweetFeed").e(e.toString())
             // Consider sending an empty list or re-throwing the exception, depending on your needs.
             send(emptyList()) // Or re-throw: throw e
         }
