@@ -502,7 +502,7 @@ object HproseInstance {
             // Wrap the network call with withRetry
             val tweetList = withRetry {
                 // 1. Make network call to get tweet list from server
-                val method = "get_tweets"
+                val method = "get_tweet_feed"
                 val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
                         "&userid=${user.mid}&start=$startRank&end=$endRank&gid=${appUser.mid}"
                 val response = httpClient.get(url)

@@ -36,6 +36,7 @@ import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
+import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -81,18 +82,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
 
-    // current time, end time is earlier in time, therefore smaller than current time.
-    private var startRank = mutableLongStateOf(0)   // most recent tweet
-    private var endRank = mutableLongStateOf(startRank.longValue + TWEET_COUNT)
-
     init {
         // init tweet feed. Need to disable loadNewer and loadOlderTweets()
         // to prevent duplicated loading of tweets.
         viewModelScope.launch(Dispatchers.IO) {
             _tweets.value = emptyList()
-            refresh(startRank.longValue, endRank.longValue)
-            // reset startTime, keep endTime as is.
-            startRank.longValue = 0
+            refresh(0)
             initState.value = false
         }
     }
@@ -101,12 +96,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh(
-        startRank: Long,
-        endRank: Long = startRank + TWEET_COUNT
-    ) {
+    suspend fun refresh(startRank: Long)
+    {
         dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
-        getTweets(startRank, endRank)
+        getTweets(startRank)
     }
 
     suspend fun loadNewerTweets() {
@@ -114,12 +107,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtTop.value = true
-            startRank.longValue = 0
-            endRank.longValue = startRank.longValue + TWEET_COUNT
-            Timber.tag("loadNewerTweets")
-                .d("start=${startRank.longValue}, end=${endRank.longValue
-                }")
-            getTweets(startRank.longValue, endRank.longValue)
+            Timber.tag("loadNewerTweets").d("start=0")
+            getTweets(0)
         } finally {
             _isRefreshingAtTop.value = false
         }
@@ -130,10 +119,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         try {
             _isRefreshingAtBottom.value = true
             val startRank = tweets.value.size.toLong()
-            endRank.longValue = startRank + TWEET_COUNT
-            Timber.tag("loadOlderTweets")
-                .d("start=$startRank, end=${endRank.longValue}")
-            getTweets(startRank, endRank.longValue)
+            Timber.tag("loadOlderTweets").d("start=$startRank")
+            getTweets(startRank)
         } finally {
             _isRefreshingAtBottom.value = false // Ensure state is reset
         }
@@ -144,34 +131,48 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * */
     private suspend fun getTweets(
         startRank: Long,   // starting backward to retrieve tweets.
-        endRank: Long, // earlier in time, therefore smaller timestamp
+        endRank: Long = startRank + TWEET_COUNT, // earlier in time, therefore smaller timestamp
     ) {
         /**
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(startRank, endRank)
-        _tweets.update { currentTweets ->
-            val allTweets = (cachedTweets + currentTweets)
-                .filterNot { it.isPrivate }
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
-            allTweets
-        }
-        /**
-         * Load tweet feed from network
-         * */
-        HproseInstance.getTweetFeed(
-            appUser,
-            startRank,
-            endRank,
-        ).collect { newTweets ->
+
+        if (appUser.isGuest()) {
+            // show tweets of admin
+            val defaultUserId = getAlphaIds().first()
             _tweets.update { currentTweets ->
-                // Order is important!! newTweets take priority over currentTweets
-                val mergedTweets = (newTweets + currentTweets)
+                val allTweets = (cachedTweets + currentTweets)
+                    .filterNot { it.isPrivate || it.mid != defaultUserId }
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+                allTweets
+            }
+            getTweets(defaultUserId)
+        } else {
+            _tweets.update { currentTweets ->
+                val allTweets = (cachedTweets + currentTweets)
                     .filterNot { it.isPrivate }
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
-                mergedTweets
+                allTweets
+            }
+            /**
+             * Load tweet feed from network
+             * */
+            HproseInstance.getTweetFeed(
+                appUser,
+                startRank,
+                endRank,
+            ).collect { newTweets ->
+                _tweets.update { currentTweets ->
+                    // Order is important!! newTweets take priority over currentTweets
+                    val mergedTweets = (newTweets + currentTweets)
+                        .filterNot { it.isPrivate }
+                        .distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
+                    mergedTweets
+                }
             }
         }
     }
@@ -224,8 +225,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         }
         _tweets.value = emptyList()
         _followings.value = getAlphaIds()
-        startRank.longValue = 0
-        endRank.longValue = startRank.longValue + TWEET_COUNT  // 30 days
     }
 
     /**
