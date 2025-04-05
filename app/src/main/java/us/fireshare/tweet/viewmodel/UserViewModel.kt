@@ -24,7 +24,6 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getSortedMetaByUser
 import us.fireshare.tweet.HproseInstance.getUser
-import us.fireshare.tweet.HproseInstance.getUserId
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.CachedUser

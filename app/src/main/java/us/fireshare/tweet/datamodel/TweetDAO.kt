@@ -100,12 +100,12 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
-    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :endRank OFFSET :startRank")
-    fun getCachedTweets(startRank: Long, endRank: Long): List<CachedTweet>
+    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :count OFFSET :offset")
+    fun getCachedTweets(offset: Int, count: Int): List<CachedTweet>
 
     @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY timestamp DESC" +
-            " LIMIT :limit OFFSET :offset")
-    fun getCachedTweetsByUser(userId: MimeiId, limit: Int, offset: Int): List<CachedTweet>
+            " LIMIT :count OFFSET :offset")
+    fun getCachedTweetsByUser(userId: MimeiId, offset: Int, count: Int): List<CachedTweet>
 
     // Delete tweets older than 30 days.
     @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")

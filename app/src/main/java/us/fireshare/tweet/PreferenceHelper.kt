@@ -2,8 +2,8 @@ package us.fireshare.tweet
 
 import android.content.Context
 import android.content.SharedPreferences
-import us.fireshare.tweet.datamodel.TW_CONST
 import androidx.core.content.edit
+import us.fireshare.tweet.datamodel.TW_CONST
 
 class PreferenceHelper(context: Context) {
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)

@@ -495,8 +495,8 @@ object HproseInstance {
      * */
     fun getTweetFeed(
         user: User,
-        startRank: Long,
-        endRank: Long?,
+        startRank: Int,
+        endRank: Int?,
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // Wrap the network call with withRetry
@@ -558,7 +558,7 @@ object HproseInstance {
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // 1. Retrieve cached tweet list for this user and send them to _tweets.
-            val cachedTweets = dao.getCachedTweetsByUser(user.mid, count, startRank)
+            val cachedTweets = dao.getCachedTweetsByUser(user.mid, startRank, count)
             send(cachedTweets.map { it.originalTweet })
 
             // 2. Make network call to get tweets from server, wrapped with retry logic
@@ -707,11 +707,11 @@ object HproseInstance {
     }}
 
     fun loadCachedTweets(
-        startRank: Long,
-        endRank: Long, // earlier in time, therefore smaller timestamp
+        startRank: Int,  // earlier in time, therefore smaller timestamp
+        count: Int,
     ): List<Tweet> {
         try {
-            return dao.getCachedTweets(startRank, endRank).map {
+            return dao.getCachedTweets(startRank, count).map {
                 // cached tweet is full object with original tweet.
                 it.originalTweet
             }

@@ -3,7 +3,6 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
@@ -70,10 +69,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _isScrolling.value = isScrolling
     }
 
-    // get all followings of current user, and load tweets.
-    private val _followings = MutableStateFlow<List<MimeiId>>(emptyList())
-    private val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
-
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
 
@@ -96,7 +91,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh(startRank: Long)
+    suspend fun refresh(startRank: Int)
     {
         dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
         getTweets(startRank)
@@ -118,7 +113,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtBottom.value = true
-            val startRank = tweets.value.size.toLong()
+            val startRank = tweets.value.size
             Timber.tag("loadOlderTweets").d("start=$startRank")
             getTweets(startRank)
         } finally {
@@ -130,13 +125,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Given a range to load all tweets of user's followings.
      * */
     private suspend fun getTweets(
-        startRank: Long,   // starting backward to retrieve tweets.
-        endRank: Long = startRank + TWEET_COUNT, // earlier in time, therefore smaller timestamp
+        startRank: Int,   // starting backward to retrieve tweets.
+        count: Int = TWEET_COUNT,
     ) {
         /**
          * Show cached tweets before loading from net.
          * */
-        val cachedTweets = loadCachedTweets(startRank, endRank)
+        val cachedTweets = loadCachedTweets(startRank, count)
 
         if (appUser.isGuest()) {
             // show tweets of admin
@@ -163,7 +158,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             HproseInstance.getTweetFeed(
                 appUser,
                 startRank,
-                endRank,
+                startRank + count,
             ).collect { newTweets ->
                 _tweets.update { currentTweets ->
                     // Order is important!! newTweets take priority over currentTweets
@@ -202,16 +197,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * When appUser toggles following status on a User, update followings list.
-     * Remove it if unfollowing, add it if following. Update tweet feed list at the same time.
+     * When appUser toggles following status on a User, update tweet feed correspondingly.
+     * Remove it if unfollowing, add it if following.
      * */
     suspend fun updateFollowingsTweets(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
             // add the tweets of a user after following it.
-            _followings.update { list -> list + userId }
             getTweets(userId)
         } else {
-            _followings.update { list -> list - userId }
             // remove all tweets of this user from list after unfollowing it.
             _tweets.update { currentTweets ->
                 currentTweets.filterNot { it.authorId == userId }
@@ -224,7 +217,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             dao.deleteCachedTweet(it.mid)
         }
         _tweets.value = emptyList()
-        _followings.value = getAlphaIds()
     }
 
     /**
