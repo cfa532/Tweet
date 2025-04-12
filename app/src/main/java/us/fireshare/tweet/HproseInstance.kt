@@ -928,6 +928,9 @@ object HproseInstance {
         appUser
     } }
 
+    /**
+     * Load favorite status of the tweet by appUser.
+     * */
     suspend fun toggleFavorite(tweet: Tweet): Tweet { return withRetry {
         val entry = "toggle_favorite"
         val url = """
@@ -939,19 +942,20 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                val res = gson.fromJson(
+                (gson.fromJson(
                     response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any>
-                val isFavorite = res["isFavorite"] as Boolean
-                tweet.favorites?.set(UserFavorites.LIKE_TWEET, isFavorite)
-                val ret = tweet.copy(
-                    favoriteCount = (res["count"] as Double).toInt()
-                )
-                val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
-                appUser = appUser.copy(favoritesCount = user.favoritesCount)
-                updateCachedTweet(tweet)
-                return@withRetry ret
+                ) as Map<String, Any>?)?.let { res ->
+                    val isFavorite = res["isFavorite"] as Boolean
+                    tweet.favorites?.set(UserFavorites.LIKE_TWEET, isFavorite)
+                    val ret = tweet.copy(
+                        favoriteCount = (res["count"] as Double).toInt()
+                    )
+                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                    appUser = appUser.copy(favoritesCount = user.favoritesCount)
+                    updateCachedTweet(tweet)
+                    return@withRetry ret
+                }
             }
         } catch (e: Exception) {
             Timber.tag("toggleFavorite").e(e, "Error: ${e.message} $tweet $url")
@@ -959,6 +963,9 @@ object HproseInstance {
         tweet
     } }
 
+    /**
+     * Load bookmark status of the tweet by appUser.
+     * */
     suspend fun toggleBookmark(tweet: Tweet): Tweet { return withRetry {
         val entry = "toggle_bookmark"
         val url = """
@@ -970,30 +977,33 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                val res = gson.fromJson( response.bodyAsText(),
+                (gson.fromJson( response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any>
-
-                val hasBookmarked = res["hasBookmarked"] as Boolean
-                tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
-                val ret = tweet.copy(
-                    bookmarkCount = (res["count"] as Double).toInt()
-                )
-                val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
-                appUser = appUser.copy(bookmarksCount = user.bookmarksCount)
-                updateCachedTweet(tweet)
-                return@withRetry ret
+                ) as Map<String, Any>?)?.let { res ->
+                    val hasBookmarked = res["hasBookmarked"] as Boolean
+                    tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
+                    val ret = tweet.copy(
+                        bookmarkCount = (res["count"] as Double).toInt()
+                    )
+                    val user = gson.fromJson(gson.toJsonTree(res["user"]), User::class.java)
+                    appUser = appUser.copy(bookmarksCount = user.bookmarksCount)
+                    updateCachedTweet(tweet)
+                    return@withRetry ret
+                }
             }
         } catch (e: Exception) {
-            Timber.tag("toggleBookmark()").e(e, "Error: ${e.message} $tweet $url")
+            Timber.tag("toggleBookmark").e(e, "Error: ${e.message} $tweet $url")
         }
         tweet
     } }
 
+    /**
+     * Load favorite tweets, bookmarks or comments of an user.
+     * */
     suspend fun getSortedMetaByUser(
         user: User,
         type: String
-    ):List<MimeiId>? { return withRetry {
+    ):List<Tweet>? { return withRetry {
         val entry = "get_user_meta"
         val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&userid=${user.mid}&type=$type"
@@ -1002,9 +1012,8 @@ object HproseInstance {
             if (response.status == HttpStatusCode.OK) {
                 val res = Gson().fromJson(
                     response.bodyAsText(),
-                    object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
-                return@withRetry res.sortedByDescending { it["Value"] as Double }
-                    .map { it["Field"] as MimeiId }
+                    object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>
+                return@withRetry res
             }
         } catch (e: Exception) {
             Timber.tag("updateUserMeta").e("${e.message} $url")

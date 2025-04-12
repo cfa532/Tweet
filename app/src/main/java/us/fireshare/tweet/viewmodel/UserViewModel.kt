@@ -178,23 +178,11 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Load a batch of bookmarks from backend.
+     * Get bookmarks of the user
      * */
-    suspend fun getBookmarks(start: Int, end: Int = -1) {
-        getSortedMetaByUser(user.value, "bookmark")?.let { list ->
-            val span = if (end > -1) list.size else (start + 10).coerceAtMost(list.size)
-            for (index in start until span) {
-                HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
-                    _bookmarks.update { bs ->
-                        val updatedBookmarks = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
-                            listOf(newTweet) + bs
-                        } else {
-                            bs
-                        }
-                        updatedBookmarks.sortedByDescending { it.timestamp }
-                    }
-                }
-            }
+    suspend fun getBookmarks(start: Int) {
+        getSortedMetaByUser(user.value, "bookmark")?.let {
+            _bookmarks.value = it
         }
     }
 
@@ -214,23 +202,11 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Get batches of favorite Tweets of the user.
+     * Get favorite Tweets of the user.
      * */
-    suspend fun getFavorites(start: Int, end: Int = -1) {
-        getSortedMetaByUser(user.value, "favorite")?.let { list ->
-            val span = if (end > -1) list.size else (start + 10).coerceAtMost(list.size)
-            for (index in start until span) {
-                HproseInstance.getTweet(list[index], user.value.mid)?.let { newTweet ->
-                    _favorites.update { bs ->
-                        val updated = if (bs.none { existingTweet -> existingTweet.mid == newTweet.mid }) {
-                            listOf(newTweet) + bs
-                        } else {
-                            bs
-                        }
-                        updated.sortedByDescending { it.timestamp }
-                    }
-                }
-            }
+    suspend fun getFavorites(start: Int) {
+        getSortedMetaByUser(user.value, "favorite")?.let {
+            _favorites.value = it
         }
     }
 

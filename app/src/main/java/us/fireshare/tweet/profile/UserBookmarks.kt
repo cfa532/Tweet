@@ -62,7 +62,6 @@ fun UserBookmarks(
     val start = remember { mutableIntStateOf(0) }
     val bookmarks by viewModel.bookmarks.collectAsState()
     val user = appUser
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     LaunchedEffect(Unit) {
         // load bookmarked tweets
