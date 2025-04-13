@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,12 +63,15 @@ fun UserBookmarks(
     val start = remember { mutableIntStateOf(0) }
     val bookmarks by viewModel.bookmarks.collectAsState()
     val user = appUser
+    val isLoading by viewModel.isLoading.collectAsState()
 
     LaunchedEffect(Unit) {
+        viewModel.isLoading.value = true
         // load bookmarked tweets
         withContext(Dispatchers.IO) {
             viewModel.getBookmarks(start.intValue)
         }
+        viewModel.isLoading.value = false
     }
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
@@ -124,48 +128,60 @@ fun UserBookmarks(
         },
         bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()
-            .pullRefresh(pullRefreshState)
-            .background(color = Color.LightGray)
-            .padding(innerPadding),
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .pullRefresh(pullRefreshState)
+                .background(color = Color.LightGray)
+                .padding(innerPadding),
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                state = listState
-            ) {
-                items(bookmarks, key = { it.mid }) { tweet ->
-                    TweetItem(tweet, parentEntry)
-                }
-                item {
-                    if (refreshingAtTop) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 60.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(80.dp),
-                            color = Color.LightGray,
-                            strokeWidth = 8.dp
-                        )
+            if (isLoading) {
+                // Show a large loading indicator when data is being loaded
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .wrapContentSize(Alignment.Center),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 8.dp
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = listState
+                ) {
+                    items(bookmarks, key = { it.mid }) { tweet ->
+                        TweetItem(tweet, parentEntry)
+                    }
+                    item {
+                        if (refreshingAtTop) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 60.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .size(80.dp),
+                                color = Color.LightGray,
+                                strokeWidth = 8.dp
+                            )
+                        }
+                    }
+                    item {
+                        if (refreshingAtBottom) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .align(Alignment.BottomCenter)
+                            )
+                        }
                     }
                 }
-                item {
-                    if (refreshingAtBottom) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .align(Alignment.BottomCenter)
-                        )
-                    }
-                }
+                PullRefreshIndicator(
+                    refreshingAtTop,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
-            PullRefreshIndicator(
-                refreshingAtTop,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
     }
 }
