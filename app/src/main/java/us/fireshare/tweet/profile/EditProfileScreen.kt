@@ -78,7 +78,7 @@ fun EditProfileScreen(
     val profile by viewModel.profile
     val hostId by viewModel.hostId
     val isPasswordVisible by viewModel.isPasswordVisible
-    val isLoading by viewModel.isLoading
+    val isLoading by viewModel.isLoading.collectAsState()
     val launcher = rememberLauncherForActivityResult( contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {

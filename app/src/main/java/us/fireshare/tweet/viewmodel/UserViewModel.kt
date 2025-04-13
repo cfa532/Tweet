@@ -58,6 +58,8 @@ class UserViewModel @AssistedInject constructor(
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
 
+    var isLoading = MutableStateFlow(false)
+
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
@@ -79,7 +81,6 @@ class UserViewModel @AssistedInject constructor(
     var profile = mutableStateOf(appUser.profile)
     var hostId = mutableStateOf("")
     var isPasswordVisible = mutableStateOf(false)
-    var isLoading = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
     suspend fun loadNewerTweets() {
