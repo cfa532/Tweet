@@ -77,21 +77,28 @@ object Gadget {
         while (lastIndex < text.length) {
             val mentionMatch = mentionRegex.find(text, lastIndex)
             if (mentionMatch != null) {
-                val username = mentionMatch.groupValues[1]
                 val start = mentionMatch.range.first
                 val originalMentionText = mentionMatch.value
 
-                if (start > lastIndex) {
-                    append(text.substring(lastIndex, start))
-                }
+                try {
+                    val username = mentionMatch.groupValues[1]
 
-                pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
-                withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
+                    if (start > lastIndex) {
+                        append(text.substring(lastIndex, start))
+                    }
+
+                    pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
+                    withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
+                        append(originalMentionText)
+                    }
+                    pop()
+
+                    lastIndex = mentionMatch.range.last + 1
+                } catch (e: Exception) {
+                    // If there's an exception handling the mentioned text, append it as is
                     append(originalMentionText)
+                    lastIndex = start + originalMentionText.length // or mentionMatch.range.last + 1
                 }
-                pop()
-
-                lastIndex = mentionMatch.range.last + 1
             } else {
                 append(text.substring(lastIndex))
                 lastIndex = text.length
