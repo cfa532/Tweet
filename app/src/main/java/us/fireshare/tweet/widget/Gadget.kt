@@ -45,7 +45,7 @@ fun String.getIP(): String? {
 object Gadget {
 
     /**
-     * Annotate HTTP links and @username in a text. Make both clickable.
+     * Annotate HTTP URL and @username in a text. Make both clickable.
      * */
     fun buildAnnotatedText(text: String): AnnotatedString = buildAnnotatedString {
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
