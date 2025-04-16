@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -46,7 +47,7 @@ object Gadget {
     /**
      * Annotate HTTP links and @username in a text. Make both clickable.
      * */
-    fun buildAnnotatedText(text: String) = buildAnnotatedString {
+    fun buildAnnotatedText(text: String): AnnotatedString = buildAnnotatedString {
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
         val mentionRegex = "@([\\w_]+)".toRegex()
         var lastIndex = 0
@@ -56,16 +57,16 @@ object Gadget {
             val start = matchResult.range.first
 
             // Append text before the URL
-            append(text.substring(lastIndex, start))
+            if (start > lastIndex) {
+                append(text.substring(lastIndex, start))
+            }
 
             // Apply URL span
             pushStringAnnotation(tag = "URL", annotation = url)
-            withLink(
-                LinkAnnotation.Url(
-                    url,
-                    TextLinkStyles(style = SpanStyle(
-                        color = Color.Cyan
-                    ))
+            withStyle(
+                style = SpanStyle(
+                    color = Color.Cyan,
+                    textDecoration = TextDecoration.Underline // Add underline for better UX
                 )
             ) {
                 append(url)
@@ -75,23 +76,34 @@ object Gadget {
             // Update lastIndex to the end of the current URL
             lastIndex = matchResult.range.last + 1
         }
+
         // Process mentions (@username)
-        mentionRegex.findAll(text.substring(lastIndex)).forEach { matchResult ->
-            val username = matchResult.groupValues[1]
-            val start = lastIndex + matchResult.range.first
-            val originalMentionText = matchResult.value // Get the original mention text
+        while (lastIndex < text.length) {
+            val mentionMatch = mentionRegex.find(text, lastIndex)
+            if (mentionMatch != null) {
+                val username = mentionMatch.groupValues[1]
+                val start = mentionMatch.range.first
+                val originalMentionText = mentionMatch.value
 
-            append(text.substring(lastIndex, start))
+                // Append text before the mention
+                if (start > lastIndex) {
+                    append(text.substring(lastIndex, start))
+                }
 
-            // Apply style and annotation for all mentions
-            pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
-            withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
-                append("@$username")
+                // Apply style and annotation for all mentions
+                pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
+                withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
+                    append(originalMentionText) // Append the original mention text
+                }
+                pop()
+
+                // Update lastIndex to the end of the current mention
+                lastIndex = mentionMatch.range.last + 1
+            } else {
+                // Append any remaining text
+                append(text.substring(lastIndex))
+                lastIndex = text.length
             }
-            pop()
-
-            // Update lastIndex to the start of the mention plus the length of the original mention text
-            lastIndex = start + originalMentionText.length
         }
 
         // Append any remaining text after the last URL
