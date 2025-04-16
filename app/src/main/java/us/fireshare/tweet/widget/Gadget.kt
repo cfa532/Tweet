@@ -56,28 +56,24 @@ object Gadget {
             val url = matchResult.value
             val start = matchResult.range.first
 
-            // Append text before the URL
             if (start > lastIndex) {
                 append(text.substring(lastIndex, start))
             }
 
-            // Apply URL span
             pushStringAnnotation(tag = "URL", annotation = url)
             withStyle(
                 style = SpanStyle(
                     color = Color.Cyan,
-                    textDecoration = TextDecoration.Underline // Add underline for better UX
+                    textDecoration = TextDecoration.Underline
                 )
             ) {
                 append(url)
             }
             pop()
 
-            // Update lastIndex to the end of the current URL
             lastIndex = matchResult.range.last + 1
         }
 
-        // Process mentions (@username)
         while (lastIndex < text.length) {
             val mentionMatch = mentionRegex.find(text, lastIndex)
             if (mentionMatch != null) {
@@ -85,31 +81,23 @@ object Gadget {
                 val start = mentionMatch.range.first
                 val originalMentionText = mentionMatch.value
 
-                // Append text before the mention
                 if (start > lastIndex) {
                     append(text.substring(lastIndex, start))
                 }
 
-                // Apply style and annotation for all mentions
                 pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
                 withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
-                    append(originalMentionText) // Append the original mention text
+                    append(originalMentionText)
                 }
                 pop()
 
-                // Update lastIndex to the end of the current mention
                 lastIndex = mentionMatch.range.last + 1
             } else {
-                // Append any remaining text
                 append(text.substring(lastIndex))
                 lastIndex = text.length
             }
         }
 
-        // Append any remaining text after the last URL
-        if (lastIndex < text.length) {
-            append(text.substring(lastIndex))
-        }
     }
 
     /**
