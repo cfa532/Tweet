@@ -83,6 +83,35 @@ class UserViewModel @AssistedInject constructor(
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
+    suspend fun initLoad() {
+        while (true) {
+            HproseInstance.getTweetListByRank(user.value, startRank.intValue)
+                .collect { newTweets ->
+                    if (newTweets.isEmpty())
+                        return@collect
+                    _tweets.update { currentTweets ->
+                        val newTweetsMap = newTweets.associateBy { it.mid }
+                        (currentTweets + newTweets)
+                            .map { newTweetsMap[it.mid] ?: it } // Update existing tweets
+                            .filter { !it.isPrivate || it.authorId == appUser.mid } // Filter private tweets
+                            .distinctBy { it.mid }
+                            .sortedByDescending { it.timestamp }
+                    }
+                }
+
+            // If some tweets are loaded, but less than 5, check if all tweets are private
+            val viewableTweetsCount =
+                tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
+            if (viewableTweetsCount < 5) {
+                startRank.intValue += 10
+                Timber.d("Incrementing startRank to ${startRank.intValue} and retrying.")
+            } else {
+                startRank.intValue = tweets.value.size   // for loading older tweets next time
+                break
+            }
+        }
+    }
+
     suspend fun loadNewerTweets() {
         if (initState.value) return
         _isRefreshing.value = true
@@ -248,7 +277,7 @@ class UserViewModel @AssistedInject constructor(
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
 
-    suspend fun getTweets() {
+    private suspend fun getTweets() {
         // 1. Fetch tweets of the author and update _tweets
         HproseInstance.getTweetListByRank(user.value, startRank.intValue)
             .collect { newTweets ->

@@ -101,7 +101,7 @@ fun ProfileScreen(
     LaunchedEffect(Unit) {
         // load tweets only when user profile screen is opened.
         withContext(Dispatchers.IO) {
-            viewModel.getTweets()
+            viewModel.initLoad()
         }
     }
 
