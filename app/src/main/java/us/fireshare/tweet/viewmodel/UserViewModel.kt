@@ -84,11 +84,15 @@ class UserViewModel @AssistedInject constructor(
     var loginError = mutableStateOf("")
 
     suspend fun initLoad() {
-        while (true) {
+        var initLoading = true
+        while (initLoading) {
             HproseInstance.getTweetListByRank(user.value, startRank.intValue)
                 .collect { newTweets ->
-                    if (newTweets.isEmpty())
+                    Timber.tag("newTweets").d("$newTweets")
+                    if (newTweets.isEmpty()) {
+                        initLoading = false
                         return@collect
+                    }
                     _tweets.update { currentTweets ->
                         val newTweetsMap = newTweets.associateBy { it.mid }
                         (currentTweets + newTweets)
@@ -98,13 +102,14 @@ class UserViewModel @AssistedInject constructor(
                             .sortedByDescending { it.timestamp }
                     }
                 }
-
+            if (!initLoading)
+                return
             // If some tweets are loaded, but less than 5, check if all tweets are private
             val viewableTweetsCount =
                 tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
             if (viewableTweetsCount < 5) {
                 startRank.intValue += 10
-                Timber.d("Incrementing startRank to ${startRank.intValue} and retrying.")
+                Timber.tag("initLoad").d("Incrementing startRank to ${startRank.intValue} and retrying.")
             } else {
                 startRank.intValue = tweets.value.size   // for loading older tweets next time
                 break
