@@ -64,7 +64,6 @@ class UserViewModel @AssistedInject constructor(
     val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
     private val _isRefreshingAtBottom = MutableStateFlow(false)
     val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
-    private var initState = MutableStateFlow(true)      // initial load state
 
     private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
     val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
@@ -83,14 +82,18 @@ class UserViewModel @AssistedInject constructor(
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
+    private var initState = MutableStateFlow(true)      // initial load state
+
+    /**
+     * Initial load of tweets of an user.
+     * */
     suspend fun initLoad() {
-        var initLoading = true
-        while (initLoading) {
+        while (initState.value) {
             HproseInstance.getTweetListByRank(user.value, startRank.intValue)
                 .collect { newTweets ->
                     Timber.tag("newTweets").d("$newTweets")
                     if (newTweets.isEmpty()) {
-                        initLoading = false
+                        initState.value = false
                         return@collect
                     }
                     _tweets.update { currentTweets ->
@@ -102,8 +105,8 @@ class UserViewModel @AssistedInject constructor(
                             .sortedByDescending { it.timestamp }
                     }
                 }
-            if (!initLoading)
-                return
+            if (!initState.value)
+                break
             // If some tweets are loaded, but less than 5, check if all tweets are private
             val viewableTweetsCount =
                 tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
@@ -115,6 +118,7 @@ class UserViewModel @AssistedInject constructor(
                 break
             }
         }
+        loadPinnedTweets()
     }
 
     suspend fun loadNewerTweets() {
@@ -299,6 +303,11 @@ class UserViewModel @AssistedInject constructor(
             }
         startRank.intValue = tweets.value.size   // for loading older tweets next time
 
+        loadPinnedTweets()
+        initState.value = false
+    }
+
+    private suspend fun loadPinnedTweets() {
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         val pinnedTweets = mutableSetOf<Tweet>()
         HproseInstance.getTopList(user.value)?.forEach { map ->
@@ -332,7 +341,6 @@ class UserViewModel @AssistedInject constructor(
 
             currentTopTweetsMap.values.toList() // Convert back to a list
         }
-        initState.value = false
     }
 
     /**

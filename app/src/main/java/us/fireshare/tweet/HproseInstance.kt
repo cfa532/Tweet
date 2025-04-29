@@ -458,8 +458,7 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-            Timber.tag("Hprose.getFollowings").e(e.toString())
+            Timber.tag("Hprose.getFollowings").e("$e")
         }
         getAlphaIds()
     } }

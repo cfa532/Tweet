@@ -48,9 +48,7 @@ fun ProfileDetail(
     val tweetCount by remember { derivedStateOf { user.tweetCount } }
 
     LaunchedEffect(appUserFollowings) {
-        withContext(Dispatchers.IO) {
-            viewModel.refreshFollowingsAndFans()
-        }
+        viewModel.refreshFollowingsAndFans()
     }
 
     // go to list of followings of the user

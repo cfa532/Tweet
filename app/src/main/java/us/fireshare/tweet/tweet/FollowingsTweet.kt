@@ -63,7 +63,7 @@ fun FollowingsTweet(
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
     val tweets by viewModel.tweets.collectAsState()
     val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
+        viewModel.viewModelScope.launch(IO) {
             viewModel.loadNewerTweets()
         }
     })
