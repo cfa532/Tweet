@@ -141,7 +141,9 @@ fun ProfileScreen(
                         }
                     }
                     items(pinnedTweets, key = { it.timestamp }) { tweet ->
-                        TweetItem(tweet, parentEntry)
+                        if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
+                            TweetItem(tweet, parentEntry)
+                        }
                     }
                     item {
                         HorizontalDivider(
@@ -152,9 +154,10 @@ fun ProfileScreen(
                     }
                 }
                 items(tweets, key = { it.timestamp }) { tweet ->
-                    TweetItem(tweet, parentEntry)
+                    if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
+                        TweetItem(tweet, parentEntry)
+                    }
                 }
-
                 item {
                     if (refreshingAtTop) {
                         CircularProgressIndicator(
