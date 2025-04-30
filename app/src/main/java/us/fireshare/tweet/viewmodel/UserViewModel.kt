@@ -88,7 +88,7 @@ class UserViewModel @AssistedInject constructor(
      * Initial load of tweets of an user.
      * */
     suspend fun initLoad() {
-        while (initState.value) {
+        while (startRank.intValue < user.value.tweetCount) {
             HproseInstance.getTweetListByRank(user.value, startRank.intValue)
                 .collect { newTweets ->
                     Timber.tag("newTweets").d("$newTweets")
@@ -105,9 +105,7 @@ class UserViewModel @AssistedInject constructor(
                             .sortedByDescending { it.timestamp }
                     }
                 }
-            if (!initState.value)
-                break
-            // If some tweets are loaded, but less than 5, check if all tweets are private
+            // private tweets not viewable to other users.
             val viewableTweetsCount =
                 tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
             if (viewableTweetsCount < 5) {
