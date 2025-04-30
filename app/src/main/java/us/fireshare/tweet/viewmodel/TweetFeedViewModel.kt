@@ -132,9 +132,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(startRank, count)
-
         if (appUser.isGuest()) {
-            // show tweets of admin
+            // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
@@ -152,22 +151,44 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     .sortedByDescending { it.timestamp }
                 allTweets
             }
-            /**
-             * Load tweet feed from network
-             * */
-            HproseInstance.getTweetFeed(
-                appUser,
-                startRank,
-                startRank + count,
-            ).collect { newTweets ->
-                _tweets.update { currentTweets ->
-                    // Order is important!! newTweets take priority over currentTweets
-                    val mergedTweets = (newTweets + currentTweets)
-                        .filterNot { it.isPrivate }
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
-                    mergedTweets
-                }
+        }
+        /**
+         * Load tweet feed from network
+         * */
+        HproseInstance.getTweetFeed(
+            appUser,
+            startRank,
+            startRank + count,
+        ).collect { newTweets ->
+            _tweets.update { currentTweets ->
+                // Order is important!! newTweets take priority over currentTweets
+                if (newTweets.isEmpty())
+                    return@collect
+                val mergedTweets = (newTweets + currentTweets)
+                    .filterNot { it.isPrivate }
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+                mergedTweets
+            }
+        }
+        /**
+         * Check for new tweets of followings.
+         * */
+        HproseInstance.getTweetFeed(
+            appUser,
+            startRank,
+            startRank + count,
+            "update_following_tweets"
+        ).collect { newTweets ->
+            if (newTweets.isEmpty())
+                return@collect
+            _tweets.update { currentTweets ->
+                // Order is important!! newTweets take priority over currentTweets
+                val mergedTweets = (newTweets + currentTweets)
+                    .filterNot { it.isPrivate }
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
+                mergedTweets
             }
         }
     }

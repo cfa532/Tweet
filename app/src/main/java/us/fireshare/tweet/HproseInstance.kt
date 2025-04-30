@@ -489,19 +489,18 @@ object HproseInstance {
     } }
 
     /**
-     * Get tweets feed in a given timestamp range.
-     * Update tweets state flow directly.
+     * Load tweets of an user and its followings from network.
      * */
     fun getTweetFeed(
         user: User,
         startRank: Int,
         endRank: Int?,
+        method: String = "get_tweet_feed"
     ): Flow<List<Tweet>> = channelFlow {
         try {
             // Wrap the network call with withRetry
             val tweetList = withRetry {
                 // 1. Make network call to get tweet list from server
-                val method = "get_tweet_feed"
                 val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
                         "&userid=${user.mid}&start=$startRank&end=$endRank&gid=${appUser.mid}"
                 val response = httpClient.get(url)
@@ -512,8 +511,6 @@ object HproseInstance {
                         object : TypeToken<List<Tweet>?>() {}.type
                     )
                 } else {
-                    // Handle non-OK status codes appropriately.  Crucially important.
-                    Timber.e("HTTP request failed with status: ${response.status}")
                     null // Or throw an exception, depending on your error handling strategy
                 }
             }
