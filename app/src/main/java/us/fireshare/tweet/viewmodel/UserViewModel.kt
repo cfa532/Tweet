@@ -85,7 +85,7 @@ class UserViewModel @AssistedInject constructor(
     private var initState = MutableStateFlow(true)      // initial load state
 
     /**
-     * Initial load of tweets of an user.
+     * Initial load of tweets of an user. Execute only once.
      * */
     suspend fun initLoad() {
         while (startRank.intValue < user.value.tweetCount) {
