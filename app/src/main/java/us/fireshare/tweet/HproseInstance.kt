@@ -489,7 +489,7 @@ object HproseInstance {
     } }
 
     /**
-     * Load tweets of an user and its followings from network.
+     * Load tweets of appUser and its followings from network.
      * */
     fun getTweetFeed(
         user: User,
@@ -502,7 +502,8 @@ object HproseInstance {
             val tweetList = withRetry {
                 // 1. Make network call to get tweet list from server
                 val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method" +
-                        "&userid=${user.mid}&start=$startRank&end=$endRank&gid=${appUser.mid}"
+                        "&userid=${user.mid}&start=$startRank&end=$endRank" +
+                        "&gid=${appUser.mid}&hostid=${user.hostIds?.first()}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
                     val gson = Gson()
