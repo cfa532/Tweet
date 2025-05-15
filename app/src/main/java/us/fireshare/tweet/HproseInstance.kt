@@ -1297,8 +1297,7 @@ object HproseInstance {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 inputStream.use { stream ->
                     while (stream.read(buffer).also { byteRead = it } != -1) {
-                        request["fsid"] = hproseClient.runMApp(
-                            "upload_ipfs",
+                        request["fsid"] = hproseClient.runMApp("upload_ipfs",
                             request.toMap(), listOf(buffer)
                         )
                         offset += byteRead
