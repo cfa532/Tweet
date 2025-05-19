@@ -33,7 +33,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.service.UploadCommentWorker
 import us.fireshare.tweet.widget.createExoPlayer
 import java.lang.Integer.max
@@ -244,8 +244,8 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun likeTweet(
         updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
     ) {
-        val isFavorite = tweetState.value.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
-        _tweetState.value.favorites?.set(UserFavorites.LIKE_TWEET, ! isFavorite)
+        val isFavorite = tweetState.value.favorites?.get(UserActions.FAVORITE) ?: false
+        _tweetState.value.favorites?.set(UserActions.FAVORITE, ! isFavorite)
         _tweetState.value = tweetState.value.copy(
             favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
             else tweetState.value.favoriteCount + 1,
@@ -261,8 +261,8 @@ class TweetViewModel @AssistedInject constructor(
      * Update bookmark count and icon right away for better user experience.
      * */
     suspend fun bookmarkTweet(updateAppUser: (Tweet, Boolean) -> Unit) {
-        val hasBookmarked = tweetState.value.favorites?.get(UserFavorites.BOOKMARK) ?: false
-        _tweetState.value.favorites?.set(UserFavorites.BOOKMARK, ! hasBookmarked)
+        val hasBookmarked = tweetState.value.favorites?.get(UserActions.BOOKMARK) ?: false
+        _tweetState.value.favorites?.set(UserActions.BOOKMARK, ! hasBookmarked)
         _tweetState.value = tweetState.value.copy(
             bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
             else tweetState.value.bookmarkCount + 1,

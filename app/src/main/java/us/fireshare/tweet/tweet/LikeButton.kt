@@ -33,7 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
@@ -100,7 +100,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
     val count by remember {
         derivedStateOf { tweet.retweetCount }
     }
-    val hasRetweeted = tweet.favorites?.get(UserFavorites.RETWEET) ?: false
+    val hasRetweeted = tweet.favorites?.get(UserActions.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
@@ -138,7 +138,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
 fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.favoriteCount
-    val isFavorite = tweet.favorites?.get(UserFavorites.LIKE_TWEET) ?: false
+    val isFavorite = tweet.favorites?.get(UserActions.FAVORITE) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()
@@ -177,7 +177,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
 fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
-    val hasBookmarked = tweet.favorites?.get(UserFavorites.BOOKMARK) ?: false
+    val hasBookmarked = tweet.favorites?.get(UserActions.BOOKMARK) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()

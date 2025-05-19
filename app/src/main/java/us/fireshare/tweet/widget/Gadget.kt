@@ -105,21 +105,6 @@ object Gadget {
     }
 
     /**
-     * Maybe a bug, but toMimeiIdList() return a one-element array, whose only
-     * element is a comma separated string of MimeiIds, but it should have been
-     * an array of the MimeiIds
-     * */
-    fun splitJson(arrJson: List<MimeiId>): List<MimeiId>? {
-        if (arrJson.isNotEmpty()) {
-            val first = arrJson.first()
-            if (first.isNotEmpty()) {
-                return first.split(",").map { it.trim() }
-            }
-        }
-        return null
-    }
-
-    /**
      * Return an array of valid IPs from different serving nodes.
      * One node one IP. Prefer IPv4 over V6 address.
      * */
@@ -243,6 +228,7 @@ object Gadget {
             }
         }
     }
+
     fun getAccessibleIP2(ipList: List<String>): String? {
         var ip4: String? = null;
         var ip6: String? = null

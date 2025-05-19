@@ -32,7 +32,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.UserFavorites
+import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.datamodel.writableUrl
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
@@ -944,7 +944,7 @@ object HproseInstance {
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any>?)?.let { res ->
                     val isFavorite = res["isFavorite"] as Boolean
-                    tweet.favorites?.set(UserFavorites.LIKE_TWEET, isFavorite)
+                    tweet.favorites?.set(UserActions.FAVORITE, isFavorite)
                     val ret = tweet.copy(
                         favoriteCount = (res["count"] as Double).toInt()
                     )
@@ -978,7 +978,7 @@ object HproseInstance {
                     object : TypeToken<Map<String, Any?>>() {}.type
                 ) as Map<String, Any>?)?.let { res ->
                     val hasBookmarked = res["hasBookmarked"] as Boolean
-                    tweet.favorites?.set(UserFavorites.BOOKMARK, hasBookmarked)
+                    tweet.favorites?.set(UserActions.BOOKMARK, hasBookmarked)
                     val ret = tweet.copy(
                         bookmarkCount = (res["count"] as Double).toInt()
                     )

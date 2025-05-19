@@ -122,8 +122,8 @@ object TW_CONST {
     const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
 }
 
-object UserFavorites {
-    const val LIKE_TWEET = 0
+object UserActions {
+    const val FAVORITE = 0
     const val BOOKMARK = 1
     const val RETWEET = 2
 }
