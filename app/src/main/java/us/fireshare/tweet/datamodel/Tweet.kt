@@ -127,6 +127,11 @@ object UserActions {
     const val BOOKMARK = 1
     const val RETWEET = 2
 }
+enum class UserContentType {
+    FAVORITES,
+    BOOKMARKS,
+    COMMENTS
+}
 
 /**
  * When tweet is added or removed from the tweet feed list,

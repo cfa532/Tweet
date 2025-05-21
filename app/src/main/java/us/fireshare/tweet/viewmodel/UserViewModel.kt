@@ -22,7 +22,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
-import us.fireshare.tweet.HproseInstance.getSortedMetaByUser
+import us.fireshare.tweet.HproseInstance.getUserTweetsByType
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
@@ -32,6 +32,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -211,7 +212,7 @@ class UserViewModel @AssistedInject constructor(
      * Get bookmarks of the user
      * */
     suspend fun getBookmarks(start: Int) {
-        getSortedMetaByUser(user.value, "bookmark")?.let {
+        getUserTweetsByType(user.value, UserContentType.BOOKMARKS)?.let {
             _bookmarks.value = it
         }
     }
@@ -235,7 +236,7 @@ class UserViewModel @AssistedInject constructor(
      * Get favorite Tweets of the user.
      * */
     suspend fun getFavorites(start: Int) {
-        getSortedMetaByUser(user.value, "favorite")?.let {
+        getUserTweetsByType(user.value, UserContentType.FAVORITES)?.let {
             _favorites.value = it
         }
     }

@@ -33,6 +33,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserActions
+import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.datamodel.writableUrl
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
@@ -739,15 +740,15 @@ object HproseInstance {
      * Increase the retweetCount of the original tweet mimei.
      * @param tweet is the original tweet
      * @param retweetId of the retweet.
-     * @param flag to indicate increase or decrease retweet count.
+     * @param direction to indicate increase or decrease retweet count.
      * @return updated original tweet.
      * */
     suspend fun updateRetweetCount(
         tweet: Tweet,
         retweetId: MimeiId,
-        flag: Int = 1
+        direction: Int = 1
     ): Tweet? { return withRetry {
-        val entry = if (flag == 1) "retweet_added" else "retweet_removed"
+        val entry = if (direction == 1) "retweet_added" else "retweet_removed"
         val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId" +
                 "&authorid=${tweet.authorId}"
@@ -885,46 +886,6 @@ object HproseInstance {
         }
     } }
 
-    suspend fun updateFavoriteOfUser(
-        tweetId: MimeiId,
-        isFavorite: Boolean = false
-    ): User { return withRetry {
-        val entry = "toggle_favorite_by_user"
-        val url = """
-            ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
-            &tweetid=$tweetId&userid=${appUser.mid}&isfavorite=$isFavorite
-        """.trimIndent()
-        try {
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                return@withRetry Gson().fromJson(response.bodyAsText(), User::class.java)
-            }
-        } catch (e: Exception) {
-            Timber.tag("updateFavoriteOfUser()").e(e, "${e.message} $url")
-        }
-        appUser
-    } }
-
-    suspend fun updateBookmarkOfUser(
-        tweetId: MimeiId,
-        isBookmarked: Boolean = false
-    ): User { return withRetry {
-        val entry = "toggle_bookmark_by_user"
-        val url = """
-            ${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry
-            &tweetid=$tweetId&userid=${appUser.mid}&isbookmarked=$isBookmarked
-        """.trimIndent()
-        try {
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                return@withRetry Gson().fromJson(response.bodyAsText(), User::class.java)
-            }
-        } catch (e: Exception) {
-            Timber.tag("updateBookmarkOfUser()").e(e, "${e.message} $url")
-        }
-        appUser
-    } }
-
     /**
      * Load favorite status of the tweet by appUser.
      * */
@@ -942,7 +903,7 @@ object HproseInstance {
                 (gson.fromJson(
                     response.bodyAsText(),
                     object : TypeToken<Map<String, Any?>>() {}.type
-                ) as Map<String, Any>?)?.let { res ->
+                ) as? Map<String, Any>)?.let { res ->
                     val isFavorite = res["isFavorite"] as Boolean
                     tweet.favorites?.set(UserActions.FAVORITE, isFavorite)
                     val ret = tweet.copy(
@@ -997,10 +958,15 @@ object HproseInstance {
     /**
      * Load favorite tweets, bookmarks or comments of an user.
      * */
-    suspend fun getSortedMetaByUser(
+    suspend fun getUserTweetsByType(
         user: User,
-        type: String
+        type: UserContentType
     ):List<Tweet>? { return withRetry {
+        val typeString = when (type) {
+            UserContentType.FAVORITES -> "favorites" // Or whatever your backend expects
+            UserContentType.BOOKMARKS -> "bookmarks"
+            UserContentType.COMMENTS -> "comments"
+        }
         val entry = "get_user_meta"
         val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                 "&userid=${user.mid}&type=$type"
