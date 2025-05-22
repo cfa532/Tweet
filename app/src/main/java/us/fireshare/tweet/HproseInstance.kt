@@ -607,7 +607,7 @@ object HproseInstance {
      * */
     suspend fun getTweet(
         tweetId: MimeiId,
-        authorId: MimeiId,
+        authorId: MimeiId,  // authorId of the tweet. To check if appUser is permitted to access.
         nodeUrl: String? = null      // ip address where tweet can be found.
     ): Tweet? { return withRetry {
         // if there is a cached tweet, return it.
@@ -635,9 +635,11 @@ object HproseInstance {
                     tweet.author = author
                     return@withRetry tweet
                 } else {
+                    /**
+                     * Cannot get tweet from author's default node.
+                     * Try to load the tweet some somewhere else, by tweetId alone.
+                     * */
                     if (nodeUrl == null) {
-                        // most likely the author cannot provide tweet data.
-                        // Try to load the tweet some somewhere else, by tweetId alone.
                         getProviders(tweetId)?.let { ipList ->
                             getAccessibleTweet(ipList, tweetId, authorId)?.let { tweet ->
                                 tweet.author = author
