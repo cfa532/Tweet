@@ -1192,10 +1192,11 @@ object HproseInstance {
      * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    suspend fun getTopList(user: User): List<Map<*,*>>? { return withRetry {
+    suspend fun getPinnedList(user: User): List<Map<*,*>>? { return withRetry {
         val entry = "get_top_tweets"
         val url =
-            "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
+            "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}" +
+                    "&gid=${appUser.mid}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -1204,7 +1205,7 @@ object HproseInstance {
                     object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>?
             }
         } catch (e: Exception) {
-            Timber.tag("getTopList").e("$e")
+            Timber.tag("getPinnedList").e("$e")
         }
         null
     } }

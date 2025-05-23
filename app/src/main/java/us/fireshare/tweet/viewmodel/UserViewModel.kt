@@ -300,7 +300,7 @@ class UserViewModel @AssistedInject constructor(
     private suspend fun loadPinnedTweets() {
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getTopList(user.value)?.forEach { map ->
+        HproseInstance.getPinnedList(user.value)?.forEach { map ->
             val tweet = tweets.value.find { it.mid == map["tweetId"] }
             if (tweet != null) {
                 // add tweet to topTweets, update its timestamp to when it is pinned.
@@ -340,7 +340,10 @@ class UserViewModel @AssistedInject constructor(
         HproseInstance.togglePinnedTweet(tweetId)?.forEach { map ->
             val tweet = tweets.value.find { it.mid == map["tweetId"] }
             if (tweet != null) {
-                // add tweet to topTweets, update its timestamp to when it is pinned.
+                /**
+                 * add tweet to topTweets, update its timestamp to when it is pinned,
+                 * instead of when it was created.
+                 * */
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
                 HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
