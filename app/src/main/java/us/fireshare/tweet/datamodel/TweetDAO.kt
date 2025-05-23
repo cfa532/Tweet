@@ -134,7 +134,7 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     TweetCacheDatabase::class.java,
                     "tweet_cache_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(false)
                     .build()
                 INSTANCE = instance
                 instance

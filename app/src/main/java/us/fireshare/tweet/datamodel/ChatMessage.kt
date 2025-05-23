@@ -156,10 +156,10 @@ abstract class ChatDatabase : RoomDatabase() {
         fun getInstance(context: Context): ChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    ChatDatabase::class.java,
-                    "chat_database"
-                ).fallbackToDestructiveMigration().build()
+                                context.applicationContext,
+                                ChatDatabase::class.java,
+                                "chat_database"
+                            ).fallbackToDestructiveMigration(false).build()
                 INSTANCE = instance
                 instance
             }
