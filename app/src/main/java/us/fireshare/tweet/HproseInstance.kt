@@ -965,13 +965,13 @@ object HproseInstance {
         type: UserContentType
     ):List<Tweet>? { return withRetry {
         val typeString = when (type) {
-            UserContentType.FAVORITES -> "favorites" // Or whatever your backend expects
-            UserContentType.BOOKMARKS -> "bookmarks"
-            UserContentType.COMMENTS -> "comments"
+            UserContentType.FAVORITES -> "favorite" // Or whatever your backend expects
+            UserContentType.BOOKMARKS -> "bookmark"
+            UserContentType.COMMENTS -> "comment"
         }
         val entry = "get_user_meta"
         val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
-                "&userid=${user.mid}&type=$type"
+                "&userid=${user.mid}&type=$typeString"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
@@ -979,9 +979,11 @@ object HproseInstance {
                     response.bodyAsText(),
                     object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>
                 return@withRetry res
+            } else {
+                Timber.tag("getUserTweetsByType").w("$response")
             }
         } catch (e: Exception) {
-            Timber.tag("updateUserMeta").e("${e.message} $url")
+            Timber.tag("getUserTweetsByType").e("${e.message} $url")
         }
         null
     } }

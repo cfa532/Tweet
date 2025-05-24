@@ -213,7 +213,10 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun getBookmarks(start: Int) {
         getUserTweetsByType(user.value, UserContentType.BOOKMARKS)?.let {
-            _bookmarks.value = it
+            _bookmarks.value = it.map { tweet ->
+                tweet.author = getUser(tweet.authorId)
+                tweet
+            }
         }
     }
 
@@ -237,7 +240,10 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun getFavorites(start: Int) {
         getUserTweetsByType(user.value, UserContentType.FAVORITES)?.let {
-            _favorites.value = it
+            _favorites.value = it.map { tweet ->
+                tweet.author = getUser(tweet.authorId)
+                tweet
+            }
         }
     }
 
