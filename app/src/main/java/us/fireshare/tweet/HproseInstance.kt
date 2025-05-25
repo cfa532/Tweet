@@ -967,13 +967,13 @@ object HproseInstance {
         type: UserContentType
     ):List<Tweet>? { return withRetry {
         val typeString = when (type) {
-            UserContentType.FAVORITES -> "favorite" // Or whatever your backend expects
-            UserContentType.BOOKMARKS -> "bookmark"
-            UserContentType.COMMENTS -> "comment"
+            UserContentType.FAVORITES -> "favorite_list" // Or whatever your backend expects
+            UserContentType.BOOKMARKS -> "bookmark_list"
+            UserContentType.COMMENTS -> "comment_list"
         }
         val entry = "get_user_meta"
         val url = "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
-                "&userid=${user.mid}&type=$typeString"
+                "&userid=${user.mid}&type=$typeString&appuserid=${appUser.mid}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
