@@ -280,7 +280,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun refreshUser() {
-        HproseInstance.removeCachedUser(userId)
+//        HproseInstance.removeCachedUser(userId)
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
 

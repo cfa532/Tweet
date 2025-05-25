@@ -40,7 +40,44 @@ data class Tweet(
     var attachments: List<MimeiFileType>? = null,
     var isPrivate: Boolean = false,     // Viewable by the author only, if true.
     val downloadable: Boolean? = false,  // only used in web version.
-)
+) {
+    companion object {
+        fun decode(jsonString: String): Tweet? {
+            return try {
+                val gson = com.google.gson.Gson()
+                val jsonObject = gson.fromJson(jsonString, com.google.gson.JsonObject::class.java)
+                
+                // Convert timestamp to Long if it's a string
+                if (jsonObject.has("timestamp")) {
+                    val timestamp = jsonObject.get("timestamp")
+                    if (timestamp.isJsonPrimitive && timestamp.asJsonPrimitive.isString) {
+                        jsonObject.addProperty("timestamp", timestamp.asString.toLong())
+                    }
+                }
+
+                // Handle attachments timestamps if present
+                if (jsonObject.has("attachments")) {
+                    val attachmentsArray = jsonObject.getAsJsonArray("attachments")
+                    attachmentsArray?.forEach { attachment ->
+                        if (attachment.isJsonObject) {
+                            val attachmentObj = attachment.asJsonObject
+                            if (attachmentObj.has("timestamp")) {
+                                val timestamp = attachmentObj.get("timestamp")
+                                if (timestamp.isJsonPrimitive && timestamp.asJsonPrimitive.isString) {
+                                    attachmentObj.addProperty("timestamp", timestamp.asString.toLong())
+                                }
+                            }
+                        }
+                    }
+                }
+
+                gson.fromJson(jsonObject, Tweet::class.java)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+}
 
 @Parcelize
 @Serializable

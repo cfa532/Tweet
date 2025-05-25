@@ -443,7 +443,10 @@ object HproseInstance {
         }
     }
 
-    // get Ids of users who the current user is following
+    /**
+     * Given user object get a list of Field-Value, where Field is user Id,
+     * Value is timestamp when the following is added.
+     * */
     suspend fun getFollowings(user: User): List<MimeiId> { return withRetry {
         try {
             if (! user.isGuest()) {
@@ -451,12 +454,10 @@ object HproseInstance {
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$method&userid=${user.mid}"
                 val response = httpClient.get(url)
-                if (response.status == HttpStatusCode.OK) {
-                    val followings = Gson().fromJson(response.bodyAsText(),
-                        object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
-                    return@withRetry followings.sortedByDescending { it["Value"] as Double }
-                        .map { it["Field"] as MimeiId }
-                }
+                val followings = Gson().fromJson(response.bodyAsText(),
+                    object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
+                return@withRetry followings.sortedByDescending { it["Value"] as Double }
+                    .map { it["Field"] as MimeiId }
             }
         } catch (e: Exception) {
             Timber.tag("Hprose.getFollowings").e("$e")
@@ -464,7 +465,10 @@ object HproseInstance {
         getAlphaIds()
     } }
 
-    // get fans list of an user
+    /**
+     * Given user object get a list of Field-Value, where Field is user Id,
+     * Value is timestamp when the follower is added.
+     * */
     suspend fun getFans(user: User): List<MimeiId>? { return withRetry {
         try {
             if (! user.isGuest()) {
@@ -472,16 +476,10 @@ object HproseInstance {
                 val url =
                     "${user.baseUrl}/entry?aid=$appId&ver=last&entry=$entry&userid=${user.mid}"
                 val response = httpClient.get(url)
-                if (response.status == HttpStatusCode.OK) {
-                    val fans = Gson().fromJson(response.bodyAsText(),
-                        object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
-                    /**
-                     * Map is Redis HSet<Field, Value>, where Field is an user Id
-                     * Value is the timestamp of the follower been added.
-                     * */
-                    return@withRetry fans.sortedByDescending { it["Value"] as Double }
-                        .map { it["Field"] as MimeiId }
-                }
+                val fans = Gson().fromJson(response.bodyAsText(),
+                    object : TypeToken<List<Map<*,*>>>() {}.type) as List<Map<*,*>>
+                return@withRetry fans.sortedByDescending { it["Value"] as Double }
+                    .map { it["Field"] as MimeiId }
             }
         } catch (e: Exception) {
             Timber.tag("Hprose.getFans").e(e.toString())
@@ -507,11 +505,13 @@ object HproseInstance {
                         "&gid=${appUser.mid}&hostid=${user.hostIds?.first()}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
+                    val responseText = response.bodyAsText()
+                    // Parse each tweet in the response using Tweet.decode()
                     val gson = Gson()
-                    gson.fromJson<List<Tweet>?>(
-                        response.bodyAsText(),
-                        object : TypeToken<List<Tweet>?>() {}.type
-                    )
+                    val jsonArray = gson.fromJson(responseText, Array<Any>::class.java)
+                    jsonArray.mapNotNull { tweetJson ->
+                        Tweet.decode(gson.toJson(tweetJson))
+                    }
                 } else {
                     null // Or throw an exception, depending on your error handling strategy
                 }
@@ -566,10 +566,11 @@ object HproseInstance {
                         "&userid=${user.mid}&start=$startRank&end=${startRank + count}"
                 val response = httpClient.get(url)
                 if (response.status == HttpStatusCode.OK) {
-                    Gson().fromJson<List<Tweet>?>(
-                        response.bodyAsText(),
-                        object : TypeToken<List<Tweet>?>() {}.type
-                    )
+                    val gson = Gson()
+                    val jsonArray = gson.fromJson(response.bodyAsText(), Array<Any>::class.java)
+                    jsonArray.mapNotNull { tweetJson ->
+                        Tweet.decode(gson.toJson(tweetJson))
+                    }
                 } else {
                     Timber.e("HTTP request failed with status: ${response.status}")
                     null // Or throw an exception, depending on your error handling strategy
@@ -625,16 +626,14 @@ object HproseInstance {
 
         // appUser is passed to sever, to check if the current user has liked or bookmarked.
         val url = "$hostIP/entry?aid=$appId&ver=last&entry=get_tweet" +
-            "&tweetid=$tweetId&userid=${appUser.mid}"
+            "&tweetid=$tweetId&appuserid=${appUser.mid}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val gson = Gson()
-                val tweet = gson.fromJson(response.bodyAsText(), Tweet::class.java)
-                if (tweet != null) {
+                Tweet.decode(response.bodyAsText())?.let { tweet ->
                     tweet.author = author
                     return@withRetry tweet
-                } else {
+                } ?: run {
                     /**
                      * Cannot get tweet from author's default node.
                      * Try to load the tweet some somewhere else, by tweetId alone.
@@ -688,7 +687,7 @@ object HproseInstance {
                     "&userid=${author.mid}&hostid=${author.hostIds?.first()}"
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                Gson().fromJson(response.bodyAsText(), Tweet::class.java)?.let { tweet ->
+                Tweet.decode(response.bodyAsText())?.let { tweet ->
                     tweet.author = author
                     /**
                      * update the tweet in the cache database.
@@ -752,12 +751,12 @@ object HproseInstance {
     ): Tweet? { return withRetry {
         val entry = if (direction == 1) "retweet_added" else "retweet_removed"
         val url = "${tweet.author?.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
-                "&tweetid=${tweet.mid}&userid=${appUser.mid}&retweetid=$retweetId" +
+                "&tweetid=${tweet.mid}&appuserid=${appUser.mid}&retweetid=$retweetId" +
                 "&authorid=${tweet.authorId}"
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                return@withRetry Gson().fromJson(response.bodyAsText(), Tweet::class.java)
+                return@withRetry Tweet.decode(response.bodyAsText())
             }
         } catch (e: Exception) {
             Timber.tag("updateRetweetCount()").e("$e $url")
@@ -821,7 +820,10 @@ object HproseInstance {
      * Called when appUser clicks the Follow button.
      * @param followedId is the user that appUser is following or unfollowing.
      * */
-    suspend fun toggleFollowing(followedId: MimeiId, followingId: MimeiId = appUser.mid): Boolean? { return withRetry {
+    suspend fun toggleFollowing(
+        followedId: MimeiId,
+        followingId: MimeiId = appUser.mid
+    ): Boolean? { return withRetry {
         val followedUser = getUser(followedId)
         val entry = "toggle_following"
         val url = "${appUser.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
@@ -975,10 +977,11 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                val res = Gson().fromJson(
-                    response.bodyAsText(),
-                    object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>
-                return@withRetry res
+                val gson = Gson()
+                val jsonArray = gson.fromJson(response.bodyAsText(), Array<Any>::class.java)
+                return@withRetry jsonArray.mapNotNull { tweetJson ->
+                    Tweet.decode(gson.toJson(tweetJson))
+                }
             } else {
                 Timber.tag("getUserTweetsByType").w("$response")
             }
@@ -1004,9 +1007,10 @@ object HproseInstance {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
-                return@withRetry gson.fromJson(
-                    response.bodyAsText(),
-                    object : TypeToken<List<Tweet>>() {}.type) as List<Tweet>?
+                val jsonArray = gson.fromJson(response.bodyAsText(), Array<Any>::class.java)
+                return@withRetry jsonArray.mapNotNull { tweetJson ->
+                    Tweet.decode(gson.toJson(tweetJson))
+                }
             }
         } catch (e: Exception) {
             Timber.tag("getComments()").e(e, "Error: ${e.message}")

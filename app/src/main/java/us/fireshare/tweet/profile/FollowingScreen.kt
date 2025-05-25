@@ -133,11 +133,10 @@ fun FollowingItem(
     val navController = LocalNavController.current
 
     if (user.isGuest()) {
-        // Try to reload the user data when this item would be visible
+        // Try to reload the user data when the user is not loaded properly
         LaunchedEffect(userId) {
             viewModel.refreshUser()
         }
-//        return
     }
 
     HorizontalDivider(

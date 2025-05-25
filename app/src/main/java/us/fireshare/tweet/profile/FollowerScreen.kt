@@ -131,9 +131,8 @@ fun FollowerItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    // Skip rendering if user is a guest (not properly loaded)
     if (user.isGuest()) {
-        // Try to reload the user data when this item would be visible
+        // Try to reload the user data when the user is not loaded properly
         LaunchedEffect(userId) {
             viewModel.refreshUser()
         }
