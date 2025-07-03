@@ -36,6 +36,7 @@ import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
+import us.fireshare.tweet.widget.Gadget
 import kotlin.math.max
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
@@ -460,7 +461,7 @@ class UserViewModel @AssistedInject constructor(
                     /**
                      * Set the newly created user as followers of admin users.
                      * */
-                    appUser.followingList?.forEach {
+                    HproseInstance.getAlphaIds().forEach {
                         HproseInstance.toggleFollower(it, true, newUser.mid)
                     }
                     password.value = ""     // clear the password
