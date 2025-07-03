@@ -76,7 +76,7 @@ class ChatViewModel @AssistedInject constructor(
      * Check new messages on writable host of an user.
      * */
     suspend fun fetchNewMessage(numOfMsgs: Int = 500) {
-        val fetchedMessages = HproseInstance.fetchMessages(receiptId, numOfMsgs) ?: return
+        val fetchedMessages = HproseInstance.fetchMessages(receiptId) ?: return
         val news = fetchedMessages.toMutableList()
         if (news.isNotEmpty()) {
             chatRepository.insertMessages(news.filter { it.authorId != appUser.mid })

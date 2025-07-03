@@ -1,11 +1,11 @@
 package us.fireshare.tweet.datamodel
 
-import android.os.Parcelable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import kotlinx.parcelize.Parcelize
+import com.google.gson.Gson
+import com.google.gson.JsonElement
 import kotlinx.serialization.Serializable
-import us.fireshare.tweet.HproseInstance
+import timber.log.Timber
 
 @Serializable
 @Entity(tableName = "tweets")
@@ -132,7 +132,7 @@ data class Tweet(
         /**
          * Creates a Tweet from a dictionary returned by the network call
          */
-        fun from(dict: Map<String, Any>): Tweet {
+        fun from(dict: String): Tweet {
             try {
                 val gson = com.google.gson.Gson()
                 val jsonString = gson.toJson(dict)
@@ -232,40 +232,43 @@ data class Tweet(
     /**
      * Updates the tweet instance with values from another tweet
      */
-    fun update(from other: Tweet) {
+    fun update(from: Tweet) {
         // Update all properties except author
-        other.content?.let { this.content = it }
-        other.title?.let { this.title = it }
-        other.favorites?.let { this.favorites = it.toMutableList() }
-        this.favoriteCount = other.favoriteCount
-        this.bookmarkCount = other.bookmarkCount
-        this.retweetCount = other.retweetCount
-        this.commentCount = other.commentCount
-        other.attachments?.let { this.attachments = it }
-        this.isPrivate = other.isPrivate
-        this.downloadable = other.downloadable
-        this.timestamp = other.timestamp
+        from.content?.let { this.content = it }
+        from.title?.let { this.title = it }
+        from.favorites?.let { this.favorites = it.toMutableList() }
+        this.favoriteCount = from.favoriteCount
+        this.bookmarkCount = from.bookmarkCount
+        this.retweetCount = from.retweetCount
+        this.commentCount = from.commentCount
+        from.attachments?.let { this.attachments = it }
+        this.isPrivate = from.isPrivate
+        this.downloadable = from.downloadable
+        this.timestamp = from.timestamp
     }
 
     /**
      * Updates the tweet instance with values from a dictionary
      */
-    fun update(from dict: Map<String, Any>) {
+
+    fun update(dict: Map<String, Any>) {
         try {
-            val gson = com.google.gson.Gson()
-            val jsonString = gson.toJson(dict)
-            val tempTweet = gson.fromJson(jsonString, Tweet::class.java)
-            
+            val gson = Gson()
+            val jsonElement: JsonElement = gson.toJsonTree(dict)
+            val tempTweet = gson.fromJson(jsonElement, Tweet::class.java)
+
             // Update this instance with the new values
             tempTweet.content?.let { this.content = it }
             tempTweet.title?.let { this.title = it }
-            tempTweet.author?.let { this.author = it }
+            // tempTweet.author?.let { this.author = it } // Be careful with nested objects
+            this.author = tempTweet.author // If author is a complex type, ensure it's handled
             tempTweet.favorites?.let { this.favorites = it.toMutableList() }
             this.favoriteCount = tempTweet.favoriteCount
             this.bookmarkCount = tempTweet.bookmarkCount
             this.retweetCount = tempTweet.retweetCount
             this.commentCount = tempTweet.commentCount
-            tempTweet.attachments?.let { this.attachments = it }
+            // tempTweet.attachments?.let { this.attachments = it } // Be careful with lists of complex objects
+            this.attachments = tempTweet.attachments // Ensure attachments are handled correctly
             this.isPrivate = tempTweet.isPrivate
             this.downloadable = tempTweet.downloadable
             this.timestamp = tempTweet.timestamp

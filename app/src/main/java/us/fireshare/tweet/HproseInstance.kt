@@ -226,7 +226,7 @@ object HproseInstance {
     } }
 
     // get the recent unread message from a sender.
-    suspend fun fetchMessages(senderId: MimeiId, MessageCount: Int = 50): List<ChatMessage>? { return withRetry {
+    suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? { return withRetry {
         try {
             val gson = Gson()
             val entry = "message_fetch"
@@ -299,9 +299,8 @@ object HproseInstance {
                 "ver" to "last",
                 "username" to username
             )
-            val hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null)
-            return@withRetry response as? String
+            val response = appUser.hproseService?.runMApp<String?>(entry, params)
+            return@withRetry response
         } catch (e: Exception) {
             Timber.tag("GetUserId").e("$e")
             null
@@ -338,7 +337,7 @@ object HproseInstance {
             )
             
             val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             
             if (response != null) {
                 val status = response["status"] as? String
@@ -465,7 +464,7 @@ object HproseInstance {
                 )
                 
                 val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-                val response = hproseClient.runMApp(entry, params, null) as? List<Map<String, Any>>
+                val response = hproseClient.runMApp(entry, params) as? List<Map<String, Any>>
                 
                 if (response != null) {
                     val sorted = response.sortedByDescending { (it["value"] as? Int) ?: 0 }
@@ -493,7 +492,7 @@ object HproseInstance {
                 )
                 
                 val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-                val response = hproseClient.runMApp(entry, params, null) as? List<Map<String, Any>>
+                val response = hproseClient.runMApp(entry, params) as? List<Map<String, Any>>
                 
                 if (response != null) {
                     val sorted = response.sortedByDescending { (it["value"] as? Int) ?: 0 }
@@ -525,16 +524,13 @@ object HproseInstance {
                     "userid" to if (!user.isGuest()) user.mid else getAlphaIds().first(),
                     "appuserid" to appUser.mid
                 )
-                
-                val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-                val response = hproseClient.runMApp(entry, params, null) as? List<Map<String, Any>?>
-                
+                val response = user.hproseService?.runMApp(entry, params) as? List<Map<String, Any>?>
                 response?.mapNotNull { tweetJson ->
-                    tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
+                    tweetJson?.let { Tweet.from(tweetJson) }
                 } ?: emptyList()
             }
 
-            tweetList?.let {
+            tweetList.let {
                 val list = it.mapNotNull { tweet ->
                     tweet.author = getUser(tweet.authorId)
 
@@ -545,7 +541,7 @@ object HproseInstance {
                     }
 
                     // Skip private tweets in feed
-                    if (tweet.isPrivate == true) {
+                    if (tweet.isPrivate) {
                         return@mapNotNull null
                     }
 
@@ -553,9 +549,6 @@ object HproseInstance {
                     tweet
                 }
                 send(list)
-            } ?: run {
-                Timber.w("Tweet list is null after network call.")
-                send(emptyList())
             }
         } catch (e: Exception) {
             Timber.tag("getTweetFeed").e(e.toString())
@@ -589,7 +582,7 @@ object HproseInstance {
                 )
                 
                 val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-                val response = hproseClient.runMApp(entry, params, null) as? List<Map<String, Any>?>
+                val response = hproseClient.runMApp(entry, params) as? List<Map<String, Any>?>
                 
                 response?.mapNotNull { tweetJson ->
                     tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
@@ -637,10 +630,8 @@ object HproseInstance {
             else
                 return@withRetry cachedTweet
         }
-
         val author = getUser(authorId)
         val hostIP = (nodeUrl ?: author?.baseUrl) ?: return@withRetry null
-
         val entry = "get_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -651,10 +642,9 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("$hostIP/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
-            
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             if (response != null) {
-                Tweet.from(response)?.let { tweet ->
+                Tweet.from(response).let { tweet ->
                     tweet.author = author
                     TweetCacheManager.shared.saveTweet(tweet, userId = appUser.mid)
                     return@withRetry tweet
@@ -696,9 +686,9 @@ object HproseInstance {
             val url = "${author.baseUrl}/entry?aid=$appId&ver=last&entry=$entry" +
                     "&tweetid=$tweetId&appuserid=${appUser.mid}" +
                     "&userid=${author.mid}&hostid=${author.hostIds?.first()}"
-            val response = httpClient.get(url)
+            val response = httpClient.get(url) as HttpResponse
             if (response.status == HttpStatusCode.OK) {
-                Tweet.from(response)?.let { tweet ->
+                Tweet.from(response).let { tweet ->
                     tweet.author = author
                     /**
                      * update the tweet in the cache database.
@@ -767,7 +757,7 @@ object HproseInstance {
         try {
             val response = httpClient.get(url)
             if (response.status == HttpStatusCode.OK) {
-                return@withRetry Tweet.from(response)
+                return@withRetry Tweet.from(response.bodyAsText())
             }
         } catch (e: Exception) {
             Timber.tag("updateRetweetCount()").e("$e $url")
@@ -786,7 +776,7 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             
             if (response != null) {
                 val success = response["success"] as? Boolean
@@ -859,7 +849,7 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Boolean
+            val response = hproseClient.runMApp(entry, params) as? Boolean
             return@withRetry response
         } catch (e: Exception) {
             Timber.tag("toggleFollowing()").e("$e")
@@ -932,7 +922,7 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("${tweet.author?.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             
             if (response != null) {
                 val isFavorite = response["isFavorite"] as? Boolean
@@ -979,7 +969,7 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("${tweet.author?.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             
             if (response != null) {
                 val hasBookmarked = response["hasBookmarked"] as? Boolean
@@ -1030,7 +1020,7 @@ object HproseInstance {
             if (response.status == HttpStatusCode.OK) {
                 val gson = Gson()
                 val jsonArray = gson.fromJson(response.bodyAsText(), Array<Any>::class.java)
-                return@withRetry jsonArray.mapNotNull { tweetJson ->
+                return@withRetry jsonArray.map { tweetJson ->
                     Tweet.from(gson.toJson(tweetJson) as Map<String, Any>)
                 }
             } else {
@@ -1056,7 +1046,7 @@ object HproseInstance {
         
         try {
             val hproseClient = HproseClient.create("${appUser.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? Map<String, Any>
+            val response = hproseClient.runMApp(entry, params) as? Map<String, Any>
             
             if (response != null) {
                 val success = response["success"] as? Boolean
@@ -1093,7 +1083,7 @@ object HproseInstance {
             )
             
             val hproseClient = HproseClient.create("${tweet.author?.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp(entry, params, null) as? List<Map<String, Any>?>
+            val response = hproseClient.runMApp(entry, params) as? List<Map<String, Any>?>
             
             if (response != null) {
                 return@withRetry response.mapNotNull { tweetJson ->
@@ -1412,5 +1402,5 @@ object HproseInstance {
         }
         null
     } }
-} }
+}
 
