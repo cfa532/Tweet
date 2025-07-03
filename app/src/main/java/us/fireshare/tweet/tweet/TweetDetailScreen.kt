@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,6 +57,7 @@ fun TweetDetailScreen(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
+    val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -67,7 +68,7 @@ fun TweetDetailScreen(
     }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1 * 60 * 1000) // Delay for 5 minutes
+            delay(1 * 60 * 1000) // Delay for 1 minute
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweet()
                 viewModel.loadComments(tweet)
@@ -151,20 +152,18 @@ fun TweetDetailScreen(
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),
                     thickness = 0.5.dp,
-                    color = Color.LightGray
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
-            /**
-             * Comment list of this tweet. Need to add pagination later.
-             * */
-            items(comments, key = { it.mid })
-            { comment ->
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 0.5.dp,
-                    color = Color.LightGray
+            
+            // Comments section using CommentListView
+            item {
+                CommentListView(
+                    comments = comments,
+                    listState = listState,
+                    contentPadding = PaddingValues(bottom = 60.dp),
+                    parentEntry = parentEntry
                 )
-                CommentItem(comment, viewModel, parentEntry)
             }
         }
     }

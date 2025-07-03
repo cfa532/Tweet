@@ -39,9 +39,132 @@ data class Tweet(
     // List of media IDs attached to the tweet
     var attachments: List<MimeiFileType>? = null,
     var isPrivate: Boolean = false,     // Viewable by the author only, if true.
-    val downloadable: Boolean? = false,  // only used in web version.
+    var downloadable: Boolean = false,  // only used in web version.
 ) {
     companion object {
+        // Singleton dictionary to store tweet instances
+        private val instances = mutableMapOf<String, Tweet>()
+        private val instanceLock = Any()
+
+        /**
+         * Get or create a tweet instance with the given parameters
+         */
+        @Synchronized
+        fun getInstance(
+            mid: String,
+            authorId: String,
+            content: String? = null,
+            timestamp: Long = System.currentTimeMillis(),
+            title: String? = null,
+            originalTweetId: String? = null,
+            originalAuthorId: String? = null,
+            author: User? = null,
+            favorites: List<Boolean>? = listOf(false, false, false),
+            favoriteCount: Int = 0,
+            bookmarkCount: Int = 0,
+            retweetCount: Int = 0,
+            commentCount: Int = 0,
+            attachments: List<MimeiFileType>? = null,
+            isPrivate: Boolean = false,
+            downloadable: Boolean = false
+        ): Tweet {
+            synchronized(instanceLock) {
+                val existingInstance = instances[mid]
+                if (existingInstance != null) {
+                    // Update existing instance with new values
+                    content?.let { existingInstance.content = it }
+                    title?.let { existingInstance.title = it }
+                    author?.let { existingInstance.author = it }
+                    favorites?.let { existingInstance.favorites = it.toMutableList() }
+                    existingInstance.favoriteCount = favoriteCount
+                    existingInstance.bookmarkCount = bookmarkCount
+                    existingInstance.retweetCount = retweetCount
+                    existingInstance.commentCount = commentCount
+                    attachments?.let { existingInstance.attachments = it }
+                    existingInstance.isPrivate = isPrivate
+                    existingInstance.downloadable = downloadable
+                    return existingInstance
+                }
+
+                val newInstance = Tweet(
+                    mid = mid,
+                    authorId = authorId,
+                    content = content,
+                    timestamp = timestamp,
+                    title = title,
+                    originalTweetId = originalTweetId,
+                    originalAuthorId = originalAuthorId,
+                    author = author,
+                    favorites = favorites?.toMutableList(),
+                    favoriteCount = favoriteCount,
+                    bookmarkCount = bookmarkCount,
+                    retweetCount = retweetCount,
+                    commentCount = commentCount,
+                    attachments = attachments,
+                    isPrivate = isPrivate,
+                    downloadable = downloadable
+                )
+                instances[mid] = newInstance
+                return newInstance
+            }
+        }
+
+        /**
+         * Clear a specific tweet instance
+         */
+        @Synchronized
+        fun clearInstance(mid: String) {
+            synchronized(instanceLock) {
+                instances.remove(mid)
+            }
+        }
+
+        /**
+         * Clear all tweet instances
+         */
+        @Synchronized
+        fun clearAllInstances() {
+            synchronized(instanceLock) {
+                instances.clear()
+            }
+        }
+
+        /**
+         * Creates a Tweet from a dictionary returned by the network call
+         */
+        fun from(dict: Map<String, Any>): Tweet {
+            try {
+                val gson = com.google.gson.Gson()
+                val jsonString = gson.toJson(dict)
+                val tweet = gson.fromJson(jsonString, Tweet::class.java)
+                
+                return getInstance(
+                    mid = tweet.mid,
+                    authorId = tweet.authorId,
+                    content = tweet.content,
+                    timestamp = tweet.timestamp,
+                    title = tweet.title,
+                    originalTweetId = tweet.originalTweetId,
+                    originalAuthorId = tweet.originalAuthorId,
+                    author = tweet.author,
+                    favorites = tweet.favorites,
+                    favoriteCount = tweet.favoriteCount,
+                    bookmarkCount = tweet.bookmarkCount,
+                    retweetCount = tweet.retweetCount,
+                    commentCount = tweet.commentCount,
+                    attachments = tweet.attachments,
+                    isPrivate = tweet.isPrivate,
+                    downloadable = tweet.downloadable
+                )
+            } catch (e: Exception) {
+                Timber.e("Error converting dictionary to Tweet: $e")
+                throw RuntimeException("Cannot convert dictionary to Tweet", e)
+            }
+        }
+
+        /**
+         * Legacy decode method for backward compatibility
+         */
         fun decode(jsonString: String): Tweet? {
             return try {
                 val gson = com.google.gson.Gson()
@@ -77,70 +200,168 @@ data class Tweet(
             }
         }
     }
-}
 
-@Parcelize
-@Serializable
-data class User(
-    var baseUrl: String? = null,
-    var writableUrl: String? = null,
-    var mid: MimeiId,  // Ensure MimeiId is Parcelable
-    var name: String? = null,
-    var username: String? = null,
-    var password: String? = null,
-    var avatar: MimeiId? = null,  // Ensure MimeiId is Parcelable
-    var email: String? = null,
-    var profile: String? = null,
-    var timestamp: Long = System.currentTimeMillis(),
-    var lastLogin: Long? = System.currentTimeMillis(),
-    var cloudDrivePort: Int? = 8964,
-
-    var tweetCount: Int = 0,
-    var followingCount: Int? = null,
-    var followersCount: Int? = null,
-    var bookmarksCount: Int? = null,
-    var favoritesCount: Int? = null,
-    var commentsCount: Int? = null,
-
-    var hostIds: List<MimeiId>? = null,
-    var publicKey: String? = null,
-
-    var fansList: List<MimeiId>? = null,
-    var followingList: List<MimeiId>? = null,
-    var bookmarkedTweets: List<MimeiId>? = null,
-    var favoriteTweets: List<MimeiId>? = null,
-    var repliedTweets: List<MimeiId>? = null,
-    var commentsList: List<MimeiId>? = null,
-    var topTweets: List<MimeiId>? = null    // pinned tweets by the user.
-
-) : Parcelable
-
-/**
- * IP address of the first node in HostIds, which the user is authorized to write data on.
- * */
-suspend fun User.writableUrl(): String? {
-    return if (!writableUrl.isNullOrEmpty()) { // Check for null or empty string
-//        this.baseUrl = writableUrl
-        writableUrl
-    } else {
-        hostIds?.firstOrNull()?.let { hostId ->
-            HproseInstance.getHostIP(hostId)?.let { hostIP ->
-                "http://$hostIP".also { newUrl ->
-                    this.writableUrl = newUrl
-//                    this.baseUrl = newUrl
-                }
-            } ?: baseUrl
+    // Computed properties for user interaction states
+    var isFavorite: Boolean
+        get() = favorites?.getOrNull(0) ?: false
+        set(value) {
+            if (favorites == null) {
+                favorites = mutableListOf(false, false, false)
+            }
+            favorites!![0] = value
         }
+
+    var isBookmarked: Boolean
+        get() = favorites?.getOrNull(1) ?: false
+        set(value) {
+            if (favorites == null) {
+                favorites = mutableListOf(false, false, false)
+            }
+            favorites!![1] = value
+        }
+
+    var isRetweeted: Boolean
+        get() = favorites?.getOrNull(2) ?: false
+        set(value) {
+            if (favorites == null) {
+                favorites = mutableListOf(false, false, false)
+            }
+            favorites!![2] = value
+        }
+
+    /**
+     * Updates the tweet instance with values from another tweet
+     */
+    fun update(from other: Tweet) {
+        // Update all properties except author
+        other.content?.let { this.content = it }
+        other.title?.let { this.title = it }
+        other.favorites?.let { this.favorites = it.toMutableList() }
+        this.favoriteCount = other.favoriteCount
+        this.bookmarkCount = other.bookmarkCount
+        this.retweetCount = other.retweetCount
+        this.commentCount = other.commentCount
+        other.attachments?.let { this.attachments = it }
+        this.isPrivate = other.isPrivate
+        this.downloadable = other.downloadable
+        this.timestamp = other.timestamp
+    }
+
+    /**
+     * Updates the tweet instance with values from a dictionary
+     */
+    fun update(from dict: Map<String, Any>) {
+        try {
+            val gson = com.google.gson.Gson()
+            val jsonString = gson.toJson(dict)
+            val tempTweet = gson.fromJson(jsonString, Tweet::class.java)
+            
+            // Update this instance with the new values
+            tempTweet.content?.let { this.content = it }
+            tempTweet.title?.let { this.title = it }
+            tempTweet.author?.let { this.author = it }
+            tempTweet.favorites?.let { this.favorites = it.toMutableList() }
+            this.favoriteCount = tempTweet.favoriteCount
+            this.bookmarkCount = tempTweet.bookmarkCount
+            this.retweetCount = tempTweet.retweetCount
+            this.commentCount = tempTweet.commentCount
+            tempTweet.attachments?.let { this.attachments = it }
+            this.isPrivate = tempTweet.isPrivate
+            this.downloadable = tempTweet.downloadable
+            this.timestamp = tempTweet.timestamp
+        } catch (e: Exception) {
+            Timber.e("Error updating tweet from dictionary: $e")
+            throw RuntimeException("Cannot update tweet from dictionary", e)
+        }
+    }
+
+    /**
+     * Creates a copy of the tweet with updated attributes
+     */
+    fun copy(
+        content: String? = null,
+        title: String? = null,
+        author: User? = null,
+        favorites: List<Boolean>? = null,
+        favoriteCount: Int? = null,
+        bookmarkCount: Int? = null,
+        retweetCount: Int? = null,
+        commentCount: Int? = null,
+        attachments: List<MimeiFileType>? = null,
+        isPrivate: Boolean? = null,
+        downloadable: Boolean? = null
+    ): Tweet {
+        return getInstance(
+            mid = this.mid,
+            authorId = this.authorId,
+            content = content ?: this.content,
+            timestamp = this.timestamp,
+            title = title ?: this.title,
+            originalTweetId = this.originalTweetId,
+            originalAuthorId = this.originalAuthorId,
+            author = author ?: this.author,
+            favorites = favorites ?: this.favorites,
+            favoriteCount = favoriteCount ?: this.favoriteCount,
+            bookmarkCount = bookmarkCount ?: this.bookmarkCount,
+            retweetCount = retweetCount ?: this.retweetCount,
+            commentCount = commentCount ?: this.commentCount,
+            attachments = attachments ?: this.attachments,
+            isPrivate = isPrivate ?: this.isPrivate,
+            downloadable = downloadable ?: this.downloadable
+        )
+    }
+
+    /**
+     * Checks if this tweet is pinned based on a list of pinned tweets
+     */
+    fun isPinned(pinnedTweets: List<Map<String, Any>>): Boolean {
+        return pinnedTweets.any { dict ->
+            val pinnedTweet = dict["tweet"] as? Tweet
+            pinnedTweet?.mid == this.mid
+        }
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as Tweet
+        return mid == other.mid
+    }
+
+    override fun hashCode(): Int {
+        return mid.hashCode()
     }
 }
 
-fun User.isGuest(): Boolean {
-    return mid == TW_CONST.GUEST_ID
-}
+
 
 @Serializable
 enum class MediaType {
     Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
+}
+
+/**
+ * Extension function for merging tweets into an array
+ */
+fun MutableList<Tweet>.mergeTweets(newTweets: List<Tweet>) {
+    Timber.d("[TweetListView] Merging ${newTweets.size} tweets")
+    // Create a dictionary to track unique tweets by their mid
+    val uniqueTweets = mutableMapOf<String, Tweet>()
+    
+    // Add existing tweets to dictionary
+    for (tweet in this) {
+        uniqueTweets[tweet.mid] = tweet
+    }
+    
+    // Add new tweets, overwriting existing ones if they have the same mid
+    for (tweet in newTweets) {
+        uniqueTweets[tweet.mid] = tweet
+    }
+    
+    // Convert back to array and sort by timestamp in descending order
+    this.clear()
+    this.addAll(uniqueTweets.values.sortedByDescending { it.timestamp })
+    Timber.d("[TweetListView] After merge: ${this.size} tweets")
 }
 
 @Serializable

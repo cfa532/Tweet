@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -50,6 +48,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.TweetItem
+import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -69,35 +68,15 @@ fun ProfileScreen(
         }
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.topTweets.collectAsState()
+    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
+    val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-
-    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-    val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
-            viewModel.loadNewerTweets()
-        }
-    } )
-    // for pulling up at the bottom of the list
-    val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val listState = rememberLazyListState()
-    val layoutInfo by remember {
-        // critical to performance not read layoutInfo directly
-        derivedStateOf { listState.layoutInfo }
-    }
-    val isAtBottom =
-        layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
 
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
-    LaunchedEffect(isAtBottom) {
-        if (isAtBottom && tweets.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                viewModel.loadOlderTweets()
-            }
-        }
-    }
     LaunchedEffect(Unit) {
         // load tweets only when user profile screen is opened.
         withContext(Dispatchers.IO) {
@@ -109,24 +88,28 @@ fun ProfileScreen(
         topBar = { ProfileTopAppBar(viewModel, navController, scrollBehavior) },
         bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()
-            .pullRefresh(pullRefreshState)
-            .background(color = Color.LightGray)
-            .padding(innerPadding),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(innerPadding)
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 state = listState
             ) {
-                // the belt where user details and Pin are displayed.
+                // Profile details section
                 item {
-                    // Display user name, profile, number of followers....
                     ProfileDetail(viewModel, navController, appUserViewModel)
                 }
+                
+                // Pinned tweets section
                 if (pinnedTweets.isNotEmpty()) {
                     item {
-                        Surface( modifier = Modifier.fillMaxWidth(),
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
                             tonalElevation = 100.dp,
                         ) {
                             Text(
@@ -153,41 +136,23 @@ fun ProfileScreen(
                         )
                     }
                 }
-                items(tweets, key = { it.timestamp }) { tweet ->
-                    if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
-                        TweetItem(tweet, parentEntry)
-                    }
-                }
+                
+                // Regular tweets using TweetListView
                 item {
-                    if (refreshingAtTop) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 60.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(80.dp),
-                            color = Color.LightGray,
-                            strokeWidth = 8.dp
-                        )
-                    }
-                }
-                item {
-                    if (refreshingAtBottom) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .align(Alignment.BottomCenter)
-                        )
-                    }
+                    TweetListView(
+                        tweets = tweets,
+                        listState = listState,
+                        isRefreshingAtTop = refreshingAtTop,
+                        isRefreshingAtBottom = refreshingAtBottom,
+                        onRefreshTop = { viewModel.viewModelScope.launch(Dispatchers.IO) { viewModel.loadNewerTweets() } },
+                        onLoadMore = { viewModel.viewModelScope.launch(Dispatchers.IO) { viewModel.loadOlderTweets() } },
+                        scrollBehavior = scrollBehavior,
+                        contentPadding = PaddingValues(bottom = 60.dp),
+                        showPrivateTweets = appUser.mid == userId,
+                        parentEntry = parentEntry
+                    )
                 }
             }
-            PullRefreshIndicator(
-                refreshingAtTop,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
     }
 }

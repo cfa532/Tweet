@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.tweet.TweetListView
 
 /**
  * Tweets of the followings of current user.
@@ -61,26 +62,13 @@ fun FollowingsTweet(
     viewModel: TweetFeedViewModel
 ) {
     val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
-    val tweets by viewModel.tweets.collectAsState()
-    val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
-        viewModel.viewModelScope.launch(IO) {
-            viewModel.loadNewerTweets()
-        }
-    })
     val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
-    val isAtBottom by remember {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
-        }
-    }
-    val context = LocalContext.current
-    val activity = context as? Activity
-    LaunchedEffect(Unit) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    }
+    val tweets by viewModel.tweets.collectAsState()
     val scrollPosition by viewModel.scrollPosition.collectAsState()
+    val isScrolling by viewModel.isScrolling.collectAsState()
+    val initState by viewModel.initState.collectAsState()
+
+    // Restore scroll position on first load
     LaunchedEffect(scrollPosition) {
         if (listState.isScrollInProgress.not()) {
             withContext(Dispatchers.Main) {
@@ -89,7 +77,6 @@ fun FollowingsTweet(
             }
         }
     }
-    val initState by viewModel.initState.collectAsState()
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             .collect {
@@ -101,76 +88,25 @@ fun FollowingsTweet(
     LaunchedEffect(appUser.mid) {
         if (!initState) {
             withContext(IO) {
-//                viewModel.reset()
                 viewModel.refresh(0)
             }
         }
     }
-    LaunchedEffect(isAtBottom) {
-        if (isAtBottom) {
-            withContext(IO) {
-                viewModel.loadOlderTweets()
-            }
-        }
-    }
 
-    // Update isScrolling state
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .collect {
-                viewModel.setScrollingState(it)
-            }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(color = Color.LightGray)
-            .pullRefresh(pullRefreshState)
-    ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            state = listState,
-            contentPadding = PaddingValues(bottom = 60.dp) // Adjust this value
-        ) {
-            items(tweets, key = { it.mid }) { tweet ->
-                if (!tweet.isPrivate) {
-                    TweetItem(tweet, parentEntry)
-                }
-            }
-            item {
-                if (refreshingAtTop) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 60.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                            .size(80.dp),
-                        color = Color.LightGray,
-                        strokeWidth = 8.dp
-                    )
-                }
-            }
-            item {
-                if (refreshingAtBottom) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                            .align(Alignment.BottomCenter)
-                    )
-                }
-            }
-        }
-        PullRefreshIndicator(
-            refreshingAtTop,
-            state = pullRefreshState,
-            Modifier.align(Alignment.TopCenter)
-        )
-    }
+    TweetListView(
+        tweets = tweets,
+        listState = listState,
+        isRefreshingAtTop = refreshingAtTop,
+        isRefreshingAtBottom = refreshingAtBottom,
+        onRefreshTop = { viewModel.viewModelScope.launch(IO) { viewModel.loadNewerTweets() } },
+        onLoadMore = { viewModel.viewModelScope.launch(IO) { viewModel.loadOlderTweets() } },
+        onScrollPositionChange = { viewModel.updateScrollPosition(it) },
+        scrollBehavior = scrollBehavior,
+        contentPadding = PaddingValues(bottom = 60.dp),
+        showPrivateTweets = false,
+        modifier = Modifier,
+        parentEntry = parentEntry
+    )
 }
 
 private data object BottomBarTransparency {

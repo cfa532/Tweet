@@ -6,8 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -40,6 +39,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
+import us.fireshare.tweet.tweet.UserListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +56,10 @@ fun FollowerScreen(
         ) { factory ->
             factory.create(userId)
         }
+    val followersOfProfile by viewModel.followers.collectAsState()
+    val userOfProfile by viewModel.user.collectAsState()
+    val listState = rememberLazyListState()
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -64,7 +68,6 @@ fun FollowerScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    val userOfProfile by viewModel.user.collectAsState()
                     Column {
                         UserAvatar(user = userOfProfile, size = 36)
                         Text(
@@ -87,37 +90,24 @@ fun FollowerScreen(
         },
         bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
-        val followersOfProfile by viewModel.followers.collectAsState()
-
-        Surface(modifier = Modifier.padding(innerPadding))
-        {
-            LazyColumn( modifier = Modifier.fillMaxWidth()
-            ) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center // Center align content horizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.fans),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-                items(followersOfProfile, key = { it }) { userId ->
+        Surface(modifier = Modifier.padding(innerPadding)) {
+            UserListView(
+                users = followersOfProfile,
+                listState = listState,
+                contentPadding = PaddingValues(bottom = 60.dp),
+                userItem = { followerUserId ->
                     FollowerItem(
-                        userId,
-                        if (userId == appUser.mid) appUserViewModel
+                        userId = followerUserId,
+                        viewModel = if (followerUserId == appUser.mid) appUserViewModel
                         else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                            parentEntry, key = userId
+                            parentEntry, key = followerUserId
                         ) { factory ->
-                            factory.create(userId)
+                            factory.create(followerUserId)
                         },
-                        appUserViewModel
+                        appUserViewModel = appUserViewModel
                     )
                 }
-            }
+            )
         }
     }
 }
