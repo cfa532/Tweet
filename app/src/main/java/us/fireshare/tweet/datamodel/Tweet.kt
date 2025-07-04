@@ -132,9 +132,9 @@ data class Tweet(
         /**
          * Creates a Tweet from a dictionary returned by the network call
          */
-        fun from(dict: String): Tweet {
+        fun from(dict: Map<String, Any>): Tweet {
             try {
-                val gson = com.google.gson.Gson()
+                val gson = Gson()
                 val jsonString = gson.toJson(dict)
                 val tweet = gson.fromJson(jsonString, Tweet::class.java)
                 
@@ -169,7 +169,7 @@ data class Tweet(
             return try {
                 val gson = com.google.gson.Gson()
                 val jsonObject = gson.fromJson(jsonString, com.google.gson.JsonObject::class.java)
-                
+
                 // Convert timestamp to Long if it's a string
                 if (jsonObject.has("timestamp")) {
                     val timestamp = jsonObject.get("timestamp")
@@ -250,7 +250,6 @@ data class Tweet(
     /**
      * Updates the tweet instance with values from a dictionary
      */
-
     fun update(dict: Map<String, Any>) {
         try {
             val gson = Gson()
@@ -260,15 +259,13 @@ data class Tweet(
             // Update this instance with the new values
             tempTweet.content?.let { this.content = it }
             tempTweet.title?.let { this.title = it }
-            // tempTweet.author?.let { this.author = it } // Be careful with nested objects
-            this.author = tempTweet.author // If author is a complex type, ensure it's handled
+            tempTweet.author?.let { this.author = it }
             tempTweet.favorites?.let { this.favorites = it.toMutableList() }
             this.favoriteCount = tempTweet.favoriteCount
             this.bookmarkCount = tempTweet.bookmarkCount
             this.retweetCount = tempTweet.retweetCount
             this.commentCount = tempTweet.commentCount
-            // tempTweet.attachments?.let { this.attachments = it } // Be careful with lists of complex objects
-            this.attachments = tempTweet.attachments // Ensure attachments are handled correctly
+            tempTweet.attachments?.let { this.attachments = it }
             this.isPrivate = tempTweet.isPrivate
             this.downloadable = tempTweet.downloadable
             this.timestamp = tempTweet.timestamp
@@ -322,6 +319,7 @@ data class Tweet(
             val pinnedTweet = dict["tweet"] as? Tweet
             pinnedTweet?.mid == this.mid
         }
+    }
     }
 
     override fun equals(other: Any?): Boolean {
