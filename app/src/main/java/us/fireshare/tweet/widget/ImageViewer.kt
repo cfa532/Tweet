@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -48,51 +49,53 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
- * Download and compress image in cache
- * @param imageUrl: Leither image url in the format of
- *                  http://ip/ipfs/mimeiId
- * @param isPreview: download the original image to cache without compression if False
- * @param imageSize: compress download image below imageSize(KB)
+ * Image viewer that caches compressed previews and loads full-size images on demand
+ * @param imageUrl: Image URL in the format of http://ip/ipfs/mimeiId or http://ip/mm/mimeiId
+ * @param isFullSize: If true, shows full-size image (loads from backend without caching)
+ * @param imageSize: Preview cache size in KB (default 200KB)
  * */
 @Composable
 fun ImageViewer(
     imageUrl: String,
     modifier: Modifier = Modifier,
-    isPreview: Boolean = true,
-    imageSize: Int = 200    // Cache size in KB
+    isFullSize: Boolean = false,
+    imageSize: Int = 200    // Preview cache size in KB
 ) {
     val context = LocalContext.current
     val cacheManager = remember { CacheManager(context) }
-    val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl, isPreview))
+    val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl))
 
     var isDownloading by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf(false) }
+    var fullSizeImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var isLoadingFullSize by remember { mutableStateOf(false) }
 
     var showMenu by remember { mutableStateOf(false) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Check if image is already cached. Use it directly if so.
-    val cachedImage = remember(imageUrl.getMimeiKeyFromUrl()) {
+    // Check if preview is already cached
+    val cachedPreview = remember(imageUrl.getMimeiKeyFromUrl()) {
         mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value))
     }
-    val adjustedModifier = if (isPreview) {
-        modifier.fillMaxSize()      // image is viewed within a parent composable
+    
+    val adjustedModifier = if (isFullSize) {
+        modifier.fillMaxWidth()     // Full-size image takes full width
     } else {
-        modifier.fillMaxWidth()     // image is viewed full screen
+        modifier.fillMaxSize()      // Preview image fits within parent
     }
 
+    // Load preview if not cached
     LaunchedEffect(imageUrl) {
-        if (cachedImage.value == null) {
+        if (cachedPreview.value == null) {
             downloadScope.launch {
                 isDownloading = true
                 downloadError = false
-                val downloadedPath =
-                    cacheManager.downloadImageToCache(imageUrl, isPreview, imageSize)
+                val downloadedPath = cacheManager.downloadImageToCache(imageUrl, imageSize)
 
                 isDownloading = false
                 if (downloadedPath != null) {
-                    cachedImage.value = cacheManager.loadImageFromCache(downloadedPath)
+                    cachedPreview.value = cacheManager.loadImageFromCache(downloadedPath)
                 } else {
                     downloadError = true
                 }
@@ -100,10 +103,28 @@ fun ImageViewer(
         }
     }
 
-    if (cachedImage.value != null) {
+    // Load full-size image when needed
+    LaunchedEffect(imageUrl, isFullSize) {
+        if (isFullSize && fullSizeImage == null && !isLoadingFullSize) {
+            downloadScope.launch {
+                isLoadingFullSize = true
+                fullSizeImage = cacheManager.loadFullSizeImage(imageUrl)
+                isLoadingFullSize = false
+            }
+        }
+    }
+
+    // Determine which image to show
+    val imageToShow = if (isFullSize) {
+        fullSizeImage ?: cachedPreview.value // Show full-size if available, otherwise show preview
+    } else {
+        cachedPreview.value // Always show preview for non-full-size
+    }
+
+    if (imageToShow != null) {
         Box(modifier = modifier) {
             Image(
-                painter = BitmapPainter(cachedImage.value!!),
+                painter = BitmapPainter(imageToShow),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = adjustedModifier
@@ -133,6 +154,16 @@ fun ImageViewer(
                         }
                     }
             )
+            
+            // Show loading indicator for full-size images while loading
+            if (isFullSize && isLoadingFullSize && fullSizeImage == null) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(48.dp)
+                )
+            }
+            
             if (showMenu) {
                 // Calculate DropdownMenu position
                 var parentSize by remember { mutableStateOf(IntSize.Zero) }
@@ -170,54 +201,21 @@ fun ImageViewer(
                 }
             }
         }
-    } else if (isDownloading || downloadError) { // Combined conditions
+    } else if (isDownloading || downloadError) {
         Box(
             modifier = adjustedModifier
                 .fillMaxWidth()
                 .background(Color.LightGray) // Gray background
         ) {
-            if (!isPreview) {
-                if (cacheManager.isCached(imageUrl, true)) {
-                    val placeholderImage = cacheManager.loadImageFromCache(
-                        cacheManager.getCachedImagePath(imageUrl, true)
-                    )
-                    if (placeholderImage != null) {
-                        Image(
-                            painter = BitmapPainter(placeholderImage),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = adjustedModifier
-                        )
-                    }
-                } else {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .heightIn(min = 400.dp)
-                    )
-                }
-            }
-        }
-    } else {
-        // Display placeholder for non-existent resource
-        Box(
-            modifier = adjustedModifier
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            if (cacheManager.isCached(imageUrl, true)) {
-                val placeholderImage = cacheManager.loadImageFromCache(
-                    cacheManager.getCachedImagePath(imageUrl, true)
+            if (isFullSize) {
+                // For full-size images, show loading indicator
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .heightIn(min = 400.dp)
                 )
-                if (placeholderImage != null) {
-                    Image(
-                        painter = BitmapPainter(placeholderImage),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = adjustedModifier
-                    )
-                }
             } else {
+                // For previews, show placeholder
                 Image(
                     painter = painterResource(id = R.drawable.ic_user_avatar),
                     contentDescription = "Placeholder Avatar",
@@ -227,6 +225,22 @@ fun ImageViewer(
                     contentScale = ContentScale.Crop
                 )
             }
+        }
+    } else {
+        // Display placeholder for non-existent resource
+        Box(
+            modifier = adjustedModifier
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_user_avatar),
+                contentDescription = "Placeholder Avatar",
+                modifier = modifier
+                    .size(imageSize.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
         }
     }
 }

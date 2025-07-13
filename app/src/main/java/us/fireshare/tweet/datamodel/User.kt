@@ -259,6 +259,36 @@ data class User(
     }
 
     /**
+     * Computed property that returns baseUrl with TW_CONST.CLOUD_PORT
+     * Used for accessing netdisk and transcode services
+     */
+    val netdiskUrl: String?
+        get() {
+            val baseUrl = baseUrl ?: return null
+            
+            return try {
+                val uri = java.net.URI(baseUrl)
+                val scheme = uri.scheme ?: "http"
+                val host = uri.host ?: return baseUrl
+                val path = uri.path ?: ""
+                val query = uri.query?.let { "?$it" } ?: ""
+                val fragment = uri.fragment?.let { "#$it" } ?: ""
+                
+                // Handle IPv6 addresses
+                val hostPart = if (host.contains(":")) {
+                    "[$host]"
+                } else {
+                    host
+                }
+                
+                "$scheme://$hostPart:${TW_CONST.CLOUD_PORT}$path$query$fragment"
+            } catch (e: Exception) {
+                Timber.w("Failed to parse baseUrl for cloud port replacement: $baseUrl", e)
+                baseUrl
+            }
+        }
+
+    /**
      * Get writable URL with fallback
      */
     suspend fun writableUrl(): String? {

@@ -26,22 +26,17 @@ class CacheManager(private val context: Context) {
     private val cacheDir: File = File(context.cacheDir, "image_cache")
 
     /**
-     * Generates the file path for a cached image based on the image URL and whether it's a preview.
-     * @param imageUrl The URL of the image. http//ip/mm/mimeiId_preview.jpg
-     * @param isPreview Boolean indicating if the image is a preview.
-     * @return The absolute path of the cached image file.
+     * Generates the file path for a cached preview image.
+     * @param imageUrl The URL of the image. http//ip/mm/mimeiId
+     * @return The absolute path of the cached preview image file.
      */
-    fun getCachedImagePath(imageUrl: String, isPreview: Boolean = true): String {
-        val fileName = if (isPreview) {
-            imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
-        } else {
-            imageUrl.getMimeiKeyFromUrl() + ".png"
-        }
+    fun getCachedImagePath(imageUrl: String): String {
+        val fileName = imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
         return File(cacheDir, fileName).absolutePath
     }
 
     /**
-     * Loads an image from the cache.
+     * Loads a preview image from the cache.
      * @param cachedPath The path of the cached image file.
      * @return The loaded ImageBitmap, or null if the file does not exist.
      */
@@ -56,13 +51,13 @@ class CacheManager(private val context: Context) {
     }
 
     /**
-     * Downloads an image from the given URL and caches it.
+     * Downloads an image from the given URL and caches it as a compressed preview.
+     * Only previews are cached, full-size images are loaded directly from backend.
      * @param imageUrl The URL of the image to download.
-     * @param isPreview Boolean indicating if the image is a preview.
-     * @param imageSize The target size of the image in kilobytes (for previews).
-     * @return The absolute path of the cached image file, or null if an error occurs.
+     * @param imageSize The target size of the preview in kilobytes (default 200KB).
+     * @return The absolute path of the cached preview image file, or null if an error occurs.
      */
-    suspend fun downloadImageToCache(imageUrl: String, isPreview: Boolean = true, imageSize: Int): String? {
+    suspend fun downloadImageToCache(imageUrl: String, imageSize: Int = 200): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val imageLoader = ImageLoader(context)
@@ -73,44 +68,38 @@ class CacheManager(private val context: Context) {
                     .build()
                 val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
 
-                val fileName = if (isPreview) {
-                    imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
-                } else {
-                    imageUrl.getMimeiKeyFromUrl() + ".png"
-                }
+                val fileName = imageUrl.getMimeiKeyFromUrl() + "_preview.jpg"
                 val cacheFile = File(cacheDir, fileName)
 
                 result?.let { drawable ->
                     val bitmap = (drawable as BitmapDrawable).bitmap
-                    if (isPreview) {
-                        var quality = 100
-                        var fileSize: Long
-                        val targetSize = imageSize * 1024
-                        do {
-                            FileOutputStream(cacheFile).use { out ->
-                                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
-                            }
-                            fileSize = cacheFile.length()
-
-                            // Calculate the difference between current file size and target size
-                            val sizeDifference = fileSize - targetSize
-
-                            // Adjust quality reduction rate based on the size difference
-                            quality -= when {
-                                sizeDifference > targetSize * 0.5 -> 20 // Reduce quality faster when far from target
-                                sizeDifference > targetSize * 0.2 -> 10 // Moderate reduction
-                                else -> 5 // Slow down reduction as we approach the target size
-                            }
-
-                            // Ensure quality does not go below 0
-                            if (quality < 0) quality = 0
-
-                        } while (fileSize > targetSize && quality > 0)
-                    } else {
+                    
+                    // Compress the image to target size
+                    var quality = 100
+                    var fileSize: Long
+                    val targetSize = imageSize * 1024
+                    do {
                         FileOutputStream(cacheFile).use { out ->
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
                         }
-                    }
+                        fileSize = cacheFile.length()
+
+                        // Calculate the difference between current file size and target size
+                        val sizeDifference = fileSize - targetSize
+
+                        // Adjust quality reduction rate based on the size difference
+                        quality -= when {
+                            sizeDifference > targetSize * 0.5 -> 20 // Reduce quality faster when far from target
+                            sizeDifference > targetSize * 0.2 -> 10 // Moderate reduction
+                            else -> 5 // Slow down reduction as we approach the target size
+                        }
+
+                        // Ensure quality does not go below 0
+                        if (quality < 0) quality = 0
+
+                    } while (fileSize > targetSize && quality > 0)
+                    
+                    Timber.tag("CacheManager").d("Cached preview: ${cacheFile.name}, size: ${fileSize / 1024}KB, quality: $quality")
                 }
 
                 cacheFile.absolutePath
@@ -122,10 +111,37 @@ class CacheManager(private val context: Context) {
         }
     }
 
+    /**
+     * Loads a full-size image directly from the backend without caching.
+     * This method is used when displaying full-size images.
+     * @param imageUrl The URL of the image to load.
+     * @return The loaded ImageBitmap, or null if an error occurs.
+     */
+    suspend fun loadFullSizeImage(imageUrl: String): ImageBitmap? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val imageLoader = ImageLoader(context)
+                val request = ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .memoryCachePolicy(CachePolicy.READ_ONLY)
+                    .diskCachePolicy(CachePolicy.DISABLED) // Don't cache full-size images
+                    .build()
+                val result = (imageLoader.execute(request) as? SuccessResult)?.drawable
+
+                result?.let { drawable ->
+                    val bitmap = (drawable as BitmapDrawable).bitmap
+                    bitmap.asImageBitmap()
+                }
+            } catch (e: Exception) {
+                Timber.tag("CacheManager").e("Error loading full-size image: $e")
+                null
+            }
+        }
+    }
+
     fun clearOldCachedImages(maxAgeInMillis: Long) {
-        val imageCacheDir = context.cacheDir // Assuming images are stored in the main cache directory
-        if (imageCacheDir.exists() && imageCacheDir.isDirectory) {
-            val files = imageCacheDir.listFiles() ?: return
+        if (cacheDir.exists() && cacheDir.isDirectory) {
+            val files = cacheDir.listFiles() ?: return
             for (file in files) {
                 if (file.isFile && System.currentTimeMillis() - file.lastModified() > maxAgeInMillis) {
                     file.delete()
@@ -135,13 +151,12 @@ class CacheManager(private val context: Context) {
     }
 
     /**
-     * Checks if an image is already cached.
+     * Checks if a preview image is already cached.
      * @param imageUrl The URL of the image.
-     * @param isPreview Boolean indicating if the image is a preview.
-     * @return True if the image is cached, false otherwise.
+     * @return True if the preview is cached, false otherwise.
      */
-    fun isCached(imageUrl: String, isPreview: Boolean = true): Boolean {
-        val cachedPath = getCachedImagePath(imageUrl, isPreview)
+    fun isCached(imageUrl: String): Boolean {
+        val cachedPath = getCachedImagePath(imageUrl)
         val file = File(cachedPath)
         return file.exists()
     }

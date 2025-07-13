@@ -265,7 +265,7 @@ fun MediaBrowser(
                 else -> {
                     ImageViewer(
                         mediaItem.url,
-                        isPreview = false,  // show original image
+                        isFullSize = true,  // show original image
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                             .draggable(

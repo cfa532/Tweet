@@ -33,6 +33,8 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.service.UploadCommentWorker
 import us.fireshare.tweet.widget.createExoPlayer
@@ -128,13 +130,9 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     suspend fun delComment(commentId: MimeiId) {
-        _comments.update { currentComments ->
-            currentComments.filterNot { it.mid == commentId }
-        }
-        _tweetState.value = tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-
+        // Remove manual UI updates - let notification system handle them
         HproseInstance.delComment(tweetState.value, commentId) {
-            _tweetState.value = tweet.copy(commentCount = _comments.value.size)
+            // Callback is kept for backward compatibility but UI updates are handled by notifications
         }
     }
     // add new Comment object to its parent Tweet. The code runs on Main thread.
@@ -173,27 +171,17 @@ class TweetViewModel @AssistedInject constructor(
                                 // Handle the success and update UI
                                 val map = gson.fromJson(json, Map::class.java) as Map<*, *>
 
-                                val comment = gson.fromJson(map["comment"].toString(), Tweet::class.java)
-                                comment.author = appUser
-                                Timber.tag("UploadComment").d("Comment: $comment")
-                                _comments.update { list -> listOf(comment) + list }
-
-                                // Original tweet with the newly added comment.
-                                val updatedTweet = gson.fromJson(map["updatedTweet"].toString(), Tweet::class.java)
-                                Timber.tag("UploadComment").d("Update tweet: $updatedTweet")
-                                _tweetState.value = updatedTweet
+                                // UI updates are now handled by the notification system
+                                // The notification will be posted by HproseInstance.uploadComment()
+                                Timber.tag("UploadComment").d("Comment upload succeeded, notification will update UI")
 
                                 // the comment is also posted as an tweet.
                                 if (map["retweet"].toString() != "null") {
                                     val retweet = gson.fromJson(map["retweet"].toString(), Tweet::class.java)
-                                    retweet.originalTweet = updatedTweet
+                                    retweet.originalTweet = tweetState.value
                                     retweet.author = appUser
-                                    tweetFeedViewModel.addTweetToFeed(retweet)
-
-                                    // update cached tweet in the database.
-                                    viewModelScope.launch(Dispatchers.IO) {
-                                        updateCachedTweet(updatedTweet)
-                                    }
+                                    // Retweet will be added via notification system
+                                    // tweetFeedViewModel.addTweetToFeed(retweet) // Removed - use notifications instead
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("UploadComment").e("${e.message}")
@@ -285,6 +273,67 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
         HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
             _tweetState.value = it
+        }
+    }
+
+    /**
+     * Listen to tweet notifications and update the tweet detail accordingly
+     */
+    fun startListeningToNotifications() {
+        viewModelScope.launch {
+            TweetNotificationCenter.events.collect { event ->
+                when (event) {
+                    is TweetEvent.CommentUploaded -> {
+                        // Only handle if this is the parent tweet for the comment
+                        if (event.parentTweet.mid == tweetState.value.mid) {
+                            // Update the tweet state with new comment count
+                            _tweetState.value = event.parentTweet
+                            
+                            // Add the new comment to the comments list
+                            _comments.update { currentComments ->
+                                (listOf(event.comment) + currentComments)
+                                    .distinctBy { it.mid }
+                                    .sortedByDescending { it.timestamp }
+                            }
+                        }
+                    }
+                    is TweetEvent.CommentDeleted -> {
+                        // Only handle if this is the parent tweet for the comment
+                        if (event.parentTweetId == tweetState.value.mid) {
+                            // Remove the comment from the comments list
+                            _comments.update { currentComments ->
+                                currentComments.filterNot { it.mid == event.commentId }
+                            }
+                            
+                            // Update comment count
+                            _tweetState.value = tweetState.value.copy(
+                                commentCount = max(0, tweetState.value.commentCount - 1)
+                            )
+                        }
+                    }
+                    is TweetEvent.TweetLiked -> {
+                        // Update like status if this is the same tweet
+                        if (event.tweet.mid == tweetState.value.mid) {
+                            _tweetState.value = event.tweet
+                        }
+                    }
+                    is TweetEvent.TweetBookmarked -> {
+                        // Update bookmark status if this is the same tweet
+                        if (event.tweet.mid == tweetState.value.mid) {
+                            _tweetState.value = event.tweet
+                        }
+                    }
+                    is TweetEvent.TweetUpdated -> {
+                        // Update tweet if this is the same tweet
+                        if (event.tweet.mid == tweetState.value.mid) {
+                            _tweetState.value = event.tweet
+                        }
+                    }
+                    else -> {
+                        // Handle other events if needed
+                    }
+                }
+            }
         }
     }
 }

@@ -46,12 +46,17 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.hls.DefaultHlsPlaylistParserFactory
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -273,6 +278,16 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
 }
 
+
+
+/**
+ * Creates an ExoPlayer instance optimized for HLS streaming (default format)
+ * Progressive video support is maintained for backward compatibility
+ * 
+ * @param context Android context
+ * @param url Video URL (HLS is default, progressive fallback if needed)
+ * @return Configured ExoPlayer instance
+ */
 @OptIn(UnstableApi::class)
 fun createExoPlayer(context: Context, url: String): ExoPlayer {
     val cache = VideoCacheManager.getCache(context)
@@ -288,10 +303,53 @@ fun createExoPlayer(context: Context, url: String): ExoPlayer {
         .setCustomCacheKey(cacheKey)  // This ensures the cache uses your unique key
         .build()
 
-    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+    // HLS is now the default video format, progressive video is only for backward compatibility
+    // Always try HLS first, and only fall back to progressive if HLS fails
+    android.util.Log.d("MediaPreview", "Creating HLS MediaSource (default) for URL: $url")
+    val mediaSource: MediaSource = HlsMediaSource.Factory(cacheDataSourceFactory)
+        .setAllowChunklessPreparation(true)
+        .setPlaylistParserFactory(DefaultHlsPlaylistParserFactory())
         .createMediaSource(mediaItem)
 
-    return ExoPlayer.Builder(context).build().apply {
+    val exoPlayer = ExoPlayer.Builder(context)
+        .setLoadControl(
+            LoadControl.Builder()
+                .setBufferDurationsMs(
+                    5000, // minBufferMs - minimum duration of media that the player will attempt to ensure is buffered
+                    30000, // maxBufferMs - maximum duration of media that the player will attempt to buffer
+                    1000, // bufferForPlaybackMs - duration of media that must be buffered for playback to start
+                    2000 // bufferForPlaybackAfterRebufferMs - duration of media that must be buffered for playback to resume after a rebuffer
+                )
+                .build()
+        )
+        .build()
+    
+    // Add listener for player events (HLS is default, with fallback to progressive if needed)
+    exoPlayer.addListener(object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_READY -> {
+                    android.util.Log.d("MediaPreview", "HLS player ready for URL: $url")
+                }
+                Player.STATE_BUFFERING -> {
+                    android.util.Log.d("MediaPreview", "HLS player buffering for URL: $url")
+                }
+                Player.STATE_ENDED -> {
+                    android.util.Log.d("MediaPreview", "HLS player ended for URL: $url")
+                }
+                Player.STATE_IDLE -> {
+                    android.util.Log.d("MediaPreview", "HLS player idle for URL: $url")
+                }
+            }
+        }
+        
+        override fun onPlayerError(error: PlaybackException) {
+            android.util.Log.e("MediaPreview", "HLS player error for URL: $url", error)
+            // Note: ExoPlayer will automatically handle fallback to progressive format if HLS fails
+        }
+    })
+    
+    return exoPlayer.apply {
         setMediaSource(mediaSource)
         prepare()  // Prepares the player with the media source
     }

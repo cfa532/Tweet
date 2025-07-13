@@ -62,6 +62,11 @@ fun UserFavorites(
     val favorites by viewModel.favorites.collectAsState()
     val user = appUser
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    // Start listening to tweet and comment notifications
+    LaunchedEffect(Unit) {
+        viewModel.startListeningToNotifications()
+    }
 
     LaunchedEffect(Unit) {
         viewModel.isLoading.value = true

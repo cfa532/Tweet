@@ -75,6 +75,11 @@ fun TweetDetailScreen(
             }
         }
     }
+    
+    // Start listening to tweet and comment notifications
+    LaunchedEffect(Unit) {
+        viewModel.startListeningToNotifications()
+    }
     var gridColumns by remember { mutableIntStateOf(
         tweet.attachments?.let{
             if (it.size>4) 2 else 1

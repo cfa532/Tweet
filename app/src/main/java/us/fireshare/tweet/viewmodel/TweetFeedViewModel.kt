@@ -35,6 +35,8 @@ import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -236,14 +238,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     }
 
     /**
-     * Add tweet to Feed list and user's viewModel when new tweet uploaded.
+     * Add tweet to Feed list when new tweet uploaded.
+     * This method is kept for backward compatibility but should be replaced with notification system.
+     * @deprecated Use TweetNotificationCenter events instead
      * */
+    @Deprecated("Use TweetNotificationCenter events instead")
     fun addTweetToFeed(newTweet: Tweet) {
         _tweets.update { currentTweets -> (listOf(newTweet) + currentTweets)
             .distinctBy { it.mid }
             .sortedByDescending { it.timestamp }
         }
-        tweetActionListener.onTweetAdded(newTweet)
+        // Remove manual listener call - use notifications instead
+        // tweetActionListener.onTweetAdded(newTweet)
     }
 
     /**
@@ -263,14 +269,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweetId: MimeiId,
         callback: () -> Unit
     ) {
-        // update UI first for better user experience.
+        // Remove manual UI updates - let notification system handle them
         applicationScope.launch(IO) {
             dao.deleteCachedTweet(tweetId)
-            _tweets.update { currentTweets ->
-                currentTweets.filterNot { it.mid == tweetId }
-            }
-            tweetActionListener.onTweetDeleted(tweetId)     // userViewModel function
-            HproseInstance.delTweet(tweetId)
+            // Use deleteTweet which posts notifications instead of delTweet
+            HproseInstance.deleteTweet(tweetId)
             callback()
         }
         applicationScope.launch(Main) {
@@ -312,8 +315,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 if (tweet != null) {
                                     tweet.author = appUser
 
-                                    // add tweet to TweetFeedViewModel's list
-                                    addTweetToFeed(tweet)
+                                    // Tweet will be added via notification system
+                                    // addTweetToFeed(tweet) // Removed - use notifications instead
                                     // notify user the result of tweet upload
                                     Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
                                 }
@@ -342,5 +345,79 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     }
                 }
             }
+    }
+
+    /**
+     * Listen to tweet notifications and update the feed accordingly
+     */
+    fun startListeningToNotifications() {
+        viewModelScope.launch {
+            TweetNotificationCenter.events.collect { event ->
+                when (event) {
+                    is TweetEvent.TweetUploaded -> {
+                        // Add new tweet to the beginning of the feed
+                        _tweets.value = listOf(event.tweet) + (_tweets.value ?: emptyList())
+                    }
+                    is TweetEvent.TweetDeleted -> {
+                        // Remove tweet from feed
+                        _tweets.value = _tweets.value?.filter { it.mid != event.tweetId } ?: emptyList()
+                    }
+                    is TweetEvent.CommentUploaded -> {
+                        // Update comment count for parent tweet
+                        _tweets.value = _tweets.value?.map { tweet ->
+                            if (tweet.mid == event.parentTweet.mid) {
+                                tweet.copy(commentCount = event.parentTweet.commentCount)
+                            } else {
+                                tweet
+                            }
+                        } ?: emptyList()
+                    }
+                    is TweetEvent.CommentDeleted -> {
+                        // Decrease comment count for parent tweet
+                        _tweets.value = _tweets.value?.map { tweet ->
+                            if (tweet.mid == event.parentTweetId) {
+                                tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                            } else {
+                                tweet
+                            }
+                        } ?: emptyList()
+                    }
+                    is TweetEvent.TweetLiked -> {
+                        // Update like status and count
+                        _tweets.value = _tweets.value?.map { tweet ->
+                            if (tweet.mid == event.tweet.mid) {
+                                event.tweet
+                            } else {
+                                tweet
+                            }
+                        } ?: emptyList()
+                    }
+                    is TweetEvent.TweetBookmarked -> {
+                        // Update bookmark status and count
+                        _tweets.value = _tweets.value?.map { tweet ->
+                            if (tweet.mid == event.tweet.mid) {
+                                event.tweet
+                            } else {
+                                tweet
+                            }
+                        } ?: emptyList()
+                    }
+                    is TweetEvent.TweetRetweeted -> {
+                        // Add retweet to feed
+                        _tweets.value = listOf(event.retweet) + (_tweets.value ?: emptyList())
+                    }
+                    is TweetEvent.TweetUpdated -> {
+                        // Update existing tweet
+                        _tweets.value = _tweets.value?.map { tweet ->
+                            if (tweet.mid == event.tweet.mid) {
+                                event.tweet
+                            } else {
+                                tweet
+                            }
+                        } ?: emptyList()
+                    }
+                }
+            }
+        }
     }
 }
