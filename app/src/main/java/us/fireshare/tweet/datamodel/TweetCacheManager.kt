@@ -1,6 +1,5 @@
 package us.fireshare.tweet.datamodel
 
-import android.content.Context
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import java.util.Date
@@ -13,7 +12,7 @@ import java.util.concurrent.TimeUnit
 object TweetCacheManager {
     
     // Cache expiration time (30 days in milliseconds)
-    private const val CACHE_EXPIRATION_TIME = TimeUnit.DAYS.toMillis(30)
+    private const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
     
     // In-memory cache for frequently accessed tweets
     private val memoryCache = mutableMapOf<String, CachedTweet>()
