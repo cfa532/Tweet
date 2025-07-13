@@ -34,8 +34,9 @@ import kotlinx.coroutines.delay
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.widget.Gadget.isElementVisible
-import us.fireshare.tweet.widget.VideoCacheManager.getVideoDimensions
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoDimensions
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -57,7 +58,7 @@ fun VideoPreview(
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    val exoPlayer = remember { createExoPlayer(context, url) }
+    val exoPlayer = remember { createExoPlayer(context, url, MediaType.Video) }
 
     /**
      * Stop playing when screen is locked or closed. Resume play when unlocked.

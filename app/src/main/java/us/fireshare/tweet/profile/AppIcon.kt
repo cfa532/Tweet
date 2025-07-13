@@ -51,7 +51,6 @@ fun UserAvatar(
             modifier = modifier
                 .size(size.dp)
                 .clip(CircleShape),
-            isPreview = true,
             imageSize = size
         )
     } ?: Image(

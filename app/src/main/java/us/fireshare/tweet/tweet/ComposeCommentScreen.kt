@@ -86,6 +86,11 @@ fun ComposeCommentScreen(
     val tweet by tweetViewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
+    
+    // Start listening to tweet and comment notifications
+    LaunchedEffect(Unit) {
+        tweetViewModel.startListeningToNotifications()
+    }
 
     // Create a launcher for the file picker
     val selectedAttachments = remember { mutableStateListOf<Uri>() }

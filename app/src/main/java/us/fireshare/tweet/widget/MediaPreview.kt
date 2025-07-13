@@ -46,12 +46,18 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.hls.DefaultHlsPlaylistParserFactory
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -273,29 +279,25 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
 }
 
+
+
+/**
+ * Creates an ExoPlayer instance that automatically handles both progressive and HLS videos
+ * Uses ExoPlayer's built-in caching - no custom implementation needed
+ * 
+ * @param context Android context
+ * @param url Video URL
+ * @param mediaType Optional MediaType (not used in simplified approach)
+ * @return Configured ExoPlayer instance
+ */
 @OptIn(UnstableApi::class)
-fun createExoPlayer(context: Context, url: String): ExoPlayer {
-    val cache = VideoCacheManager.getCache(context)
-    val dataSourceFactory = DefaultDataSource.Factory(context)
-    val cacheDataSourceFactory = CacheDataSource.Factory()
-        .setCache(cache)
-        .setUpstreamDataSourceFactory(dataSourceFactory)
-        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-    val cacheKey = url.getMimeiKeyFromUrl()
-    val mediaItem = androidx.media3.common.MediaItem.Builder()
-        .setUri(Uri.parse(url))
-        .setCustomCacheKey(cacheKey)  // This ensures the cache uses your unique key
-        .build()
-
-    val mediaSource: MediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-        .createMediaSource(mediaItem)
-
-    return ExoPlayer.Builder(context).build().apply {
-        setMediaSource(mediaSource)
-        prepare()  // Prepares the player with the media source
-    }
+fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
+    // Use simplified cache manager that leverages ExoPlayer's built-in capabilities
+    return SimplifiedVideoCacheManager.createExoPlayer(context, url)
 }
+
+// Simplified approach - no custom HLS detection or separate progressive handling needed
+// ExoPlayer automatically detects and handles both HLS and progressive videos
 
 @OptIn(UnstableApi::class)
 @Composable

@@ -83,6 +83,11 @@ fun ProfileScreen(
             viewModel.initLoad()
         }
     }
+    
+    // Start listening to tweet and comment notifications
+    LaunchedEffect(Unit) {
+        viewModel.startListeningToNotifications()
+    }
 
     Scaffold(
         topBar = { ProfileTopAppBar(viewModel, navController, scrollBehavior) },

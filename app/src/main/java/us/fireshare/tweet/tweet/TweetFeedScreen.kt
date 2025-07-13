@@ -81,6 +81,11 @@ fun TweetFeedScreen(
     LaunchedEffect(pagerState.currentPage) {
         selectedTabIndex = pagerState.currentPage
     }
+    
+    // Start listening to tweet and comment notifications
+    LaunchedEffect(Unit) {
+        viewModel.startListeningToNotifications()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(

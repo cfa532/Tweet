@@ -57,6 +57,8 @@ import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
 
+import us.fireshare.tweet.widget.IpfsCacheManager
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
@@ -98,6 +100,61 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             var isCachedCleared by remember { mutableStateOf(false) }
+            var showCacheInfo by remember { mutableStateOf(false) }
+            
+            // Cache information section
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Cache Information")
+                Button(onClick = { showCacheInfo = !showCacheInfo }) {
+                    Text(if (showCacheInfo) "Hide" else "Show")
+                }
+            }
+            
+            if (showCacheInfo) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(8.dp)
+                ) {
+                    // Unified cache statistics
+                    val cacheSummary = IpfsCacheManager.getCacheSummary(navController.context)
+                    val summaryLines = cacheSummary.split("\n")
+                    
+                    summaryLines.forEach { line ->
+                        if (line.isNotEmpty()) {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    // Test IPFS ID extraction with sample URLs
+                    val testImageUrl = "http://example.com/mm/QmImage123456789"
+                    val testVideoUrl = "http://example.com/mm/QmVideo123456789"
+                    val unifiedTestResult = IpfsCacheManager.testIpfsIdExtraction(testVideoUrl)
+                    
+                    Text(
+                        text = "Unified IPFS Test: ${unifiedTestResult.split("\n").firstOrNull() ?: ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                }
+            }
+            
             Row(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -109,6 +166,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Button(onClick = {
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         dao.clearAllCachedTweets()
+                        IpfsCacheManager.clearAllCaches(navController.context)
                         isCachedCleared = true
                     } },
                     enabled = !isCachedCleared

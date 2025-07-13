@@ -30,6 +30,8 @@ import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
@@ -541,34 +543,148 @@ class UserViewModel @AssistedInject constructor(
         isPasswordVisible.value = ! isPasswordVisible.value
     }
 
-    override fun onTweetAdded(tweet: Tweet) {
-        _tweets.update { currentTweets -> (listOf(tweet) + currentTweets)
-            .distinctBy { it.mid }
-            .sortedByDescending { it.timestamp }
+    /**
+     * Listen to tweet notifications and update user's tweet lists accordingly
+     */
+    fun startListeningToNotifications() {
+        viewModelScope.launch {
+            TweetNotificationCenter.events.collect { event ->
+                when (event) {
+                    is TweetEvent.TweetUploaded -> {
+                        // Only add if it's the current user's tweet
+                        if (event.tweet.authorId == user.value.mid) {
+                            _tweets.update { currentTweets -> (listOf(event.tweet) + currentTweets)
+                                .distinctBy { it.mid }
+                                .sortedByDescending { it.timestamp }
+                            }
+                            _user.value = user.value.copy(tweetCount = tweets.value.size)
+                        }
+                    }
+                    is TweetEvent.TweetDeleted -> {
+                        // Remove from all lists
+                        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
+                        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == event.tweetId } }
+                        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
+                        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
+                        
+                        // Update user's tweet count
+                        _user.value = user.value.copy(tweetCount = tweets.value.size)
+                    }
+                    is TweetEvent.TweetLiked -> {
+                        // Update like status in favorites list
+                        _favorites.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.tweet.mid) event.tweet else tweet
+                            }
+                        }
+                    }
+                    is TweetEvent.TweetBookmarked -> {
+                        // Update bookmark status in bookmarks list
+                        _bookmarks.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.tweet.mid) event.tweet else tweet
+                            }
+                        }
+                    }
+                    is TweetEvent.CommentUploaded -> {
+                        // Update comment count for parent tweet in all lists
+                        _tweets.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweet.mid) {
+                                    tweet.copy(commentCount = event.parentTweet.commentCount)
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _topTweets.update { topTweets ->
+                            topTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweet.mid) {
+                                    tweet.copy(commentCount = event.parentTweet.commentCount)
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _favorites.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweet.mid) {
+                                    tweet.copy(commentCount = event.parentTweet.commentCount)
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _bookmarks.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweet.mid) {
+                                    tweet.copy(commentCount = event.parentTweet.commentCount)
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                    }
+                    is TweetEvent.CommentDeleted -> {
+                        // Decrease comment count for parent tweet in all lists
+                        _tweets.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweetId) {
+                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _topTweets.update { topTweets ->
+                            topTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweetId) {
+                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _favorites.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweetId) {
+                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                        _bookmarks.update { currentTweets ->
+                            currentTweets.map { tweet ->
+                                if (tweet.mid == event.parentTweetId) {
+                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                } else {
+                                    tweet
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        // Handle other events if needed
+                    }
+                }
+            }
         }
-        _user.value = user.value.copy(tweetCount = tweets.value.size)
     }
 
     /**
-     * A tweet is deleted by appUser, remove it from all tweet lists that has the tweet.
-     * */
+     * @deprecated Use notification system instead
+     */
+    @Deprecated("Use notification system instead")
+    override fun onTweetAdded(tweet: Tweet) {
+        // This method is deprecated - use startListeningToNotifications() instead
+    }
+
+    /**
+     * @deprecated Use notification system instead
+     */
+    @Deprecated("Use notification system instead")
     override fun onTweetDeleted(tweetId: MimeiId) {
-        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
-
-        // remove deleted tweet from favorite list, if it is there. May not be loaded yet.
-        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-
-        /**
-         * Remove bookmark and favorite from User mimei, if there are any.
-         * */
-//        HproseInstance.updateFavoriteOfUser(tweetId, false)
-//        val updatedUser = HproseInstance.updateBookmarkOfUser(tweetId, false)
-//        _user.value = user.value.copy(
-//            favoritesCount = updatedUser.favoritesCount,
-//            bookmarksCount = updatedUser.bookmarksCount,
-//            tweetCount = tweets.value.size
-//        )
+        // This method is deprecated - use startListeningToNotifications() instead
     }
 }

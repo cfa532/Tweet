@@ -224,7 +224,7 @@ fun ImageModalDialog(
                     .verticalScroll(scrollState)
             ) {
                 getMediaUrl(user.avatar, user.baseUrl)?.let {
-                    ImageViewer(it, isPreview = false)
+                    ImageViewer(it, isFullSize = true)
                 }
                 SelectableText(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
