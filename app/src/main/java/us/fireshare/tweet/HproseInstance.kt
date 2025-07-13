@@ -45,7 +45,7 @@ import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.Gadget.getAccessibleUser
-import us.fireshare.tweet.widget.VideoCacheManager.getVideoAspectRatio
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
 import java.io.IOException
 import java.net.ConnectException
 import java.net.ProtocolException
