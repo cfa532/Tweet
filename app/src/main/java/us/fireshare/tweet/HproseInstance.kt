@@ -43,7 +43,8 @@ import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.util.regex.Pattern
-import kotlin.runCatching
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -142,6 +143,8 @@ object HproseInstance {
         }
     }
 
+
+
     /**
      * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
      * */
@@ -223,49 +226,9 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-    private suspend fun <T> withRetry(block: suspend () -> T): T {
-        var retryCount = 0
-        while (retryCount < 2) { // Retry up to 2 times
-            try {
-                return block() // Return the result of the block
-            } catch (e: IOException) { // Catch only IOException (network exception)
-                Timber.tag("HproseInstance").e("IOException: ${e.message}")
-                retryCount++
-                initAppEntry()
-            } catch (e: ProtocolException) { // Catch only ProtocolException (network exception)
-                Timber.tag("HproseInstance").e("ProtocolException: ${e.message}")
-                retryCount++
-                initAppEntry()
-            } catch (e: java.util.concurrent.TimeoutException) { // Catch timeout exceptions
-                Timber.tag("HproseInstance").e("TimeoutException: ${e.message}")
-                retryCount++
-                initAppEntry()
-            } catch (e: java.lang.reflect.UndeclaredThrowableException) { // Catch proxy exceptions
-                val cause = e.cause
-                when (cause) {
-                    is java.util.concurrent.TimeoutException -> {
-                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Timeout): ${cause.message}")
-                        retryCount++
-                        initAppEntry()
-                    }
-                    is IOException, is ProtocolException -> {
-                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Network): ${cause.message}")
-                        retryCount++
-                        initAppEntry()
-                    }
-                    else -> {
-                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Other): ${cause?.message}")
-                        throw e // Re-throw if it's not a network/timeout issue
-                    }
-                }
-            }
-        }
-        // If all retries fail, handle the error (e.g., throw an exception or return a default value)
-        Timber.tag("HproseInstance").e("Network error: All retries failed.")
-        throw Exception("Network error: All retries failed.") // Or return a default value
-    }
 
-    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) = withRetry {
+
+    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         val entry = "message_outgoing"
         val params = mapOf(
             "aid" to appId,
@@ -276,8 +239,10 @@ object HproseInstance {
             "msg" to Json.encodeToString(msg),
             "hostid" to (appUser.hostIds?.first() ?: "")
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Boolean>(entry, params)
+        try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Boolean>(entry, params)
+            }
             if (response == true) {
                 getUser(receiptId)?.let { receipt ->
                     val receiptEntry = "message_incoming"
@@ -289,16 +254,22 @@ object HproseInstance {
                         "receiptid" to receiptId,
                         "msg" to Json.encodeToString(msg)
                     )
-                    runCatching {
-                        receipt.hproseService?.runMApp<Any>(receiptEntry, receiptParams)
-                    }.onFailure { e -> Timber.tag("sendMessage").e("Error sending to receipt: $e") }
+                    try {
+                        withContext(Dispatchers.IO) {
+                            receipt.hproseService?.runMApp<Any>(receiptEntry, receiptParams)
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("sendMessage").e("Error sending to receipt: $e")
+                    }
                 }
             }
-        }.onFailure { e -> Timber.tag("sendMessage").e(e) }
+        } catch (e: Exception) {
+            Timber.tag("sendMessage").e(e)
+        }
     }
 
     // get the recent unread message from a sender.
-    suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? = withRetry {
+    suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
         val entry = "message_fetch"
         val params = mapOf(
             "aid" to appId,
@@ -308,25 +279,29 @@ object HproseInstance {
             "senderid" to senderId
         )
 
-        return@withRetry runCatching {
-            val response = appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
-            response?.mapNotNull { messageData ->
-                runCatching {
-                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
-                }.onFailure { e ->
-                    Timber.tag("fetchMessages").e("Error parsing message: $e")
-                }.getOrNull()
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
             }
-        }.onFailure { e ->
+            response?.mapNotNull { messageData ->
+                try {
+                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
+                } catch (e: Exception) {
+                    Timber.tag("fetchMessages").e("Error parsing message: $e")
+                    null
+                }
+            }
+        } catch (e: Exception) {
             Timber.tag("fetchMessages").e(e)
-        }.getOrNull()
+            null
+        }
     }
 
     /**
      * Get a list of unread incoming messages. Only check, do not fetch them.
      * */
-    suspend fun checkNewMessages(): List<ChatMessage>? = withRetry {
-        if (appUser.isGuest()) return@withRetry null
+    suspend fun checkNewMessages(): List<ChatMessage>? {
+        if (appUser.isGuest()) return null
         val entry = "message_check"
         val params = mapOf(
             "aid" to appId,
@@ -334,8 +309,10 @@ object HproseInstance {
             "entry" to entry,
             "userid" to appUser.mid
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response?.mapNotNull { messageData ->
                 try {
                     Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
@@ -344,32 +321,45 @@ object HproseInstance {
                     null
                 }
             }
-        }.onFailure { e -> Timber.tag("checkNewMessages").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("checkNewMessages").e(e)
+            null
+        }
     }
 
-    suspend fun checkUpgrade(): Map<String, String>? = withRetry {
+    suspend fun checkUpgrade(): Map<String, String>? {
         val entry = "check_upgrade"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "entry" to entry
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             response?.mapValues { it.value.toString() }
-        }.onFailure { e -> Timber.tag("checkUpgrade").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("checkUpgrade").e(e)
+            null
+        }
     }
 
-    suspend fun getUserId(username: String): MimeiId? = withRetry {
+    suspend fun getUserId(username: String): MimeiId? {
         val entry = "get_userid"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "username" to username
         )
-        runCatching {
-            appUser.hproseService?.runMApp<String>(entry, params)
-        }.onFailure { e -> Timber.tag("GetUserId").e(e) }.getOrNull()
+        return try {
+            withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<String>(entry, params)
+            }
+        } catch (e: Exception) {
+            Timber.tag("GetUserId").e(e)
+            null
+        }
     }
 
     /**
@@ -382,10 +372,10 @@ object HproseInstance {
         username: String,
         password: String,
         context: Context
-    ): Pair<User?, String?> = withRetry {
-        runCatching {
-            val userId = getUserId(username) ?: return@withRetry Pair(null, context.getString(R.string.login_getuserid_fail))
-            val user = getUser(userId) ?: return@withRetry Pair(null, context.getString(R.string.login_getuser_fail))
+    ): Pair<User?, String?> {
+        return try {
+            val userId = getUserId(username) ?: return Pair(null, context.getString(R.string.login_getuserid_fail))
+            val user = getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
             val entry = "login"
             val params = mapOf(
                 "aid" to appId,
@@ -393,52 +383,65 @@ object HproseInstance {
                 "username" to username,
                 "password" to password
             )
-            val response = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             when (response?.get("status") as? String) {
                 "success" -> Pair(user, null)
                 "failure" -> Pair(null, response["reason"] as? String ?: "Unknown error occurred")
                 else -> Pair(null, context.getString(R.string.login_error))
             }
-        }.onFailure { e ->
+        } catch (e: Exception) {
             Timber.tag("Login").e(e)
-        }.getOrNull() ?: Pair(null, context.getString(R.string.login_error))
+            Pair(null, context.getString(R.string.login_error))
+        }
     }
 
     /**
      * Given host url, get the node Id
      * */
-    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? = withRetry {
+    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
         val entry = "getvar"
         val params = mapOf("name" to "hostid")
-        runCatching {
+        return try {
             val hproseClient = HproseClient.create("$host/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<String>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                hproseClient.runMApp<String>(entry, params)
+            }
             response?.trim()?.trim('"')?.trim(',')
-        }.onFailure { e -> Timber.tag("getHostId").e("$e $host") }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getHostId").e("$e $host")
+            null
+        }
     }
 
     /**
      * @param nodeId
      * Find IP addresses of given node.
      * */
-    suspend fun getHostIP(nodeId: MimeiId): String? = withRetry {
+    suspend fun getHostIP(nodeId: MimeiId): String? {
         val entry = "getvar"
         val params = mapOf(
             "name" to "ips",
             "arg0" to nodeId
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<String>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<String>(entry, params)
+            }
             response?.trim()?.trim('"')?.trim(',')?.split(',')?.let { ips ->
                 if (ips.isNotEmpty()) getAccessibleIP2(ips) else null
             }
-        }.onFailure { e -> Timber.tag("getHostIP").e("$e $nodeId") }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getHostIP").e("$e $nodeId")
+            null
+        }
     }
 
     /**
      * Register a new user or update an existing user account.
      * */
-    suspend fun setUserData(userObj: User): Map<*, *>? = withRetry {
+    suspend fun setUserData(userObj: User): Map<*, *>? {
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
         val entry = if (user.isGuest()) {
             /**
@@ -459,61 +462,79 @@ object HproseInstance {
             "entry" to entry,
             "user" to Json.encodeToString(user)
         )
-        runCatching {
-            val hproseClient = HproseClient.create("${user.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             response
-        }.onFailure { e -> Timber.tag("setUserData").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("setUserData").e(e)
+            null
+        }
     }
 
-    suspend fun setUserAvatar(user: User, avatar: MimeiId) = withRetry {
+    suspend fun setUserAvatar(user: User, avatar: MimeiId) {
         val entry = "set_user_avatar"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
         """.trimIndent()
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
-        runCatching {
-            appUser.uploadService?.runMApp<Any>(entry, request)
-        }.onFailure { e -> Timber.tag("setUserAvatar").e(e) }
+        try {
+            withContext(Dispatchers.IO) {
+                appUser.uploadService?.runMApp<Any>(entry, request)
+            }
+        } catch (e: Exception) {
+            Timber.tag("setUserAvatar").e(e)
+        }
     }
 
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
      * */
-    suspend fun getFollowings(user: User): List<MimeiId> = withRetry {
-        if (user.isGuest()) return@withRetry getAlphaIds()
+    suspend fun getFollowings(user: User): List<MimeiId> {
+        if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "userid" to user.mid
         )
-        runCatching {
-            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
-                ?.mapNotNull { it["field"] as? String }
-        }.onFailure { e -> Timber.tag("Hprose.getFollowings").e(e) }.getOrNull() ?: getAlphaIds()
+                ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
+        } catch (e: Exception) {
+            Timber.tag("Hprose.getFollowings").e(e)
+            getAlphaIds()
+        }
     }
 
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
      * */
-    suspend fun getFans(user: User): List<MimeiId>? = withRetry {
-        if (user.isGuest()) return@withRetry null
+    suspend fun getFans(user: User): List<MimeiId>? {
+        if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "userid" to user.mid
         )
-        runCatching {
-            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
                 ?.mapNotNull { it["field"] as? String }
-        }.onFailure { e -> Timber.tag("Hprose.getFans").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("Hprose.getFans").e(e)
+            null
+        }
     }
 
     /**
@@ -525,7 +546,7 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
-    ): List<Tweet> = withRetry {
+    ): List<Tweet> {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -535,12 +556,14 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
         
-        val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+        val response = withContext(Dispatchers.IO) {
+            user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+        }
         val tweetList = response?.mapNotNull { tweetJson ->
             tweetJson?.let { Tweet.from(tweetJson) }
         } ?: emptyList()
 
-        tweetList.mapNotNull { tweet ->
+        return tweetList.mapNotNull { tweet ->
             tweet.author = getUser(tweet.authorId)
 
             if (tweet.originalTweetId != null) {
@@ -568,7 +591,7 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = 20,
         entry: String = "get_tweets_by_user"
-    ): List<Tweet> = withRetry {
+    ): List<Tweet> {
         try {
             val params = mapOf(
                 "aid" to appId,
@@ -581,7 +604,9 @@ object HproseInstance {
             
             Timber.tag("getTweetListByRank").d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
             
-            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            }
             
             val tweetList = response?.mapNotNull { tweetJson ->
                 tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
@@ -589,7 +614,7 @@ object HproseInstance {
 
             Timber.tag("getTweetListByRank").d("Received ${tweetList.size} tweets for user: ${user.mid}")
 
-            tweetList.mapNotNull { tweet ->
+            return tweetList.mapNotNull { tweet ->
                 tweet.author = user
 
                 if (tweet.originalTweetId != null) {
@@ -603,7 +628,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("getTweetListByRank").e(e, "Error fetching tweets for user: ${user.mid}")
-            throw e // Re-throw to be handled by withRetry
+            throw e
         }
     }
 
@@ -633,17 +658,17 @@ object HproseInstance {
         tweetId: MimeiId,
         authorId: MimeiId,
         nodeUrl: String? = null
-    ): Tweet? = withRetry {
+    ): Tweet? {
         // Check cache first using TweetCacheManager
         TweetCacheManager.getCachedTweet(tweetId)?.let { cachedTweet ->
-            if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
-                return@withRetry null
+            return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
+                null
             else
-                return@withRetry cachedTweet
+                cachedTweet
         }
         
         val author = getUser(authorId)
-        val hostIP = (nodeUrl ?: author?.baseUrl) ?: return@withRetry null
+        val hostIP = (nodeUrl ?: author?.baseUrl) ?: return null
         val entry = "get_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -652,14 +677,19 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
         
-        runCatching {
-            val response = author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             response?.let { tweetData -> 
                 Tweet.from(tweetData).copy(author = author).apply { 
                     TweetCacheManager.saveTweet(this, userId = appUser.mid) 
                 }
             }
-        }.onFailure { e -> Timber.tag("getTweet").e("$tweetId $authorId $hostIP $e") }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getTweet").e("$tweetId $authorId $hostIP $e")
+            null
+        }
     }
 
     /**
@@ -676,9 +706,9 @@ object HproseInstance {
     suspend fun refreshTweet(
         tweetId: MimeiId,
         authorId: MimeiId
-    ): Tweet? = withRetry {
-        runCatching {
-            val author = getUser(authorId) ?: return@withRetry null
+    ): Tweet? {
+        return try {
+            val author = getUser(authorId) ?: return null
             val entry = "refresh_tweet"
             val params = mapOf(
                 "aid" to appId,
@@ -690,17 +720,21 @@ object HproseInstance {
                 "hostid" to (author.hostIds?.first() ?: "")
             )
             
-            val response = author.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                author.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             
             response?.let { tweetData -> 
                 Tweet.from(tweetData).apply { TweetCacheManager.updateCachedTweet(this, appUser.mid) }
             }
             Timber.tag("refreshTweet").d("$response")
             response?.let { Tweet.from(it) }
-        }.onFailure { e -> Timber.tag("refreshTweet").e("$tweetId $authorId $e") }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("refreshTweet").e("$tweetId $authorId $e")
+            null
+        }
         // if cannot get tweet from node, delete it from cache.
-        TweetCacheManager.removeCachedTweet(tweetId)
-        null
+//        TweetCacheManager.removeCachedTweet(tweetId)
     }
 
     fun loadCachedTweets(
@@ -746,7 +780,7 @@ object HproseInstance {
         tweet: Tweet,
         retweetId: MimeiId,
         direction: Int = 1
-    ): Tweet? = withRetry {
+    ): Tweet? {
         val entry = if (direction == 1) "retweet_added" else "retweet_removed"
         val params = mapOf(
             "aid" to appId,
@@ -757,13 +791,18 @@ object HproseInstance {
             "retweetid" to retweetId,
             "authorid" to tweet.authorId
         )
-        runCatching {
-            val response = tweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                tweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             response?.let { Tweet.from(it) }
-        }.onFailure { e -> Timber.tag("updateRetweetCount()").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("updateRetweetCount()").e(e)
+            null
+        }
     }
 
-    suspend fun uploadTweet(tweet: Tweet): Tweet? = withRetry {
+    suspend fun uploadTweet(tweet: Tweet): Tweet? {
         val entry = "add_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -771,8 +810,10 @@ object HproseInstance {
             "hostid" to (appUser.hostIds?.first() ?: ""),
             "tweet" to Json.encodeToString(tweet)
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             if (response?.get("success") == true) {
                 val newTweetId = response["mid"] as? String
                 if (newTweetId != null) {
@@ -789,13 +830,16 @@ object HproseInstance {
                 Timber.tag("uploadTweet").e("Upload failed: $errorMessage")
                 null
             }
-        }.onFailure { e -> Timber.tag("uploadTweet").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("uploadTweet").e(e)
+            null
+        }
     }
 
     /**
      * Delete a tweet and returned the deleted tweetId
      * */
-    suspend fun delTweet(tweetId: MimeiId): MimeiId? = withRetry {
+    suspend fun delTweet(tweetId: MimeiId): MimeiId? {
         val entry = "delete_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -804,17 +848,22 @@ object HproseInstance {
             "tweetid" to tweetId,
             "authorid" to appUser.mid
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<String>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<String>(entry, params)
+            }
             if (response != null) {
                 // Post notification for successful deletion
                 TweetNotificationCenter.post(TweetEvent.TweetDeleted(tweetId, appUser.mid))
             }
             response
-        }.onFailure { e -> Timber.tag("delTweet").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("delTweet").e(e)
+            null
+        }
     }
 
-    suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) = withRetry {
+    suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) {
         val entry = "delete_comment"
         val params = mapOf(
             "aid" to appId,
@@ -825,14 +874,18 @@ object HproseInstance {
             "userid" to appUser.mid,
             "hostid" to (parentTweet.author?.hostIds?.first() ?: "")
         )
-        runCatching {
-            val response = parentTweet.author?.hproseService?.runMApp<Boolean>(entry, params)
+        try {
+            val response = withContext(Dispatchers.IO) {
+                parentTweet.author?.hproseService?.runMApp<Boolean>(entry, params)
+            }
             if (response == true) {
                 // Post notification for successful comment deletion
                 TweetNotificationCenter.post(TweetEvent.CommentDeleted(commentId, parentTweet.mid))
                 callback(commentId)
             }
-        }.onFailure { e -> Timber.tag("delComment()").e(e) }
+        } catch (e: Exception) {
+            Timber.tag("delComment()").e(e)
+        }
     }
 
     /**
@@ -842,7 +895,7 @@ object HproseInstance {
     suspend fun toggleFollowing(
         followedId: MimeiId,
         followingId: MimeiId = appUser.mid
-    ): Boolean? = withRetry {
+    ): Boolean? {
         val entry = "toggle_following"
         val params = mapOf(
             "aid" to appId,
@@ -850,10 +903,15 @@ object HproseInstance {
             "followingid" to followedId,
             "userid" to followingId
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Boolean>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Boolean>(entry, params)
+            }
             response
-        }.onFailure { e -> Timber.tag("toggleFollowing()").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("toggleFollowing()").e(e)
+            null
+        }
     }
 
     /**
@@ -865,8 +923,8 @@ object HproseInstance {
         userId: MimeiId,
         isFollowing: Boolean,
         followerId: MimeiId = appUser.mid
-    ) = withRetry {
-        runCatching {
+    ) {
+        try {
             val user = getUser(userId)
             if (user != null) {
                 val entry = "toggle_follower"
@@ -878,9 +936,13 @@ object HproseInstance {
                     "userid" to userId,
                     "isfollower" to isFollowing
                 )
-                user.hproseService?.runMApp<Any>(entry, params)
+                withContext(Dispatchers.IO) {
+                    user.hproseService?.runMApp<Any>(entry, params)
+                }
             }
-        }.onFailure { e -> Timber.tag("toggleFollower()").e(e) }
+        } catch (e: Exception) {
+            Timber.tag("toggleFollower()").e(e)
+        }
     }
 
     /**
@@ -889,7 +951,7 @@ object HproseInstance {
     suspend fun retweet(
         tweet: Tweet,                       // original tweet to be retweeted
         addTweetToFeed: (Tweet) -> Unit     // add retweet to user's feed
-    ) = withRetry {
+    ) {
         try {
             // upload the retweet, simply a few dozen bytes.
             val retweet = uploadTweet( Tweet(
@@ -898,7 +960,7 @@ object HproseInstance {
                 authorId = appUser.mid,
                 originalTweetId = tweet.mid,
                 originalAuthorId = tweet.authorId
-            )) ?: return@withRetry
+            )) ?: return
 
             retweet.originalTweet = tweet
             addTweetToFeed(retweet)
@@ -917,7 +979,7 @@ object HproseInstance {
     /**
      * Load favorite status of the tweet by appUser.
      * */
-    suspend fun toggleFavorite(tweet: Tweet): Tweet = withRetry {
+    suspend fun toggleFavorite(tweet: Tweet): Tweet {
         val entry = "toggle_favorite"
         val params = mapOf(
             "aid" to appId,
@@ -927,8 +989,10 @@ object HproseInstance {
             "authorid" to tweet.authorId,
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             val isFavorite = response?.get("isFavorite") as? Boolean
             val favoriteCount = response?.get("count") as? Int
             if (isFavorite != null && favoriteCount != null) {
@@ -949,13 +1013,16 @@ object HproseInstance {
                 
                 ret
             } else tweet
-        }.onFailure { e -> Timber.tag("toggleFavorite").e(e) }.getOrNull() ?: tweet
+        } catch (e: Exception) {
+            Timber.tag("toggleFavorite").e(e)
+            tweet
+        }
     }
 
     /**
      * Load bookmark status of the tweet by appUser.
      * */
-    suspend fun toggleBookmark(tweet: Tweet): Tweet = withRetry {
+    suspend fun toggleBookmark(tweet: Tweet): Tweet {
         val entry = "toggle_bookmark"
         val params = mapOf(
             "aid" to appId,
@@ -965,9 +1032,11 @@ object HproseInstance {
             "authorid" to tweet.authorId,
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
-        runCatching {
+        return try {
             val hproseClient = HproseClient.create("${tweet.author?.baseUrl}/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<Map<String, Any>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                hproseClient.runMApp<Map<String, Any>>(entry, params)
+            }
             val hasBookmarked = response?.get("hasBookmarked") as? Boolean
             val bookmarkCount = response?.get("count") as? Int
             if (hasBookmarked != null && bookmarkCount != null) {
@@ -988,7 +1057,10 @@ object HproseInstance {
                 
                 ret
             } else tweet
-        }.onFailure { e -> Timber.tag("toggleBookmark").e(e) }.getOrNull() ?: tweet
+        } catch (e: Exception) {
+            Timber.tag("toggleBookmark").e(e)
+            tweet
+        }
     }
 
     /**
@@ -997,7 +1069,7 @@ object HproseInstance {
     suspend fun getUserTweetsByType(
         user: User,
         type: UserContentType
-    ): List<Tweet>? = withRetry {
+    ): List<Tweet>? {
         val typeString = when (type) {
             UserContentType.FAVORITES -> "favorite_list" // Or whatever your backend expects
             UserContentType.BOOKMARKS -> "bookmark_list"
@@ -1012,16 +1084,21 @@ object HproseInstance {
             "type" to typeString,
             "appuserid" to appUser.mid
         )
-        runCatching {
-            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response?.mapNotNull { tweetData -> Tweet.from(tweetData) }
-        }.onFailure { e -> Timber.tag("getUserTweetsByType").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getUserTweetsByType").e(e)
+            null
+        }
     }
 
     /**
      * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
      */
-    suspend fun deleteTweet(tweetId: String): String? = withRetry {
+    suspend fun deleteTweet(tweetId: String): String? {
         val entry = "delete_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1029,8 +1106,10 @@ object HproseInstance {
             "authorid" to appUser.mid,
             "tweetid" to tweetId
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             if (response?.get("success") == true) {
                 val deletedTweetId = response["tweetid"] as? String
                 
@@ -1044,15 +1123,18 @@ object HproseInstance {
                 val errorMessage = response?.get("message") as? String ?: "Unknown tweet deletion error"
                 throw Exception(errorMessage)
             }
-        }.onFailure { e -> Timber.tag("deleteTweet").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("deleteTweet").e(e)
+            null
+        }
     }
 
     /**
      * Load all comments of a tweet.
      * @param pageNumber
      * */
-    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? = withRetry {
-        runCatching {
+    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
+        return try {
             if (tweet.author == null) tweet.author = getUser(tweet.authorId)
             val entry = "get_comments"
             val params = mapOf(
@@ -1063,16 +1145,21 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize
             )
-            val response = tweet.author?.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                tweet.author?.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            }
             response?.mapNotNull { tweetJson -> tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) } }
-        }.onFailure { e -> Timber.tag("getComments()").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getComments()").e(e)
+            null
+        }
     }
 
     /**
      * The mid of "comment" is updated here, used to be null.
      * @Return the updated parent tweet.
      * */
-    suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet = withRetry {
+    suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet {
         val entry = "add_comment"
         val params = mapOf(
             "aid" to appId,
@@ -1083,8 +1170,10 @@ object HproseInstance {
             "userid" to appUser.mid,
             "hostid" to (tweet.author?.hostIds?.first() ?: "")
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            }
             if (response != null) {
                 // update mid of comment, which was null when passed as argument
                 val newCommentId = response["commentId"] as? MimeiId ?: comment.mid
@@ -1100,7 +1189,10 @@ object HproseInstance {
                 
                 updatedTweet
             } else tweet
-        }.onFailure { e -> Timber.tag("uploadComment()").e(e) }.getOrNull() ?: tweet
+        } catch (e: Exception) {
+            Timber.tag("uploadComment()").e(e)
+            tweet
+        }
     }
 
     fun getMediaUrl(mid: MimeiId?, baseUrl: String?): String? {
@@ -1127,7 +1219,7 @@ object HproseInstance {
      * 
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
-    suspend fun getUser(userId: MimeiId, baseUrl: String? = null): User? = withRetry {
+    suspend fun getUser(userId: MimeiId, baseUrl: String? = null): User? {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         cachedUsers.firstOrNull { it.mid == userId }?.let { cachedUser ->
             // Check if user is expired
@@ -1136,7 +1228,7 @@ object HproseInstance {
                 removeUserFromCache(userId)
             } else {
                 Timber.tag("getUser").d("User $userId found in cache (not expired)")
-                return@withRetry cachedUser
+                return cachedUser
             }
         }
 
@@ -1146,7 +1238,7 @@ object HproseInstance {
         // Step 3: Determine the base URL to use
         val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
             // Get provider IP for the user
-            val providerIP = getProviderIP(userId) ?: return@withRetry null
+            val providerIP = getProviderIP(userId) ?: return null
             "http://$providerIP"
         } else {
             baseUrl
@@ -1158,7 +1250,7 @@ object HproseInstance {
         
         // Step 5: Cache the user and return
         addUserToCache(user)
-        return@withRetry user
+                    return user
     }
 
     /**
@@ -1171,23 +1263,28 @@ object HproseInstance {
     /**
      * Get provider IP for a user using "get_provider" entry
      */
-    private suspend fun getProviderIP(userId: MimeiId): String? = withRetry {
+    private suspend fun getProviderIP(userId: MimeiId): String? {
         val entry = "get_provider"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "mid" to userId
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<String>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<String>(entry, params)
+            }
             response
-        }.onFailure { e -> Timber.tag("getProviderIP").e("$e $userId") }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getProviderIP").e("$e $userId")
+            null
+        }
     }
 
     /**
      * Update user data from server using "get_user" entry
      */
-    private suspend fun updateUserFromServer(user: User) = withRetry {
+    private suspend fun updateUserFromServer(user: User) {
         val entry = "get_user"
         val params = mapOf(
             "aid" to appId,
@@ -1195,8 +1292,10 @@ object HproseInstance {
             "userid" to user.mid
         )
         
-        runCatching {
-            val response = user.hproseService?.runMApp<Any>(entry, params)
+        try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<Any>(entry, params)
+            }
             
             when (response) {
                 is Map<*, *> -> {
@@ -1212,17 +1311,21 @@ object HproseInstance {
                     user.baseUrl = "http://$providerIP"
                     
                     // Retry with new baseUrl
-                    val retryResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                    val retryResponse = withContext(Dispatchers.IO) {
+                        user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                    }
                     retryResponse?.let { userData ->
                         user.from(userData)
                         TweetCacheManager.saveUser(user)
                     }
                 }
             }
-        }.onFailure { e -> Timber.tag("updateUserFromServer").e("$e ${user.mid}") }
+        } catch (e: Exception) {
+            Timber.tag("updateUserFromServer").e("$e ${user.mid}")
+        }
     }
 
-    suspend fun getUserCoreData(mid: MimeiId, ip: String): User? = withRetry {
+    suspend fun getUserCoreData(mid: MimeiId, ip: String): User? {
         val entry = "get_user_core_data"
         val params = mapOf(
             "aid" to appId,
@@ -1230,9 +1333,11 @@ object HproseInstance {
             "entry" to entry,
             "userid" to mid
         )
-        runCatching {
+        return try {
             val hproseClient = HproseClient.create("http://$ip/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<Map<String, Any>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                hproseClient.runMApp<Map<String, Any>>(entry, params)
+            }
             response?.let {
                 getUserInstance(mid).apply {
                     baseUrl = "http://$ip"
@@ -1251,24 +1356,29 @@ object HproseInstance {
                     cloudDrivePort = (it["cloudDrivePort"] as? Number)?.toInt() ?: 8010
                 }
             }
-        }.onFailure { e -> Timber.tag("getUserCoreData").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getUserCoreData").e(e)
+            null
+        }
     }
 
     /**
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    suspend fun isAccessible(ip: String): String? = withRetry {
-        runCatching {
+    suspend fun isAccessible(ip: String): String? {
+        return try {
             val entry = "getvar"
             val params = mapOf(
                 "name" to "mmversions",
                 "arg0" to appId
             )
             val hproseClient = HproseClient.create("http://$ip/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<Array<String>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                hproseClient.runMApp<Array<String>>(entry, params)
+            }
             response?.firstOrNull()?.let { ip } // Return IP if found
-        }.onFailure { e ->
+        } catch (e: Exception) {
             when (e) {
                 is ConnectException, is SocketTimeoutException -> {
                     // Ignore these exceptions and continue
@@ -1276,10 +1386,11 @@ object HproseInstance {
                 }
 //                else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }
-        }.getOrNull()
+            null
+        }
     }
 
-    suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? = withRetry {
+    suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? {
         val entry = "get_providers"
         val params = mapOf(
             "aid" to appId,
@@ -1287,17 +1398,22 @@ object HproseInstance {
             "entry" to entry,
             "mid" to mid
         )
-        runCatching {
+        return try {
             val hproseClient = HproseClient.create("$baseUrl/webapi/").useService(HproseService::class.java)
-            val response = hproseClient.runMApp<List<String>>(entry, params)
+            val response = withContext(Dispatchers.IO) {
+                hproseClient.runMApp<List<String>>(entry, params)
+            }
             response?.toSet()?.toList()
-        }.onFailure { e -> Timber.tag("getProviders").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getProviders").e(e)
+            null
+        }
     }
 
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    suspend fun togglePinnedTweet(tweetId: MimeiId): List<Map<*,*>>? = withRetry {
+    suspend fun togglePinnedTweet(tweetId: MimeiId): List<Map<*,*>>? {
         val entry = "toggle_top_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -1306,17 +1422,22 @@ object HproseInstance {
             "userid" to appUser.mid,
             "tweetid" to tweetId
         )
-        runCatching {
-            val response = appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response
-        }.onFailure { e -> Timber.tag("togglePinnedTweet").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("togglePinnedTweet").e(e)
+            null
+        }
     }
 
     /**
      * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    suspend fun getPinnedList(user: User): List<Map<*,*>>? = withRetry {
+    suspend fun getPinnedList(user: User): List<Map<*,*>>? {
         val entry = "get_top_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -1325,10 +1446,15 @@ object HproseInstance {
             "userid" to user.mid,
             "gid" to appUser.mid
         )
-        runCatching {
-            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            }
             response
-        }.onFailure { e -> Timber.tag("getPinnedList").e(e) }.getOrNull()
+        } catch (e: Exception) {
+            Timber.tag("getPinnedList").e(e)
+            null
+        }
     }
 
     /**
@@ -1338,8 +1464,8 @@ object HproseInstance {
         removeUserFromCache(userId)
     }
 
-    suspend fun logging(msg: String) = withRetry {
-        if (appUser.isGuest()) return@withRetry
+    suspend fun logging(msg: String) {
+        if (appUser.isGuest()) return
         val entry = "logging"
         val params = mapOf(
             "aid" to appId,
@@ -1347,9 +1473,13 @@ object HproseInstance {
             "entry" to entry,
             "msg" to msg
         )
-        runCatching {
-            appUser.hproseService?.runMApp<Any>(entry, params)
-        }.onFailure { e -> Timber.tag("logging").e(e) }
+        try {
+            withContext(Dispatchers.IO) {
+                appUser.hproseService?.runMApp<Any>(entry, params)
+            }
+        } catch (e: Exception) {
+            Timber.tag("logging").e(e)
+        }
     }
 
     /**
@@ -1361,7 +1491,7 @@ object HproseInstance {
         context: Context,
         uri: Uri,
         referenceId: MimeiId? = null
-    ): MimeiFileType? = withRetry {
+    ): MimeiFileType? {
         // Get file name
         var fileName: String? = null
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -1398,7 +1528,7 @@ object HproseInstance {
                 val netdiskResult = uploadVideoToNetdisk(context, uri, fileName, fileTimestamp, referenceId)
                 if (netdiskResult != null) {
                     Timber.tag("uploadToIPFS()").d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
-                    return@withRetry netdiskResult
+                    return netdiskResult
                 }
             } catch (e: Exception) {
                 Timber.tag("uploadToIPFS()").w("Failed to upload video to netdisk, falling back to IPFS: ${e.message}")
@@ -1406,7 +1536,7 @@ object HproseInstance {
         }
 
         // Fall back to original IPFS method for non-video files or if netdisk upload fails
-        return@withRetry uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
+                    return uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
     }
 
     /**
@@ -1483,9 +1613,11 @@ object HproseInstance {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 inputStream.use { stream ->
                     while (stream.read(buffer).also { byteRead = it } != -1) {
-                        request["fsid"] = appUser.uploadService?.runMApp<String>("upload_ipfs",
-                            request.toMap(), listOf(buffer)
-                        )
+                        request["fsid"] = withContext(Dispatchers.IO) {
+                            appUser.uploadService?.runMApp<String>("upload_ipfs",
+                                request.toMap(), listOf(buffer)
+                            )
+                        }
                         offset += byteRead
                         request["offset"] = offset
                     }
@@ -1495,7 +1627,9 @@ object HproseInstance {
             // Do it later when uploading tweet.
             request["finished"] = "true"
             referenceId?.let { request["referenceid"] = it }
-            val cid = appUser.uploadService?.runMApp<String>("upload_ipfs", request.toMap()) ?: return null
+            val cid = withContext(Dispatchers.IO) {
+                appUser.uploadService?.runMApp<String>("upload_ipfs", request.toMap())
+            } ?: return null
 
             @OptIn(UnstableApi::class)
             val aspectRatio = if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
