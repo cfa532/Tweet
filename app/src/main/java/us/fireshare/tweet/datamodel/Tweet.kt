@@ -134,7 +134,51 @@ data class Tweet(
         fun from(dict: Map<String, Any>): Tweet {
             try {
                 val gson = Gson()
-                val jsonString = gson.toJson(dict)
+                
+                // Pre-process the dictionary to handle scientific notation in numeric fields
+                val processedDict = dict.toMutableMap()
+                
+                // Handle timestamp field
+                processedDict["timestamp"]?.let { value ->
+                    when (value) {
+                        is Number -> processedDict["timestamp"] = value.toLong()
+                        is String -> {
+                            try {
+                                processedDict["timestamp"] = value.toDouble().toLong()
+                            } catch (e: NumberFormatException) {
+                                Timber.w("Failed to parse timestamp: $value")
+                            }
+                        }
+                    }
+                }
+                
+                // Handle attachments timestamps if present
+                val attachments = processedDict["attachments"] as? List<*>
+                if (attachments != null) {
+                    val processedAttachments = attachments.map { attachment ->
+                        if (attachment is Map<*, *>) {
+                            val attachmentMap = attachment.toMutableMap()
+                            attachmentMap["timestamp"]?.let { value ->
+                                when (value) {
+                                    is Number -> attachmentMap["timestamp"] = value.toLong()
+                                    is String -> {
+                                        try {
+                                            attachmentMap["timestamp"] = value.toDouble().toLong()
+                                        } catch (e: NumberFormatException) {
+                                            Timber.w("Failed to parse attachment timestamp: $value")
+                                        }
+                                    }
+                                }
+                            }
+                            attachmentMap
+                        } else {
+                            attachment
+                        }
+                    }
+                    processedDict["attachments"] = processedAttachments
+                }
+                
+                val jsonString = gson.toJson(processedDict)
                 val tweet = gson.fromJson(jsonString, Tweet::class.java)
                 
                 return getInstance(
@@ -252,7 +296,51 @@ data class Tweet(
     fun update(dict: Map<String, Any>) {
         try {
             val gson = Gson()
-            val jsonElement: JsonElement = gson.toJsonTree(dict)
+            
+            // Pre-process the dictionary to handle scientific notation in numeric fields
+            val processedDict = dict.toMutableMap()
+            
+            // Handle timestamp field
+            processedDict["timestamp"]?.let { value ->
+                when (value) {
+                    is Number -> processedDict["timestamp"] = value.toLong()
+                    is String -> {
+                        try {
+                            processedDict["timestamp"] = value.toDouble().toLong()
+                        } catch (e: NumberFormatException) {
+                            Timber.w("Failed to parse timestamp: $value")
+                        }
+                    }
+                }
+            }
+            
+            // Handle attachments timestamps if present
+            val attachments = processedDict["attachments"] as? List<*>
+            if (attachments != null) {
+                val processedAttachments = attachments.map { attachment ->
+                    if (attachment is Map<*, *>) {
+                        val attachmentMap = attachment.toMutableMap()
+                        attachmentMap["timestamp"]?.let { value ->
+                            when (value) {
+                                is Number -> attachmentMap["timestamp"] = value.toLong()
+                                is String -> {
+                                    try {
+                                        attachmentMap["timestamp"] = value.toDouble().toLong()
+                                    } catch (e: NumberFormatException) {
+                                        Timber.w("Failed to parse attachment timestamp: $value")
+                                    }
+                                }
+                            }
+                        }
+                        attachmentMap
+                    } else {
+                        attachment
+                    }
+                }
+                processedDict["attachments"] = processedAttachments
+            }
+            
+            val jsonElement: JsonElement = gson.toJsonTree(processedDict)
             val tempTweet = gson.fromJson(jsonElement, Tweet::class.java)
 
             // Update this instance with the new values

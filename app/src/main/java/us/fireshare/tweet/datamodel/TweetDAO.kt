@@ -86,7 +86,7 @@ interface CachedTweetDao {
      * Cache of User list.
      * */
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy to overwrite existing data
-    suspend fun insertOrUpdateCachedUser(cachedUser: CachedUser)
+    fun insertOrUpdateCachedUser(cachedUser: CachedUser)
 
     @Query("SELECT * FROM CachedUser WHERE userId = :userId")
     fun getCachedUser(userId: MimeiId): CachedUser?

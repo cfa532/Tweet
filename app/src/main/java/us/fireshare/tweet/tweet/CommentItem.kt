@@ -78,6 +78,7 @@ fun CommentItem(
         modifier = Modifier
             .clickable { navController.navigate(NavTweet.TweetDetail(comment.authorId, comment.mid)) }
             .padding(horizontal = 4.dp)
+            .heightIn(max = 80000.dp) // Limit individual comment height
     ) {
         Row(
             verticalAlignment = Alignment.Top,
@@ -137,7 +138,7 @@ fun CommentItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .wrapContentHeight()
-                            .heightIn(max = 400.dp)
+                            .heightIn(max = 600.dp) // Max height for media grid in comments
                     ) {
                         MediaPreviewGrid(it, viewModel)
                     }

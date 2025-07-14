@@ -4,10 +4,12 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -141,7 +143,8 @@ fun TweetDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            state = listState
         ) {
             item {
                 /**
@@ -162,14 +165,12 @@ fun TweetDetailScreen(
                 )
             }
             
-            // Comments section using CommentListView
-            item {
-                CommentListView(
-                    comments = comments,
-                    listState = listState,
-                    contentPadding = PaddingValues(bottom = 60.dp),
-                    parentEntry = parentEntry
-                )
+            // Comments as individual items
+            items(
+                items = comments,
+                key = { it.mid }
+            ) { comment ->
+                CommentItem(comment, viewModel, parentEntry)
             }
         }
     }

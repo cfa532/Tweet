@@ -12,7 +12,7 @@ plugins {
 
 android {
     namespace = "us.fireshare.tweet"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "28.0.12433566"
 
     defaultConfig {

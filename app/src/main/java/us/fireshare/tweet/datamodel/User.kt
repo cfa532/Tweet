@@ -60,7 +60,38 @@ data class User(
         fun from(dict: Map<String, Any>): User {
             try {
                 val gson = com.google.gson.Gson()
-                val jsonString = gson.toJson(dict)
+                
+                // Pre-process the dictionary to handle scientific notation in numeric fields
+                val processedDict = dict.toMutableMap()
+                
+                // Handle timestamp and lastLogin fields
+                processedDict["timestamp"]?.let { value ->
+                    when (value) {
+                        is Number -> processedDict["timestamp"] = value.toLong()
+                        is String -> {
+                            try {
+                                processedDict["timestamp"] = value.toDouble().toLong()
+                            } catch (e: NumberFormatException) {
+                                Timber.w("Failed to parse timestamp: $value")
+                            }
+                        }
+                    }
+                }
+                
+                processedDict["lastLogin"]?.let { value ->
+                    when (value) {
+                        is Number -> processedDict["lastLogin"] = value.toLong()
+                        is String -> {
+                            try {
+                                processedDict["lastLogin"] = value.toDouble().toLong()
+                            } catch (e: NumberFormatException) {
+                                Timber.w("Failed to parse lastLogin: $value")
+                            }
+                        }
+                    }
+                }
+                
+                val jsonString = gson.toJson(processedDict)
                 val decodedUser = gson.fromJson(jsonString, User::class.java)
                 
                 // Keep original baseUrl when updated by user dictionary from backend
@@ -252,6 +283,61 @@ data class User(
     }
 
     /**
+     * Update user data from a map (similar to iOS updateFromMap)
+     */
+    fun from(userData: Map<String, Any>) {
+        try {
+            // Pre-process the data to handle scientific notation in numeric fields
+            val processedData = userData.toMutableMap()
+            
+            // Handle timestamp and lastLogin fields
+            processedData["timestamp"]?.let { value ->
+                when (value) {
+                    is Number -> processedData["timestamp"] = value.toLong()
+                    is String -> {
+                        try {
+                            processedData["timestamp"] = value.toDouble().toLong()
+                        } catch (e: NumberFormatException) {
+                            Timber.w("Failed to parse timestamp: $value")
+                        }
+                    }
+                }
+            }
+            
+            processedData["lastLogin"]?.let { value ->
+                when (value) {
+                    is Number -> processedData["lastLogin"] = value.toLong()
+                    is String -> {
+                        try {
+                            processedData["lastLogin"] = value.toDouble().toLong()
+                        } catch (e: NumberFormatException) {
+                            Timber.w("Failed to parse lastLogin: $value")
+                        }
+                    }
+                }
+            }
+            
+            name = processedData["name"] as? String ?: name
+            username = processedData["username"] as? String ?: username
+            avatar = processedData["avatar"] as? String ?: avatar
+            email = processedData["email"] as? String ?: email
+            profile = processedData["profile"] as? String ?: profile
+            cloudDrivePort = (processedData["cloudDrivePort"] as? Number)?.toInt() ?: cloudDrivePort
+            
+            tweetCount = (processedData["tweetCount"] as? Number)?.toInt() ?: tweetCount
+            followingCount = (processedData["followingCount"] as? Number)?.toInt() ?: followingCount
+            followersCount = (processedData["followersCount"] as? Number)?.toInt() ?: followersCount
+            bookmarksCount = (processedData["bookmarksCount"] as? Number)?.toInt() ?: bookmarksCount
+            favoritesCount = (processedData["favoritesCount"] as? Number)?.toInt() ?: favoritesCount
+            commentsCount = (processedData["commentsCount"] as? Number)?.toInt() ?: commentsCount
+            
+            hostIds = (processedData["hostIds"] as? List<*>)?.mapNotNull { id -> id as? String } ?: hostIds
+        } catch (e: Exception) {
+            Timber.tag("User.from").e("Error updating user from map: $e")
+        }
+    }
+
+    /**
      * Check if IP address is IPv6
      */
     private fun isIPv6Address(ip: String): Boolean {
@@ -304,6 +390,16 @@ data class User(
             }
         }
     }
+
+    /**
+     * Check if this user instance has expired and needs to be fetched from backend again
+     */
+    val hasExpired: Boolean
+        get() {
+            val timestamp = HproseInstance.getUserCacheTimestamp(mid) ?: return true
+            val currentTime = System.currentTimeMillis()
+            return (currentTime - timestamp) > HproseInstance.USER_CACHE_EXPIRATION_TIME
+        }
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -7,8 +7,6 @@ import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
-import com.google.gson.reflect.TypeToken
 import hprose.client.HproseClient
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -16,14 +14,8 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.HttpStatusCode
-import io.ktor.client.request.forms.*
-import io.ktor.http.Headers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.CachedTweet
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.ChatDatabase
@@ -50,8 +42,6 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.ProtocolException
 import java.net.SocketTimeoutException
-import java.net.URLEncoder
-import java.util.Date
 import java.util.regex.Pattern
 import kotlin.runCatching
 
@@ -62,10 +52,75 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)
     
+    // User cache expiration time (30 minutes in milliseconds)
+    const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
+    
     // in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
+    private var userCacheTimestamps: MutableMap<MimeiId, Long> = mutableMapOf()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
+
+    /**
+     * Add user to cache with current timestamp
+     */
+    private fun addUserToCache(user: User) {
+        cachedUsers.add(user)
+        userCacheTimestamps[user.mid] = System.currentTimeMillis()
+        dao.insertOrUpdateCachedUser(CachedUser(user.mid, user))
+    }
+
+    /**
+     * Remove user from cache
+     */
+    private fun removeUserFromCache(userId: MimeiId) {
+        cachedUsers.removeIf { it.mid == userId }
+        userCacheTimestamps.remove(userId)
+    }
+
+    /**
+     * Clean up expired users from cache
+     */
+    fun cleanupExpiredUsers() {
+        val expiredUserIds = cachedUsers.filter { user ->
+            user.hasExpired
+        }.map { it.mid }
+        
+        expiredUserIds.forEach { userId ->
+            removeUserFromCache(userId)
+            Timber.tag("cleanupExpiredUsers").d("Removed expired user: $userId")
+        }
+        
+        if (expiredUserIds.isNotEmpty()) {
+            Timber.tag("cleanupExpiredUsers").d("Cleaned up ${expiredUserIds.size} expired users")
+        }
+    }
+
+    /**
+     * Get user cache statistics
+     */
+    fun getUserCacheStats(): UserCacheStats {
+        val totalUsers = cachedUsers.size
+        val expiredUsers = cachedUsers.count { it.hasExpired }
+        val validUsers = totalUsers - expiredUsers
+        
+        return UserCacheStats(
+            totalUsers = totalUsers,
+            validUsers = validUsers,
+            expiredUsers = expiredUsers,
+            expirationTimeMs = USER_CACHE_EXPIRATION_TIME
+        )
+    }
+
+    /**
+     * User cache statistics data class
+     */
+    data class UserCacheStats(
+        val totalUsers: Int,
+        val validUsers: Int,
+        val expiredUsers: Int,
+        val expirationTimeMs: Long
+    )
 
     suspend fun init(context: Context) {
         this.preferenceHelper = PreferenceHelper(context)
@@ -81,9 +136,9 @@ object HproseInstance {
     }
     val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
-            requestTimeoutMillis = 60_000 // Total request timeout
-            connectTimeoutMillis = 30_000  // Connection timeout
-            socketTimeoutMillis = 60_000  // Socket timeout
+            requestTimeoutMillis = 300_000 // Total request timeout (5 minutes)
+            connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
+            socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
         }
     }
 
@@ -141,12 +196,12 @@ object HproseInstance {
                              * */
                             getProviders(userId, "http://$firstIp")?.let { ips ->
                                 appUser = getAccessibleUser(ips, userId) ?: appUser
-                                cachedUsers.add(appUser)
+                                addUserToCache(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                             }
                         } else {
                             appUser.followingList = getAlphaIds()
-                            cachedUsers.add(appUser)
+                            addUserToCache(appUser)
                             Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                         }
                         // once a workable URL is found, break.
@@ -181,6 +236,28 @@ object HproseInstance {
                 Timber.tag("HproseInstance").e("ProtocolException: ${e.message}")
                 retryCount++
                 initAppEntry()
+            } catch (e: java.util.concurrent.TimeoutException) { // Catch timeout exceptions
+                Timber.tag("HproseInstance").e("TimeoutException: ${e.message}")
+                retryCount++
+                initAppEntry()
+            } catch (e: java.lang.reflect.UndeclaredThrowableException) { // Catch proxy exceptions
+                val cause = e.cause
+                when (cause) {
+                    is java.util.concurrent.TimeoutException -> {
+                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Timeout): ${cause.message}")
+                        retryCount++
+                        initAppEntry()
+                    }
+                    is IOException, is ProtocolException -> {
+                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Network): ${cause.message}")
+                        retryCount++
+                        initAppEntry()
+                    }
+                    else -> {
+                        Timber.tag("HproseInstance").e("UndeclaredThrowableException (Other): ${cause?.message}")
+                        throw e // Re-throw if it's not a network/timeout issue
+                    }
+                }
             }
         }
         // If all retries fail, handle the error (e.g., throw an exception or return a default value)
@@ -492,32 +569,41 @@ object HproseInstance {
         pageSize: Int = 20,
         entry: String = "get_tweets_by_user"
     ): List<Tweet> = withRetry {
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "userid" to user.mid,
-            "pn" to pageNumber,
-            "ps" to pageSize,
-            "appuserid" to appUser.mid
-        )
-        
-        val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
-        
-        val tweetList = response?.mapNotNull { tweetJson ->
-            tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
-        } ?: emptyList()
+        try {
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "userid" to user.mid,
+                "pn" to pageNumber,
+                "ps" to pageSize,
+                "appuserid" to appUser.mid
+            )
+            
+            Timber.tag("getTweetListByRank").d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
+            
+            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            
+            val tweetList = response?.mapNotNull { tweetJson ->
+                tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
+            } ?: emptyList()
 
-        tweetList.mapNotNull { tweet ->
-            tweet.author = user
+            Timber.tag("getTweetListByRank").d("Received ${tweetList.size} tweets for user: ${user.mid}")
 
-            if (tweet.originalTweetId != null) {
-                val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                    ?: return@mapNotNull null
-                tweet.originalTweet = originalTweet
+            tweetList.mapNotNull { tweet ->
+                tweet.author = user
+
+                if (tweet.originalTweetId != null) {
+                    val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                        ?: return@mapNotNull null
+                    tweet.originalTweet = originalTweet
+                }
+
+                updateCachedTweet(tweet)
+                tweet
             }
-
-            updateCachedTweet(tweet)
-            tweet
+        } catch (e: Exception) {
+            Timber.tag("getTweetListByRank").e(e, "Error fetching tweets for user: ${user.mid}")
+            throw e // Re-throw to be handled by withRetry
         }
     }
 
@@ -824,7 +910,7 @@ object HproseInstance {
             // Post notification for retweet
             TweetNotificationCenter.post(TweetEvent.TweetRetweeted(tweet, retweet))
         } catch (e: Exception) {
-            Timber.e("toggleRetweet()", e.toString())
+            Timber.tag("toggleRetweet").e(e.toString())
         }
     }
 
@@ -1031,43 +1117,109 @@ object HproseInstance {
     /**
      * Given userId, get baseUrl where user data can be accessed.
      * An user mimei may be stored on many nodes.
-     * */
-    suspend fun getUser(userId: MimeiId): User? = withRetry {
-        // check if user data has been cached
-        cachedUsers.firstOrNull { it.mid == userId }?.let { return@withRetry it }
+     * 
+     * Algorithm based on iOS implementation:
+     * 1. Check user cache first (if baseUrl matches appUser.baseUrl)
+     * 2. If no baseUrl provided, get provider IP for the user
+     * 3. Fetch user data from server using "get_user" entry
+     * 4. Handle both user data and provider IP responses
+     * 5. Update cache with fetched user data
+     * 
+     * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
+     */
+    suspend fun getUser(userId: MimeiId, baseUrl: String? = null): User? = withRetry {
+        // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
+        cachedUsers.firstOrNull { it.mid == userId }?.let { cachedUser ->
+            // Check if user is expired
+            if (cachedUser.hasExpired) {
+                Timber.tag("getUser").d("User $userId is expired, refreshing from backend")
+                removeUserFromCache(userId)
+            } else {
+                Timber.tag("getUser").d("User $userId found in cache (not expired)")
+                return@withRetry cachedUser
+            }
+        }
 
-        val entry = "getvar"
+        // Step 2: Create user instance, which was either expired or not found in cache.
+        val user = getUserInstance(userId)
+        
+        // Step 3: Determine the base URL to use
+        val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
+            // Get provider IP for the user
+            val providerIP = getProviderIP(userId) ?: return@withRetry null
+            "http://$providerIP"
+        } else {
+            baseUrl
+        }
+        
+        // Step 4: Set the base URL and fetch user data
+        user.baseUrl = finalBaseUrl
+        updateUserFromServer(user)
+        
+        // Step 5: Cache the user and return
+        addUserToCache(user)
+        return@withRetry user
+    }
+
+    /**
+     * Get user cache timestamp
+     */
+    fun getUserCacheTimestamp(userId: MimeiId): Long {
+        return userCacheTimestamps[userId] ?: 0L
+    }
+
+    /**
+     * Get provider IP for a user using "get_provider" entry
+     */
+    private suspend fun getProviderIP(userId: MimeiId): String? = withRetry {
+        val entry = "get_provider"
         val params = mapOf(
-            "name" to "mmprovsips",
-            "arg0" to userId
+            "aid" to appId,
+            "ver" to "last",
+            "mid" to userId
         )
         runCatching {
             val response = appUser.hproseService?.runMApp<String>(entry, params)
-            response?.let {
-                var string = it.trim().removeSurrounding("\"").replace("\\", "")
-                val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
-                string = """
-                    window.setParam({
-                        addrs: $string,
-                        aid: ""
-                    })]
-                """.trimIndent()
-                val matcher = pattern.matcher(string as CharSequence)
-                if (matcher.find()) {
-                    matcher.group(1)?.let { group ->
-                        val paramMap = Gson().fromJson(group, Map::class.java) as Map<*, *>
-                        // Get a list of IP addresses, one IP per host.
-                        val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
-                        getAccessibleUser(hostIPs, userId)?.let { user ->
-                            cachedUsers.add(user)
-                            dao.insertOrUpdateCachedUser(CachedUser(userId, user))
-                            return@withRetry user
-                        }
+            response
+        }.onFailure { e -> Timber.tag("getProviderIP").e("$e $userId") }.getOrNull()
+    }
+
+    /**
+     * Update user data from server using "get_user" entry
+     */
+    private suspend fun updateUserFromServer(user: User) = withRetry {
+        val entry = "get_user"
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "userid" to user.mid
+        )
+        
+        runCatching {
+            val response = user.hproseService?.runMApp<Any>(entry, params)
+            
+            when (response) {
+                is Map<*, *> -> {
+                    // User data received directly
+                    val userData = response as Map<String, Any>
+                    user.from(userData)
+                    TweetCacheManager.saveUser(user)
+                }
+                is String -> {
+                    // User data not found on this node, but IP of a valid provider is returned.
+                    // Provider IP received, update baseUrl and retry
+                    val providerIP = response
+                    user.baseUrl = "http://$providerIP"
+                    
+                    // Retry with new baseUrl
+                    val retryResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                    retryResponse?.let { userData ->
+                        user.from(userData)
+                        TweetCacheManager.saveUser(user)
                     }
                 }
             }
-            null
-        }.onFailure { e -> Timber.tag("getUser").e(e) }.getOrNull()
+        }.onFailure { e -> Timber.tag("updateUserFromServer").e("$e ${user.mid}") }
     }
 
     suspend fun getUserCoreData(mid: MimeiId, ip: String): User? = withRetry {
@@ -1183,7 +1335,7 @@ object HproseInstance {
      * Remove user from cachedUsers list.
      * */
     fun removeCachedUser(userId: MimeiId) {
-        cachedUsers.removeIf { it.mid == userId }
+        removeUserFromCache(userId)
     }
 
     suspend fun logging(msg: String) = withRetry {

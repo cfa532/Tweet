@@ -176,6 +176,22 @@ object TweetCacheManager {
     }
     
     /**
+     * Save a user to cache
+     */
+    fun saveUser(user: User) {
+        try {
+            synchronized(cacheLock) {
+                // Update database cache
+                HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user))
+                
+                Timber.d("User cached: ${user.mid}")
+            }
+        } catch (e: Exception) {
+            Timber.e("Error saving user to cache: $e")
+        }
+    }
+
+    /**
      * Check if a cached tweet is expired
      */
     private fun isExpired(cachedTweet: CachedTweet): Boolean {
