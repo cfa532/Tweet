@@ -86,7 +86,12 @@ object TweetCacheManager {
     /**
      * Update an existing cached tweet
      */
-    fun updateCachedTweet(tweet: Tweet, userId: MimeiId) {
+    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
+        if (tweet == null) {
+            Timber.w("Attempted to update cached tweet with null tweet")
+            return
+        }
+        
         try {
             synchronized(cacheLock) {
                 val existingCachedTweet = HproseInstance.dao.getCachedTweet(tweet.mid)

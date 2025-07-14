@@ -35,15 +35,19 @@ data class CachedUser(
 )
 
 class UserConverter {
+    private val gson = Gson().newBuilder()
+        .excludeFieldsWithoutExposeAnnotation()
+        .create()
+    
     @TypeConverter
     fun fromUser(user: User): String {
-        return Gson().toJson(user)
+        return gson.toJson(user)
     }
 
     @TypeConverter
     fun toUser(str: String): User? {
         return try {
-            Gson().fromJson(str, object : TypeToken<User?>() {}.type)
+            gson.fromJson(str, object : TypeToken<User?>() {}.type)
         } catch (e: Exception) {
             Timber.tag("toUser").e("$e")
             null
@@ -52,15 +56,19 @@ class UserConverter {
 }
 
 class TweetConverter {
+    private val gson = Gson().newBuilder()
+        .excludeFieldsWithoutExposeAnnotation()
+        .create()
+    
     @TypeConverter
     fun fromTweet(tweet: Tweet): String {
-        return Gson().toJson(tweet)
+        return gson.toJson(tweet)
     }
 
     @TypeConverter
     fun toTweet(str: String): Tweet? {
         return try {
-            Gson().fromJson(str, object : TypeToken<Tweet?>() {}.type)
+            gson.fromJson(str, object : TypeToken<Tweet?>() {}.type)
         } catch (e: Exception) {
             Timber.tag("toTweet").e("$e")
             null

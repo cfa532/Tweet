@@ -1,6 +1,7 @@
 package us.fireshare.tweet.datamodel
 
 import android.os.Parcelable
+import com.google.gson.annotations.Expose
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import us.fireshare.tweet.HproseInstance
@@ -11,36 +12,36 @@ import timber.log.Timber
 @Parcelize
 @Serializable
 data class User(
-    var baseUrl: String? = null,
-    var writableUrl: String? = null,
-    var mid: MimeiId,
-    var name: String? = null,
-    var username: String? = null,
-    var password: String? = null,
-    var avatar: MimeiId? = null,
-    var email: String? = null,
-    var profile: String? = null,
-    var timestamp: Long = System.currentTimeMillis(),
-    var lastLogin: Long? = System.currentTimeMillis(),
-    var cloudDrivePort: Int = 8010,
+    @Expose var baseUrl: String? = null,
+    @Expose var writableUrl: String? = null,
+    @Expose var mid: MimeiId,
+    @Expose var name: String? = null,
+    @Expose var username: String? = null,
+    @Expose var password: String? = null,
+    @Expose var avatar: MimeiId? = null,
+    @Expose var email: String? = null,
+    @Expose var profile: String? = null,
+    @Expose var timestamp: Long = System.currentTimeMillis(),
+    @Expose var lastLogin: Long? = System.currentTimeMillis(),
+    @Expose var cloudDrivePort: Int = 8010,
 
-    var tweetCount: Int = 0,
-    var followingCount: Int = 0,
-    var followersCount: Int = 0,
-    var bookmarksCount: Int = 0,
-    var favoritesCount: Int = 0,
-    var commentsCount: Int = 0,
+    @Expose var tweetCount: Int = 0,
+    @Expose var followingCount: Int = 0,
+    @Expose var followersCount: Int = 0,
+    @Expose var bookmarksCount: Int = 0,
+    @Expose var favoritesCount: Int = 0,
+    @Expose var commentsCount: Int = 0,
 
-    var hostIds: List<MimeiId>? = null,
-    var publicKey: String? = null,
+    @Expose var hostIds: List<MimeiId>? = null,
+    @Expose var publicKey: String? = null,
 
-    var fansList: List<MimeiId>? = null,
-    var followingList: List<MimeiId>? = null,
-    var bookmarkedTweets: List<MimeiId>? = null,
-    var favoriteTweets: List<MimeiId>? = null,
-    var repliedTweets: List<MimeiId>? = null,
-    var commentsList: List<MimeiId>? = null,
-    var topTweets: List<MimeiId>? = null
+    @Expose var fansList: List<MimeiId>? = null,
+    @Expose var followingList: List<MimeiId>? = null,
+    @Expose var bookmarkedTweets: List<MimeiId>? = null,
+    @Expose var favoriteTweets: List<MimeiId>? = null,
+    @Expose var repliedTweets: List<MimeiId>? = null,
+    @Expose var commentsList: List<MimeiId>? = null,
+    @Expose var topTweets: List<MimeiId>? = null
 ) : Parcelable {
 
     companion object {
@@ -369,7 +370,7 @@ data class User(
                 
                 "$scheme://$hostPart:${TW_CONST.CLOUD_PORT}$path$query$fragment"
             } catch (e: Exception) {
-                Timber.w("Failed to parse baseUrl for cloud port replacement: $baseUrl", e)
+                Timber.w(e, "Failed to parse baseUrl for cloud port replacement: $baseUrl")
                 baseUrl
             }
         }
@@ -396,7 +397,7 @@ data class User(
      */
     val hasExpired: Boolean
         get() {
-            val timestamp = HproseInstance.getUserCacheTimestamp(mid) ?: return true
+            val timestamp = HproseInstance.getUserCacheTimestamp(mid)
             val currentTime = System.currentTimeMillis()
             return (currentTime - timestamp) > HproseInstance.USER_CACHE_EXPIRATION_TIME
         }
