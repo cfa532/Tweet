@@ -472,10 +472,6 @@ enum class UserContentType {
  * When tweet is added or removed from the tweet feed list,
  * update tweet list in ProfileScreen, also add or remove it.
  * */
-interface TweetActionListener {
-    fun onTweetAdded(tweet: Tweet)
-    fun onTweetDeleted(tweetId: MimeiId)
-}
 
 @Serializable
 data class MimeiFileType(
