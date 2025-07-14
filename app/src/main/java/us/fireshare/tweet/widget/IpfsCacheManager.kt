@@ -1,6 +1,7 @@
 package us.fireshare.tweet.widget
 
 import android.content.Context
+import androidx.media3.common.util.UnstableApi
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
@@ -14,6 +15,7 @@ import java.io.File
  * URL Format: http://ip/mm/mimei_id (IPFS-based URLs)
  * Cache Key: Uses IPFS ID (last part of URL) as cache key
  */
+@UnstableApi
 object IpfsCacheManager {
     
     /**

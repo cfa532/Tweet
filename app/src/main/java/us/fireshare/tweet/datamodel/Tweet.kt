@@ -27,7 +27,6 @@ data class Tweet(
     var favorites: MutableList<Boolean>? = mutableListOf(false, false, false),
 
     var favoriteCount: Int = 0,     // Number of likes
-
     var bookmarkCount: Int = 0, // Number of bookmarks
 
     // retweets ID, without comments.

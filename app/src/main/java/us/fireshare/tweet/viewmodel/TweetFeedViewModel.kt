@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.max
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -37,7 +38,6 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetActionListener
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -141,51 +141,49 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
-                    .filter { it.mid == defaultUserId }
-                    .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
+                    .filter { tweet: Tweet -> tweet.mid == defaultUserId }
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
                 allTweets
             }
             getTweets(defaultUserId)
         } else {
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
-                    .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
                 allTweets
             }
             /**
              * Load tweet feed from network
              * */
-            HproseInstance.getTweetFeed(
+            val newTweets = HproseInstance.getTweetFeed(
                 appUser,
                 startRank,
                 startRank + count,
-            ).collect { newTweets ->
-                _tweets.update { currentTweets ->
-                    // Order is important!! newTweets take priority over currentTweets
-                    val mergedTweets = (newTweets + currentTweets)
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
-                    mergedTweets
-                }
+            )
+            _tweets.update { currentTweets ->
+                // Order is important!! newTweets take priority over currentTweets
+                val mergedTweets = (newTweets + currentTweets)
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                mergedTweets
             }
             /**
              * Check for new tweets of followings.
              * */
-            HproseInstance.getTweetFeed(
+            val followingTweets = HproseInstance.getTweetFeed(
                 appUser,
                 startRank,
                 startRank + count,
                 "update_following_tweets"
-            ).collect { newTweets ->
-                _tweets.update { currentTweets ->
-                    // Order is important!! newTweets take priority over currentTweets
-                    val mergedTweets = (newTweets + currentTweets)
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
-                    mergedTweets
-                }
+            )
+            _tweets.update { currentTweets ->
+                // Order is important!! followingTweets take priority over currentTweets
+                val mergedTweets = (followingTweets + currentTweets)
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                mergedTweets
             }
         }
     }
@@ -196,17 +194,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private suspend fun getTweets(userId: MimeiId) {
         try {
             getUser(userId)?.let { user ->
-                HproseInstance.getTweetListByRank(
+                val newTweets = HproseInstance.getTweetListByRank(
                     user,
                     0,
-                ).collect { newTweets ->
-                    _tweets.update { list ->
-                        val mergedTweets = (newTweets + list)
-                            .filterNot { it.isPrivate }
-                            .distinctBy { it.mid }
-                            .sortedByDescending { it.timestamp }
-                        mergedTweets
-                    }
+                )
+                _tweets.update { list ->
+                    val mergedTweets = (newTweets + list)
+                        .filterNot { tweet: Tweet -> tweet.isPrivate }
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    mergedTweets
                 }
             }
         } catch (e: Exception) {

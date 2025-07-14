@@ -29,7 +29,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.BottomBarViewModel
 

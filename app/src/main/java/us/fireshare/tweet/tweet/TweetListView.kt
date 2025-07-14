@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.MimeiId
 
 /**
  * TweetListView: Android Material3 style tweet list with pull-to-refresh, infinite scroll, and loading indicators.
@@ -116,7 +117,7 @@ fun TweetListView(
                 key = { it.mid }
             ) { tweet ->
                 if (showPrivateTweets || !tweet.isPrivate) {
-                    TweetItem(tweet, parentEntry)
+                    parentEntry?.let { TweetItem(tweet, it) }
                 }
             }
             if (isRefreshingAtTop) {
@@ -177,7 +178,7 @@ fun SimpleTweetListView(
             key = { it.mid }
         ) { tweet ->
             if (!tweet.isPrivate) {
-                TweetItem(tweet, parentEntry)
+                parentEntry.let { TweetItem(tweet, it) }
             }
         }
     }
@@ -268,15 +269,15 @@ fun UserTweetListView(
                 // This is a simplified version - you can extend it as needed
                 items(pinnedTweets, key = { it.mid }) { tweet ->
                     if (showPrivateTweets || !tweet.isPrivate) {
-                        TweetItem(tweet, parentEntry)
+                        parentEntry.let { TweetItem(tweet, it) }
                     }
                 }
             }
             
             // Display regular tweets
-            items(tweets, key = { it.mid }) { tweet ->
+            items(tweets, key = { it.mid }) { tweet: Tweet ->
                 if (showPrivateTweets || !tweet.isPrivate) {
-                    TweetItem(tweet, parentEntry)
+                    parentEntry.let { TweetItem(tweet, it) }
                 }
             }
 
@@ -393,7 +394,7 @@ fun CommentListView(
                 items = comments,
                 key = { it.mid }
             ) { comment ->
-                CommentItem(comment, null, parentEntry)
+                parentEntry?.let { CommentItem(comment, null, it) }
             }
             if (isRefreshingAtTop) {
                 item {

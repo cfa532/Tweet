@@ -55,8 +55,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.exoplayer.source.hls.HlsMediaSource
-import androidx.media3.exoplayer.source.hls.DefaultHlsPlaylistParserFactory
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R

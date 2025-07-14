@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         applicationId = "us.fireshare.tweet"
-        minSdk = 28
+        minSdk = 29
         targetSdk = 35
         versionCode = 27    // Google Play store version code
         versionName = "32"   // compared with App Mimei version to check for upgrade.
@@ -68,11 +68,11 @@ android {
     flavorDimensions += "version"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "21"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -130,7 +130,6 @@ dependencies {
     implementation(libs.androidx.media3.media3.exoplayer)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.ui)
-    implementation(libs.androidx.media3.hls)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     implementation(libs.androidx.navigation.runtime.ktx)

@@ -92,16 +92,14 @@ class UserViewModel @AssistedInject constructor(
     suspend fun initLoad() {
         loadPinnedTweets()
         while (startRank.intValue < user.value.tweetCount) {
-            HproseInstance.getTweetListByRank(user.value, startRank.intValue)
-                .collect { newTweets ->
-                    _tweets.update { currentTweets ->
-                        val newTweetsMap = newTweets.associateBy { it.mid }
-                        (currentTweets + newTweets)
-                            .map { newTweetsMap[it.mid] ?: it } // Update existing tweets
-                            .distinctBy { it.mid }
-                            .sortedByDescending { it.timestamp }
-                    }
-                }
+            val newTweets = HproseInstance.getTweetListByRank(user.value, startRank.intValue)
+            _tweets.update { currentTweets ->
+                val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
+                (currentTweets + newTweets)
+                    .map { tweet: Tweet -> newTweetsMap[tweet.mid] ?: tweet } // Update existing tweets
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+            }
             // private tweets not viewable to other users.
             val viewableTweetsCount =
                 tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
@@ -227,11 +225,11 @@ class UserViewModel @AssistedInject constructor(
      * */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
         if (isBookmarked) {
-            _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount?.plus(1))
+            _user.value = user.value.copy(bookmarksCount = (user.value.bookmarksCount ?: 0) + 1)
             _bookmarks.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                bookmarksCount = user.value.bookmarksCount?.minus(1)?.let { max(it, 0) })
+                bookmarksCount = max((user.value.bookmarksCount ?: 0) - 1, 0))
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
     }
@@ -250,11 +248,11 @@ class UserViewModel @AssistedInject constructor(
 
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
         if (isFavorite) {
-            _user.value = user.value.copy(favoritesCount = user.value.favoritesCount?.plus(1))
+            _user.value = user.value.copy(favoritesCount = (user.value.favoritesCount ?: 0) + 1)
             _favorites.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                favoritesCount = user.value.favoritesCount?.minus(1)?.let { max(it, 0) })
+                favoritesCount = max((user.value.favoritesCount ?: 0) - 1, 0))
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
     }
@@ -288,19 +286,17 @@ class UserViewModel @AssistedInject constructor(
     private suspend fun getTweets() {
         loadPinnedTweets()
         // 1. Fetch tweets of the author and update _tweets
-        HproseInstance.getTweetListByRank(user.value, startRank.intValue)
-            .collect { newTweets ->
-                _tweets.update { currentTweets ->
-                    val newTweetsMap = newTweets.associateBy { it.mid }
-                    val updatedTweets = currentTweets.map { tweet ->
-                        newTweetsMap[tweet.mid] ?: tweet
-                    }
-                    (updatedTweets + newTweets)
-                        .filterNot { it.isPrivate && it.authorId != appUser.mid }
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
-                }
+        val newTweets = HproseInstance.getTweetListByRank(user.value, startRank.intValue)
+        _tweets.update { currentTweets ->
+            val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
+            val updatedTweets = currentTweets.map { tweet ->
+                newTweetsMap[tweet.mid] ?: tweet
             }
+            (updatedTweets + newTweets)
+                .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                .distinctBy { tweet: Tweet -> tweet.mid }
+                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+        }
         startRank.intValue = tweets.value.size   // for loading older tweets next time
     }
 
@@ -326,8 +322,8 @@ class UserViewModel @AssistedInject constructor(
         // 3. overwrite any tweet in _topTweets with one from pinnedTweets
         _topTweets.update { currentTopTweets ->
             val pinnedTweetsFiltered = pinnedTweets.toList()
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
+                .distinctBy { tweet: Tweet -> tweet.mid }
+                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
 
             val currentTopTweetsMap = currentTopTweets.associateBy { it.mid }.toMutableMap()
 
@@ -365,9 +361,9 @@ class UserViewModel @AssistedInject constructor(
         }
         _topTweets.update {
             pinnedTweets.toList()
-                .filterNot { it.isPrivate && it.authorId != appUser.mid }
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
+                .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                .distinctBy { tweet: Tweet -> tweet.mid }
+                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
         }
     }
 

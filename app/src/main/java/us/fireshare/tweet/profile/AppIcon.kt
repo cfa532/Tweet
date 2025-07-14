@@ -18,7 +18,6 @@ import coil.compose.rememberAsyncImagePainter
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.widget.ImageViewer
 
 @Composable

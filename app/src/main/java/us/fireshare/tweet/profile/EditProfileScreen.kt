@@ -56,7 +56,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.viewmodel.UserViewModel
 

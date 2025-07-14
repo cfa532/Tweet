@@ -34,7 +34,8 @@ import androidx.navigation.NavBackStackEntry
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.isGuest
+import us.fireshare.tweet.datamodel.User
+import androidx.compose.foundation.layout.PaddingValues
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet

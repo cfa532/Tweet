@@ -60,7 +60,7 @@ import us.fireshare.tweet.widget.SelectableText
 @Composable
 fun CommentItem(
     comment: Tweet,
-    parentTweetViewModel: TweetViewModel,
+    parentTweetViewModel: TweetViewModel?,
     parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
@@ -139,7 +139,7 @@ fun CommentItem(
                             .wrapContentHeight()
                             .heightIn(max = 400.dp)
                     ) {
-                        MediaPreviewGrid(it, parentTweetViewModel)
+                        MediaPreviewGrid(it, viewModel)
                     }
                 }
             }
@@ -161,9 +161,9 @@ fun CommentItem(
 }
 
 @Composable
-fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
+fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     var expanded by remember { mutableStateOf(false) }
-    val parentTweet by parentTweetViewModel.tweetState.collectAsState()
+    val parentTweet by parentTweetViewModel?.tweetState?.collectAsState() ?: remember { mutableStateOf(null) }
 
     Box {
         // the 3 dots button on the right
@@ -186,11 +186,11 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel) {
                 .wrapContentWidth(align = Alignment.End)
                 .height(IntrinsicSize.Min)
         ) {
-            if (parentTweet.authorId == appUser.mid || comment.authorId == appUser.mid) {
+            if (parentTweet?.authorId == appUser.mid || comment.authorId == appUser.mid) {
                 DropdownMenuItem( modifier = Modifier.alpha(0.9f),
                     onClick = {
-                        parentTweetViewModel.viewModelScope.launch(Dispatchers.IO) {
-                            parentTweetViewModel.delComment(comment.mid)
+                        parentTweetViewModel?.viewModelScope?.launch(Dispatchers.IO) {
+                            parentTweetViewModel?.delComment(comment.mid)
                         }
                     },
                     text = {

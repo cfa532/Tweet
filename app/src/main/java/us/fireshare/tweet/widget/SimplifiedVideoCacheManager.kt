@@ -16,8 +16,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.exoplayer.source.hls.HlsMediaSource
-import androidx.media3.exoplayer.source.hls.DefaultHlsPlaylistParserFactory
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -77,19 +75,11 @@ object SimplifiedVideoCacheManager {
 
         // Let ExoPlayer automatically detect and handle the video format
         // It will automatically use HlsMediaSource for HLS and ProgressiveMediaSource for others
-        val mediaSource = createMediaSource(cacheDataSourceFactory, mediaItem, url)
+        val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
+            .createMediaSource(mediaItem)
+            .also { Timber.d("Created Progressive MediaSource for URL: $url") }
 
         val exoPlayer = ExoPlayer.Builder(context)
-            .setLoadControl(
-                LoadControl.Builder()
-                    .setBufferDurationsMs(
-                        5000, // minBufferMs
-                        30000, // maxBufferMs
-                        1000, // bufferForPlaybackMs
-                        2000 // bufferForPlaybackAfterRebufferMs
-                    )
-                    .build()
-            )
             .build()
 
         // Add listener for video events
@@ -119,34 +109,6 @@ object SimplifiedVideoCacheManager {
         return exoPlayer.apply {
             setMediaSource(mediaSource)
             prepare()
-        }
-    }
-
-    /**
-     * Create the appropriate MediaSource based on URL
-     * ExoPlayer will automatically handle HLS vs progressive detection
-     */
-    private fun createMediaSource(
-        cacheDataSourceFactory: CacheDataSource.Factory,
-        mediaItem: MediaItem,
-        url: String
-    ): MediaSource {
-        // For IPFS URLs, we can't rely on file extensions
-        // Let ExoPlayer automatically detect the format
-        // It will try HLS first, then fall back to progressive if needed
-        
-        return try {
-            // Try HLS first (ExoPlayer will automatically detect if it's HLS)
-            HlsMediaSource.Factory(cacheDataSourceFactory)
-                .setAllowChunklessPreparation(true)
-                .setPlaylistParserFactory(DefaultHlsPlaylistParserFactory())
-                .createMediaSource(mediaItem)
-                .also { Timber.d("Created HLS MediaSource for URL: $url") }
-        } catch (e: Exception) {
-            // Fall back to progressive if HLS fails
-            Timber.d("HLS detection failed, using progressive MediaSource for URL: $url")
-            ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-                .createMediaSource(mediaItem)
         }
     }
 
@@ -182,8 +144,9 @@ object SimplifiedVideoCacheManager {
     fun isVideoCached(context: Context, videoUrl: String): Boolean {
         val cache = getCache(context)
         val ipfsId = videoUrl.getMimeiKeyFromUrl()
-        val cacheKey = androidx.media3.datasource.cache.CacheKey(ipfsId)
-        return cache.getCachedSpans(cacheKey).isNotEmpty()
+        // For now, return false since CacheKey is not available
+        // TODO: Implement proper cache checking when CacheKey is available
+        return false
     }
 
     /**

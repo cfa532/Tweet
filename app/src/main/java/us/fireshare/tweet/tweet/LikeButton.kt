@@ -34,7 +34,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.UserActions
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet

@@ -53,11 +53,11 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
-import us.fireshare.tweet.datamodel.isGuest
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
 
 import us.fireshare.tweet.widget.IpfsCacheManager
+import androidx.media3.common.util.UnstableApi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,8 +99,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             .padding(horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            var isCachedCleared by remember { mutableStateOf(false) }
             var showCacheInfo by remember { mutableStateOf(false) }
+            var isCachedCleared by remember { mutableStateOf(false) }
             
             // Cache information section
             Row(
@@ -128,6 +128,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         .padding(8.dp)
                 ) {
                     // Unified cache statistics
+                    @Suppress("UnsafeOptInUsageError")
                     val cacheSummary = IpfsCacheManager.getCacheSummary(navController.context)
                     val summaryLines = cacheSummary.split("\n")
                     
@@ -144,6 +145,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     // Test IPFS ID extraction with sample URLs
                     val testImageUrl = "http://example.com/mm/QmImage123456789"
                     val testVideoUrl = "http://example.com/mm/QmVideo123456789"
+                    @Suppress("UnsafeOptInUsageError")
                     val unifiedTestResult = IpfsCacheManager.testIpfsIdExtraction(testVideoUrl)
                     
                     Text(
@@ -151,7 +153,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
                 }
             }
             
@@ -166,6 +167,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Button(onClick = {
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         dao.clearAllCachedTweets()
+                        @Suppress("UnsafeOptInUsageError")
                         IpfsCacheManager.clearAllCaches(navController.context)
                         isCachedCleared = true
                     } },
@@ -198,7 +200,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                         if (!appUser.isGuest()) {
                             try {
-                                appUser.cloudDrivePort = cloudPort?.toInt()
+                                appUser.cloudDrivePort = cloudPort?.toInt() ?: 8010
                                 applicationScope.launch(Dispatchers.IO) {
                                     HproseInstance.setUserData(appUser)
                                 }
@@ -216,16 +218,24 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Privacy policy",
+            Row(
                 modifier = Modifier
-                    .clickable { showDialog = true }
-                    .background(MaterialTheme.colorScheme.onTertiary,
-                        shape = RoundedCornerShape(12.dp))
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                    .width(intrinsicSize = IntrinsicSize.Max),
-                color = MaterialTheme.colorScheme.primary
-            )
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("") // Empty text to take up space
+                Text("Privacy policy",
+                    modifier = Modifier
+                        .clickable { showDialog = true }
+                        .background(MaterialTheme.colorScheme.onTertiary,
+                            shape = RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .width(intrinsicSize = IntrinsicSize.Max),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Text("Version: ${BuildConfig.VERSION_NAME}",
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodyMedium,
