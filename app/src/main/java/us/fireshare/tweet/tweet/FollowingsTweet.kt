@@ -33,12 +33,8 @@ fun FollowingsTweet(
 
     // Refresh tweets when user changes (login/logout)
     LaunchedEffect(us.fireshare.tweet.HproseInstance.appUser.mid) {
-        if (!initState) {
-            withContext(IO) {
-                viewModel.refresh(0)
-            }
-        } else {
-            viewModel.initState.value = false
+        withContext(IO) {
+            viewModel.refresh(0)
         }
     }
 

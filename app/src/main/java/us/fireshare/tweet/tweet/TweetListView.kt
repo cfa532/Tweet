@@ -39,11 +39,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.MimeiId
+import timber.log.Timber
 
 /**
  * TweetListView: Self-contained Android Material3 style tweet list with built-in pagination, 
@@ -89,6 +89,7 @@ fun TweetListView(
                 try {
                     withContext(Dispatchers.IO) {
                         currentPage = 0 // Reset to page 0 for refresh
+                        Timber.tag("TweetListView").d("Pull refresh: Loading page 0, current tweets: ${tweets.size}")
                         fetchTweets(0)
                     }
                 } finally {
@@ -116,12 +117,13 @@ fun TweetListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom) {
+        if (isAtBottom && !isRefreshingAtBottom && tweets.size >= 4) { // Only trigger if we have enough tweets
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
                         currentPage += 1 // Increment page for load more
+                        Timber.tag("TweetListView").d("Loading more tweets, page: $currentPage, current tweets: ${tweets.size}")
                         fetchTweets(currentPage)
                     }
                 } finally {

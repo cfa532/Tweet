@@ -58,6 +58,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
 
+    init {
+        // Load initial tweets when ViewModel is created
+        viewModelScope.launch(Dispatchers.IO) {
+            refresh(0)
+            initState.value = false
+        }
+    }
+
     /**
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
@@ -84,35 +92,35 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         count: Int = TWEET_COUNT,
     ) {
+        Timber.tag("getTweets").d("Loading page $pageNumber with count $count, current tweets: ${_tweets.value.size}")
+        
         /**
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(pageNumber * count, count)
+        Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for page $pageNumber")
+        
         if (appUser.isGuest()) {
             // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
-                    .filter { tweet: Tweet -> tweet.mid == defaultUserId }
+                    .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                Timber.tag("getTweets").d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
                 allTweets
             }
             getTweets(defaultUserId)
         } else {
-            // Handle cached tweets
-            if (pageNumber == 0) {
-                // For refresh (page 0), replace the list with cached tweets
-                _tweets.value = cachedTweets
-            } else {
-                // For load more (page > 0), append cached tweets
-                _tweets.update { currentTweets ->
-                    val allTweets = (cachedTweets + currentTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    allTweets
-                }
+            // Handle cached tweets - always merge, never replace
+            _tweets.update { currentTweets ->
+                val allTweets = (cachedTweets + currentTweets)
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                Timber.tag("getTweets").d("Cached: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
+                allTweets
             }
             
             /**
@@ -124,17 +132,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 count,
             )
             
-            if (pageNumber == 0) {
-                // For refresh, replace the list with new tweets
-                _tweets.value = newTweets
-            } else {
-                // For load more, append new tweets
-                _tweets.update { currentTweets ->
-                    val mergedTweets = (newTweets + currentTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    mergedTweets
-                }
+            Timber.tag("getTweets").d("Received ${newTweets.size} new tweets for page $pageNumber")
+            if (newTweets.isNotEmpty()) {
+                Timber.tag("getTweets").d("First tweet: ${newTweets.first().mid}, Last tweet: ${newTweets.last().mid}")
+            }
+            
+            // Always merge new tweets with existing ones, never replace
+            _tweets.update { currentTweets ->
+                val mergedTweets = (currentTweets + newTweets)
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                Timber.tag("getTweets").d("Network: Updated tweets from ${currentTweets.size} to ${mergedTweets.size}")
+                mergedTweets
             }
             
             /**
@@ -147,22 +156,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 "update_following_tweets"
             )
             
-            if (pageNumber == 0) {
-                // For refresh, merge with following tweets
-                _tweets.update { currentTweets ->
-                    val mergedTweets = (followingTweets + currentTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    mergedTweets
-                }
-            } else {
-                // For load more, append following tweets
-                _tweets.update { currentTweets ->
-                    val mergedTweets = (followingTweets + currentTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    mergedTweets
-                }
+            Timber.tag("getTweets").d("Received ${followingTweets.size} following tweets for page $pageNumber")
+            
+            // Always merge following tweets with existing ones
+            _tweets.update { currentTweets ->
+                val mergedTweets = (currentTweets + followingTweets)
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                Timber.tag("getTweets").d("Following: Updated tweets from ${currentTweets.size} to ${mergedTweets.size}")
+                mergedTweets
             }
         }
     }
