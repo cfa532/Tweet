@@ -37,18 +37,16 @@ fun FollowingsTweet(
             withContext(IO) {
                 viewModel.refresh(0)
             }
+        } else {
+            viewModel.initState.value = false
         }
     }
 
     TweetListView(
         tweets = tweets,
-        getTweets = { pageNumber ->
+        fetchTweets = { pageNumber ->
             coroutineScope.launch(IO) {
-                if (pageNumber == 0) {
-                    viewModel.loadNewerTweets()
-                } else {
-                    viewModel.loadOlderTweets()
-                }
+                viewModel.fetchTweets(pageNumber)
             }
         },
         scrollBehavior = scrollBehavior,

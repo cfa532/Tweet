@@ -29,7 +29,7 @@ class NetworkCheckJobService : JobService() {
 
         bottomBarViewModel.updateBadgeCount()
         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
-            tweetFeedViewModel.loadNewerTweets()
+            tweetFeedViewModel.fetchTweets(0)
         }
 
         // Job finished

@@ -136,6 +136,18 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
+     * Simple function to fetch tweets for a specific page number.
+     * TweetListView manages pagination logic internally.
+     */
+    suspend fun fetchTweets(pageNumber: Int) {
+        if (pageNumber == 0) {
+            loadNewerTweets()
+        } else {
+            loadOlderTweets()
+        }
+    }
+
+    /**
      * Whether the tweet is pinned to top list.
      * */
     fun hasPinned(tweet: Tweet): Boolean {

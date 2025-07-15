@@ -46,41 +46,17 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
-
     companion object {
         private const val TWEET_COUNT = 20
     }
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
-    // Remove scroll position state and updateScrollPosition
-    // private val _scrollPosition = MutableStateFlow(Pair(0, 0))
-    // val scrollPosition: StateFlow<Pair<Int, Int>> get() = _scrollPosition.asStateFlow()
-    // fun updateScrollPosition(scrollPosition: Pair<Int, Int>) { _scrollPosition.value = scrollPosition }
     private val _isScrolling = MutableStateFlow(false)
     val isScrolling: StateFlow<Boolean> get() = _isScrolling.asStateFlow()
 
-    fun setScrollingState(isScrolling: Boolean) {
-        _isScrolling.value = isScrolling
-    }
-
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
-
-    private val _isRefreshingAtTop = MutableStateFlow(false)
-    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshingAtTop.asStateFlow()
-    private val _isRefreshingAtBottom = MutableStateFlow(false)
-    val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
-
-    init {
-        // init tweet feed. Need to disable loadNewer and loadOlderTweets()
-        // to prevent duplicated loading of tweets.
-        viewModelScope.launch(Dispatchers.IO) {
-            _tweets.value = emptyList()
-            refresh(0)
-            initState.value = false
-        }
-    }
 
     /**
      * Called after login or logout(). Update current user's following list and tweets.
@@ -93,31 +69,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         getTweets(pageNumber)
     }
 
-    suspend fun loadNewerTweets() {
-        // prevent unnecessary run at first load when number of tweets are small
-        if (initState.value) return
-        try {
-            _isRefreshingAtTop.value = true
-            Timber.tag("loadNewerTweets").d("pageNumber=0")
-            // Clear the list for refresh
-            _tweets.value = emptyList()
-            getTweets(0)
-        } finally {
-            _isRefreshingAtTop.value = false
-        }
-    }
-
-    suspend fun loadOlderTweets() {
-        if (initState.value) return
-        try {
-            _isRefreshingAtBottom.value = true
-            // Calculate the page number based on current list size
-            val pageNumber = tweets.value.size / TWEET_COUNT
-            Timber.tag("loadOlderTweets").d("pageNumber=$pageNumber")
-            getTweets(pageNumber)
-        } finally {
-            _isRefreshingAtBottom.value = false // Ensure state is reset
-        }
+    /**
+     * Simple function to fetch tweets for a specific page number.
+     * TweetListView manages pagination logic internally.
+     */
+    suspend fun fetchTweets(pageNumber: Int) {
+        getTweets(pageNumber)
     }
 
     /**
@@ -349,65 +306,65 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 when (event) {
                     is TweetEvent.TweetUploaded -> {
                         // Add new tweet to the beginning of the feed
-                        _tweets.value = listOf(event.tweet) + (_tweets.value ?: emptyList())
+                        _tweets.value = listOf(event.tweet) + _tweets.value
                     }
                     is TweetEvent.TweetDeleted -> {
                         // Remove tweet from feed
-                        _tweets.value = _tweets.value?.filter { it.mid != event.tweetId } ?: emptyList()
+                        _tweets.value = _tweets.value.filter { it.mid != event.tweetId } ?: emptyList()
                     }
                     is TweetEvent.CommentUploaded -> {
                         // Update comment count for parent tweet
-                        _tweets.value = _tweets.value?.map { tweet ->
+                        _tweets.value = _tweets.value.map { tweet ->
                             if (tweet.mid == event.parentTweet.mid) {
                                 tweet.copy(commentCount = event.parentTweet.commentCount)
                             } else {
                                 tweet
                             }
-                        } ?: emptyList()
+                        }
                     }
                     is TweetEvent.CommentDeleted -> {
                         // Decrease comment count for parent tweet
-                        _tweets.value = _tweets.value?.map { tweet ->
+                        _tweets.value = _tweets.value.map { tweet ->
                             if (tweet.mid == event.parentTweetId) {
                                 tweet.copy(commentCount = max(0, tweet.commentCount - 1))
                             } else {
                                 tweet
                             }
-                        } ?: emptyList()
+                        }
                     }
                     is TweetEvent.TweetLiked -> {
                         // Update like status and count
-                        _tweets.value = _tweets.value?.map { tweet ->
+                        _tweets.value = _tweets.value.map { tweet ->
                             if (tweet.mid == event.tweet.mid) {
                                 event.tweet
                             } else {
                                 tweet
                             }
-                        } ?: emptyList()
+                        }
                     }
                     is TweetEvent.TweetBookmarked -> {
                         // Update bookmark status and count
-                        _tweets.value = _tweets.value?.map { tweet ->
+                        _tweets.value = _tweets.value.map { tweet ->
                             if (tweet.mid == event.tweet.mid) {
                                 event.tweet
                             } else {
                                 tweet
                             }
-                        } ?: emptyList()
+                        }
                     }
                     is TweetEvent.TweetRetweeted -> {
                         // Add retweet to feed
-                        _tweets.value = listOf(event.retweet) + (_tweets.value ?: emptyList())
+                        _tweets.value = listOf(event.retweet) + _tweets.value
                     }
                     is TweetEvent.TweetUpdated -> {
                         // Update existing tweet
-                        _tweets.value = _tweets.value?.map { tweet ->
+                        _tweets.value = _tweets.value.map { tweet ->
                             if (tweet.mid == event.tweet.mid) {
                                 event.tweet
                             } else {
                                 tweet
                             }
-                        } ?: emptyList()
+                        }
                     }
                 }
             }

@@ -49,8 +49,8 @@ import us.fireshare.tweet.datamodel.MimeiId
  * TweetListView: Self-contained Android Material3 style tweet list with built-in pagination, 
  * pull-to-refresh, infinite scroll, and loading indicators.
  *
- * @param tweets List of tweets to display
- * @param getTweets Function to load tweets for a specific page number (0 for refresh, currentPage+1 for load more)
+ * @param tweets List of tweets to display (from ViewModel)
+ * @param fetchTweets Function to fetch tweets for a specific page number
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
  * @param showPrivateTweets Whether to show private tweets
@@ -61,7 +61,7 @@ import us.fireshare.tweet.datamodel.MimeiId
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun TweetListView(
     tweets: List<Tweet>,
-    getTweets: (Int) -> Unit,
+    fetchTweets: (Int) -> Unit,
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
@@ -89,7 +89,7 @@ fun TweetListView(
                 try {
                     withContext(Dispatchers.IO) {
                         currentPage = 0 // Reset to page 0 for refresh
-                        getTweets(0)
+                        fetchTweets(0)
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -122,7 +122,7 @@ fun TweetListView(
                 try {
                     withContext(Dispatchers.IO) {
                         currentPage += 1 // Increment page for load more
-                        getTweets(currentPage)
+                        fetchTweets(currentPage)
                     }
                 } finally {
                     isRefreshingAtBottom = false // Ensure state is reset

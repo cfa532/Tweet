@@ -142,13 +142,9 @@ fun ProfileScreen(
                 item {
                     TweetListView(
                         tweets = tweets,
-                        getTweets = { pageNumber ->
+                        fetchTweets = { pageNumber ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                if (pageNumber == 0) {
-                                    viewModel.loadNewerTweets()
-                                } else {
-                                    viewModel.loadOlderTweets()
-                                }
+                                viewModel.fetchTweets(pageNumber)
                             }
                         },
                         scrollBehavior = scrollBehavior,

@@ -659,35 +659,34 @@ object HproseInstance {
         authorId: MimeiId,
         nodeUrl: String? = null
     ): Tweet? {
-        // Check cache first using TweetCacheManager
-        TweetCacheManager.getCachedTweet(tweetId)?.let { cachedTweet ->
-            return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
-                null
-            else
-                cachedTweet
-        }
-        
-        val author = getUser(authorId)
-        val hostIP = (nodeUrl ?: author?.baseUrl) ?: return null
-        val entry = "get_tweet"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "tweetid" to tweetId,
-            "appuserid" to appUser.mid
-        )
-        
         return try {
+            // Check cache first using TweetCacheManager
+            TweetCacheManager.getCachedTweet(tweetId)?.let { cachedTweet ->
+                return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
+                    null
+                else
+                    cachedTweet
+            }
+
+            val author = getUser(authorId)
+            val entry = "get_tweet"
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "tweetid" to tweetId,
+                "appuserid" to appUser.mid
+            )
+
             val response = withContext(Dispatchers.IO) {
                 author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
             }
-            response?.let { tweetData -> 
-                Tweet.from(tweetData).copy(author = author).apply { 
-                    TweetCacheManager.saveTweet(this, userId = appUser.mid) 
+            response?.let { tweetData ->
+                Tweet.from(tweetData).copy(author = author).apply {
+                    TweetCacheManager.saveTweet(this, userId = appUser.mid)
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("getTweet").e("$tweetId $authorId $hostIP $e")
+            Timber.tag("getTweet").e("$tweetId $authorId $e")
             null
         }
     }
