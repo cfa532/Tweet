@@ -35,7 +35,7 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.TweetActionListener
+
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.service.SnackbarController
@@ -46,11 +46,6 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
-    /**
-     * tweetActionListener adds new tweet to the tweet list
-     * of UserViewModel, so that new tweet appears in both viewModel.
-     * */
-    lateinit var tweetActionListener: TweetActionListener
 
     companion object {
         private const val TWEET_COUNT = 20
@@ -232,32 +227,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             dao.deleteCachedTweet(it.mid)
         }
         _tweets.value = emptyList()
-    }
-
-    /**
-     * Add tweet to Feed list when new tweet uploaded.
-     * This method is kept for backward compatibility but should be replaced with notification system.
-     * @deprecated Use TweetNotificationCenter events instead
-     * */
-    @Deprecated("Use TweetNotificationCenter events instead")
-    fun addTweetToFeed(newTweet: Tweet) {
-        _tweets.update { currentTweets -> (listOf(newTweet) + currentTweets)
-            .distinctBy { it.mid }
-            .sortedByDescending { it.timestamp }
-        }
-        // Remove manual listener call - use notifications instead
-        // tweetActionListener.onTweetAdded(newTweet)
-    }
-
-    /**
-     * If original tweet is not null, retweet the original tweet,
-     * otherwise retweet the tweet itself.
-     * */
-    suspend fun addRetweet(tweet: Tweet) {
-        val t = if (tweet.originalTweetId != null) tweet.originalTweet!! else tweet
-        HproseInstance.retweet(t) {
-            addTweetToFeed(it)
-        }
     }
 
     // order of deletion is critical here.

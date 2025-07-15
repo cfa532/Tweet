@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -69,11 +68,8 @@ fun ProfileScreen(
         }
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.topTweets.collectAsState()
-    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()
-    val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val listState = rememberLazyListState()
 
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -103,8 +99,7 @@ fun ProfileScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                state = listState
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
             ) {
                 // Profile details section
                 item {
@@ -147,11 +142,15 @@ fun ProfileScreen(
                 item {
                     TweetListView(
                         tweets = tweets,
-                        listState = listState,
-                        isRefreshingAtTop = refreshingAtTop,
-                        isRefreshingAtBottom = refreshingAtBottom,
-                        onRefreshTop = { viewModel.viewModelScope.launch(Dispatchers.IO) { viewModel.loadNewerTweets() } },
-                        onLoadMore = { viewModel.viewModelScope.launch(Dispatchers.IO) { viewModel.loadOlderTweets() } },
+                        getTweets = { pageNumber ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                if (pageNumber == 0) {
+                                    viewModel.loadNewerTweets()
+                                } else {
+                                    viewModel.loadOlderTweets()
+                                }
+                            }
+                        },
                         scrollBehavior = scrollBehavior,
                         contentPadding = PaddingValues(bottom = 60.dp),
                         showPrivateTweets = appUser.mid == userId,

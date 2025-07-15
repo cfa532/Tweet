@@ -4,20 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,7 +21,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -48,10 +38,10 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.tweet.TweetItem
+import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserBookmarks(
     viewModel: UserViewModel,    // appUserViewModel
@@ -75,30 +65,6 @@ fun UserBookmarks(
             viewModel.getBookmarks(start.intValue)
         }
         viewModel.isLoading.value = false
-    }
-    val refreshingAtTop by viewModel.isRefreshingAtTop.collectAsState()      // data loading indicator
-    val pullRefreshState = rememberPullRefreshState(refreshingAtTop, {
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
-            start.intValue = 0
-            viewModel.getBookmarks(start.intValue)
-        }
-    } )
-    // for pulling up at the bottom of the list
-    val refreshingAtBottom by viewModel.isRefreshingAtBottom.collectAsState()
-    val listState = rememberLazyListState()
-    val layoutInfo by remember {
-        // critical to performance not read layoutInfo directly
-        derivedStateOf { listState.layoutInfo }
-    }
-    val isAtBottom =
-        layoutInfo.visibleItemsInfo.lastOrNull()?.index == layoutInfo.totalItemsCount - 1
-    LaunchedEffect(isAtBottom) {
-        if (isAtBottom && bookmarks.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                start.intValue += 10
-                viewModel.getBookmarks(start.intValue)
-            }
-        }
     }
 
     Scaffold(
@@ -132,8 +98,8 @@ fun UserBookmarks(
         bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0) }
     ) { innerPadding ->
         Box(
-            modifier = Modifier.fillMaxSize()
-                .pullRefresh(pullRefreshState)
+            modifier = Modifier
+                .fillMaxSize()
                 .background(color = Color.LightGray)
                 .padding(innerPadding),
         ) {
@@ -147,42 +113,20 @@ fun UserBookmarks(
                     strokeWidth = 8.dp
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    state = listState
-                ) {
-                    items(bookmarks, key = { it.mid }) { tweet ->
-                        TweetItem(tweet, parentEntry)
-                    }
-                    item {
-                        if (refreshingAtTop) {
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 60.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
-                                    .size(80.dp),
-                                color = Color.LightGray,
-                                strokeWidth = 8.dp
-                            )
+                TweetListView(
+                    tweets = bookmarks,
+                    getTweets = { pageNumber ->
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            if (pageNumber == 0) {
+                                start.intValue = 0
+                            } else {
+                                start.intValue += 10
+                            }
+                            viewModel.getBookmarks(start.intValue)
                         }
-                    }
-                    item {
-                        if (refreshingAtBottom) {
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
-                                    .align(Alignment.BottomCenter)
-                            )
-                        }
-                    }
-                }
-                PullRefreshIndicator(
-                    refreshingAtTop,
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    },
+                    showPrivateTweets = false,
+                    parentEntry = parentEntry
                 )
             }
         }

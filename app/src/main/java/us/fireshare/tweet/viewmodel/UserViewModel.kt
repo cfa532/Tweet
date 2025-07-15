@@ -32,7 +32,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
-import us.fireshare.tweet.datamodel.TweetActionListener
+
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.SnackbarController
@@ -43,7 +43,7 @@ import kotlin.math.max
 class UserViewModel @AssistedInject constructor(
     @Assisted private val userId: MimeiId,
 //    private val savedStateHandle: SavedStateHandle
-): ViewModel(), TweetActionListener {
+): ViewModel() {
     private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -668,19 +668,4 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * @deprecated Use notification system instead
-     */
-    @Deprecated("Use notification system instead")
-    override fun onTweetAdded(tweet: Tweet) {
-        // This method is deprecated - use startListeningToNotifications() instead
-    }
-
-    /**
-     * @deprecated Use notification system instead
-     */
-    @Deprecated("Use notification system instead")
-    override fun onTweetDeleted(tweetId: MimeiId) {
-        // This method is deprecated - use startListeningToNotifications() instead
-    }
 }

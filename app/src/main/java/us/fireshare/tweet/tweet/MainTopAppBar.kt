@@ -31,10 +31,9 @@ import us.fireshare.tweet.profile.UserAvatar
 @Composable
 fun MainTopAppBar(
     navController: NavHostController,
-    listState: LazyListState,
+    onScrollToTop: (() -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
-    val scope = rememberCoroutineScope()
     CenterAlignedTopAppBar(
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.topAppBarColors(
@@ -50,10 +49,7 @@ fun MainTopAppBar(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = {
-                            scope.launch {
-                                listState.scrollToItem(0)
-//                                listState.animateScrollToItem(0)
-                            }
+                            onScrollToTop?.invoke()
                         })
                 ) {
                     AppIcon()

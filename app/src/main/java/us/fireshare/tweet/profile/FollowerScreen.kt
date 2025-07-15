@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -56,7 +55,6 @@ fun FollowerScreen(
         }
     val followersOfProfile by viewModel.followers.collectAsState()
     val userOfProfile by viewModel.user.collectAsState()
-    val listState = rememberLazyListState()
 
     Scaffold(
         topBar = {
@@ -91,7 +89,9 @@ fun FollowerScreen(
         Surface(modifier = Modifier.padding(innerPadding)) {
             UserListView(
                 users = followersOfProfile,
-                listState = listState,
+                getUsers = { pageNumber ->
+                    // TODO: Implement pagination for followers if needed
+                },
                 contentPadding = PaddingValues(bottom = 60.dp),
                 userItem = { followerUserId ->
                     FollowerItem(

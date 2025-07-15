@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -24,7 +25,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,14 +45,11 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.MimeiId
 
 /**
- * TweetListView: Android Material3 style tweet list with pull-to-refresh, infinite scroll, and loading indicators.
+ * TweetListView: Self-contained Android Material3 style tweet list with built-in pagination, 
+ * pull-to-refresh, infinite scroll, and loading indicators.
  *
  * @param tweets List of tweets to display
- * @param listState LazyListState for scroll management
- * @param isRefreshingAtTop Whether top refresh is in progress
- * @param isRefreshingAtBottom Whether bottom refresh is in progress
- * @param onRefreshTop Callback for pull-to-refresh
- * @param onLoadMore Callback for infinite scroll
+ * @param getTweets Function to load tweets for a specific page number (0 for refresh, currentPage+1 for load more)
  * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
@@ -59,21 +61,36 @@ import us.fireshare.tweet.datamodel.MimeiId
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun TweetListView(
     tweets: List<Tweet>,
-    listState: LazyListState,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
+    getTweets: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
-    modifier: Modifier = Modifier,
     parentEntry: NavBackStackEntry? = null,
 ) {
+    // Internal state management
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
-        onRefresh = { onRefreshTop?.invoke() }
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshingAtTop = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage = 0 // Reset to page 0 for refresh
+                        getTweets(0)
+                    }
+                } finally {
+                    isRefreshingAtTop = false
+                }
+            }
+        }
     )
 
     val isAtBottom by remember {
@@ -94,8 +111,18 @@ fun TweetListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && onLoadMore != null) {
-            onLoadMore()
+        if (isAtBottom && !isRefreshingAtBottom) {
+            coroutineScope.launch {
+                isRefreshingAtBottom = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage += 1 // Increment page for load more
+                        getTweets(currentPage)
+                    }
+                } finally {
+                    isRefreshingAtBottom = false
+                }
+            }
         }
     }
 
@@ -186,16 +213,14 @@ fun SimpleTweetListView(
 
 /**
  * A TweetListView specifically designed for displaying user tweets with pinned tweets support.
+ * Self-contained with built-in pagination and refresh functionality.
  * 
  * @param tweets The list of regular tweets
  * @param pinnedTweets The list of pinned tweets to display at the top
  * @param parentEntry Navigation back stack entry for navigation context
- * @param listState The LazyListState for scroll management
+ * @param getTweets Function to load tweets for a specific page number
+ * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior for nested scrolling
- * @param isRefreshingAtTop Whether the top refresh is in progress
- * @param isRefreshingAtBottom Whether the bottom refresh is in progress
- * @param onRefreshTop Callback for top refresh action
- * @param onLoadMore Callback for loading more tweets
  * @param showPrivateTweets Whether to show private tweets
  * @param modifier Additional modifier for the component
  */
@@ -205,22 +230,32 @@ fun UserTweetListView(
     tweets: List<Tweet>,
     pinnedTweets: List<Tweet> = emptyList(),
     parentEntry: NavBackStackEntry,
-    listState: LazyListState,
+    getTweets: (Int) -> Unit,
+    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
     showPrivateTweets: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // Internal state management
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     // Pull-to-refresh state
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
-            onRefreshTop?.let { refresh ->
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    refresh()
+            coroutineScope.launch {
+                isRefreshingAtTop = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage = 0 // Reset to page 0 for refresh
+                        getTweets(0)
+                    }
+                } finally {
+                    isRefreshingAtTop = false
                 }
             }
         }
@@ -235,11 +270,27 @@ fun UserTweetListView(
         }
     }
 
+    // Track scroll position changes
+    LaunchedEffect(listState) {
+        snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+            .collect { position ->
+                onScrollPositionChange?.invoke(position)
+            }
+    }
+
     // Handle infinite scrolling
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && onLoadMore != null) {
-            withContext(Dispatchers.IO) {
-                onLoadMore()
+        if (isAtBottom && !isRefreshingAtBottom) {
+            coroutineScope.launch {
+                isRefreshingAtBottom = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage += 1 // Increment page for load more
+                        getTweets(currentPage)
+                    }
+                } finally {
+                    isRefreshingAtBottom = false
+                }
             }
         }
     }
@@ -321,13 +372,10 @@ fun UserTweetListView(
 
 /**
  * CommentListView: Specialized list view for displaying tweet comments with Material3 styling.
+ * Self-contained with built-in pagination and refresh functionality.
  *
  * @param comments List of comment tweets to display
- * @param listState LazyListState for scroll management
- * @param isRefreshingAtTop Whether top refresh is in progress
- * @param isRefreshingAtBottom Whether bottom refresh is in progress
- * @param onRefreshTop Callback for pull-to-refresh
- * @param onLoadMore Callback for infinite scroll
+ * @param getComments Function to load comments for a specific page number
  * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
@@ -338,20 +386,35 @@ fun UserTweetListView(
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun CommentListView(
     comments: List<Tweet>,
-    listState: LazyListState,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
+    getComments: (Int) -> Unit,
     onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     modifier: Modifier = Modifier,
     parentEntry: NavBackStackEntry? = null,
 ) {
+    // Internal state management
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
-        onRefresh = { onRefreshTop?.invoke() }
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshingAtTop = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage = 0 // Reset to page 0 for refresh
+                        getComments(0)
+                    }
+                } finally {
+                    isRefreshingAtTop = false
+                }
+            }
+        }
     )
 
     val isAtBottom by remember {
@@ -372,8 +435,18 @@ fun CommentListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && onLoadMore != null) {
-            onLoadMore()
+        if (isAtBottom && !isRefreshingAtBottom) {
+            coroutineScope.launch {
+                isRefreshingAtBottom = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage += 1 // Increment page for load more
+                        getComments(currentPage)
+                    }
+                } finally {
+                    isRefreshingAtBottom = false
+                }
+            }
         }
     }
 
@@ -434,13 +507,10 @@ fun CommentListView(
 
 /**
  * UserListView: Material3 style list view for displaying user lists (followers/following).
+ * Self-contained with built-in pagination and refresh functionality.
  *
  * @param users List of users to display
- * @param listState LazyListState for scroll management
- * @param isRefreshingAtTop Whether top refresh is in progress
- * @param isRefreshingAtBottom Whether bottom refresh is in progress
- * @param onRefreshTop Callback for pull-to-refresh
- * @param onLoadMore Callback for infinite scroll
+ * @param getUsers Function to load users for a specific page number
  * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
@@ -451,20 +521,35 @@ fun CommentListView(
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun UserListView(
     users: List<MimeiId>,
-    listState: LazyListState,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
+    getUsers: (Int) -> Unit,
     onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     modifier: Modifier = Modifier,
     userItem: @Composable (MimeiId) -> Unit,
 ) {
+    // Internal state management
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
-        onRefresh = { onRefreshTop?.invoke() }
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshingAtTop = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage = 0 // Reset to page 0 for refresh
+                        getUsers(0)
+                    }
+                } finally {
+                    isRefreshingAtTop = false
+                }
+            }
+        }
     )
 
     val isAtBottom by remember {
@@ -485,8 +570,18 @@ fun UserListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && onLoadMore != null) {
-            onLoadMore()
+        if (isAtBottom && !isRefreshingAtBottom) {
+            coroutineScope.launch {
+                isRefreshingAtBottom = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage += 1 // Increment page for load more
+                        getUsers(currentPage)
+                    }
+                } finally {
+                    isRefreshingAtBottom = false
+                }
+            }
         }
     }
 

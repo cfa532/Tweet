@@ -1,5 +1,6 @@
 package us.fireshare.tweet.datamodel
 
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ object TweetNotificationCenter {
     /**
      * Post an event without suspending (for use in non-suspend contexts)
      */
+    @OptIn(DelicateCoroutinesApi::class)
     fun postAsync(event: TweetEvent) {
         kotlinx.coroutines.GlobalScope.launch {
             _events.emit(event)

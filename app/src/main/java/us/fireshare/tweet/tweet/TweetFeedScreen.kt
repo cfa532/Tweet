@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +38,7 @@ import androidx.navigation.NavHostController
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.ui.theme.rememberDelayedBottomBarTransparency
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 data class TabItem(
@@ -63,7 +63,6 @@ fun TweetFeedScreen(
     // State to track if scrolling is in progress
     val isScrolling by viewModel.isScrolling.collectAsState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val listState = rememberLazyListState()
 
     // Check if the top bar is collapsed by checking the offset
     val isTopAppBarCollapsed by remember {
@@ -90,7 +89,7 @@ fun TweetFeedScreen(
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            topBar = { MainTopAppBar(navController, listState, scrollBehavior) },
+            topBar = { MainTopAppBar(navController, onScrollToTop = null, scrollBehavior = scrollBehavior) },
             bottomBar = {} // Remove bottomBar from Scaffold
         ) { innerPadding ->
             Column(
@@ -133,7 +132,7 @@ fun TweetFeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (index) {
-                            0 -> FollowingsTweet(parentEntry, listState, scrollBehavior, viewModel)
+                            0 -> FollowingsTweet(parentEntry, scrollBehavior, viewModel)
                             1 -> RecommendedTweetScreen()
                         }
                     }

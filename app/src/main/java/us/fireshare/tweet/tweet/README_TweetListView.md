@@ -1,11 +1,14 @@
 # TweetListView Component
 
-A reusable, iOS-like TweetListView component for displaying lists of tweets in your Android app.
+A self-contained, reusable, iOS-like TweetListView component for displaying lists of tweets in your Android app.
 
 ## Features
 
-- **Pull-to-refresh functionality** - Swipe down to refresh the tweet list
-- **Infinite scrolling** - Automatically load more tweets when reaching the bottom
+- **Self-contained state management** - Handles pagination, scroll, pull-to-refresh, and load more internally
+- **Simplified API** - Single `getTweets(pageNumber)` function for all loading operations
+- **Automatic page management** - Internal `currentPage` state tracks pagination automatically
+- **Pull-to-refresh functionality** - Swipe down to refresh the tweet list (page 0)
+- **Infinite scrolling** - Automatically load more tweets when reaching the bottom (currentPage+1)
 - **Scroll position preservation** - Maintain scroll position across configuration changes
 - **Loading states** - Visual indicators for top and bottom loading states
 - **TopAppBar integration** - Seamless integration with Material3 TopAppBar scroll behavior
@@ -16,23 +19,19 @@ A reusable, iOS-like TweetListView component for displaying lists of tweets in y
 
 ### 1. TweetListView (Main Component)
 
-The main component with full functionality:
+The main self-contained component with full functionality:
 
 ```kotlin
 @Composable
 fun TweetListView(
     tweets: List<Tweet>,
-    parentEntry: NavBackStackEntry,
-    listState: LazyListState,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
+    getTweets: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
-    modifier: Modifier = Modifier
+    parentEntry: NavBackStackEntry? = null,
 )
 ```
 
@@ -59,12 +58,9 @@ fun UserTweetListView(
     tweets: List<Tweet>,
     pinnedTweets: List<Tweet> = emptyList(),
     parentEntry: NavBackStackEntry,
-    listState: LazyListState,
+    getTweets: (Int) -> Unit,
+    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    isRefreshingAtTop: Boolean = false,
-    isRefreshingAtBottom: Boolean = false,
-    onRefreshTop: (() -> Unit)? = null,
-    onLoadMore: (() -> Unit)? = null,
     showPrivateTweets: Boolean = false,
     modifier: Modifier = Modifier
 )
@@ -81,14 +77,17 @@ fun MyTweetScreen(
     viewModel: TweetFeedViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
-    val listState = rememberLazyListState()
     
     TweetListView(
         tweets = tweets,
-        parentEntry = parentEntry,
-        listState = listState,
-        onRefreshTop = { viewModel.refresh() },
-        onLoadMore = { viewModel.loadMore() }
+        getTweets = { pageNumber ->
+            if (pageNumber == 0) {
+                viewModel.refresh()
+            } else {
+                viewModel.loadMore()
+            }
+        },
+        parentEntry = parentEntry
     )
 }
 ```
@@ -102,7 +101,6 @@ fun TweetFeedWithTopBar(
     viewModel: TweetFeedViewModel
 ) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val listState = rememberLazyListState()
     val tweets by viewModel.tweets.collectAsState()
     
     Scaffold(
@@ -115,11 +113,15 @@ fun TweetFeedWithTopBar(
     ) { padding ->
         TweetListView(
             tweets = tweets,
-            parentEntry = parentEntry,
-            listState = listState,
+            getTweets = { pageNumber ->
+                if (pageNumber == 0) {
+                    viewModel.refresh()
+                } else {
+                    viewModel.loadMore()
+                }
+            },
             scrollBehavior = scrollBehavior,
-            onRefreshTop = { viewModel.refresh() },
-            onLoadMore = { viewModel.loadMore() },
+            parentEntry = parentEntry,
             modifier = Modifier.padding(padding)
         )
     }
@@ -136,15 +138,18 @@ fun UserProfileScreen(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
-    val listState = rememberLazyListState()
     
     UserTweetListView(
         tweets = tweets,
         pinnedTweets = pinnedTweets,
         parentEntry = parentEntry,
-        listState = listState,
-        onRefreshTop = { viewModel.refreshTweets() },
-        onLoadMore = { viewModel.loadMoreTweets() },
+        getTweets = { pageNumber ->
+            if (pageNumber == 0) {
+                viewModel.refreshTweets()
+            } else {
+                viewModel.loadMoreTweets()
+            }
+        },
         showPrivateTweets = true // Show private tweets for user's own profile
     )
 }
@@ -180,17 +185,19 @@ FollowingsTweet(
     viewModel = viewModel
 )
 
-// New way
+// New way - Self-contained
 TweetListView(
     tweets = viewModel.tweets.collectAsState().value,
-    parentEntry = parentEntry,
-    listState = listState,
+    getTweets = { pageNumber ->
+        if (pageNumber == 0) {
+            viewModel.loadNewerTweets()
+        } else {
+            viewModel.loadOlderTweets()
+        }
+    },
+    onScrollPositionChange = { viewModel.updateScrollPosition(it) },
     scrollBehavior = scrollBehavior,
-    isRefreshingAtTop = viewModel.isRefreshingAtTop.collectAsState().value,
-    isRefreshingAtBottom = viewModel.isRefreshingAtBottom.collectAsState().value,
-    onRefreshTop = { viewModel.loadNewerTweets() },
-    onLoadMore = { viewModel.loadOlderTweets() },
-    onScrollPositionChange = { viewModel.updateScrollPosition(it) }
+    parentEntry = parentEntry
 )
 ```
 
@@ -211,29 +218,62 @@ LazyColumn(
     // ... loading indicators
 }
 
-// New way
+// New way - Self-contained
 UserTweetListView(
     tweets = tweets,
     pinnedTweets = pinnedTweets,
     parentEntry = parentEntry,
-    listState = listState,
+    getTweets = { pageNumber ->
+        if (pageNumber == 0) {
+            viewModel.loadNewerTweets()
+        } else {
+            viewModel.loadOlderTweets()
+        }
+    },
     scrollBehavior = scrollBehavior,
-    isRefreshingAtTop = isRefreshingAtTop,
-    isRefreshingAtBottom = isRefreshingAtBottom,
-    onRefreshTop = { viewModel.loadNewerTweets() },
-    onLoadMore = { viewModel.loadOlderTweets() },
     showPrivateTweets = appUser.mid == userId
 )
 ```
 
 ## Benefits
 
-1. **Consistency** - Unified tweet list behavior across the app
-2. **Reusability** - Single component for multiple use cases
-3. **Maintainability** - Centralized tweet list logic
-4. **iOS-like UX** - Familiar pull-to-refresh and infinite scroll behavior
-5. **Performance** - Optimized with proper state management and lazy loading
-6. **Flexibility** - Configurable for different scenarios
+1. **Simplified API** - Single function for all loading operations instead of separate callbacks
+2. **Self-contained** - No need to manage loading states or page numbers externally
+3. **Automatic pagination** - Internal page state management eliminates manual tracking
+4. **Consistency** - Unified tweet list behavior across the app
+5. **Reusability** - Single component for multiple use cases
+6. **Maintainability** - Centralized tweet list logic
+7. **iOS-like UX** - Familiar pull-to-refresh and infinite scroll behavior
+8. **Performance** - Optimized with proper state management and lazy loading
+9. **Flexibility** - Configurable for different scenarios
+
+## How the New API Works
+
+The TweetListView now uses a single `getTweets(pageNumber)` function that handles both refresh and load more operations:
+
+- **Page 0**: Called when user pulls to refresh (resets the list)
+- **Page 1, 2, 3...**: Called when user scrolls to bottom (loads more content)
+
+The component internally manages the `currentPage` state:
+- On pull-to-refresh: `currentPage = 0`
+- On infinite scroll: `currentPage += 1`
+
+### Example Implementation
+
+```kotlin
+TweetListView(
+    tweets = tweets,
+    getTweets = { pageNumber ->
+        if (pageNumber == 0) {
+            // Refresh: Load newest tweets
+            viewModel.loadNewerTweets()
+        } else {
+            // Load more: Load older tweets
+            viewModel.loadOlderTweets()
+        }
+    }
+)
+```
 
 ## Integration with ViewModels
 
@@ -259,4 +299,5 @@ You can customize the component by:
 - Implements proper key-based item identification
 - Leverages `derivedStateOf` for scroll position calculations
 - Uses `snapshotFlow` for efficient scroll tracking
-- Implements proper coroutine scoping for async operations 
+- Implements proper coroutine scoping for async operations
+- Self-managed loading states prevent duplicate requests 
