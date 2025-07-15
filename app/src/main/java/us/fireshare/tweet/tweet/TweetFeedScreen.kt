@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,9 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.ui.theme.rememberDelayedBottomBarTransparency
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.tweet.ScrollState
+import us.fireshare.tweet.tweet.ScrollDirection
+import kotlinx.coroutines.delay
 
 data class TabItem(
     val title: String = "Followings",
@@ -61,7 +65,8 @@ fun TweetFeedScreen(
         TabItem(title = context.getString(R.string.recommendation))
     )
     // State to track if scrolling is in progress
-    val isScrolling by viewModel.isScrolling.collectAsState()
+    // val isScrolling by viewModel.isScrolling.collectAsState()
+    var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     // Check if the top bar is collapsed by checking the offset
@@ -70,7 +75,40 @@ fun TweetFeedScreen(
     }
 
     // Calculate the transparency based on scrolling state
-    val bottomBarTransparency = rememberDelayedBottomBarTransparency(isScrolling)
+    val bottomBarTransparency = rememberDelayedBottomBarTransparency(scrollState.isScrolling)
+    
+    // Custom transparency based on scroll direction with custom timing
+    // - Scroll UP (content moves down): opacity = 0.98 immediately
+    // - Scroll DOWN (content moves up): opacity = 0.2 after 1 second delay
+    // - Idle: delayed fade-in (0.98)
+    var customTransparency by remember { mutableStateOf(0.98f) }
+    var lastScrollDirection by remember { mutableStateOf(ScrollDirection.NONE) }
+    
+    // Handle delayed opacity change for scroll down
+    LaunchedEffect(scrollState.direction) {
+        when (scrollState.direction) {
+            ScrollDirection.UP -> {
+                // Immediate opacity change for scroll up
+                customTransparency = 0.98f
+                lastScrollDirection = ScrollDirection.UP
+            }
+            ScrollDirection.DOWN -> {
+                // Delayed opacity change for scroll down
+                lastScrollDirection = ScrollDirection.DOWN
+                kotlinx.coroutines.delay(1000) // 1 second delay
+                if (scrollState.direction == ScrollDirection.DOWN) { // Still scrolling down after delay
+                    customTransparency = 0.2f
+                }
+            }
+            ScrollDirection.NONE -> {
+                // Only use idle logic if we weren't just scrolling up
+                if (lastScrollDirection != ScrollDirection.UP) {
+                    customTransparency = bottomBarTransparency.value
+                }
+                lastScrollDirection = ScrollDirection.NONE
+            }
+        }
+    }
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
@@ -132,7 +170,7 @@ fun TweetFeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (index) {
-                            0 -> FollowingsTweet(parentEntry, scrollBehavior, viewModel)
+                            0 -> FollowingsTweet(parentEntry, scrollBehavior, viewModel, onScrollStateChange = { scrollState = it })
                             1 -> RecommendedTweetScreen()
                         }
                     }
@@ -142,7 +180,7 @@ fun TweetFeedScreen(
         // Place the BottomNavigationBar on top of the LazyColumn
         BottomNavigationBar(
             Modifier
-                .alpha(bottomBarTransparency.value)
+                .alpha(customTransparency)
                 .align(Alignment.BottomCenter),
             navController,
             selectedBottomBarItemIndex

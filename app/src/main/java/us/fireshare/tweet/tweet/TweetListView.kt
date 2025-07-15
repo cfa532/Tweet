@@ -45,6 +45,15 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.MimeiId
 import timber.log.Timber
 
+enum class ScrollDirection {
+    UP, DOWN, NONE
+}
+
+data class ScrollState(
+    val isScrolling: Boolean,
+    val direction: ScrollDirection
+)
+
 /**
  * TweetListView: Self-contained Android Material3 style tweet list with built-in pagination, 
  * pull-to-refresh, infinite scroll, and loading indicators.
@@ -67,6 +76,7 @@ fun TweetListView(
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
+    onScrollStateChange: ((ScrollState) -> Unit)? = null,
 ) {
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -80,6 +90,40 @@ fun TweetListView(
         initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
     )
     val coroutineScope = rememberCoroutineScope()
+
+    val SCROLL_OFFSET_THRESHOLD = 8
+    val ITEM_INDEX_THRESHOLD = 1
+
+    // Track scroll state and notify parent
+    LaunchedEffect(listState) {
+        var previousFirstVisibleItem = listState.firstVisibleItemIndex
+        var previousScrollOffset = listState.firstVisibleItemScrollOffset
+        
+        snapshotFlow { 
+            val isScrolling = listState.isScrollInProgress
+            val firstVisibleItem = listState.firstVisibleItemIndex
+            val scrollOffset = listState.firstVisibleItemScrollOffset
+            
+            // Determine scroll direction with threshold
+            val direction = when {
+                !isScrolling -> ScrollDirection.NONE
+                firstVisibleItem < previousFirstVisibleItem - ITEM_INDEX_THRESHOLD || 
+                (firstVisibleItem == previousFirstVisibleItem && scrollOffset < previousScrollOffset - SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.UP
+                firstVisibleItem > previousFirstVisibleItem + ITEM_INDEX_THRESHOLD || 
+                (firstVisibleItem == previousFirstVisibleItem && scrollOffset > previousScrollOffset + SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.DOWN
+                else -> ScrollDirection.NONE
+            }
+            
+            // Update previous values
+            previousFirstVisibleItem = firstVisibleItem
+            previousScrollOffset = scrollOffset
+            
+            ScrollState(isScrolling, direction)
+        }
+        .collect { scrollState ->
+            onScrollStateChange?.invoke(scrollState)
+        }
+    }
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,

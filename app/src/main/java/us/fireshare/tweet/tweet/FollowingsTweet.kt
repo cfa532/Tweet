@@ -25,7 +25,8 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 fun FollowingsTweet(
     parentEntry: NavBackStackEntry,
     scrollBehavior: TopAppBarScrollBehavior,
-    viewModel: TweetFeedViewModel
+    viewModel: TweetFeedViewModel,
+    onScrollStateChange: (ScrollState) -> Unit = {},
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val initState by viewModel.initState.collectAsState()
@@ -48,6 +49,7 @@ fun FollowingsTweet(
         scrollBehavior = scrollBehavior,
         contentPadding = PaddingValues(bottom = 60.dp),
         showPrivateTweets = false,
-        parentEntry = parentEntry
+        parentEntry = parentEntry,
+        onScrollStateChange = onScrollStateChange
     )
 }

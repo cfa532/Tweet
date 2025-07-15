@@ -609,7 +609,7 @@ object HproseInstance {
             }
             
             val tweetList = response?.mapNotNull { tweetJson ->
-                tweetJson?.let { Tweet.from(tweetJson as Map<String, Any>) }
+                tweetJson?.let { Tweet.from(tweetJson) }
             } ?: emptyList()
 
             Timber.tag("getTweetListByRank").d("Received ${tweetList.size} tweets for user: ${user.mid}")
