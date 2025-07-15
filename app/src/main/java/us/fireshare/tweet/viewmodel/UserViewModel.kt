@@ -118,15 +118,19 @@ class UserViewModel @AssistedInject constructor(
         if (initState.value) return
         _isRefreshing.value = true
         startRank.intValue = 0
-        Timber.tag("UserVM.loadNewerTweets").d("start rank=${startRank.intValue}")
+        Timber.tag("UserVM.loadNewerTweets").d("pageNumber=${startRank.intValue}")
+        // Clear the list for refresh
+        _tweets.value = emptyList()
         getTweets()
         _isRefreshing.value = false
     }
     suspend fun loadOlderTweets() {
         if (initState.value) return
         _isRefreshingAtBottom.value = true
-        startRank.intValue = tweets.value.size
-        Timber.tag("UserVM.loadOlderTweets").d("start rank=${startRank.intValue}")
+        // Calculate page number based on current list size
+        val pageNumber = tweets.value.size / 20 // Assuming 20 is the page size
+        startRank.intValue = pageNumber
+        Timber.tag("UserVM.loadOlderTweets").d("pageNumber=${startRank.intValue}")
         getTweets()
         _isRefreshingAtBottom.value = false
     }
@@ -287,17 +291,26 @@ class UserViewModel @AssistedInject constructor(
         loadPinnedTweets()
         // 1. Fetch tweets of the author and update _tweets
         val newTweets = HproseInstance.getTweetListByRank(user.value, startRank.intValue)
-        _tweets.update { currentTweets ->
-            val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
-            val updatedTweets = currentTweets.map { tweet ->
-                newTweetsMap[tweet.mid] ?: tweet
+        
+        if (startRank.intValue == 0) {
+            // For refresh (page 0), replace the list
+            _tweets.value = newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+        } else {
+            // For load more (page > 0), append to the list
+            _tweets.update { currentTweets ->
+                val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
+                val updatedTweets = currentTweets.map { tweet ->
+                    newTweetsMap[tweet.mid] ?: tweet
+                }
+                (updatedTweets + newTweets)
+                    .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
             }
-            (updatedTweets + newTweets)
-                .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-                .distinctBy { tweet: Tweet -> tweet.mid }
-                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
         }
-        startRank.intValue = tweets.value.size   // for loading older tweets next time
+        
+        // Update startRank for next load (increment page number)
+        startRank.intValue = startRank.intValue + 1
     }
 
     private suspend fun loadPinnedTweets() {

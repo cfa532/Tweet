@@ -53,15 +53,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
-    // Remember the current viewable tweet's mid, to keep a scrollable position.
-    private val _scrollPosition = MutableStateFlow(Pair(0, 0))
-    val scrollPosition: StateFlow<Pair<Int, Int>> get() = _scrollPosition.asStateFlow()
+    // Remove scroll position state and updateScrollPosition
+    // private val _scrollPosition = MutableStateFlow(Pair(0, 0))
+    // val scrollPosition: StateFlow<Pair<Int, Int>> get() = _scrollPosition.asStateFlow()
+    // fun updateScrollPosition(scrollPosition: Pair<Int, Int>) { _scrollPosition.value = scrollPosition }
     private val _isScrolling = MutableStateFlow(false)
     val isScrolling: StateFlow<Boolean> get() = _isScrolling.asStateFlow()
 
-    fun updateScrollPosition(scrollPosition: Pair<Int, Int>) {
-        _scrollPosition.value = scrollPosition
-    }
     fun setScrollingState(isScrolling: Boolean) {
         _isScrolling.value = isScrolling
     }
@@ -88,11 +86,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh(startRank: Int)
+    suspend fun refresh(pageNumber: Int = 0)
     {
         if (!appUser.isGuest())
             dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
-        getTweets(startRank)
+        getTweets(pageNumber)
     }
 
     suspend fun loadNewerTweets() {
@@ -100,7 +98,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtTop.value = true
-            Timber.tag("loadNewerTweets").d("start=0")
+            Timber.tag("loadNewerTweets").d("pageNumber=0")
+            // Clear the list for refresh
+            _tweets.value = emptyList()
             getTweets(0)
         } finally {
             _isRefreshingAtTop.value = false
@@ -111,25 +111,26 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (initState.value) return
         try {
             _isRefreshingAtBottom.value = true
-            val startRank = tweets.value.size
-            Timber.tag("loadOlderTweets").d("start=$startRank")
-            getTweets(startRank)
+            // Calculate the page number based on current list size
+            val pageNumber = tweets.value.size / TWEET_COUNT
+            Timber.tag("loadOlderTweets").d("pageNumber=$pageNumber")
+            getTweets(pageNumber)
         } finally {
             _isRefreshingAtBottom.value = false // Ensure state is reset
         }
     }
 
     /**
-     * Given a range to load all tweets of user's followings.
+     * Given a page number to load tweets of user's followings.
      * */
     private suspend fun getTweets(
-        startRank: Int,   // starting backward to retrieve tweets.
+        pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         count: Int = TWEET_COUNT,
     ) {
         /**
          * Show cached tweets before loading from net.
          * */
-        val cachedTweets = loadCachedTweets(startRank, count)
+        val cachedTweets = loadCachedTweets(pageNumber * count, count)
         if (appUser.isGuest()) {
             // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
@@ -143,42 +144,68 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
             }
             getTweets(defaultUserId)
         } else {
-            _tweets.update { currentTweets ->
-                val allTweets = (cachedTweets + currentTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                allTweets
+            // Handle cached tweets
+            if (pageNumber == 0) {
+                // For refresh (page 0), replace the list with cached tweets
+                _tweets.value = cachedTweets
+            } else {
+                // For load more (page > 0), append cached tweets
+                _tweets.update { currentTweets ->
+                    val allTweets = (cachedTweets + currentTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    allTweets
+                }
             }
+            
             /**
              * Load tweet feed from network
              * */
             val newTweets = HproseInstance.getTweetFeed(
                 appUser,
-                startRank,
-                startRank + count,
+                pageNumber,
+                count,
             )
-            _tweets.update { currentTweets ->
-                // Order is important!! newTweets take priority over currentTweets
-                val mergedTweets = (newTweets + currentTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                mergedTweets
+            
+            if (pageNumber == 0) {
+                // For refresh, replace the list with new tweets
+                _tweets.value = newTweets
+            } else {
+                // For load more, append new tweets
+                _tweets.update { currentTweets ->
+                    val mergedTweets = (newTweets + currentTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    mergedTweets
+                }
             }
+            
             /**
              * Check for new tweets of followings.
              * */
             val followingTweets = HproseInstance.getTweetFeed(
                 appUser,
-                startRank,
-                startRank + count,
+                pageNumber,
+                count,
                 "update_following_tweets"
             )
-            _tweets.update { currentTweets ->
-                // Order is important!! followingTweets take priority over currentTweets
-                val mergedTweets = (followingTweets + currentTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                mergedTweets
+            
+            if (pageNumber == 0) {
+                // For refresh, merge with following tweets
+                _tweets.update { currentTweets ->
+                    val mergedTweets = (followingTweets + currentTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    mergedTweets
+                }
+            } else {
+                // For load more, append following tweets
+                _tweets.update { currentTweets ->
+                    val mergedTweets = (followingTweets + currentTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    mergedTweets
+                }
             }
         }
     }

@@ -32,7 +32,7 @@ fun FollowingsTweet(
     val coroutineScope = rememberCoroutineScope()
 
     // Refresh tweets when user changes (login/logout)
-    LaunchedEffect(appUser.mid) {
+    LaunchedEffect(us.fireshare.tweet.HproseInstance.appUser.mid) {
         if (!initState) {
             withContext(IO) {
                 viewModel.refresh(0)
@@ -51,7 +51,6 @@ fun FollowingsTweet(
                 }
             }
         },
-        onScrollPositionChange = { viewModel.updateScrollPosition(it) },
         scrollBehavior = scrollBehavior,
         contentPadding = PaddingValues(bottom = 60.dp),
         showPrivateTweets = false,

@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -50,7 +51,6 @@ import us.fireshare.tweet.datamodel.MimeiId
  *
  * @param tweets List of tweets to display
  * @param getTweets Function to load tweets for a specific page number (0 for refresh, currentPage+1 for load more)
- * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
  * @param showPrivateTweets Whether to show private tweets
@@ -63,7 +63,6 @@ fun TweetListView(
     tweets: List<Tweet>,
     getTweets: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
@@ -73,7 +72,13 @@ fun TweetListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
-    val listState = rememberLazyListState()
+    
+    // Remember scroll position across recompositions and configuration changes
+    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
+        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+    )
     val coroutineScope = rememberCoroutineScope()
 
     val pullRefreshState = rememberPullRefreshState(
@@ -101,11 +106,11 @@ fun TweetListView(
         }
     }
 
-    // Track scroll position changes
+    // Track scroll position changes and save them
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             .collect { position ->
-                onScrollPositionChange?.invoke(position)
+                savedScrollPosition.value = position
             }
     }
 
@@ -120,7 +125,7 @@ fun TweetListView(
                         getTweets(currentPage)
                     }
                 } finally {
-                    isRefreshingAtBottom = false
+                    isRefreshingAtBottom = false // Ensure state is reset
                 }
             }
         }
@@ -219,7 +224,6 @@ fun SimpleTweetListView(
  * @param pinnedTweets The list of pinned tweets to display at the top
  * @param parentEntry Navigation back stack entry for navigation context
  * @param getTweets Function to load tweets for a specific page number
- * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior for nested scrolling
  * @param showPrivateTweets Whether to show private tweets
  * @param modifier Additional modifier for the component
@@ -231,7 +235,6 @@ fun UserTweetListView(
     pinnedTweets: List<Tweet> = emptyList(),
     parentEntry: NavBackStackEntry,
     getTweets: (Int) -> Unit,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     showPrivateTweets: Boolean = false,
     modifier: Modifier = Modifier
@@ -240,7 +243,13 @@ fun UserTweetListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
-    val listState = rememberLazyListState()
+    
+    // Remember scroll position across recompositions and configuration changes
+    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
+        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+    )
     val coroutineScope = rememberCoroutineScope()
 
     // Pull-to-refresh state
@@ -270,11 +279,11 @@ fun UserTweetListView(
         }
     }
 
-    // Track scroll position changes
+    // Track scroll position changes and save them
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             .collect { position ->
-                onScrollPositionChange?.invoke(position)
+                savedScrollPosition.value = position
             }
     }
 
@@ -376,7 +385,6 @@ fun UserTweetListView(
  *
  * @param comments List of comment tweets to display
  * @param getComments Function to load comments for a specific page number
- * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
  * @param modifier Modifier for the component
@@ -387,7 +395,6 @@ fun UserTweetListView(
 fun CommentListView(
     comments: List<Tweet>,
     getComments: (Int) -> Unit,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     modifier: Modifier = Modifier,
@@ -397,7 +404,13 @@ fun CommentListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
-    val listState = rememberLazyListState()
+    
+    // Remember scroll position across recompositions and configuration changes
+    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
+        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+    )
     val coroutineScope = rememberCoroutineScope()
 
     val pullRefreshState = rememberPullRefreshState(
@@ -425,11 +438,11 @@ fun CommentListView(
         }
     }
 
-    // Track scroll position changes
+    // Track scroll position changes and save them
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             .collect { position ->
-                onScrollPositionChange?.invoke(position)
+                savedScrollPosition.value = position
             }
     }
 
@@ -511,7 +524,6 @@ fun CommentListView(
  *
  * @param users List of users to display
  * @param getUsers Function to load users for a specific page number
- * @param onScrollPositionChange Callback for scroll position changes
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
  * @param modifier Modifier for the component
@@ -522,7 +534,6 @@ fun CommentListView(
 fun UserListView(
     users: List<MimeiId>,
     getUsers: (Int) -> Unit,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     modifier: Modifier = Modifier,
@@ -532,7 +543,13 @@ fun UserListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
-    val listState = rememberLazyListState()
+    
+    // Remember scroll position across recompositions and configuration changes
+    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
+        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+    )
     val coroutineScope = rememberCoroutineScope()
 
     val pullRefreshState = rememberPullRefreshState(
@@ -560,11 +577,11 @@ fun UserListView(
         }
     }
 
-    // Track scroll position changes
+    // Track scroll position changes and save them
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
             .collect { position ->
-                onScrollPositionChange?.invoke(position)
+                savedScrollPosition.value = position
             }
     }
 
