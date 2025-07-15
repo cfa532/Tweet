@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.ExperimentalMaterialApi
@@ -147,10 +148,11 @@ fun ProfileScreen(
                                 viewModel.fetchTweets(pageNumber)
                             }
                         },
-                        scrollBehavior = scrollBehavior,
+                        scrollBehavior = null, // Disable nested scrolling to prevent conflicts
                         contentPadding = PaddingValues(bottom = 60.dp),
                         showPrivateTweets = appUser.mid == userId,
-                        parentEntry = parentEntry
+                        parentEntry = parentEntry,
+                        modifier = Modifier.heightIn(max = 2000.dp) // Set max height constraint
                     )
                 }
             }
