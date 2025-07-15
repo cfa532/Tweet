@@ -52,9 +52,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
-    private val _isScrolling = MutableStateFlow(false)
-    val isScrolling: StateFlow<Boolean> get() = _isScrolling.asStateFlow()
-
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
 
@@ -312,7 +309,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     }
                     is TweetEvent.TweetDeleted -> {
                         // Remove tweet from feed
-                        _tweets.value = _tweets.value.filter { it.mid != event.tweetId } ?: emptyList()
+                        _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
                     }
                     is TweetEvent.CommentUploaded -> {
                         // Update comment count for parent tweet

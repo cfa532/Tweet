@@ -62,18 +62,10 @@ class UserViewModel @AssistedInject constructor(
 
     var isLoading = MutableStateFlow(false)
 
-    private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshingAtTop: StateFlow<Boolean> get() = _isRefreshing.asStateFlow()
-    private val _isRefreshingAtBottom = MutableStateFlow(false)
-    val isRefreshingAtBottom: StateFlow<Boolean> get() = _isRefreshingAtBottom.asStateFlow()
-
     private val _bookmarks = MutableStateFlow<List<Tweet>>(emptyList())
     val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
     private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
-
-    // current rank of tweet in DB. Retrieve 10 tweets each time start from it.
-    private var startRank = mutableIntStateOf(0)
 
     // variable for login management
     var username = mutableStateOf(appUser.username)
@@ -90,49 +82,33 @@ class UserViewModel @AssistedInject constructor(
      * Initial load of tweets of an user. Execute only once.
      * */
     suspend fun initLoad() {
-        loadPinnedTweets()
-        while (startRank.intValue < user.value.tweetCount) {
-            val newTweets = HproseInstance.getTweetListByRank(user.value, startRank.intValue)
-            _tweets.update { currentTweets ->
-                val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
-                (currentTweets + newTweets)
-                    .map { tweet: Tweet -> newTweetsMap[tweet.mid] ?: tweet } // Update existing tweets
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-            }
-            // private tweets not viewable to other users.
-            val viewableTweetsCount =
-                tweets.value.count { !it.isPrivate || it.authorId == appUser.mid }
-            if (viewableTweetsCount < 5) {
-                startRank.intValue += 10
-                Timber.tag("initLoad").d("Incrementing startRank to ${startRank.intValue} and retrying.")
-            } else {
-                startRank.intValue = tweets.value.size   // for loading older tweets next time
-                break
-            }
+        // Load first page (page 0) which includes pinned tweets
+        getTweets(0)
+        
+        // Load additional pages if needed to get at least 5 viewable tweets
+        var pageNumber = 1
+        while (tweets.value.count { !it.isPrivate || it.authorId == appUser.mid } < 5 && pageNumber < 3) {
+            getTweets(pageNumber)
+            pageNumber++
         }
+        
         initState.value = false
     }
 
     suspend fun loadNewerTweets() {
         if (initState.value) return
-        _isRefreshing.value = true
-        startRank.intValue = 0
-        Timber.tag("UserVM.loadNewerTweets").d("pageNumber=${startRank.intValue}")
-        // Clear the list for refresh
+        Timber.tag("UserVM.loadNewerTweets").d("Loading page 0")
+        // Clear the list for refresh and load page 0
         _tweets.value = emptyList()
-        getTweets()
-        _isRefreshing.value = false
+        getTweets(0)
     }
+    
     suspend fun loadOlderTweets() {
         if (initState.value) return
-        _isRefreshingAtBottom.value = true
         // Calculate page number based on current list size
         val pageNumber = tweets.value.size / 20 // Assuming 20 is the page size
-        startRank.intValue = pageNumber
-        Timber.tag("UserVM.loadOlderTweets").d("pageNumber=${startRank.intValue}")
-        getTweets()
-        _isRefreshingAtBottom.value = false
+        Timber.tag("UserVM.loadOlderTweets").d("Loading page $pageNumber")
+        getTweets(pageNumber)
     }
 
     /**
@@ -140,11 +116,7 @@ class UserViewModel @AssistedInject constructor(
      * TweetListView manages pagination logic internally.
      */
     suspend fun fetchTweets(pageNumber: Int) {
-        if (pageNumber == 0) {
-            loadNewerTweets()
-        } else {
-            loadOlderTweets()
-        }
+        getTweets(pageNumber)
     }
 
     /**
@@ -299,12 +271,16 @@ class UserViewModel @AssistedInject constructor(
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
 
-    private suspend fun getTweets() {
-        loadPinnedTweets()
-        // 1. Fetch tweets of the author and update _tweets
-        val newTweets = HproseInstance.getTweetListByRank(user.value, startRank.intValue)
+    private suspend fun getTweets(pageNumber: Int) {
+        // When pageNumber is 0, load pinned tweets first
+        if (pageNumber == 0) {
+            loadPinnedTweets()
+        }
         
-        if (startRank.intValue == 0) {
+        // Fetch tweets of the author and update _tweets
+        val newTweets = HproseInstance.getTweetListByRank(user.value, pageNumber)
+        
+        if (pageNumber == 0) {
             // For refresh (page 0), replace the list
             _tweets.value = newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
         } else {
@@ -320,9 +296,6 @@ class UserViewModel @AssistedInject constructor(
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
             }
         }
-        
-        // Update startRank for next load (increment page number)
-        startRank.intValue = startRank.intValue + 1
     }
 
     private suspend fun loadPinnedTweets() {
