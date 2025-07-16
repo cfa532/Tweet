@@ -32,17 +32,19 @@ import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
-import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
-
-import us.fireshare.tweet.datamodel.TweetEvent
-import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.datamodel.TweetCacheDatabase
+import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.UserContentType
+import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
-import us.fireshare.tweet.service.UploadTweetWorker
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import javax.inject.Inject
+import us.fireshare.tweet.datamodel.TweetCacheManager
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
@@ -68,7 +70,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     suspend fun refresh(pageNumber: Int = 0)
     {
         if (!appUser.isGuest())
-            dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
+            TweetCacheManager.saveUser(appUser)
         fetchTweets(pageNumber)
     }
 

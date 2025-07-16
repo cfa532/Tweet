@@ -99,6 +99,9 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedUser WHERE userId = :userId")
     fun getCachedUser(userId: MimeiId): CachedUser?
 
+    @Query("DELETE FROM CachedUser WHERE userId = :userId")
+    fun deleteCachedUser(userId: MimeiId)
+
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
      * */

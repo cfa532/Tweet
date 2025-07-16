@@ -408,9 +408,9 @@ data class User(
      */
     val hasExpired: Boolean
         get() {
-            val timestamp = HproseInstance.getUserCacheTimestamp(mid)
+            val timestamp = TweetCacheManager.getUserCacheTimestamp(mid)
             val currentTime = System.currentTimeMillis()
-            return (currentTime - timestamp) > HproseInstance.USER_CACHE_EXPIRATION_TIME
+            return (currentTime - timestamp) > 30 * 60 * 1000L // 30 minutes in milliseconds
         }
 
     override fun equals(other: Any?): Boolean {

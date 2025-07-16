@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -26,11 +28,12 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -50,13 +53,10 @@ import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
-import androidx.compose.foundation.layout.PaddingValues
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.TweetItem
-import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.ScrollDirection
-import us.fireshare.tweet.ui.theme.rememberDelayedBottomBarTransparency
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -81,39 +81,66 @@ fun ProfileScreen(
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // LazyListState for scroll tracking
+    val listState = rememberLazyListState()
     
     // Calculate the transparency based on scrolling state
-    val bottomBarTransparency = rememberDelayedBottomBarTransparency(scrollState.isScrolling)
+    var bottomBarTransparency by remember { mutableStateOf(0.98f) }
     
-    // Custom transparency based on scroll direction with custom timing
-    // - Scroll UP (content moves down): opacity = 0.98 immediately
-    // - Scroll DOWN (content moves up): opacity = 0.2 after 1 second delay
-    // - Idle: delayed fade-in (0.98)
-    var customTransparency by remember { mutableStateOf(0.98f) }
-    var lastScrollDirection by remember { mutableStateOf(ScrollDirection.NONE) }
-    
-    // Handle delayed opacity change for scroll down
-    LaunchedEffect(scrollState.direction) {
-        when (scrollState.direction) {
-            ScrollDirection.UP -> {
-                // Immediate opacity change for scroll up
-                customTransparency = 0.98f
-                lastScrollDirection = ScrollDirection.UP
+    // Track scroll state and update bottom bar transparency
+    LaunchedEffect(listState) {
+        var previousFirstVisibleItem = listState.firstVisibleItemIndex
+        var previousScrollOffset = listState.firstVisibleItemScrollOffset
+        
+        snapshotFlow { 
+            val isScrolling = listState.isScrollInProgress
+            val firstVisibleItem = listState.firstVisibleItemIndex
+            val scrollOffset = listState.firstVisibleItemScrollOffset
+            
+            // Determine scroll direction with threshold
+            // When scrolling DOWN (content moves UP): firstVisibleItem increases or scrollOffset increases
+            // When scrolling UP (content moves DOWN): firstVisibleItem decreases or scrollOffset decreases
+            val direction = when {
+                !isScrolling -> ScrollDirection.NONE
+                firstVisibleItem > previousFirstVisibleItem || 
+                (firstVisibleItem == previousFirstVisibleItem && scrollOffset > previousScrollOffset + 8) -> ScrollDirection.DOWN
+                firstVisibleItem < previousFirstVisibleItem || 
+                (firstVisibleItem == previousFirstVisibleItem && scrollOffset < previousScrollOffset - 8) -> ScrollDirection.UP
+                else -> ScrollDirection.NONE
             }
-            ScrollDirection.DOWN -> {
-                // Delayed opacity change for scroll down
-                lastScrollDirection = ScrollDirection.DOWN
-                kotlinx.coroutines.delay(1000) // 1 second delay
-                if (scrollState.direction == ScrollDirection.DOWN) { // Still scrolling down after delay
-                    customTransparency = 0.2f
+            
+            // Update previous values
+            previousFirstVisibleItem = firstVisibleItem
+            previousScrollOffset = scrollOffset
+            
+            ScrollState(isScrolling, direction)
+        }
+        .collect { newScrollState ->
+            scrollState = newScrollState
+            
+            // Update bottom bar transparency based on scroll direction
+            when (newScrollState.direction) {
+                ScrollDirection.UP -> {
+                    // Scroll UP (content moves down): restore header and bottom bar
+                    bottomBarTransparency = 0.98f
                 }
-            }
-            ScrollDirection.NONE -> {
-                // Only use idle logic if we weren't just scrolling up
-                if (lastScrollDirection != ScrollDirection.UP) {
-                    customTransparency = bottomBarTransparency.value
+                ScrollDirection.DOWN -> {
+                    // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
+                    delay(200) // Reduced delay for more responsive transition
+                    if (scrollState.direction == ScrollDirection.DOWN) {
+                        bottomBarTransparency = 0.3f
+                    }
                 }
-                lastScrollDirection = ScrollDirection.NONE
+                ScrollDirection.NONE -> {
+                    // Idle state: gradually restore opacity
+                    delay(600)
+                    if (scrollState.direction == ScrollDirection.NONE) {
+                        bottomBarTransparency = 0.98f
+                    }
+                }
             }
         }
     }
@@ -133,6 +160,23 @@ fun ProfileScreen(
         viewModel.startListeningToNotifications()
     }
 
+    // Pull-to-refresh state
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshing = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        viewModel.fetchTweets(0)
+                    }
+                } finally {
+                    isRefreshing = false
+                }
+            }
+        }
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = { ProfileTopAppBar(viewModel, navController, scrollBehavior) },
@@ -142,11 +186,13 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
+                    .pullRefresh(pullRefreshState)
             ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    state = listState
                 ) {
                     // Profile details section
                     item {
@@ -185,29 +231,47 @@ fun ProfileScreen(
                         }
                     }
                     
-                    // Regular tweets using TweetListView
-                    item {
-                        TweetListView(
-                            tweets = tweets,
-                            fetchTweets = { pageNumber ->
-                                viewModel.fetchTweets(pageNumber)
-                            },
-                            scrollBehavior = null, // Disable nested scrolling to prevent conflicts
-                            contentPadding = PaddingValues(bottom = 60.dp),
-                            showPrivateTweets = appUser.mid == userId,
-                            parentEntry = parentEntry,
-                            modifier = Modifier.heightIn(max = 2000.dp), // Set max height constraint
-                            onScrollStateChange = { scrollState = it }
-                        )
+                    // Regular tweets section
+                    items(tweets, key = { it.mid }) { tweet ->
+                        if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
+                            TweetItem(tweet, parentEntry)
+                        }
+                    }
+                    
+                    // Loading indicator at bottom for pagination
+                    if (tweets.isNotEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                 }
+                
+                // Pull refresh indicator
+                PullRefreshIndicator(
+                    refreshing = isRefreshing,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    backgroundColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
             }
         }
         
         // Place the BottomNavigationBar on top with opacity control
         BottomNavigationBar(
             Modifier
-                .alpha(customTransparency)
+                .alpha(bottomBarTransparency)
                 .align(Alignment.BottomCenter),
             navController,
             0

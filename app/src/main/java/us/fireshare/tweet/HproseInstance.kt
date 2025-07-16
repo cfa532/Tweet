@@ -17,7 +17,6 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.CachedTweetDao
-import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MimeiFileType
@@ -52,75 +51,8 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)
 
-    // User cache expiration time (30 minutes in milliseconds)
-    const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
-
-    // in-memory cache of users.
-    private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
-    private var userCacheTimestamps: MutableMap<MimeiId, Long> = mutableMapOf()
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
-
-    /**
-     * Add user to cache with current timestamp
-     */
-    private fun addUserToCache(user: User) {
-        cachedUsers.add(user)
-        userCacheTimestamps[user.mid] = System.currentTimeMillis()
-        dao.insertOrUpdateCachedUser(CachedUser(user.mid, user))
-    }
-
-    /**
-     * Remove user from cache
-     */
-    private fun removeUserFromCache(userId: MimeiId) {
-        cachedUsers.removeIf { it.mid == userId }
-        userCacheTimestamps.remove(userId)
-    }
-
-    /**
-     * Clean up expired users from cache
-     */
-    fun cleanupExpiredUsers() {
-        val expiredUserIds = cachedUsers.filter { user ->
-            user.hasExpired
-        }.map { it.mid }
-
-        expiredUserIds.forEach { userId ->
-            removeUserFromCache(userId)
-            Timber.tag("cleanupExpiredUsers").d("Removed expired user: $userId")
-        }
-
-        if (expiredUserIds.isNotEmpty()) {
-            Timber.tag("cleanupExpiredUsers").d("Cleaned up ${expiredUserIds.size} expired users")
-        }
-    }
-
-    /**
-     * Get user cache statistics
-     */
-    fun getUserCacheStats(): UserCacheStats {
-        val totalUsers = cachedUsers.size
-        val expiredUsers = cachedUsers.count { it.hasExpired }
-        val validUsers = totalUsers - expiredUsers
-
-        return UserCacheStats(
-            totalUsers = totalUsers,
-            validUsers = validUsers,
-            expiredUsers = expiredUsers,
-            expirationTimeMs = USER_CACHE_EXPIRATION_TIME
-        )
-    }
-
-    /**
-     * User cache statistics data class
-     */
-    data class UserCacheStats(
-        val totalUsers: Int,
-        val validUsers: Int,
-        val expiredUsers: Int,
-        val expirationTimeMs: Long
-    )
 
     suspend fun init(context: Context) {
         this.preferenceHelper = PreferenceHelper(context)
@@ -150,7 +82,6 @@ object HproseInstance {
      * */
     private suspend fun initAppEntry() {
         // make sure no stale data during retry init.
-        cachedUsers.clear()
         for (url in preferenceHelper.getAppUrls()) {
             try {
                 /**
@@ -198,12 +129,12 @@ object HproseInstance {
                              * */
                             getProviders(userId, "http://$bestIp")?.let { ips ->
                                 appUser = getAccessibleUser(ips, userId) ?: appUser
-                                addUserToCache(appUser)
+                                TweetCacheManager.saveUser(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                             }
                         } else {
                             appUser.followingList = getAlphaIds()
-                            addUserToCache(appUser)
+                            TweetCacheManager.saveUser(appUser)
                             Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                         }
                         // once a workable URL is found, break.
@@ -225,7 +156,6 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         val entry = "message_outgoing"
         val params = mapOf(
@@ -238,8 +168,7 @@ object HproseInstance {
             "hostid" to (appUser.hostIds?.first() ?: "")
         )
         try {
-            val response =
-                appUser.hproseService?.runMApp<Boolean>(entry, params)
+            val response = appUser.hproseService?.runMApp<Boolean>(entry, params)
 
             if (response == true) {
                 getUser(receiptId)?.let { receipt ->
@@ -641,7 +570,8 @@ object HproseInstance {
     ): Tweet? {
         return try {
             // Check cache first using TweetCacheManager
-            TweetCacheManager.getCachedTweet(tweetId)?.let { cachedTweet ->
+            val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
+            if (cachedTweet != null) {
                 return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
                     null
                 else
@@ -671,7 +601,7 @@ object HproseInstance {
     /**
      * Update cached but keep its timestamp when it was cached.
      * */
-    fun updateCachedTweet(tweet: Tweet) {
+    suspend fun updateCachedTweet(tweet: Tweet) {
         TweetCacheManager.updateCachedTweet(tweet, appUser.mid)
     }
 
@@ -1185,11 +1115,12 @@ object HproseInstance {
      */
     suspend fun getUser(userId: MimeiId, baseUrl: String? = null): User? {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
-        cachedUsers.firstOrNull { it.mid == userId }?.let { cachedUser ->
+        val cachedUser = TweetCacheManager.getCachedUser(userId)
+        if (cachedUser != null) {
             // Check if user is expired
             if (cachedUser.hasExpired) {
                 Timber.tag("getUser").d("User $userId is expired, refreshing from backend")
-                removeUserFromCache(userId)
+                TweetCacheManager.removeCachedUser(userId)
             } else {
                 Timber.tag("getUser").d("User $userId found in cache (not expired)")
                 return cachedUser
@@ -1213,15 +1144,8 @@ object HproseInstance {
         updateUserFromServer(user)
 
         // Step 5: Cache the user and return
-        addUserToCache(user)
+        TweetCacheManager.saveUser(user)
         return user
-    }
-
-    /**
-     * Get user cache timestamp
-     */
-    fun getUserCacheTimestamp(userId: MimeiId): Long {
-        return userCacheTimestamps[userId] ?: 0L
     }
 
     /**
@@ -1245,7 +1169,7 @@ object HproseInstance {
     /**
      * Update user data from server using "get_user" entry
      */
-    private fun updateUserFromServer(user: User) {
+    private suspend fun updateUserFromServer(user: User) {
         val entry = "get_user"
         val params = mapOf(
             "aid" to appId,
@@ -1263,7 +1187,6 @@ object HproseInstance {
                     user.baseUrl = "http://$providerIP"
                     user.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { userData ->
                         user.from(userData)
-                        TweetCacheManager.saveUser(user)
                     }
                 }
                 
@@ -1271,7 +1194,6 @@ object HproseInstance {
                     // User data received directly
                     val userData = response as Map<String, Any>
                     user.from(userData)
-                    TweetCacheManager.saveUser(user)
                 }
             }
         } catch (e: Exception) {

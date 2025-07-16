@@ -26,7 +26,6 @@ import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -38,6 +37,7 @@ import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import kotlin.math.max
+import us.fireshare.tweet.datamodel.TweetCacheManager
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
@@ -93,22 +93,6 @@ class UserViewModel @AssistedInject constructor(
         }
 
         initState.value = false
-    }
-
-    suspend fun loadNewerTweets() {
-        if (initState.value) return
-        Timber.tag("UserVM.loadNewerTweets").d("Loading page 0")
-        // Clear the list for refresh and load page 0
-        _tweets.value = emptyList()
-        getTweets(0)
-    }
-
-    suspend fun loadOlderTweets() {
-        if (initState.value) return
-        // Calculate page number based on current list size
-        val pageNumber = tweets.value.size / 20 // Assuming 20 is the page size
-        Timber.tag("UserVM.loadOlderTweets").d("Loading page $pageNumber")
-        getTweets(pageNumber)
     }
 
     /**
@@ -184,8 +168,9 @@ class UserViewModel @AssistedInject constructor(
                     list.filterNot { it == subjectUserId }
             }
             _user.value = user.value.copy(followingCount = followings.value.size)
-            dao.insertOrUpdateCachedUser(CachedUser(userId, appUser))
-
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                TweetCacheManager.saveUser(appUser)
+            }
             // callback to update tweet feed. Load or remove tweets of the others.
             updateTweetFeed(isFollowing)
         }
@@ -271,7 +256,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun refreshUser() {
-//        HproseInstance.removeCachedUser(userId)
+        TweetCacheManager.removeCachedUser(userId)
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
 
@@ -691,6 +676,12 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun someFunctionThatCallsSaveUser() {
+        viewModelScope.launch(Dispatchers.IO) {
+            TweetCacheManager.saveUser(appUser)
         }
     }
 }
