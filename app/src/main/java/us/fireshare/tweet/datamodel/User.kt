@@ -153,7 +153,7 @@ data class User(
                     _hproseService = client.useService(HproseService::class.java)
                     return _hproseService
                 } catch (e: Exception) {
-                    Timber.e("Failed to create Hprose client for baseUrl: $baseUrl", e)
+                    Timber.e(e, "Failed to create Hprose client for baseUrl: $baseUrl")
                     return null
                 }
             }
@@ -174,7 +174,7 @@ data class User(
                     _uploadService = client.useService(HproseService::class.java)
                     return _uploadService
                 } catch (e: Exception) {
-                    Timber.e("Failed to create Hprose upload client for writableUrl: $writableUrl", e)
+                    Timber.e(e, "Failed to create Hprose upload client for writableUrl: $writableUrl")
                     return null
                 }
             }
