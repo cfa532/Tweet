@@ -82,6 +82,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
         Timber.tag("getTweets").d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
+        Timber.tag("getTweets").d("appUser.mid: ${appUser.mid}, isGuest: ${appUser.isGuest()}")
         
         /**
          * Show cached tweets before loading from net.
@@ -92,6 +93,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         if (appUser.isGuest()) {
             // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
+            Timber.tag("getTweets").d("Guest user: defaultUserId = $defaultUserId")
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
@@ -101,7 +103,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 Timber.tag("getTweets").d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
                 allTweets
             }
-            return getTweets(defaultUserId, pageNumber)
+            val result = getTweets(defaultUserId, pageNumber)
+            Timber.tag("getTweets").d("Guest: After getTweets, _tweets.size = ${_tweets.value.size}")
+            return result
         } else {
             // Immediately merge cached tweets if they're not already in the list
             _tweets.update { currentTweets ->
@@ -211,10 +215,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 Timber.tag("getTweets").d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: $userId")
                 
                 _tweets.update { list ->
-                    val mergedTweets = (validTweets + list)
-                        .filterNot { tweet: Tweet -> tweet.isPrivate }
+                    val beforeFilter = validTweets + list
+                    val afterPrivateFilter = beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                    val mergedTweets = afterPrivateFilter
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    
+                    Timber.tag("getTweets").d("getTweets update: beforeFilter=${beforeFilter.size}, afterPrivateFilter=${afterPrivateFilter.size}, final=${mergedTweets.size}")
                     mergedTweets
                 }
                 return tweetsWithNulls

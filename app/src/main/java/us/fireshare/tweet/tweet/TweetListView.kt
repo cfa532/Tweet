@@ -82,12 +82,15 @@ fun TweetListView(
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
     currentUserId: MimeiId? = null, // Add current user ID to detect user changes
 ) {
+    // Debug logging
+    Timber.tag("TweetListView").d("TweetListView received tweets: ${tweets.size}")
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var currentPage by remember { mutableIntStateOf(0) }
+    var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
     var isLoadingMore by remember { mutableStateOf(false) }
     var lastUserId by remember { mutableStateOf(currentUserId) }
+    var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -99,37 +102,45 @@ fun TweetListView(
 
     val SCROLL_OFFSET_THRESHOLD = 8
     val ITEM_INDEX_THRESHOLD = 1
+    val MINMIMUM_TWEET_COUNT = 4
 
     // Detect user changes and initialize data
     LaunchedEffect(currentUserId) {
         if (currentUserId != lastUserId) {
             Timber.tag("TweetListView").d("User changed from $lastUserId to $currentUserId, initializing data")
             lastUserId = currentUserId
-            currentPage = 0
+            lastLoadedPage = -1 // Reset last loaded page
+            serverDepleted = false // Reset server depleted flag for new user
             
             // Initialize with enough data (at least 4 tweets)
             var enoughTweets = false
-            var serverDepleted = false
+            var localServerDepleted = false
+            var pageToLoad = 0
             
-            while (!enoughTweets && !serverDepleted) {
-                val tweetsWithNulls = fetchTweets(currentPage)
+            while (!enoughTweets && !localServerDepleted) {
+                val tweetsWithNulls = fetchTweets(pageToLoad)
                 
-                // Check if server is depleted (returned fewer tweets than expected)
-                if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE) { // Assuming TWEET_COUNT is 20
-                    serverDepleted = true
-                    Timber.tag("TweetListView").d("Server depleted at page $currentPage, returned ${tweetsWithNulls.size} tweets")
+                // Only increment lastLoadedPage if we got a full page of results
+                if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
+                    lastLoadedPage = pageToLoad
+                } else {
+                    // Server is depleted (returned fewer tweets than expected)
+                    localServerDepleted = true
+                    serverDepleted = true // Update the shared flag
+                    lastLoadedPage = pageToLoad // This is the last page we can load
+                    Timber.tag("TweetListView").d("Server depleted at page $pageToLoad, returned ${tweetsWithNulls.size} tweets")
                 }
                 
                 // Check if we have enough tweets
-                enoughTweets = tweets.size >= 4
+                enoughTweets = tweets.size >= MINMIMUM_TWEET_COUNT
                 
                 // Move to next page for next iteration
-                currentPage++
+                pageToLoad++
                 
-                Timber.tag("TweetListView").d("Page $currentPage: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}")
+                Timber.tag("TweetListView").d("Page $pageToLoad: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
             }
             
-            Timber.tag("TweetListView").d("Initialization completed: total tweets: ${tweets.size}, server depleted: $serverDepleted")
+            Timber.tag("TweetListView").d("Initialization completed: total tweets: ${tweets.size}, server depleted: $localServerDepleted, lastLoadedPage: $lastLoadedPage")
         }
     }
 
@@ -171,9 +182,17 @@ fun TweetListView(
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage = 0 // Reset to page 0 for refresh
+                        lastLoadedPage = -1 // Reset last loaded page
+                        serverDepleted = false // User-initiated: allow loading again
                         Timber.tag("TweetListView").d("Pull refresh: Loading page 0, current tweets: ${tweets.size}")
-                        fetchTweets(0)
+                        val tweetsWithNulls = fetchTweets(0)
+                        
+                        // Only set lastLoadedPage if we got a full page
+                        lastLoadedPage = if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
+                            0
+                        } else {
+                            0 // Even if partial, this is the last page we can load
+                        }
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -182,7 +201,7 @@ fun TweetListView(
         }
     )
 
-    val isAtBottom by remember {
+    val isAtBottom by remember(tweets) {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
@@ -208,18 +227,28 @@ fun TweetListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, tweets.size: ${tweets.size}")
+        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
         
-        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && tweets.size >= 4) { // Only trigger if we have enough tweets
+        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && tweets.size >= 4 && !serverDepleted) { // Only trigger if we have enough tweets and server not depleted
             Timber.tag("TweetListView").d("Triggering load more...")
             isLoadingMore = true
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage += 1 // Increment page for load more
-                        Timber.tag("TweetListView").d("Loading more tweets, page: $currentPage, current tweets: ${tweets.size}")
-                        fetchTweets(currentPage)
+                        val nextPage = lastLoadedPage + 1 // Load the next page after the last loaded page
+                        Timber.tag("TweetListView").d("Loading more tweets, next page: $nextPage, lastLoadedPage: $lastLoadedPage, current tweets: ${tweets.size}")
+                        val tweetsWithNulls = fetchTweets(nextPage)
+                        
+                        // Only increment lastLoadedPage if we got a full page of results
+                        if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
+                            lastLoadedPage = nextPage
+                        } else {
+                            // Server is depleted (returned fewer tweets than expected)
+                            serverDepleted = true // Auto-load: stop further auto-loads
+                            lastLoadedPage = nextPage // This is the last page we can load
+                            Timber.tag("TweetListView").d("Server depleted at page $nextPage, returned ${tweetsWithNulls.size} tweets")
+                        }
                     }
                 } finally {
                     isRefreshingAtBottom = false // Ensure state is reset

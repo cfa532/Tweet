@@ -84,14 +84,14 @@ class UserViewModel @AssistedInject constructor(
     suspend fun initLoad() {
         // Load first page (page 0) which includes pinned tweets
         getTweets(0)
-        
+
         // Load additional pages if needed to get at least 5 viewable tweets
         var pageNumber = 1
         while (tweets.value.count { !it.isPrivate || it.authorId == appUser.mid } < 5 && pageNumber < 3) {
             getTweets(pageNumber)
             pageNumber++
         }
-        
+
         initState.value = false
     }
 
@@ -102,7 +102,7 @@ class UserViewModel @AssistedInject constructor(
         _tweets.value = emptyList()
         getTweets(0)
     }
-    
+
     suspend fun loadOlderTweets() {
         if (initState.value) return
         // Calculate page number based on current list size
@@ -191,7 +191,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun refreshFollowingsAndFans() {
+    fun refreshFollowingsAndFans() {
         _followers.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value)
     }
@@ -218,7 +218,8 @@ class UserViewModel @AssistedInject constructor(
             _bookmarks.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                bookmarksCount = max((user.value.bookmarksCount ?: 0) - 1, 0))
+                bookmarksCount = max((user.value.bookmarksCount ?: 0) - 1, 0)
+            )
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
     }
@@ -241,7 +242,8 @@ class UserViewModel @AssistedInject constructor(
             _favorites.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                favoritesCount = max((user.value.favoritesCount ?: 0) - 1, 0))
+                favoritesCount = max((user.value.favoritesCount ?: 0) - 1, 0)
+            )
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
     }
@@ -254,7 +256,8 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                _user.value =
+                    getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -277,18 +280,20 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             loadPinnedTweets()
         }
-        
+
         // Fetch tweets of the author and update _tweets
         val newTweetsWithNulls = HproseInstance.getTweetListByRank(user.value, pageNumber)
-        
+
         // Filter out null elements and get valid tweets
         val newTweets = newTweetsWithNulls.filterNotNull()
-        
-        Timber.tag("getTweets").d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
-        
+
+        Timber.tag("getTweets")
+            .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
+
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
-            _tweets.value = newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+            _tweets.value =
+                newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
         } else {
             // For load more (page > 0), append to the list
             _tweets.update { currentTweets ->
@@ -302,7 +307,7 @@ class UserViewModel @AssistedInject constructor(
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
             }
         }
-        
+
         return newTweetsWithNulls
     }
 
@@ -407,8 +412,10 @@ class UserViewModel @AssistedInject constructor(
 
     fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
-        appUser = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl,
-            followingList = HproseInstance.getAlphaIds())
+        appUser = User(
+            mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl,
+            followingList = HproseInstance.getAlphaIds()
+        )
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * */
@@ -442,7 +449,7 @@ class UserViewModel @AssistedInject constructor(
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
-            }?: run {
+            } ?: run {
                 showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
                 isLoading.value = false
                 return
@@ -471,7 +478,8 @@ class UserViewModel @AssistedInject constructor(
                 } else {
                     // update user profile
                     updatedUser = gson.fromJson(ret["user"].toString(), userType)
-                    appUser = appUser.copy(name = updatedUser.name, profile = updatedUser.profile,
+                    appUser = appUser.copy(
+                        name = updatedUser.name, profile = updatedUser.profile,
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
                     _user.value = appUser
@@ -484,7 +492,7 @@ class UserViewModel @AssistedInject constructor(
             } else {
                 showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
             }
-        }?: run {
+        } ?: run {
             showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
         }
         isLoading.value = false
@@ -521,28 +529,33 @@ class UserViewModel @AssistedInject constructor(
         isLoading.value = false
         loginError.value = ""
     }
+
     fun onNameChange(value: String) {
         name.value = value
         isLoading.value = false
         loginError.value = ""
     }
+
     fun onProfileChange(value: String) {
         profile.value = value
         isLoading.value = false
         loginError.value = ""
     }
+
     fun onNodeIdChange(value: String) {
         hostId.value = value
         isLoading.value = false
         loginError.value = ""
     }
+
     fun onPasswordChange(pwd: String) {
         password.value = pwd.trim()
         isLoading.value = false
         loginError.value = ""
     }
+
     fun onPasswordVisibilityChange() {
-        isPasswordVisible.value = ! isPasswordVisible.value
+        isPasswordVisible.value = !isPasswordVisible.value
     }
 
     /**
@@ -555,23 +568,26 @@ class UserViewModel @AssistedInject constructor(
                     is TweetEvent.TweetUploaded -> {
                         // Only add if it's the current user's tweet
                         if (event.tweet.authorId == user.value.mid) {
-                            _tweets.update { currentTweets -> (listOf(event.tweet) + currentTweets)
-                                .distinctBy { it.mid }
-                                .sortedByDescending { it.timestamp }
+                            _tweets.update { currentTweets ->
+                                (listOf(event.tweet) + currentTweets)
+                                    .distinctBy { it.mid }
+                                    .sortedByDescending { it.timestamp }
                             }
                             _user.value = user.value.copy(tweetCount = tweets.value.size)
                         }
                     }
+
                     is TweetEvent.TweetDeleted -> {
                         // Remove from all lists
                         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
                         _topTweets.update { topTweets -> topTweets.filterNot { it.mid == event.tweetId } }
                         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
                         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
-                        
+
                         // Update user's tweet count
                         _user.value = user.value.copy(tweetCount = tweets.value.size)
                     }
+
                     is TweetEvent.TweetLiked -> {
                         // Update like status in favorites list
                         _favorites.update { currentTweets ->
@@ -580,6 +596,7 @@ class UserViewModel @AssistedInject constructor(
                             }
                         }
                     }
+
                     is TweetEvent.TweetBookmarked -> {
                         // Update bookmark status in bookmarks list
                         _bookmarks.update { currentTweets ->
@@ -588,6 +605,7 @@ class UserViewModel @AssistedInject constructor(
                             }
                         }
                     }
+
                     is TweetEvent.CommentUploaded -> {
                         // Update comment count for parent tweet in all lists
                         _tweets.update { currentTweets ->
@@ -627,6 +645,7 @@ class UserViewModel @AssistedInject constructor(
                             }
                         }
                     }
+
                     is TweetEvent.CommentDeleted -> {
                         // Decrease comment count for parent tweet in all lists
                         _tweets.update { currentTweets ->
@@ -666,6 +685,7 @@ class UserViewModel @AssistedInject constructor(
                             }
                         }
                     }
+
                     else -> {
                         // Handle other events if needed
                     }
@@ -673,5 +693,4 @@ class UserViewModel @AssistedInject constructor(
             }
         }
     }
-
 }
