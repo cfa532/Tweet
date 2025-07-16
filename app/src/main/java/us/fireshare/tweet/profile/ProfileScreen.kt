@@ -190,9 +190,7 @@ fun ProfileScreen(
                         TweetListView(
                             tweets = tweets,
                             fetchTweets = { pageNumber ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    viewModel.fetchTweets(pageNumber)
-                                }
+                                viewModel.fetchTweets(pageNumber)
                             },
                             scrollBehavior = null, // Disable nested scrolling to prevent conflicts
                             contentPadding = PaddingValues(bottom = 60.dp),

@@ -114,9 +114,10 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Simple function to fetch tweets for a specific page number.
      * TweetListView manages pagination logic internally.
+     * Returns List<Tweet?> including null elements from the backend.
      */
-    suspend fun fetchTweets(pageNumber: Int) {
-        getTweets(pageNumber)
+    suspend fun fetchTweets(pageNumber: Int): List<Tweet?> {
+        return getTweets(pageNumber)
     }
 
     /**
@@ -271,14 +272,19 @@ class UserViewModel @AssistedInject constructor(
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
 
-    private suspend fun getTweets(pageNumber: Int) {
+    private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         // When pageNumber is 0, load pinned tweets first
         if (pageNumber == 0) {
             loadPinnedTweets()
         }
         
         // Fetch tweets of the author and update _tweets
-        val newTweets = HproseInstance.getTweetListByRank(user.value, pageNumber)
+        val newTweetsWithNulls = HproseInstance.getTweetListByRank(user.value, pageNumber)
+        
+        // Filter out null elements and get valid tweets
+        val newTweets = newTweetsWithNulls.filterNotNull()
+        
+        Timber.tag("getTweets").d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
         
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
@@ -296,6 +302,8 @@ class UserViewModel @AssistedInject constructor(
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
             }
         }
+        
+        return newTweetsWithNulls
     }
 
     private suspend fun loadPinnedTweets() {

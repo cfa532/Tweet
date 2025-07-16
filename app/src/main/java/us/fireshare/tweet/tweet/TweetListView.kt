@@ -36,14 +36,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
+import com.google.android.gms.common.internal.Constants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.MimeiId
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.TW_CONST
 
 enum class ScrollDirection {
     UP, DOWN, NONE
@@ -70,18 +73,21 @@ data class ScrollState(
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun TweetListView(
     tweets: List<Tweet>,
-    fetchTweets: (Int) -> Unit,
+    fetchTweets: suspend (Int) -> List<Tweet?>, // Changed to suspend function
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
+    currentUserId: MimeiId? = null, // Add current user ID to detect user changes
 ) {
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var lastUserId by remember { mutableStateOf(currentUserId) }
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -93,6 +99,39 @@ fun TweetListView(
 
     val SCROLL_OFFSET_THRESHOLD = 8
     val ITEM_INDEX_THRESHOLD = 1
+
+    // Detect user changes and initialize data
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != lastUserId) {
+            Timber.tag("TweetListView").d("User changed from $lastUserId to $currentUserId, initializing data")
+            lastUserId = currentUserId
+            currentPage = 0
+            
+            // Initialize with enough data (at least 4 tweets)
+            var enoughTweets = false
+            var serverDepleted = false
+            
+            while (!enoughTweets && !serverDepleted) {
+                val tweetsWithNulls = fetchTweets(currentPage)
+                
+                // Check if server is depleted (returned fewer tweets than expected)
+                if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE) { // Assuming TWEET_COUNT is 20
+                    serverDepleted = true
+                    Timber.tag("TweetListView").d("Server depleted at page $currentPage, returned ${tweetsWithNulls.size} tweets")
+                }
+                
+                // Check if we have enough tweets
+                enoughTweets = tweets.size >= 4
+                
+                // Move to next page for next iteration
+                currentPage++
+                
+                Timber.tag("TweetListView").d("Page $currentPage: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}")
+            }
+            
+            Timber.tag("TweetListView").d("Initialization completed: total tweets: ${tweets.size}, server depleted: $serverDepleted")
+        }
+    }
 
     // Track scroll state and notify parent
     LaunchedEffect(listState) {
@@ -147,7 +186,15 @@ fun TweetListView(
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
+            val totalItems = layoutInfo.totalItemsCount
+            
+            // Check if we're near the bottom (within 2 items of the end)
+            val isAtBottom = lastVisibleItem != null && lastVisibleItem.index >= totalItems - 2
+            
+            // Debug logging
+            Timber.tag("TweetListView").d("isAtBottom check: lastVisibleItem=${lastVisibleItem?.index}, totalItems=$totalItems, isAtBottom=$isAtBottom, tweets.size=${tweets.size}")
+            
+            isAtBottom
         }
     }
 
@@ -161,7 +208,11 @@ fun TweetListView(
 
     // Infinite scroll
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && tweets.size >= 4) { // Only trigger if we have enough tweets
+        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, tweets.size: ${tweets.size}")
+        
+        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && tweets.size >= 4) { // Only trigger if we have enough tweets
+            Timber.tag("TweetListView").d("Triggering load more...")
+            isLoadingMore = true
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
@@ -172,6 +223,8 @@ fun TweetListView(
                     }
                 } finally {
                     isRefreshingAtBottom = false // Ensure state is reset
+                    isLoadingMore = false
+                    Timber.tag("TweetListView").d("Load more completed, isRefreshingAtBottom set to false, isLoadingMore set to false")
                 }
             }
         }

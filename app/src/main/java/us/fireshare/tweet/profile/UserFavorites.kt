@@ -39,6 +39,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.datamodel.Tweet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,14 +115,13 @@ fun UserFavorites(
                 TweetListView(
                     tweets = favorites,
                     fetchTweets = { pageNumber ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            if (pageNumber == 0) {
-                                start.intValue = 0
-                            } else {
-                                start.intValue += 10
-                            }
-                            viewModel.getFavorites(start.intValue)
+                        if (pageNumber == 0) {
+                            start.intValue = 0
+                        } else {
+                            start.intValue += 10
                         }
+                        viewModel.getFavorites(start.intValue)
+                        emptyList<Tweet?>() // Return empty list since getFavorites updates the state
                     },
                     showPrivateTweets = false,
                     parentEntry = parentEntry

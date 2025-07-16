@@ -515,14 +515,14 @@ object HproseInstance {
 
     /**
      * Load tweets of appUser and its followings from network.
-     * Simplified version that returns List<Tweet> directly instead of using channelFlow.
+     * Keep null elements in the response list and preserves their positions.
      * */
     suspend fun getTweetFeed(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
-    ): List<Tweet> {
+    ): List<Tweet?> {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -535,39 +535,51 @@ object HproseInstance {
         val response =
             user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
-        val tweetList = response?.mapNotNull { tweetJson ->
-            tweetJson?.let { Tweet.from(tweetJson) }
+        return response?.map { tweetJson ->
+            // If the element is null, keep it as null
+            if (tweetJson == null) {
+                null
+            } else {
+                // Try to decode the tweet
+                try {
+                    val tweet = Tweet.from(tweetJson)
+                    tweet.author = getUser(tweet.authorId)
+
+                    if (tweet.originalTweetId != null) {
+                        val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                        if (originalTweet != null) {
+                            tweet.originalTweet = originalTweet
+                        } else {
+                            // If original tweet cannot be fetched, return null
+                            return@map null
+                        }
+                    }
+
+                    // Skip private tweets in feed
+                    if (tweet.isPrivate) {
+                        null
+                    } else {
+                        updateCachedTweet(tweet)
+                        tweet
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
+                    null
+                }
+            }
         } ?: emptyList()
-
-        return tweetList.mapNotNull { tweet ->
-            tweet.author = getUser(tweet.authorId)
-
-            if (tweet.originalTweetId != null) {
-                val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                    ?: return@mapNotNull null
-                tweet.originalTweet = originalTweet
-            }
-
-            // Skip private tweets in feed
-            if (tweet.isPrivate) {
-                return@mapNotNull null
-            }
-
-            updateCachedTweet(tweet)
-            tweet
-        }
     }
 
     /**
      * Load tweets of a specific user by rank.
-     * Simplified version that returns List<Tweet> directly instead of using channelFlow.
+     * Handles null elements in the response list and preserves their positions.
      * */
     suspend fun getTweetListByRank(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
         entry: String = "get_tweets_by_user"
-    ): List<Tweet> {
+    ): List<Tweet?> {
         try {
             val params = mapOf(
                 "aid" to appId,
@@ -581,45 +593,42 @@ object HproseInstance {
             Timber.tag("getTweetListByRank")
                 .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
             val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
-            val tweetList = response?.mapNotNull { tweetJson ->
-                tweetJson?.let { Tweet.from(tweetJson) }
+            
+            val result = response?.map { tweetJson ->
+                // If the element is null, keep it as null
+                if (tweetJson == null) {
+                    null
+                } else {
+                    // Try to decode the tweet
+                    try {
+                        val tweet = Tweet.from(tweetJson)
+                        tweet.author = user
+                        if (tweet.originalTweetId != null) {
+                            val originalTweet =
+                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            if (originalTweet != null) {
+                                tweet.originalTweet = originalTweet
+                            } else {
+                                // If original tweet cannot be fetched, return null
+                                return@map null
+                            }
+                        }
+                        updateCachedTweet(tweet)
+                        tweet
+                    } catch (e: Exception) {
+                        Timber.tag("getTweetListByRank").e("Error decoding tweet: $e")
+                        null
+                    }
+                }
             } ?: emptyList()
 
             Timber.tag("getTweetListByRank")
-                .d("Received ${tweetList.size} tweets for user: ${user.mid}")
+                .d("Received ${response?.size ?: 0} tweets (${result.filterNotNull().size} valid) for user: ${user.mid}")
 
-            return tweetList.mapNotNull { tweet ->
-                tweet.author = user
-                if (tweet.originalTweetId != null) {
-                    val originalTweet =
-                        getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                            ?: return@mapNotNull null
-                    tweet.originalTweet = originalTweet
-                }
-                updateCachedTweet(tweet)
-                tweet
-            }
+            return result
         } catch (e: Exception) {
             Timber.tag("getTweetListByRank").e(e, "Error fetching tweets for user: ${user.mid}")
             throw e
-        }
-    }
-
-    /**
-     * Get cached tweets for a user (for immediate display while loading from network).
-     * This can be called before the network request to show cached data immediately.
-     * */
-    fun getCachedTweetsByUser(
-        user: User,
-        pageNumber: Int = 0,
-        pageSize: Int = 20
-    ): List<Tweet> {
-        return try {
-            dao.getCachedTweetsByUser(user.mid, pageNumber * pageSize, pageSize)
-                .map { it.originalTweet }
-        } catch (e: Exception) {
-            Timber.tag("getCachedTweetsByUser").e("$e")
-            emptyList()
         }
     }
 

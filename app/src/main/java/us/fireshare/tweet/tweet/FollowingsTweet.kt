@@ -29,27 +29,24 @@ fun FollowingsTweet(
     onScrollStateChange: (ScrollState) -> Unit = {},
 ) {
     val tweets by viewModel.tweets.collectAsState()
-    val initState by viewModel.initState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Refresh tweets when user changes (login/logout)
-    LaunchedEffect(us.fireshare.tweet.HproseInstance.appUser.mid) {
-        withContext(IO) {
-            viewModel.refresh(0)
-        }
+    // Clear tweets when user changes
+    LaunchedEffect(appUser.mid) {
+        viewModel.clearTweets()
     }
 
     TweetListView(
         tweets = tweets,
         fetchTweets = { pageNumber ->
-            coroutineScope.launch(IO) {
-                viewModel.fetchTweets(pageNumber)
-            }
+            // Call the ViewModel's fetchTweets and return the result
+            viewModel.fetchTweets(pageNumber)
         },
         scrollBehavior = scrollBehavior,
         contentPadding = PaddingValues(bottom = 60.dp),
         showPrivateTweets = false,
         parentEntry = parentEntry,
-        onScrollStateChange = onScrollStateChange
+        onScrollStateChange = onScrollStateChange,
+        currentUserId = appUser.mid // Pass current user ID for change detection
     )
 }

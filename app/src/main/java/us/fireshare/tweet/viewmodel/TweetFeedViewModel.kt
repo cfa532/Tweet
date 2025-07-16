@@ -34,6 +34,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.CachedUser
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 
 import us.fireshare.tweet.datamodel.TweetEvent
@@ -46,9 +47,6 @@ import javax.inject.Inject
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel()
 {
-    companion object {
-        private const val TWEET_COUNT = 20
-    }
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
@@ -71,30 +69,24 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     {
         if (!appUser.isGuest())
             dao.insertOrUpdateCachedUser(CachedUser(appUser.mid, appUser))
-        getTweets(pageNumber)
+        fetchTweets(pageNumber)
     }
 
     /**
      * Simple function to fetch tweets for a specific page number.
      * TweetListView manages pagination logic internally.
+     * Returns List<Tweet?> including null elements from the backend.
      */
-    suspend fun fetchTweets(pageNumber: Int) {
-        getTweets(pageNumber)
-    }
-
-    /**
-     * Given a page number to load tweets of user's followings.
-     * */
-    private suspend fun getTweets(
+    suspend fun fetchTweets(
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
-        count: Int = TWEET_COUNT,
-    ) {
-        Timber.tag("getTweets").d("Loading page $pageNumber with count $count, current tweets: ${_tweets.value.size}")
+        pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
+    ): List<Tweet?> {
+        Timber.tag("getTweets").d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
         
         /**
          * Show cached tweets before loading from net.
          * */
-        val cachedTweets = loadCachedTweets(pageNumber * count, count)
+        val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
         Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for page $pageNumber")
         
         if (appUser.isGuest()) {
@@ -109,84 +101,128 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 Timber.tag("getTweets").d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
                 allTweets
             }
-            getTweets(defaultUserId)
+            return getTweets(defaultUserId, pageNumber)
         } else {
-            // Handle cached tweets - always merge, never replace
+            // Immediately merge cached tweets if they're not already in the list
             _tweets.update { currentTweets ->
-                val allTweets = (cachedTweets + currentTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                Timber.tag("getTweets").d("Cached: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
-                allTweets
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                
+                if (newCachedTweets.isNotEmpty()) {
+                    val allTweets = (currentTweets + newCachedTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    Timber.tag("getTweets").d("Cached: Added ${newCachedTweets.size} new cached tweets, updated from ${currentTweets.size} to ${allTweets.size}")
+                    allTweets
+                } else {
+                    Timber.tag("getTweets").d("Cached: No new cached tweets to add, keeping ${currentTweets.size} tweets")
+                    currentTweets
+                }
             }
             
             /**
              * Load tweet feed from network
              * */
-            val newTweets = HproseInstance.getTweetFeed(
+            val tweetsWithNulls = HproseInstance.getTweetFeed(
                 appUser,
                 pageNumber,
-                count,
+                pageSize,
             )
             
-            Timber.tag("getTweets").d("Received ${newTweets.size} new tweets for page $pageNumber")
-            if (newTweets.isNotEmpty()) {
-                Timber.tag("getTweets").d("First tweet: ${newTweets.first().mid}, Last tweet: ${newTweets.last().mid}")
+            // Filter out null elements and get valid tweets
+            val validTweets = tweetsWithNulls.filterNotNull()
+            
+            Timber.tag("getTweets").d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for page $pageNumber")
+            if (validTweets.isNotEmpty()) {
+                Timber.tag("getTweets").d("First tweet: ${validTweets.first().mid}, Last tweet: ${validTweets.last().mid}")
             }
             
             // Always merge new tweets with existing ones, never replace
             _tweets.update { currentTweets ->
-                val mergedTweets = (currentTweets + newTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                Timber.tag("getTweets").d("Network: Updated tweets from ${currentTweets.size} to ${mergedTweets.size}")
-                mergedTweets
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val trulyNewTweets = validTweets.filter { it.mid !in currentTweetIds }
+                
+                if (trulyNewTweets.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + trulyNewTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    Timber.tag("getTweets").d("Network: Added ${trulyNewTweets.size} new tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
+                    mergedTweets
+                } else {
+                    Timber.tag("getTweets").d("Network: No new tweets to add, keeping ${currentTweets.size} tweets")
+                    currentTweets
+                }
             }
             
             /**
-             * Check for new tweets of followings.
+             * Check for new tweets of followings when page number is 0
              * */
-            val followingTweets = HproseInstance.getTweetFeed(
-                appUser,
-                pageNumber,
-                count,
-                "update_following_tweets"
-            )
-            
-            Timber.tag("getTweets").d("Received ${followingTweets.size} following tweets for page $pageNumber")
-            
-            // Always merge following tweets with existing ones
-            _tweets.update { currentTweets ->
-                val mergedTweets = (currentTweets + followingTweets)
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                Timber.tag("getTweets").d("Following: Updated tweets from ${currentTweets.size} to ${mergedTweets.size}")
-                mergedTweets
+            if (pageNumber == 0) {
+                val followingTweetsWithNulls = HproseInstance.getTweetFeed(
+                    appUser,
+                    pageNumber,
+                    pageSize,
+                    "update_following_tweets"
+                )
+
+                // Filter out null elements and get valid tweets
+                val followingTweets = followingTweetsWithNulls.filterNotNull()
+
+                Timber.tag("getTweets")
+                    .d("New ${followingTweetsWithNulls.size} following tweets (${followingTweets.size} valid) for page $pageNumber")
+
+                // Always merge following tweets with existing ones
+                _tweets.update { currentTweets ->
+                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                    val trulyNewFollowingTweets =
+                        followingTweets.filter { it.mid !in currentTweetIds }
+
+                    if (trulyNewFollowingTweets.isNotEmpty()) {
+                        val mergedTweets = (currentTweets + trulyNewFollowingTweets)
+                            .distinctBy { tweet: Tweet -> tweet.mid }
+                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        Timber.tag("getTweets")
+                            .d("Following: Added ${trulyNewFollowingTweets.size} new following tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
+                        mergedTweets
+                    } else {
+                        Timber.tag("getTweets")
+                            .d("Following: No new following tweets to add, keeping ${currentTweets.size} tweets")
+                        currentTweets
+                    }
+                }
             }
+            return tweetsWithNulls
         }
     }
 
     /**
-     * Given an user Id, load its tweets during a range.
+     * Given an user Id, load its tweets on a page.
      * */
-    private suspend fun getTweets(userId: MimeiId) {
+    private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
         try {
             getUser(userId)?.let { user ->
-                val newTweets = HproseInstance.getTweetListByRank(
+                val tweetsWithNulls = HproseInstance.getTweetListByRank(
                     user,
-                    0,
+                    pageNumber,
                 )
+                // Filter out null elements and get valid tweets
+                val validTweets = tweetsWithNulls.filterNotNull()
+                
+                Timber.tag("getTweets").d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: $userId")
+                
                 _tweets.update { list ->
-                    val mergedTweets = (newTweets + list)
+                    val mergedTweets = (validTweets + list)
                         .filterNot { tweet: Tweet -> tweet.isPrivate }
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
                     mergedTweets
                 }
+                return tweetsWithNulls
             }
         } catch (e: Exception) {
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
         }
+        return emptyList()
     }
 
     /**
@@ -209,6 +245,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         tweets.value.forEach {
             dao.deleteCachedTweet(it.mid)
         }
+        _tweets.value = emptyList()
+    }
+
+    /**
+     * Clear the tweet list when user changes
+     */
+    fun clearTweets() {
         _tweets.value = emptyList()
     }
 
