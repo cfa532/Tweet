@@ -31,13 +31,13 @@ fun FollowingsTweet(
     val tweets by viewModel.tweets.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Clear tweets when user changes
-    LaunchedEffect(appUser.mid) {
-        viewModel.clearTweets()
-    }
+    // Debug logging
+    timber.log.Timber.tag("FollowingsTweet").d("Collected tweets size: ${tweets.size}")
 
     TweetListView(
-        tweets = tweets,
+        tweets = tweets.also { 
+            timber.log.Timber.tag("FollowingsTweet").d("Passing tweets to TweetListView: ${it.size}")
+        },
         fetchTweets = { pageNumber ->
             // Call the ViewModel's fetchTweets and return the result
             viewModel.fetchTweets(pageNumber)

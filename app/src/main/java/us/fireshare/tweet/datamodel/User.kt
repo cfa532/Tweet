@@ -149,7 +149,7 @@ data class User(
                 try {
                     // Use factory method to create client based on URL scheme
                     val client = HproseClient.create("$baseUrl/webapi/")
-                    client.timeout = 300
+                    client.timeout = 30000
                     _hproseService = client.useService(HproseService::class.java)
                     return _hproseService
                 } catch (e: Exception) {
@@ -170,7 +170,7 @@ data class User(
                 try {
                     // Use factory method to create client based on URL scheme
                     val client = HproseClient.create("$writableUrl/webapi/")
-                    client.timeout = 3000   // upload takes longer
+                    client.timeout = 30000   // upload takes longer
                     _uploadService = client.useService(HproseService::class.java)
                     return _uploadService
                 } catch (e: Exception) {

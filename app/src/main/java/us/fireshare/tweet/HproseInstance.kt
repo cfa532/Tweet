@@ -471,7 +471,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
      * */
-    suspend fun getFollowings(user: User): List<MimeiId> {
+     fun getFollowings(user: User): List<MimeiId> {
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -493,7 +493,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
      * */
-    suspend fun getFans(user: User): List<MimeiId>? {
+     fun getFans(user: User): List<MimeiId>? {
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -502,9 +502,7 @@ object HproseInstance {
             "userid" to user.mid
         )
         return try {
-            val response =
-                user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
-
+            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
             response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
                 ?.mapNotNull { it["field"] as? String }
         } catch (e: Exception) {
@@ -682,10 +680,16 @@ object HproseInstance {
      * Called when the given tweet is visible.
      * */
     suspend fun refreshTweet(
-        tweetId: MimeiId,
-        authorId: MimeiId
+        tweetId: MimeiId?,
+        authorId: MimeiId?
     ): Tweet? {
         return try {
+            // Check for null parameters
+            if (tweetId == null || authorId == null) {
+                Timber.tag("refreshTweet").w("Null parameters: tweetId=$tweetId, authorId=$authorId")
+                return null
+            }
+            
             val author = getUser(authorId) ?: return null
             val entry = "refresh_tweet"
             val params = mapOf(
@@ -1206,13 +1210,10 @@ object HproseInstance {
 
         // Step 4: Set the base URL and fetch user data
         user.baseUrl = finalBaseUrl
-        withContext(IO) {
-            updateUserFromServer(user)
-        }
+        updateUserFromServer(user)
+
         // Step 5: Cache the user and return
-        withContext(IO) {
-            addUserToCache(user)
-        }
+        addUserToCache(user)
         return user
     }
 
@@ -1244,7 +1245,7 @@ object HproseInstance {
     /**
      * Update user data from server using "get_user" entry
      */
-    private suspend fun updateUserFromServer(user: User) {
+    private fun updateUserFromServer(user: User) {
         val entry = "get_user"
         val params = mapOf(
             "aid" to appId,
@@ -1255,13 +1256,6 @@ object HproseInstance {
             val response = user.hproseService?.runMApp<Any>(entry, params)
 
             when (response) {
-                is Map<*, *> -> {
-                    // User data received directly
-                    val userData = response as Map<String, Any>
-                    user.from(userData)
-                    TweetCacheManager.saveUser(user)
-                }
-
                 is String -> {
                     // User data not found on this node, but IP of a valid provider is returned.
                     // Provider IP received, update baseUrl and retry
@@ -1271,6 +1265,13 @@ object HproseInstance {
                         user.from(userData)
                         TweetCacheManager.saveUser(user)
                     }
+                }
+                
+                is Map<*, *> -> {
+                    // User data received directly
+                    val userData = response as Map<String, Any>
+                    user.from(userData)
+                    TweetCacheManager.saveUser(user)
                 }
             }
         } catch (e: Exception) {
