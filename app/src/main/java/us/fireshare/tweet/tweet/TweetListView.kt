@@ -182,17 +182,9 @@ fun TweetListView(
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        lastLoadedPage = -1 // Reset last loaded page
                         serverDepleted = false // User-initiated: allow loading again
                         Timber.tag("TweetListView").d("Pull refresh: Loading page 0, current tweets: ${tweets.size}")
-                        val tweetsWithNulls = fetchTweets(0)
-                        
-                        // Only set lastLoadedPage if we got a full page
-                        lastLoadedPage = if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
-                            0
-                        } else {
-                            0 // Even if partial, this is the last page we can load
-                        }
+                        fetchTweets(0)
                     }
                 } finally {
                     isRefreshingAtTop = false
