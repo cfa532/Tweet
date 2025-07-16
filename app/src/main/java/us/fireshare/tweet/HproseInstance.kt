@@ -47,7 +47,8 @@ import kotlinx.coroutines.withContext
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
 
-    private var appId: MimeiId = BuildConfig.APP_ID
+    private var _appId: MimeiId = BuildConfig.APP_ID
+    val appId: MimeiId get() = _appId
     lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)
 
@@ -103,7 +104,7 @@ object HproseInstance {
                 if (matcher.find()) {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                        appId = paramMap["mid"].toString()
+                        _appId = paramMap["mid"].toString()
 
                         /**
                          * The code above makes a call to base URL of the app, get a html page
@@ -532,7 +533,7 @@ object HproseInstance {
                         tweet.author = user
                         if (tweet.originalTweetId != null) {
                             val originalTweet =
-                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)
                             if (originalTweet != null) {
                                 tweet.originalTweet = originalTweet
                             } else {
@@ -540,7 +541,7 @@ object HproseInstance {
                                 return@map null
                             }
                         }
-                        updateCachedTweet(tweet)
+                        // Do NOT cache tweets from profile screens
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getTweetListByRank").e("Error decoding tweet: $e")
@@ -562,11 +563,13 @@ object HproseInstance {
     /**
      * Get core data of the tweet. Do Not fetch its original tweet if there is any.
      * Let the caller to decide if go further on the tweet hierarchy.
+     * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
     suspend fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
-        nodeUrl: String? = null
+        nodeUrl: String? = null,
+        shouldCache: Boolean = true
     ): Tweet? {
         return try {
             // Check cache first using TweetCacheManager
@@ -589,7 +592,7 @@ object HproseInstance {
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
                 Tweet.from(tweetData).copy(author = author).apply {
-                    TweetCacheManager.saveTweet(this, userId = appUser.mid)
+                    TweetCacheManager.saveTweet(this, userId = appUser.mid, shouldCache = shouldCache)
                 }
             }
         } catch (e: Exception) {
@@ -600,9 +603,10 @@ object HproseInstance {
 
     /**
      * Update cached but keep its timestamp when it was cached.
+     * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
-    suspend fun updateCachedTweet(tweet: Tweet) {
-        TweetCacheManager.updateCachedTweet(tweet, appUser.mid)
+    suspend fun updateCachedTweet(tweet: Tweet, shouldCache: Boolean = true) {
+        TweetCacheManager.updateCachedTweet(tweet, appUser.mid, shouldCache = shouldCache)
     }
 
     /**
@@ -631,9 +635,7 @@ object HproseInstance {
                 "hostid" to (author.hostIds?.first() ?: "")
             )
             author.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
-                Tweet.from(tweetData).apply {
-                    TweetCacheManager.updateCachedTweet(this, appUser.mid)
-                }
+                Tweet.from(tweetData)
             }
         } catch (e: Exception) {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")
@@ -657,30 +659,13 @@ object HproseInstance {
     }
 
     /**
-     * Retrieve cached tweet from Mimei DB. User info is not cached in Room,
-     * which changes frequently, so user data need to be loaded alive every time.
-     * */
-    private fun loadCachedTweet(tweetId: MimeiId): Tweet? {
-        try {
-            dao.getCachedTweet(tweetId)?.let {
-                val tweet = it.originalTweet
-                Timber.tag("loadCachedTweet").d("$tweet")
-                return tweet
-            }
-        } catch (e: Exception) {
-            Timber.tag("loadCachedTweet").e("$e")
-        }
-        return null
-    }
-
-    /**
      * Increase the retweetCount of the original tweet mimei.
      * @param tweet is the original tweet
      * @param retweetId of the retweet.
      * @param direction to indicate increase or decrease retweet count.
      * @return updated original tweet.
      * */
-    suspend fun updateRetweetCount(
+    fun updateRetweetCount(
         tweet: Tweet,
         retweetId: MimeiId,
         direction: Int = 1
@@ -1169,7 +1154,7 @@ object HproseInstance {
     /**
      * Update user data from server using "get_user" entry
      */
-    private suspend fun updateUserFromServer(user: User) {
+    private fun updateUserFromServer(user: User) {
         val entry = "get_user"
         val params = mapOf(
             "aid" to appId,
@@ -1201,7 +1186,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun getUserCoreData(mid: MimeiId, ip: String): User? {
+    fun getUserCoreData(mid: MimeiId, ip: String): User? {
         val entry = "get_user_core_data"
         val params = mapOf(
             "aid" to appId,
@@ -1437,10 +1422,10 @@ object HproseInstance {
             
             if (response.status == HttpStatusCode.OK) {
                 val responseText = response.bodyAsText()
-                val responseData = Gson().fromJson(responseText, Map::class.java) as? Map<*, *>
+                val responseData = Gson().fromJson(responseText, Map::class.java)
                 
                 val cid = responseData?.get("cid") as? String ?: throw Exception("No CID in response")
-                val fileSize = (responseData?.get("size") as? Number)?.toLong() ?: 0L
+                val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
                 
                 @OptIn(UnstableApi::class)
                 val aspectRatio = getVideoAspectRatio(context, uri)
@@ -1459,7 +1444,7 @@ object HproseInstance {
     /**
      * Original IPFS upload method as fallback
      */
-    private suspend fun uploadToIPFSOriginal(
+    private fun uploadToIPFSOriginal(
         context: Context,
         uri: Uri,
         fileName: String?,

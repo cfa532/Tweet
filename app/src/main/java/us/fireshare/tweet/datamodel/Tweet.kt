@@ -456,6 +456,7 @@ object TW_CONST {
     const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
     const val CLOUD_PORT = 8010         // port to netdisk and transcode service.
     const val PAGE_SIZE = 10
+    const val USER_BATCH_SIZE = 20      // Batch size for user fetching
 }
 
 object UserActions {

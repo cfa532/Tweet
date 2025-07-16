@@ -29,9 +29,14 @@ object TweetCacheManager {
     private val userCacheLock = Any()
     
     /**
-     * Save a tweet to cache with current timestamp
+     * Save or update a tweet in cache
+     * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
-    suspend fun saveTweet(tweet: Tweet, userId: MimeiId) {
+    suspend fun saveTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
+        if (tweet == null || !shouldCache || !isValidTweet(tweet)) {
+            return
+        }
+        
         try {
             withContext(Dispatchers.IO) {
                 synchronized(cacheLock) {
@@ -100,36 +105,10 @@ object TweetCacheManager {
     
     /**
      * Update an existing cached tweet
+     * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
-    suspend fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
-        if (tweet == null) {
-            Timber.w("Attempted to update cached tweet with null tweet")
-            return
-        }
-        
-        try {
-            withContext(Dispatchers.IO) {
-                synchronized(cacheLock) {
-                    val existingCachedTweet = HproseInstance.dao.getCachedTweet(tweet.mid)
-                    val cachedTweet = CachedTweet(
-                        mid = tweet.mid,
-                        uid = userId,
-                        originalTweet = tweet,
-                        timestamp = existingCachedTweet?.timestamp ?: Date()
-                    )
-                    
-                    // Update memory cache
-                    memoryCache[tweet.mid] = cachedTweet
-                    
-                    // Update database cache
-                    HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
-                    
-                    Timber.d("Cached tweet updated: ${tweet.mid}")
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e("Error updating cached tweet: $e")
-        }
+    suspend fun updateCachedTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
+        saveTweet(tweet, userId, shouldCache)
     }
     
     /**
@@ -363,6 +342,28 @@ object TweetCacheManager {
         }
     }
 
+    /**
+     * Check if a tweet is valid for caching
+     */
+    private fun isValidTweet(tweet: Tweet): Boolean {
+        // Check if tweet has valid ID and author
+        if (tweet.mid.isBlank() || tweet.authorId.isBlank()) {
+            return false
+        }
+        
+        // Check if tweet has content or attachments
+        if (tweet.content.isNullOrBlank() && (tweet.attachments.isNullOrEmpty())) {
+            return false
+        }
+        
+        // Check if tweet has a valid author
+        if (tweet.author == null) {
+            return false
+        }
+        
+        return true
+    }
+    
     /**
      * Check if a cached tweet is expired
      */

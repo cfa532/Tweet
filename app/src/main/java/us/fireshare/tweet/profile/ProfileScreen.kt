@@ -94,7 +94,7 @@ fun ProfileScreen(
     LaunchedEffect(listState) {
         var previousFirstVisibleItem = listState.firstVisibleItemIndex
         var previousScrollOffset = listState.firstVisibleItemScrollOffset
-        
+
         snapshotFlow { 
             val isScrolling = listState.isScrollInProgress
             val firstVisibleItem = listState.firstVisibleItemIndex
@@ -106,9 +106,9 @@ fun ProfileScreen(
             val direction = when {
                 !isScrolling -> ScrollDirection.NONE
                 firstVisibleItem > previousFirstVisibleItem || 
-                (firstVisibleItem == previousFirstVisibleItem && scrollOffset > previousScrollOffset + 8) -> ScrollDirection.DOWN
+                (firstVisibleItem == previousFirstVisibleItem && scrollOffset > previousScrollOffset + 30) -> ScrollDirection.DOWN
                 firstVisibleItem < previousFirstVisibleItem || 
-                (firstVisibleItem == previousFirstVisibleItem && scrollOffset < previousScrollOffset - 8) -> ScrollDirection.UP
+                (scrollOffset < previousScrollOffset - 30) -> ScrollDirection.UP
                 else -> ScrollDirection.NONE
             }
             
@@ -129,17 +129,14 @@ fun ProfileScreen(
                 }
                 ScrollDirection.DOWN -> {
                     // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
-                    delay(200) // Reduced delay for more responsive transition
+                    delay(100) // Small delay for smooth transition
                     if (scrollState.direction == ScrollDirection.DOWN) {
-                        bottomBarTransparency = 0.3f
+                        bottomBarTransparency = 0.2f
                     }
                 }
                 ScrollDirection.NONE -> {
-                    // Idle state: gradually restore opacity
-                    delay(600)
-                    if (scrollState.direction == ScrollDirection.NONE) {
-                        bottomBarTransparency = 0.98f
-                    }
+                    // Idle state: keep current opacity, don't restore automatically
+                    // Only restore when user starts scrolling up
                 }
             }
         }

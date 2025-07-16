@@ -84,8 +84,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
         Timber.tag("getTweets").d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
-        Timber.tag("getTweets").d("appUser.mid: ${appUser.mid}, isGuest: ${appUser.isGuest()}")
-        
+
         /**
          * Show cached tweets before loading from net.
          * */

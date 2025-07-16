@@ -39,7 +39,6 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
-import us.fireshare.tweet.tweet.UserListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,8 +91,8 @@ fun FollowingScreen(
         Surface(modifier = Modifier.padding(innerPadding)) {
             UserListView(
                 users = followingsOfProfile,
-                getUsers = { pageNumber ->
-                    // TODO: Implement pagination for followings if needed
+                fetchUsers = { pageNumber ->
+                    viewModel.fetchFollowings(pageNumber)
                 },
                 contentPadding = PaddingValues(bottom = 60.dp),
                 userItem = { followingUserId ->
@@ -107,7 +106,8 @@ fun FollowingScreen(
                         },
                         appUserViewModel = appUserViewModel
                     )
-                }
+                },
+                currentUserId = userId
             )
         }
     }

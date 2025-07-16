@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -180,6 +181,157 @@ class UserViewModel @AssistedInject constructor(
         _followers.value = HproseInstance.getFans(user.value) ?: emptyList()
         _followings.value = HproseInstance.getFollowings(user.value)
     }
+    
+    companion object {
+        // Use the constant from TW_CONST
+    }
+
+    /**
+     * Fetch followers with pagination support
+     * Returns List<MimeiId?> including null elements from the backend
+     */
+    suspend fun fetchFollowers(pageNumber: Int): List<MimeiId?> {
+        return try {
+            if (pageNumber == 0) {
+                // For page 0, refresh the entire list
+                val allFollowers = HproseInstance.getFans(user.value) ?: emptyList()
+                _followers.value = allFollowers
+                
+                // Fetch user data in batches from appUser's node
+                fetchUserDataInBatches(allFollowers)
+                
+                // Return the first batch of users
+                allFollowers.take(TW_CONST.USER_BATCH_SIZE).map { it }
+            } else {
+                // For subsequent pages, return the appropriate slice of already-loaded followers
+                val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
+                val endIndex = startIndex + TW_CONST.USER_BATCH_SIZE
+                val slice = _followers.value.slice(startIndex until minOf(endIndex, _followers.value.size))
+                
+                if (slice.isEmpty()) {
+                    // No more followers to return
+                    emptyList()
+                } else {
+                    slice.map { it }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("fetchFollowers").e(e, "Error fetching followers for user: ${user.value.mid}")
+            emptyList()
+        }
+    }
+    
+    /**
+     * Fetch followings with pagination support
+     * Returns List<MimeiId?> including null elements from the backend
+     */
+    suspend fun fetchFollowings(pageNumber: Int): List<MimeiId?> {
+        return try {
+            if (pageNumber == 0) {
+                // For page 0, refresh the entire list
+                val allFollowings = HproseInstance.getFollowings(user.value)
+                _followings.value = allFollowings
+                
+                // Fetch user data in batches from appUser's node
+                fetchUserDataInBatches(allFollowings)
+                
+                // Return the first batch of users
+                allFollowings.take(TW_CONST.USER_BATCH_SIZE).map { it }
+            } else {
+                // For subsequent pages, return the appropriate slice of already-loaded followings
+                val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
+                val endIndex = startIndex + TW_CONST.USER_BATCH_SIZE
+                val slice = _followings.value.slice(startIndex until minOf(endIndex, _followings.value.size))
+                
+                if (slice.isEmpty()) {
+                    // No more followings to return
+                    emptyList()
+                } else {
+                    slice.map { it }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("fetchFollowings").e(e, "Error fetching followings for user: ${user.value.mid}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Fetch user data in batches from appUser's node
+     * First tries to fetch in batches of USER_BATCH_SIZE, then falls back to individual calls for unavailable users
+     */
+    private suspend fun fetchUserDataInBatches(userIds: List<MimeiId>) {
+        if (userIds.isEmpty()) return
+        
+        Timber.tag("fetchUserDataInBatches").d("Fetching user data for ${userIds.size} users in batches")
+        
+        // Process users in batches
+        val batches = userIds.chunked(TW_CONST.USER_BATCH_SIZE)
+        
+        for ((batchIndex, batch) in batches.withIndex()) {
+            Timber.tag("fetchUserDataInBatches").d("Processing batch $batchIndex with ${batch.size} users")
+            
+            // Try to fetch batch from appUser's node first
+            val batchResults = fetchUserBatchFromAppUserNode(batch)
+            
+            // For users not available in batch, fetch individually
+            val unavailableUsers = batch.filterIndexed { index, _ -> batchResults[index] == null }
+            
+            if (unavailableUsers.isNotEmpty()) {
+                Timber.tag("fetchUserDataInBatches").d("Fetching ${unavailableUsers.size} users individually")
+                unavailableUsers.forEach { userId ->
+                    try {
+                        HproseInstance.getUser(userId)
+                    } catch (e: Exception) {
+                        Timber.tag("fetchUserDataInBatches").e(e, "Error fetching individual user: $userId")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Try to fetch a batch of users from appUser's node
+     * Returns a list where each element is either a User object or null if not available
+     */
+    private suspend fun fetchUserBatchFromAppUserNode(userIds: List<MimeiId>): List<User?> {
+        return try {
+            // Try to fetch users from appUser's node using a batch endpoint
+            // If the endpoint doesn't exist, this will return nulls and we'll fall back to individual calls
+            val entry = "get_users_batch"
+            val params = mapOf(
+                "aid" to HproseInstance.appId,
+                "ver" to "last",
+                "userids" to userIds
+            )
+            
+            // Add timeout to prevent hanging
+            val response = withTimeoutOrNull(5000L) { // 5 second timeout
+                HproseInstance.appUser.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            }
+            
+            response?.map { userData ->
+                if (userData == null) {
+                    null
+                } else {
+                    try {
+                        val user = User.from(userData)
+                        // Cache the user
+                        TweetCacheManager.saveUser(user)
+                        user
+                    } catch (e: Exception) {
+                        Timber.tag("fetchUserBatchFromAppUserNode").e(e, "Error parsing user data")
+                        null
+                    }
+                }
+            } ?: List(userIds.size) { null }
+            
+        } catch (e: Exception) {
+            Timber.tag("fetchUserBatchFromAppUserNode").d("Batch endpoint not available or failed, will use individual calls: $e")
+            // Return nulls to indicate batch fetch failed, will fall back to individual calls
+            List(userIds.size) { null }
+        }
+    }
 
     /**
      * Get bookmarks of the user
@@ -305,10 +457,10 @@ class UserViewModel @AssistedInject constructor(
                 // add tweet to topTweets, update its timestamp to when it is pinned.
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
-                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
+                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
                     tweet1.originalTweetId?.let {
                         tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                            tweet1.originalTweet = HproseInstance.getTweet(it, it1, shouldCache = false)
                         }
                     }
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
@@ -345,10 +497,10 @@ class UserViewModel @AssistedInject constructor(
                  * */
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
-                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid)?.let { tweet1 ->
+                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
                     tweet1.originalTweetId?.let {
                         tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.getTweet(it, it1)
+                            tweet1.originalTweet = HproseInstance.getTweet(it, it1, shouldCache = false)
                         }
                     }
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))

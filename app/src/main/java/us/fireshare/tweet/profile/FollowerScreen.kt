@@ -30,13 +30,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
-import us.fireshare.tweet.tweet.UserListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,8 +90,8 @@ fun FollowerScreen(
         Surface(modifier = Modifier.padding(innerPadding)) {
             UserListView(
                 users = followersOfProfile,
-                getUsers = { pageNumber ->
-                    // TODO: Implement pagination for followers if needed
+                fetchUsers = { pageNumber ->
+                    viewModel.fetchFollowers(pageNumber)
                 },
                 contentPadding = PaddingValues(bottom = 60.dp),
                 userItem = { followerUserId ->
@@ -104,7 +105,8 @@ fun FollowerScreen(
                         },
                         appUserViewModel = appUserViewModel
                     )
-                }
+                },
+                currentUserId = userId
             )
         }
     }
@@ -122,7 +124,9 @@ fun FollowerItem(
     if (user.isGuest()) {
         // Try to reload the user data when the user is not loaded properly
         LaunchedEffect(userId) {
-            viewModel.refreshUser()
+            withContext(Dispatchers.IO) {
+                viewModel.refreshUser()
+            }
         }
     }
 

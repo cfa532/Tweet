@@ -91,7 +91,7 @@ class TweetViewModel @AssistedInject constructor(
          * */
         if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.getTweet(tweet.mid, tweet.authorId)?.let { tweet ->
+                HproseInstance.getTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
                     _tweetState.value = tweet
                 }
             }
@@ -103,7 +103,7 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun refreshTweet() {
         HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
             if (tweet.originalTweetId != null) {
-                HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)?.let {
+                HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)?.let {
                     tweet.originalTweet = it
                 }
             }
