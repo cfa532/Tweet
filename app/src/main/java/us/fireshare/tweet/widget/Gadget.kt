@@ -105,50 +105,55 @@ object Gadget {
     }
 
     /**
-     * Return an array of valid IPs from different serving nodes.
-     * One node one IP. Prefer IPv4 over V6 address.
+     * Return the IP address with the smallest response time from the available nodes.
+     * Only considers public IPs with ports between 8000 and 9000.
+     * Treats IPv4 and IPv6 equally.
      * */
-    fun filterIpAddresses(nodeList: ArrayList<*>): List<String> {
-        val ipAddresses = mutableListOf<String>()
+    fun filterIpAddresses(nodeList: ArrayList<*>): String? {
+        var bestIp: String? = null
+        var bestResponseTime = Double.MAX_VALUE
 
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
-            var ipv6: String? = null
-            var ipv4: String? = null
-
-            // First pass: look for a valid IPv4 address
+            
             for (ipData in nodeIps) {
-                val pair = ipData as ArrayList<*>
+                val pair = ipData as? ArrayList<*> ?: continue
+                if (pair.size < 2) continue
+                
                 val ip = pair[0].toString()
-
-                if (!InetAddressUtils.isIPv6Address(ip.getIP()) &&
-                    ip.getIP()?.let { isValidPublicIpAddress(it) } == true) {
-                    ipv4 = ip
-                    break  // Found a valid IPv4, no need to check more IPs for this node
+                val responseTimeStr = pair[1].toString()
+                
+                // Parse response time (scientific format)
+                val responseTime = try {
+                    responseTimeStr.toDouble()
+                } catch (e: NumberFormatException) {
+                    continue // Skip invalid response time
                 }
-            }
-
-            // If no IPv4 found, look for IPv6
-            if (ipv4 == null) {
-                for (ipData in nodeIps) {
-                    val pair = ipData as ArrayList<*>
-                    val ip = pair[0].toString()
-
-                    if (InetAddressUtils.isIPv6Address(ip.getIP())) {
-                        ipv6 = ip
-                        break  // Found an IPv6, no need to check more
-                    }
+                
+                // Check if IP is valid and has correct port range
+                val ipOnly = ip.getIP() ?: continue
+                val port = ip.substringAfterLast(":", "8080").toIntOrNull() ?: continue
+                
+                if (port !in 8000..9000) continue
+                
+                // Check if it's a public IP
+                if (!isValidPublicIpAddress(ip)) continue
+                
+                // Determine if this IP is better than the current best
+                val isBetter = when {
+                    bestIp == null -> true // First valid IP
+                    responseTime < bestResponseTime -> true // Faster response time
+                    else -> false
                 }
-            }
-
-            // Add the preferred IP to the result list
-            when {
-                ipv4 != null -> ipAddresses.add(ipv4)
-                ipv6 != null -> ipAddresses.add(ipv6)
+                
+                if (isBetter) {
+                    bestIp = ip
+                    bestResponseTime = responseTime
+                }
             }
         }
 
-        return ipAddresses
+        return bestIp
     }
 
     /**

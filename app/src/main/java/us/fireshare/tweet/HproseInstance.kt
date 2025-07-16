@@ -42,6 +42,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.regex.Pattern
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -50,10 +51,10 @@ object HproseInstance {
     private var appId: MimeiId = BuildConfig.APP_ID
     lateinit var preferenceHelper: PreferenceHelper
     var appUser: User = User(mid = TW_CONST.GUEST_ID)
-    
+
     // User cache expiration time (30 minutes in milliseconds)
     const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
-    
+
     // in-memory cache of users.
     private var cachedUsers: MutableSet<User> = emptySet<User>().toMutableSet()
     private var userCacheTimestamps: MutableMap<MimeiId, Long> = mutableMapOf()
@@ -84,12 +85,12 @@ object HproseInstance {
         val expiredUserIds = cachedUsers.filter { user ->
             user.hasExpired
         }.map { it.mid }
-        
+
         expiredUserIds.forEach { userId ->
             removeUserFromCache(userId)
             Timber.tag("cleanupExpiredUsers").d("Removed expired user: $userId")
         }
-        
+
         if (expiredUserIds.isNotEmpty()) {
             Timber.tag("cleanupExpiredUsers").d("Cleaned up ${expiredUserIds.size} expired users")
         }
@@ -102,7 +103,7 @@ object HproseInstance {
         val totalUsers = cachedUsers.size
         val expiredUsers = cachedUsers.count { it.hasExpired }
         val validUsers = totalUsers - expiredUsers
-        
+
         return UserCacheStats(
             totalUsers = totalUsers,
             validUsers = validUsers,
@@ -126,13 +127,15 @@ object HproseInstance {
         chatDatabase = ChatDatabase.getInstance(context)
         val tweetCache = TweetCacheDatabase.getInstance(context)
         dao = tweetCache.tweetDao()
-        
-        appUser = User(mid = TW_CONST.GUEST_ID,
+
+        appUser = User(
+            mid = TW_CONST.GUEST_ID,
             baseUrl = preferenceHelper.getAppUrls().first(),
             followingList = getAlphaIds()
         )
         initAppEntry()
     }
+
     val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
             requestTimeoutMillis = 300_000 // Total request timeout (5 minutes)
@@ -140,7 +143,6 @@ object HproseInstance {
             socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
         }
     }
-
 
 
     /**
@@ -177,17 +179,16 @@ object HproseInstance {
                          * and tries to extract appId and host IP addresses from source code.
                          * */
                         Timber.tag("initAppEntry").d("$paramMap")
-                        val hostIPs = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        val bestIp = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
 
                         /**
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
                          * Each pair is an ArrayList of two elements. The first is the IP address,
                          * and the second is the time spent to get response from the IP.
                          *
-                         * hostIPs is a list of node's IP that is a Mimei provider for this App.
+                         * bestIp is the IP with the smallest response time from valid public IPs.
                          */
-                        val firstIp = getAccessibleIP(hostIPs) ?: getAccessibleIP2(hostIPs)
-                        appUser = appUser.copy(baseUrl = "http://$firstIp")
+                        appUser = appUser.copy(baseUrl = "http://$bestIp")
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
                             /**
@@ -195,7 +196,7 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            getProviders(userId, "http://$firstIp")?.let { ips ->
+                            getProviders(userId, "http://$bestIp")?.let { ips ->
                                 appUser = getAccessibleUser(ips, userId) ?: appUser
                                 addUserToCache(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
@@ -223,7 +224,6 @@ object HproseInstance {
     fun getAlphaIds(): List<MimeiId> {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
-
 
 
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
@@ -276,9 +276,10 @@ object HproseInstance {
         )
 
         return try {
-            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)?.mapNotNull { messageData ->
-                Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
-            }
+            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+                ?.mapNotNull { messageData ->
+                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
+                }
         } catch (e: Exception) {
             Timber.tag("fetchMessages").e(e)
             null
@@ -298,9 +299,10 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         return try {
-            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)?.mapNotNull { messageData ->
-                Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
-            }
+            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+                ?.mapNotNull { messageData ->
+                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
+                }
         } catch (e: Exception) {
             Timber.tag("checkNewMessages").e(e)
             null
@@ -351,8 +353,12 @@ object HproseInstance {
         context: Context
     ): Pair<User?, String?> {
         return try {
-            val userId = getUserId(username) ?: return Pair(null, context.getString(R.string.login_getuserid_fail))
-            val user = getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
+            val userId = getUserId(username) ?: return Pair(
+                null,
+                context.getString(R.string.login_getuserid_fail)
+            )
+            val user =
+                getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
             val entry = "login"
             val params = mapOf(
                 "aid" to appId,
@@ -381,7 +387,8 @@ object HproseInstance {
         val entry = "getvar"
         val params = mapOf("name" to "hostid")
         return try {
-            val hproseClient = HproseClient.create("$host/webapi/").useService(HproseService::class.java)
+            val hproseClient =
+                HproseClient.create("$host/webapi/").useService(HproseService::class.java)
             val response =
                 hproseClient.runMApp<String>(entry, params)
             response?.trim()?.trim('"')?.trim(',')
@@ -524,7 +531,7 @@ object HproseInstance {
             "userid" to if (!user.isGuest()) user.mid else getAlphaIds().first(),
             "appuserid" to appUser.mid
         )
-        
+
         val response =
             user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
@@ -570,25 +577,25 @@ object HproseInstance {
                 "ps" to pageSize,
                 "appuserid" to appUser.mid
             )
-            
-            Timber.tag("getTweetListByRank").d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
-            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
+            Timber.tag("getTweetListByRank")
+                .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
+            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
             val tweetList = response?.mapNotNull { tweetJson ->
                 tweetJson?.let { Tweet.from(tweetJson) }
             } ?: emptyList()
 
-            Timber.tag("getTweetListByRank").d("Received ${tweetList.size} tweets for user: ${user.mid}")
+            Timber.tag("getTweetListByRank")
+                .d("Received ${tweetList.size} tweets for user: ${user.mid}")
 
             return tweetList.mapNotNull { tweet ->
                 tweet.author = user
-
                 if (tweet.originalTweetId != null) {
-                    val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                        ?: return@mapNotNull null
+                    val originalTweet =
+                        getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            ?: return@mapNotNull null
                     tweet.originalTweet = originalTweet
                 }
-
                 updateCachedTweet(tweet)
                 tweet
             }
@@ -675,13 +682,11 @@ object HproseInstance {
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
-                "entry" to entry,
                 "tweetid" to tweetId,
                 "appuserid" to appUser.mid,
-                "userid" to author.mid,
+                "userid" to authorId,
                 "hostid" to (author.hostIds?.first() ?: "")
             )
-
             author.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
                 Tweet.from(tweetData).apply {
                     TweetCacheManager.updateCachedTweet(this, appUser.mid)
@@ -1180,7 +1185,7 @@ object HproseInstance {
 
         // Step 2: Create user instance, which was either expired or not found in cache.
         val user = getUserInstance(userId)
-        
+
         // Step 3: Determine the base URL to use
         val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
             // Get provider IP for the user
@@ -1189,14 +1194,17 @@ object HproseInstance {
         } else {
             baseUrl
         }
-        
+
         // Step 4: Set the base URL and fetch user data
         user.baseUrl = finalBaseUrl
-        updateUserFromServer(user)
-        
+        withContext(IO) {
+            updateUserFromServer(user)
+        }
         // Step 5: Cache the user and return
-        addUserToCache(user)
-                    return user
+        withContext(IO) {
+            addUserToCache(user)
+        }
+        return user
     }
 
     /**
@@ -1270,9 +1278,10 @@ object HproseInstance {
             "userid" to mid
         )
         return try {
-            val hproseClient = HproseClient.create("http://$ip/webapi/").useService(HproseService::class.java)
-            val response =
-                hproseClient.runMApp<Map<String, Any>>(entry, params)
+            val hproseClient = HproseClient.create("http://$ip/webapi/")
+            hproseClient.timeout = 300
+            val service = hproseClient.useService(HproseService::class.java)
+            val response = service.runMApp<Map<String, Any>>(entry, params)
 
             response?.let {
                 getUserInstance(mid).apply {
@@ -1309,9 +1318,10 @@ object HproseInstance {
                 "name" to "mmversions",
                 "arg0" to appId
             )
-            val hproseClient = HproseClient.create("http://$ip/webapi/").useService(HproseService::class.java)
-            val response =
-                hproseClient.runMApp<Array<String>>(entry, params)
+            val hproseClient = HproseClient.create("http://$ip/webapi/")
+            hproseClient.timeout = 300
+            val service = hproseClient.useService(HproseService::class.java)
+            val response = service.runMApp<Array<String>>(entry, params)
 
             response?.firstOrNull()?.let { ip } // Return IP if found
         } catch (e: Exception) {
@@ -1335,9 +1345,10 @@ object HproseInstance {
             "mid" to mid
         )
         return try {
-            val hproseClient = HproseClient.create("$baseUrl/webapi/").useService(HproseService::class.java)
-            val response =
-                hproseClient.runMApp<List<String>>(entry, params)
+            val hproseClient = HproseClient.create("$baseUrl/webapi/")
+            hproseClient.timeout = 300
+            val service = hproseClient.useService(HproseService::class.java)
+            val response = service.runMApp<List<String>>(entry, params)
 
             response?.toSet()?.toList()
         } catch (e: Exception) {
@@ -1385,13 +1396,6 @@ object HproseInstance {
             Timber.tag("getPinnedList").e(e)
             null
         }
-    }
-
-    /**
-     * Remove user from cachedUsers list.
-     * */
-    fun removeCachedUser(userId: MimeiId) {
-        removeUserFromCache(userId)
     }
 
     suspend fun logging(msg: String) {

@@ -2,10 +2,11 @@ package us.fireshare.tweet.datamodel
 
 import android.os.Parcelable
 import com.google.gson.annotations.Expose
+import hprose.client.HproseClient
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import us.fireshare.tweet.HproseInstance
-import hprose.client.HproseHttpClient
+import kotlinx.coroutines.withTimeout
 import kotlinx.parcelize.IgnoredOnParcel
 import timber.log.Timber
 
@@ -145,11 +146,16 @@ data class User(
             if (_hproseService != null) {
                 return _hproseService
             } else {
-                val client = HproseHttpClient("$baseUrl/webapi/")
-                client.timeout = 300
-                val service = client.useService(HproseService::class.java)
-                _hproseService = service
-                return service
+                try {
+                    // Use factory method to create client based on URL scheme
+                    val client = HproseClient.create("$baseUrl/webapi/")
+                    client.timeout = 300
+                    _hproseService = client.useService(HproseService::class.java)
+                    return _hproseService
+                } catch (e: Exception) {
+                    Timber.e("Failed to create Hprose client for baseUrl: $baseUrl", e)
+                    return null
+                }
             }
         }
 
@@ -161,11 +167,16 @@ data class User(
             if (_uploadService != null) {
                 return _uploadService
             } else {
-                val client = HproseHttpClient("$writableUrl/webapi/")
-                client.timeout = 300
-                val service = client.useService(HproseService::class.java)
-                _uploadService = service
-                return service
+                try {
+                    // Use factory method to create client based on URL scheme
+                    val client = HproseClient.create("$writableUrl/webapi/")
+                    client.timeout = 3000   // upload takes longer
+                    _uploadService = client.useService(HproseService::class.java)
+                    return _uploadService
+                } catch (e: Exception) {
+                    Timber.e("Failed to create Hprose upload client for writableUrl: $writableUrl", e)
+                    return null
+                }
             }
         }
 
