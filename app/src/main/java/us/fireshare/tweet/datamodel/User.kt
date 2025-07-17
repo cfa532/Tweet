@@ -6,7 +6,6 @@ import hprose.client.HproseClient
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import us.fireshare.tweet.HproseInstance
-import kotlinx.coroutines.withTimeout
 import kotlinx.parcelize.IgnoredOnParcel
 import timber.log.Timber
 
@@ -347,6 +346,23 @@ data class User(
         } catch (e: Exception) {
             Timber.tag("User.from").e("Error updating user from map: $e")
         }
+    }
+
+    fun from(userData: User) {
+        name = userData.name
+        username = userData.username
+        avatar = userData.avatar
+        email = userData.email
+        profile = userData.profile
+        cloudDrivePort = userData.cloudDrivePort
+
+        tweetCount = userData.tweetCount
+        followingCount = userData.followingCount
+        followersCount = userData.followersCount
+        bookmarksCount = userData.bookmarksCount
+        favoritesCount = userData.favoritesCount
+        commentsCount = userData.commentsCount
+        hostIds = userData.hostIds
     }
 
     /**

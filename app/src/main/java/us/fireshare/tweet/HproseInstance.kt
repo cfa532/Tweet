@@ -8,6 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
 import hprose.client.HproseClient
+import hprose.io.HproseClassManager
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.HttpTimeout
@@ -33,16 +34,12 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
-import us.fireshare.tweet.widget.Gadget.getAccessibleIP
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.Gadget.getAccessibleUser
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.regex.Pattern
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.withContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -56,6 +53,9 @@ object HproseInstance {
     lateinit var dao: CachedTweetDao
 
     suspend fun init(context: Context) {
+        HproseClassManager.register(Tweet::class.java, "Tweet")
+        HproseClassManager.register(User::class.java, "User")
+
         this.preferenceHelper = PreferenceHelper(context)
         chatDatabase = ChatDatabase.getInstance(context)
         val tweetCache = TweetCacheDatabase.getInstance(context)
@@ -128,8 +128,9 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            getProviders(userId, "http://$bestIp")?.let { ips ->
-                                appUser = getAccessibleUser(ips, userId) ?: appUser
+                            getProvider(userId)?.let { ip ->
+                                TweetCacheManager.removeCachedUser(userId)
+                                appUser = getUser(userId, "http://$ip") ?: appUser
                                 TweetCacheManager.saveUser(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                             }
@@ -157,7 +158,7 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+    fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         val entry = "message_outgoing"
         val params = mapOf(
             "aid" to appId,
@@ -277,7 +278,7 @@ object HproseInstance {
      * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    suspend fun login(
+    fun login(
         username: String,
         password: String,
         context: Context
@@ -570,7 +571,7 @@ object HproseInstance {
      * Let the caller to decide if go further on the tweet hierarchy.
      * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
-    suspend fun getTweet(
+    fun getTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         nodeUrl: String? = null,
@@ -1195,15 +1196,14 @@ object HproseInstance {
                     // Provider IP received, update baseUrl and retry
                     val providerIP = response
                     user.baseUrl = "http://$providerIP"
-                    user.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { userData ->
+                    user.hproseService?.runMApp<User>(entry, params)?.let { userData ->
                         user.from(userData)
                     }
                 }
 
-                is Map<*, *> -> {
+                is User -> {
                     // User data received directly
-                    val userData = response as Map<String, Any>
-                    user.from(userData)
+                    user.from(response)
                 }
             }
         } catch (e: Exception) {
@@ -1216,7 +1216,6 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "userid" to mid
         )
         return try {
@@ -1278,21 +1277,16 @@ object HproseInstance {
         }
     }
 
-    fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? {
-        val entry = "get_providers"
+    fun getProvider(mid: MimeiId): String? {
+        val entry = "get_provider"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "mid" to mid
         )
         return try {
-            val hproseClient = HproseClient.create("$baseUrl/webapi/")
-            hproseClient.timeout = 300
-            val service = hproseClient.useService(HproseService::class.java)
-            val response = service.runMApp<List<String>>(entry, params)
-
-            response?.toSet()?.toList()
+            val response = appUser.hproseService?.runMApp<String>(entry, params)
+            return response
         } catch (e: Exception) {
             Timber.tag("getProviders").e(e)
             null
@@ -1307,7 +1301,6 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "userid" to appUser.mid,
             "tweetid" to tweetId
         )
@@ -1328,7 +1321,6 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "userid" to user.mid,
             "gid" to appUser.mid
         )
@@ -1346,7 +1338,6 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "msg" to msg
         )
         try {

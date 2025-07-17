@@ -47,7 +47,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getProviders
+import us.fireshare.tweet.HproseInstance.getProvider
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NetworkCheckJobService
 import us.fireshare.tweet.service.ObserveAsEvents
@@ -170,14 +170,12 @@ class ActivityViewModel: ViewModel() {
                         // check for mimei of available App entry Urls. Update records in
                         // preference each time the app is run.
                         val mid = BuildConfig.ENTRY_URLS
-                        getProviders(mid)?.let {
-                            getAccessibleIP(it)?.let { ip ->
-                                val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
-                                if (response.status == HttpStatusCode.OK) {
-                                    val newUrls =
-                                        response.bodyAsText().split(System.lineSeparator()).toSet()
-                                    HproseInstance.preferenceHelper.setAppUrls(newUrls)
-                                }
+                        getProvider(mid)?.let { ip ->
+                            val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                            if (response.status == HttpStatusCode.OK) {
+                                val newUrls =
+                                    response.bodyAsText().split(System.lineSeparator()).toSet()
+                                HproseInstance.preferenceHelper.setAppUrls(newUrls)
                             }
                         }
                     }

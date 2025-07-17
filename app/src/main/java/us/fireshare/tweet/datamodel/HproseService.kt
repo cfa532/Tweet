@@ -1,7 +1,5 @@
 package us.fireshare.tweet.datamodel
 
-import us.fireshare.tweet.datamodel.MimeiId
-
 interface ScorePair {
     val score: Long
     val member: String
