@@ -128,10 +128,9 @@ object HproseInstance {
                              * Initiate current account. Get its IP list and choose the best one,
                              * and assign it to appUser.baseUrl.
                              * */
-                            getProvider(userId)?.let { ip ->
+                            getProviderIP(userId)?.let { ip ->
                                 TweetCacheManager.removeCachedUser(userId)
                                 appUser = getUser(userId, "http://$ip") ?: appUser
-                                TweetCacheManager.saveUser(appUser)
                                 Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
                             }
                         } else {
@@ -504,7 +503,7 @@ object HproseInstance {
      * Load tweets of a specific user by rank.
      * Handles null elements in the response list and preserves their positions.
      * */
-    suspend fun getTweetListByRank(
+    fun getTweetListByRank(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
@@ -1124,7 +1123,7 @@ object HproseInstance {
      *
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
-    fun getUser(userId: MimeiId, baseUrl: String? = null): User? {
+    fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
@@ -1160,24 +1159,6 @@ object HproseInstance {
     }
 
     /**
-     * Get provider IP for a user using "get_provider" entry
-     */
-    private fun getProviderIP(userId: MimeiId): String? {
-        val entry = "get_provider"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "mid" to userId
-        )
-        return try {
-            appUser.hproseService?.runMApp<String>(entry, params)
-        } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("$e $userId")
-            null
-        }
-    }
-
-    /**
      * Update user data from server using "get_user" entry
      */
     private fun updateUserFromServer(user: User) {
@@ -1196,18 +1177,36 @@ object HproseInstance {
                     // Provider IP received, update baseUrl and retry
                     val providerIP = response
                     user.baseUrl = "http://$providerIP"
-                    user.hproseService?.runMApp<User>(entry, params)?.let { userData ->
+                    user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
                         user.from(userData)
                     }
                 }
 
-                is User -> {
+                is Map<*, *> -> {
                     // User data received directly
-                    user.from(response)
+                    user.from(response as Map<String, Any>)
                 }
             }
         } catch (e: Exception) {
             Timber.tag("updateUserFromServer").e("$e ${user.mid}")
+        }
+    }
+
+    /**
+     * Get provider IP for a user using "get_provider" entry
+     */
+    fun getProviderIP(userId: MimeiId): String? {
+        val entry = "get_provider"
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "mid" to userId
+        )
+        return try {
+            appUser.hproseService?.runMApp<String>(entry, params)
+        } catch (e: Exception) {
+            Timber.tag("getProviderIP").e("$e $userId")
+            null
         }
     }
 
@@ -1273,22 +1272,6 @@ object HproseInstance {
                 }
 //                else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
             }
-            null
-        }
-    }
-
-    fun getProvider(mid: MimeiId): String? {
-        val entry = "get_provider"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "mid" to mid
-        )
-        return try {
-            val response = appUser.hproseService?.runMApp<String>(entry, params)
-            return response
-        } catch (e: Exception) {
-            Timber.tag("getProviders").e(e)
             null
         }
     }
