@@ -457,43 +457,48 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
 
-        val response =
-            user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+        return try {
+            val response =
+                user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
-        return response?.map { tweetJson ->
-            // If the element is null, keep it as null
-            if (tweetJson == null) {
-                null
-            } else {
-                // Try to decode the tweet
-                try {
-                    val tweet = Tweet.from(tweetJson)
-                    tweet.author = getUser(tweet.authorId)
-
-                    if (tweet.originalTweetId != null) {
-                        val originalTweet =
-                            getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                        if (originalTweet != null) {
-                            tweet.originalTweet = originalTweet
-                        } else {
-                            // If original tweet cannot be fetched, return null
-                            return@map null
-                        }
-                    }
-
-                    // Skip private tweets in feed
-                    if (tweet.isPrivate) {
-                        null
-                    } else {
-                        updateCachedTweet(tweet)
-                        tweet
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
+            response?.map { tweetJson ->
+                // If the element is null, keep it as null
+                if (tweetJson == null) {
                     null
+                } else {
+                    // Try to decode the tweet
+                    try {
+                        val tweet = Tweet.from(tweetJson)
+                        tweet.author = getUser(tweet.authorId)
+
+                        if (tweet.originalTweetId != null) {
+                            val originalTweet =
+                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            if (originalTweet != null) {
+                                tweet.originalTweet = originalTweet
+                            } else {
+                                // If original tweet cannot be fetched, return null
+                                return@map null
+                            }
+                        }
+
+                        // Skip private tweets in feed
+                        if (tweet.isPrivate) {
+                            null
+                        } else {
+                            updateCachedTweet(tweet)
+                            tweet
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
+                        null
+                    }
                 }
-            }
-        } ?: emptyList()
+            } ?: emptyList()
+        } catch (e: Exception) {
+            Timber.tag("getTweetFeed").e("Error fetching tweet feed: $e")
+            emptyList()
+        }
     }
 
     /**
