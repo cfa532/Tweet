@@ -31,6 +31,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
@@ -57,6 +58,8 @@ fun VideoPreview(
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    
+    Timber.d("VideoPreview - Creating ExoPlayer for URL: $url")
     val exoPlayer = remember { createExoPlayer(context, url, MediaType.Video) }
 
     /**

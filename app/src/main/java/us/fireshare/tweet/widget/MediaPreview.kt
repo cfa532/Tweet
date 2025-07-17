@@ -50,6 +50,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
@@ -60,6 +61,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import androidx.core.net.toUri
 
 @Composable
 fun MediaPreviewGrid(
@@ -113,7 +115,7 @@ fun MediaPreviewGrid(
                 numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                     mediaItems.size - maxItems else 0,
                 // autoplay first video item
-                autoPlay = if (mediaItem.type == MediaType.Video && !isFirstVideo) {
+                autoPlay = if ((mediaItem.type ?: inferMediaTypeFromAttachment(mediaItem)) == MediaType.Video && !isFirstVideo) {
                                 isFirstVideo = true
                                 true
                             } else {
@@ -138,13 +140,16 @@ fun MediaItemView(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
+        val inferredType = it.type
         MediaItem(
             getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-            it.type
+            inferredType
         )
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
+    // Add logging for debugging
+    Timber.d("MediaItemView - index: $index, type: ${attachment.type}, url: ${attachment.url}")
     /**
      * Action to take when the Full Screen button on video is clicked.
      * Image is opened in full screen automatically when clicked upon.
@@ -257,8 +262,45 @@ fun BlobLink(
     )
 }
 
+/**
+ * Infer media type from attachment properties when backend doesn't provide type
+ */
+fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
+    // Check if aspectRatio is present (indicates video)
+    if (attachment.aspectRatio != null) {
+        return MediaType.Video
+    }
+    
+    // Check filename extension
+    val fileName = attachment.fileName?.lowercase() ?: ""
+    return when {
+        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || 
+        fileName.endsWith(".png") || fileName.endsWith(".gif") || 
+        fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
+        
+        fileName.endsWith(".mp4") || fileName.endsWith(".mov") || 
+        fileName.endsWith(".avi") || fileName.endsWith(".mkv") || 
+        fileName.endsWith(".webm") || fileName.endsWith(".m3u8") -> MediaType.Video
+        
+        fileName.endsWith(".mp3") || fileName.endsWith(".wav") || 
+        fileName.endsWith(".aac") || fileName.endsWith(".ogg") || 
+        fileName.endsWith(".flac") -> MediaType.Audio
+        
+        fileName.endsWith(".pdf") -> MediaType.PDF
+        fileName.endsWith(".doc") || fileName.endsWith(".docx") -> MediaType.Word
+        fileName.endsWith(".xls") || fileName.endsWith(".xlsx") -> MediaType.Excel
+        fileName.endsWith(".ppt") || fileName.endsWith(".pptx") -> MediaType.PPT
+        fileName.endsWith(".zip") || fileName.endsWith(".rar") || 
+        fileName.endsWith(".7z") -> MediaType.Zip
+        fileName.endsWith(".txt") -> MediaType.Txt
+        fileName.endsWith(".html") || fileName.endsWith(".htm") -> MediaType.Html
+        
+        else -> MediaType.Unknown
+    }
+}
+
 fun downloadFile(context: Context, url: String, fileName: String) {
-    val request = DownloadManager.Request(Uri.parse(url))
+    val request = DownloadManager.Request(url.toUri())
         .setTitle(fileName)
         .setDescription("Downloading")
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -273,11 +315,10 @@ fun downloadFile(context: Context, url: String, fileName: String) {
 
 
 /**
- * Creates an ExoPlayer instance that prioritizes HLS videos (backend default) 
- * and falls back to progressive video only when HLS fails
+ * Creates an ExoPlayer instance that handles HLS videos properly
  * 
  * @param context Android context
- * @param url Video URL
+ * @param url Video URL (points to directory containing HLS files)
  * @param mediaType Optional MediaType (not used in simplified approach)
  * @return Configured ExoPlayer instance
  */
@@ -285,15 +326,44 @@ fun downloadFile(context: Context, url: String, fileName: String) {
 fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
     val dataSourceFactory = DefaultDataSource.Factory(context)
     
+    // For HLS videos, the URL points to a directory containing the manifest file
+    // Try master.m3u8 first (multiple quality streams), then fall back to playlist.m3u8 (single resolution)
+    val baseUrl = if (url.endsWith("/")) url else "$url/"
+    val masterUrl = "${baseUrl}master.m3u8"
+    val playlistUrl = "${baseUrl}playlist.m3u8"
+    
+    // Log the URLs being accessed
+    Timber.d("VideoPreview - Original URL: $url")
+    Timber.d("VideoPreview - Base URL: $baseUrl")
+    Timber.d("VideoPreview - Master URL: $masterUrl")
+    Timber.d("VideoPreview - Playlist URL: $playlistUrl")
+    
     // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
     
-    return ExoPlayer.Builder(context)
+    // Start with master.m3u8 (multiple quality streams)
+    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+    
+    val player = ExoPlayer.Builder(context)
         .build()
         .apply {
             setMediaSource(mediaSource)
+            
+            // Add error listener to fallback to playlist.m3u8 if master.m3u8 fails
+            addListener(object : androidx.media3.common.Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    Timber.d("VideoPreview - Master URL failed, trying playlist URL: $playlistUrl")
+                    // If master.m3u8 fails, try playlist.m3u8
+                    val fallbackMediaSource = mediaSourceFactory.createMediaSource(
+                        androidx.media3.common.MediaItem.fromUri(playlistUrl)
+                    )
+                    setMediaSource(fallbackMediaSource)
+                    prepare()
+                }
+            })
         }
+    
+    return player
 }
 
 // DefaultMediaSourceFactory automatically handles HLS and progressive videos

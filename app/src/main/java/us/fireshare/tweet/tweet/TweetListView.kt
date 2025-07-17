@@ -205,9 +205,6 @@ fun TweetListView(
             // Check if we're near the bottom (within 2 items of the end)
             val isAtBottom = lastVisibleItem != null && lastVisibleItem.index >= totalItems - 2
             
-            // Debug logging
-            Timber.tag("TweetListView").d("isAtBottom check: lastVisibleItem=${lastVisibleItem?.index}, totalItems=$totalItems, isAtBottom=$isAtBottom, tweets.size=${tweets.size}")
-            
             isAtBottom
         }
     }
