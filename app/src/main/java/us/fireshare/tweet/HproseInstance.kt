@@ -1207,43 +1207,6 @@ object HproseInstance {
         }
     }
 
-    fun getUserCoreData(mid: MimeiId, ip: String): User? {
-        val entry = "get_user_core_data"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "userid" to mid
-        )
-        return try {
-            val hproseClient = HproseClient.create("http://$ip/webapi/")
-            hproseClient.timeout = 30000
-            val service = hproseClient.useService(HproseService::class.java)
-            val response = service.runMApp<Map<String, Any>>(entry, params)
-
-            response?.let {
-                getUserInstance(mid).apply {
-                    baseUrl = "http://$ip"
-                    name = it["name"] as? String
-                    username = it["username"] as? String
-                    avatar = it["avatar"] as? String
-                    email = it["email"] as? String
-                    profile = it["profile"] as? String
-                    tweetCount = (it["tweetCount"] as? Number)?.toInt() ?: 0
-                    followingCount = (it["followingCount"] as? Number)?.toInt() ?: 0
-                    followersCount = (it["followersCount"] as? Number)?.toInt() ?: 0
-                    bookmarksCount = (it["bookmarksCount"] as? Number)?.toInt() ?: 0
-                    favoritesCount = (it["favoritesCount"] as? Number)?.toInt() ?: 0
-                    commentsCount = (it["commentsCount"] as? Number)?.toInt() ?: 0
-                    hostIds = (it["hostIds"] as? List<*>)?.mapNotNull { id -> id as? String }
-                    cloudDrivePort = (it["cloudDrivePort"] as? Number)?.toInt() ?: 8010
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("getUserCoreData").e(e)
-            null
-        }
-    }
-
     /**
      * Return the current tweet list that is pinned to top.
      * */
