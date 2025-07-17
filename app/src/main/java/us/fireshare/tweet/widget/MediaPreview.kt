@@ -174,15 +174,15 @@ fun MediaItemView(
             }
             MediaType.Video -> {
                 VideoPreview(
-                    attachment.url,
-                    modifier,
-                    index,
-                    autoPlay,
-                    inPreviewGrid,
-                    mediaItems[index].aspectRatio,
-                ) {
-                    goto(index)
-                }
+                    url = attachment.url,
+                    modifier = modifier,
+                    index = index,
+                    autoPlay = autoPlay,
+                    inPreviewGrid = inPreviewGrid,
+                    aspectRatio = mediaItems[index].aspectRatio,
+                    callback = { goto(index) },
+                    videoMid = mediaItems[index].mid
+                )
             }
             MediaType.Audio -> {
                 val backgroundModifier = if (index % 2 != 0) { // Check if index is odd
@@ -352,10 +352,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
         .apply {
             setMediaSource(mediaSource)
             
-            // Add error listener to fallback to playlist.m3u8 if master.m3u8 fails
+            // Add comprehensive listener for debugging
             addListener(object : androidx.media3.common.Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.d("VideoPreview - Master URL failed, trying playlist URL: $playlistUrl")
+                    Timber.d("VideoPreview - Player error: ${error.message}, trying playlist URL: $playlistUrl")
                     // If master.m3u8 fails, try playlist.m3u8
                     val fallbackMediaSource = mediaSourceFactory.createMediaSource(
                         androidx.media3.common.MediaItem.fromUri(playlistUrl)
@@ -363,9 +363,33 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                     setMediaSource(fallbackMediaSource)
                     prepare()
                 }
+                
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    val stateName = when (playbackState) {
+                        androidx.media3.common.Player.STATE_IDLE -> "IDLE"
+                        androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
+                        androidx.media3.common.Player.STATE_READY -> "READY"
+                        androidx.media3.common.Player.STATE_ENDED -> "ENDED"
+                        else -> "UNKNOWN"
+                    }
+                    Timber.d("VideoPreview - Playback state changed to: $stateName")
+                }
+                
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    Timber.d("VideoPreview - Is playing changed to: $isPlaying")
+                }
+                
+                override fun onIsLoadingChanged(isLoading: Boolean) {
+                    Timber.d("VideoPreview - Is loading changed to: $isLoading")
+                }
             })
+            
+            // Prepare the player immediately after setting up the listener
+            Timber.d("VideoPreview - Preparing ExoPlayer after creation")
+            prepare()
         }
     
+    Timber.d("VideoPreview - ExoPlayer created successfully")
     return player
 }
 

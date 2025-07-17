@@ -82,8 +82,6 @@ fun TweetListView(
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
     currentUserId: MimeiId? = null, // Add current user ID to detect user changes
 ) {
-    // Debug logging
-    Timber.tag("TweetListView").d("TweetListView received tweets: ${tweets.size}")
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
