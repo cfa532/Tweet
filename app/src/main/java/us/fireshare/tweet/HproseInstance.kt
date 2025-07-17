@@ -195,7 +195,7 @@ object HproseInstance {
     }
 
     // get the recent unread message from a sender.
-    suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
+    fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
         val entry = "message_fetch"
         val params = mapOf(
             "aid" to appId,
@@ -219,7 +219,7 @@ object HproseInstance {
     /**
      * Get a list of unread incoming messages. Only check, do not fetch them.
      * */
-    suspend fun checkNewMessages(): List<ChatMessage>? {
+    fun checkNewMessages(): List<ChatMessage>? {
         if (appUser.isGuest()) return null
         val entry = "message_check"
         val params = mapOf(
@@ -239,7 +239,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun checkUpgrade(): Map<String, String>? {
+    fun checkUpgrade(): Map<String, String>? {
         val entry = "check_upgrade"
         val params = mapOf(
             "aid" to appId,
@@ -256,7 +256,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun getUserId(username: String): MimeiId? {
+    fun getUserId(username: String): MimeiId? {
         val entry = "get_userid"
         val params = mapOf(
             "aid" to appId,
@@ -313,7 +313,7 @@ object HproseInstance {
     /**
      * Given host url, get the node Id
      * */
-    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
+    fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
         val entry = "getvar"
         val params = mapOf("name" to "hostid")
         return try {
@@ -332,7 +332,7 @@ object HproseInstance {
      * @param nodeId
      * Find IP addresses of given node.
      * */
-    suspend fun getHostIP(nodeId: MimeiId): String? {
+    fun getHostIP(nodeId: MimeiId): String? {
         val entry = "getvar"
         val params = mapOf(
             "name" to "ips",
@@ -354,7 +354,7 @@ object HproseInstance {
     /**
      * Register a new user or update an existing user account.
      * */
-    suspend fun setUserData(userObj: User): Map<*, *>? {
+    fun setUserData(userObj: User): Map<*, *>? {
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
         val entry = if (user.isGuest()) {
             /**
@@ -383,7 +383,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun setUserAvatar(user: User, avatar: MimeiId) {
+    fun setUserAvatar(user: User, avatar: MimeiId) {
         val entry = "set_user_avatar"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
@@ -401,7 +401,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
      * */
-     fun getFollowings(user: User): List<MimeiId> {
+    fun getFollowings(user: User): List<MimeiId> {
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -423,7 +423,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
      * */
-     fun getFans(user: User): List<MimeiId>? {
+    fun getFans(user: User): List<MimeiId>? {
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -474,7 +474,8 @@ object HproseInstance {
                     tweet.author = getUser(tweet.authorId)
 
                     if (tweet.originalTweetId != null) {
-                        val originalTweet = getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                        val originalTweet =
+                            getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
                         if (originalTweet != null) {
                             tweet.originalTweet = originalTweet
                         } else {
@@ -521,7 +522,7 @@ object HproseInstance {
             Timber.tag("getTweetListByRank")
                 .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
             val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
-            
+
             val result = response?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
@@ -533,7 +534,11 @@ object HproseInstance {
                         tweet.author = user
                         if (tweet.originalTweetId != null) {
                             val originalTweet =
-                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)
+                                getTweet(
+                                    tweet.originalTweetId!!,
+                                    tweet.originalAuthorId!!,
+                                    shouldCache = false
+                                )
                             if (originalTweet != null) {
                                 tweet.originalTweet = originalTweet
                             } else {
@@ -592,7 +597,11 @@ object HproseInstance {
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
                 Tweet.from(tweetData).copy(author = author).apply {
-                    TweetCacheManager.saveTweet(this, userId = appUser.mid, shouldCache = shouldCache)
+                    TweetCacheManager.saveTweet(
+                        this,
+                        userId = appUser.mid,
+                        shouldCache = shouldCache
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -620,10 +629,11 @@ object HproseInstance {
         return try {
             // Check for null parameters
             if (tweetId == null || authorId == null) {
-                Timber.tag("refreshTweet").w("Null parameters: tweetId=$tweetId, authorId=$authorId")
+                Timber.tag("refreshTweet")
+                    .w("Null parameters: tweetId=$tweetId, authorId=$authorId")
                 return null
             }
-            
+
             val author = getUser(authorId) ?: return null
             val entry = "refresh_tweet"
             val params = mapOf(
@@ -706,10 +716,10 @@ object HproseInstance {
                 if (newTweetId != null) {
                     // Create a new tweet with the updated mid
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
-                    
+
                     // Post notification for successful upload
                     TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                    
+
                     updatedTweet
                 } else null
             } else {
@@ -778,7 +788,7 @@ object HproseInstance {
      * Called when appUser clicks the Follow button.
      * @param followedId is the user that appUser is following or unfollowing.
      * */
-    suspend fun toggleFollowing(
+    fun toggleFollowing(
         followedId: MimeiId,
         followingId: MimeiId = appUser.mid
     ): Boolean? {
@@ -835,13 +845,15 @@ object HproseInstance {
     ) {
         try {
             // upload the retweet, simply a few dozen bytes.
-            val retweet = uploadTweet( Tweet(
-                mid = TW_CONST.GUEST_ID,    // placeholder will be replaced in backend.
-                content = "",
-                authorId = appUser.mid,
-                originalTweetId = tweet.mid,
-                originalAuthorId = tweet.authorId
-            )) ?: return
+            val retweet = uploadTweet(
+                Tweet(
+                    mid = TW_CONST.GUEST_ID,    // placeholder will be replaced in backend.
+                    content = "",
+                    authorId = appUser.mid,
+                    originalTweetId = tweet.mid,
+                    originalAuthorId = tweet.authorId
+                )
+            ) ?: return
 
             retweet.originalTweet = tweet
             addTweetToFeed(retweet)
@@ -849,7 +861,7 @@ object HproseInstance {
             updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
                 updateCachedTweet(updatedTweet)
             }
-            
+
             // Post notification for retweet
             TweetNotificationCenter.post(TweetEvent.TweetRetweeted(tweet, retweet))
         } catch (e: Exception) {
@@ -877,7 +889,8 @@ object HproseInstance {
             val isFavorite = response?.get("isFavorite") as? Boolean
             val favoriteCount = response?.get("count") as? Int
             if (isFavorite != null && favoriteCount != null) {
-                val favorites = tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
+                val favorites =
+                    tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
                 favorites[UserActions.FAVORITE] = isFavorite
                 val ret = tweet.copy(
                     favorites = favorites,
@@ -888,10 +901,10 @@ object HproseInstance {
                     // appUser.updateUser(userData)
                 }
                 updateCachedTweet(tweet)
-                
+
                 // Post notification for like toggle
                 TweetNotificationCenter.post(TweetEvent.TweetLiked(ret, isFavorite))
-                
+
                 ret
             } else tweet
         } catch (e: Exception) {
@@ -920,7 +933,8 @@ object HproseInstance {
             val hasBookmarked = response?.get("hasBookmarked") as? Boolean
             val bookmarkCount = response?.get("count") as? Int
             if (hasBookmarked != null && bookmarkCount != null) {
-                val favorites = tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
+                val favorites =
+                    tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
                 favorites[UserActions.BOOKMARK] = hasBookmarked
                 val ret = tweet.copy(
                     favorites = favorites,
@@ -931,10 +945,10 @@ object HproseInstance {
                     // appUser.updateUser(userData)
                 }
                 updateCachedTweet(tweet)
-                
+
                 // Post notification for bookmark toggle
                 TweetNotificationCenter.post(TweetEvent.TweetBookmarked(ret, hasBookmarked))
-                
+
                 ret
             } else tweet
         } catch (e: Exception) {
@@ -946,7 +960,7 @@ object HproseInstance {
     /**
      * Load favorite tweets, bookmarks or comments of an user.
      * */
-    suspend fun getUserTweetsByType(
+    fun getUserTweetsByType(
         user: User,
         type: UserContentType
     ): List<Tweet>? {
@@ -965,8 +979,8 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
         return try {
-            user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)?.map {
-                tweetData -> Tweet.from(tweetData)
+            user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)?.map { tweetData ->
+                Tweet.from(tweetData)
             }
         } catch (e: Exception) {
             Timber.tag("getUserTweetsByType").e(e)
@@ -991,15 +1005,21 @@ object HproseInstance {
 
             if (response?.get("success") == true) {
                 val deletedTweetId = response["tweetid"] as? String
-                
+
                 // Post notification for successful deletion
                 if (deletedTweetId != null) {
-                    TweetNotificationCenter.post(TweetEvent.TweetDeleted(deletedTweetId, appUser.mid))
+                    TweetNotificationCenter.post(
+                        TweetEvent.TweetDeleted(
+                            deletedTweetId,
+                            appUser.mid
+                        )
+                    )
                 }
-                
+
                 deletedTweetId
             } else {
-                val errorMessage = response?.get("message") as? String ?: "Unknown tweet deletion error"
+                val errorMessage =
+                    response?.get("message") as? String ?: "Unknown tweet deletion error"
                 throw Exception(errorMessage)
             }
         } catch (e: Exception) {
@@ -1062,10 +1082,15 @@ object HproseInstance {
                     commentCount = (response["count"] as? Number)?.toInt() ?: tweet.commentCount
                 )
                 updateCachedTweet(updatedTweet)
-                
+
                 // Post notification for successful comment upload
-                TweetNotificationCenter.post(TweetEvent.CommentUploaded(updatedComment, updatedTweet))
-                
+                TweetNotificationCenter.post(
+                    TweetEvent.CommentUploaded(
+                        updatedComment,
+                        updatedTweet
+                    )
+                )
+
                 updatedTweet
             } else tweet
         } catch (e: Exception) {
@@ -1088,17 +1113,17 @@ object HproseInstance {
     /**
      * Given userId, get baseUrl where user data can be accessed.
      * An user mimei may be stored on many nodes.
-     * 
+     *
      * Algorithm based on iOS implementation:
      * 1. Check user cache first (if baseUrl matches appUser.baseUrl)
      * 2. If no baseUrl provided, get provider IP for the user
      * 3. Fetch user data from server using "get_user" entry
      * 4. Handle both user data and provider IP responses
      * 5. Update cache with fetched user data
-     * 
+     *
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
-    suspend fun getUser(userId: MimeiId, baseUrl: String? = null): User? {
+    fun getUser(userId: MimeiId, baseUrl: String? = null): User? {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
@@ -1136,7 +1161,7 @@ object HproseInstance {
     /**
      * Get provider IP for a user using "get_provider" entry
      */
-    private suspend fun getProviderIP(userId: MimeiId): String? {
+    private fun getProviderIP(userId: MimeiId): String? {
         val entry = "get_provider"
         val params = mapOf(
             "aid" to appId,
@@ -1174,7 +1199,7 @@ object HproseInstance {
                         user.from(userData)
                     }
                 }
-                
+
                 is Map<*, *> -> {
                     // User data received directly
                     val userData = response as Map<String, Any>
@@ -1228,7 +1253,7 @@ object HproseInstance {
      * @param ip
      * Check the versions of AppId on the given IP. It shall return a list of versions.
      * */
-    suspend fun isAccessible(ip: String): String? {
+    fun isAccessible(ip: String): String? {
         return try {
             val entry = "getvar"
             val params = mapOf(
@@ -1253,7 +1278,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? {
+    fun getProviders(mid: MimeiId, baseUrl: String? = appUser.baseUrl): List<String>? {
         val entry = "get_providers"
         val params = mapOf(
             "aid" to appId,
@@ -1277,7 +1302,7 @@ object HproseInstance {
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    suspend fun togglePinnedTweet(tweetId: MimeiId): List<Map<*,*>>? {
+    fun togglePinnedTweet(tweetId: MimeiId): List<Map<*, *>>? {
         val entry = "toggle_top_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -1298,7 +1323,7 @@ object HproseInstance {
      * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    suspend fun getPinnedList(user: User): List<Map<*,*>>? {
+    fun getPinnedList(user: User): List<Map<*, *>>? {
         val entry = "get_top_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -1315,7 +1340,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun logging(msg: String) {
+    fun logging(msg: String) {
         if (appUser.isGuest()) return
         val entry = "logging"
         val params = mapOf(
@@ -1351,12 +1376,12 @@ object HproseInstance {
                 }
             }
         }
-        
+
         // Get file timestamp
         val documentFile = DocumentFile.fromSingleUri(context, uri)
         val fileTimestamp: Long = documentFile?.lastModified()?.let {
             if (it == 0L) System.currentTimeMillis() else it
-        }?: System.currentTimeMillis()
+        } ?: System.currentTimeMillis()
 
         // Determine MediaType based on MIME type
         val mimeType = context.contentResolver.getType(uri)
@@ -1374,18 +1399,21 @@ object HproseInstance {
         // For video files, try uploading to netdisk first
         if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
             try {
-                val netdiskResult = uploadVideoToNetdisk(context, uri, fileName, fileTimestamp, referenceId)
+                val netdiskResult =
+                    uploadVideoToNetdisk(context, uri, fileName, fileTimestamp, referenceId)
                 if (netdiskResult != null) {
-                    Timber.tag("uploadToIPFS()").d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
+                    Timber.tag("uploadToIPFS()")
+                        .d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
                     return netdiskResult
                 }
             } catch (e: Exception) {
-                Timber.tag("uploadToIPFS()").w("Failed to upload video to netdisk, falling back to IPFS: ${e.message}")
+                Timber.tag("uploadToIPFS()")
+                    .w("Failed to upload video to netdisk, falling back to IPFS: ${e.message}")
             }
         }
 
         // Fall back to original IPFS method for non-video files or if netdisk upload fails
-                    return uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
+        return uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
     }
 
     /**
@@ -1400,18 +1428,28 @@ object HproseInstance {
     ): MimeiFileType? {
         val netdiskUrl = appUser.netdiskUrl ?: throw Exception("Netdisk URL not available")
         val uploadUrl = "$netdiskUrl/upload"
-        
+
         Timber.tag("uploadVideoToNetdisk()").d("Uploading video to: $uploadUrl")
-        
+
         return try {
             val response = httpClient.post(uploadUrl) {
                 setBody(
                     io.ktor.client.request.forms.MultiPartFormDataContent(
                         io.ktor.client.request.forms.formData {
-                            append("file", context.contentResolver.openInputStream(uri)?.readBytes() ?: ByteArray(0), io.ktor.http.Headers.build {
-                                append("Content-Disposition", "filename=\"${fileName ?: "video.mp4"}\"")
-                                append("Content-Type", context.contentResolver.getType(uri) ?: "video/mp4")
-                            })
+                            append(
+                                "file",
+                                context.contentResolver.openInputStream(uri)?.readBytes()
+                                    ?: ByteArray(0),
+                                io.ktor.http.Headers.build {
+                                    append(
+                                        "Content-Disposition",
+                                        "filename=\"${fileName ?: "video.mp4"}\""
+                                    )
+                                    append(
+                                        "Content-Type",
+                                        context.contentResolver.getType(uri) ?: "video/mp4"
+                                    )
+                                })
                             append("aid", appId)
                             append("ver", "last")
                             referenceId?.let { append("referenceId", it) }
@@ -1419,19 +1457,27 @@ object HproseInstance {
                     )
                 )
             }
-            
+
             if (response.status == HttpStatusCode.OK) {
                 val responseText = response.bodyAsText()
                 val responseData = Gson().fromJson(responseText, Map::class.java)
-                
-                val cid = responseData?.get("cid") as? String ?: throw Exception("No CID in response")
+
+                val cid =
+                    responseData?.get("cid") as? String ?: throw Exception("No CID in response")
                 val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
-                
+
                 @OptIn(UnstableApi::class)
                 val aspectRatio = getVideoAspectRatio(context, uri)
-                
+
                 Timber.tag("uploadVideoToNetdisk()").d("Video uploaded successfully: $cid")
-                MimeiFileType(cid, us.fireshare.tweet.datamodel.MediaType.Video, fileSize, fileName, fileTimestamp, aspectRatio)
+                MimeiFileType(
+                    cid,
+                    us.fireshare.tweet.datamodel.MediaType.Video,
+                    fileSize,
+                    fileName,
+                    fileTimestamp,
+                    aspectRatio
+                )
             } else {
                 throw Exception("Upload failed with status: ${response.status}")
             }
