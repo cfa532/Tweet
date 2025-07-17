@@ -47,6 +47,7 @@ import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.MediaBrowser
 import javax.inject.Inject
 import kotlin.reflect.typeOf
@@ -200,6 +201,16 @@ fun TweetNavGraph(
                     md.params.index,
                     md.params.tweetId,
                     md.params.authorId
+                )
+            }
+            composable<NavTweet.FullScreenVideo> { navBackStackEntry ->
+                val args = navBackStackEntry.toRoute<NavTweet.FullScreenVideo>()
+                FullScreenVideoPlayer(
+                    videoMid = args.videoMid,
+                    videoUrl = args.videoUrl,
+                    onClose = {
+                        navController.popBackStack()
+                    }
                 )
             }
             composable<NavTweet.Login> {

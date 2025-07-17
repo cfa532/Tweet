@@ -64,7 +64,6 @@ fun VideoPreview(
     val coroutineScope = rememberCoroutineScope()
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var showControls by remember { mutableStateOf(false) }
     
     val exoPlayer = remember(url, videoMid) { 
         if (videoMid != null) {
@@ -124,12 +123,23 @@ fun VideoPreview(
             exoPlayer.playWhenReady = autoPlay
         } else {
             Timber.d("VideoPreview - Video no longer visible, pausing playback")
-            // Just pause playback, don't stop or destroy the player
-            exoPlayer.playWhenReady = false
+            // Only pause if this is the only active instance of this video
+            // Don't pause if the video is being used in full screen
+            videoMid?.let { mid ->
+                val activeCount = VideoManager.getVideoActiveCount(mid)
+                if (activeCount <= 1) {
+                    exoPlayer.playWhenReady = false
+                } else {
+                    Timber.d("VideoPreview - Not pausing video $mid as it's still active in other views (count: $activeCount)")
+                }
+            } ?: run {
+                // If no videoMid, this is a standalone player, so pause it
+                exoPlayer.playWhenReady = false
+            }
         }
     }
 
-    var videoRatio by remember { mutableFloatStateOf(aspectRatio?: 16f/9f) }
+    var videoRatio by remember { mutableFloatStateOf(aspectRatio ?: (16f / 9f)) }
     LaunchedEffect(url.getMimeiKeyFromUrl()) {
         if (aspectRatio == null) {
             // Default to 16:9 aspect ratio if not provided
@@ -141,14 +151,6 @@ fun VideoPreview(
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
 
-    // Auto-hide controls after 2 seconds
-    LaunchedEffect(showControls) {
-        if (showControls) {
-            delay(2000)
-            showControls = false
-        }
-    }
-
     // When previewing a single video, limit its height to show more content.
 //    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
     Box(
@@ -158,64 +160,19 @@ fun VideoPreview(
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
             .clickable {
-                showControls = !showControls
-                if (showControls) {
-                    // Reset the auto-hide timer when user touches again
-                    coroutineScope.launch {
-                        delay(2000)
-                        showControls = false
-                    }
-                }
+                Timber.d("VideoPreview - Video tapped, navigating to full screen")
+                callback(index)
             }
     ) {
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = showControls && !inPreviewGrid
-                    controllerShowTimeoutMs = 2000
-                    controllerAutoShow = false
-                    if (!showControls) hideController()
+                    useController = false // No controls in preview mode
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 }
             },
             modifier = Modifier.fillMaxWidth()
         )
-        // Mute button - only show when controls are visible
-        if (showControls) {
-            IconButton(
-                onClick = {
-                    isMuted = !isMuted
-                    preferenceHelper.setSpeakerMute(isMuted)
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-            ) {
-                Icon(
-                    painter = painterResource(if (isMuted) R.drawable.ic_speaker_slash else R.drawable.ic_speaker),
-                    contentDescription = if (isMuted) "UnMute" else "Mute",
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier
-                        .size(ButtonDefaults.IconSize)
-                )
-            }
-        }
-
-        if (!inPreviewGrid && showControls) {
-            // Show full screen button - only when controls are visible
-            IconButton(
-                onClick = { callback(index) },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_full_screen),
-                    contentDescription = "Full screen",
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(ButtonDefaults.IconSize)
-                )
-            }
-        }
     }
 }

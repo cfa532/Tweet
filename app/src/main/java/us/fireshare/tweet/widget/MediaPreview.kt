@@ -158,11 +158,26 @@ fun MediaItemView(
      * Image is opened in full screen automatically when clicked upon.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
-        navController.navigate(
-            NavTweet.MediaViewer(MediaViewerParams(
-                attachments, idx, tweet.mid, tweet.authorId
-            ) )
-        )
+        val attachment = attachments[idx]
+        when (attachment.type) {
+            MediaType.Video -> {
+                // Navigate to full-screen video player
+                navController.navigate(
+                    NavTweet.FullScreenVideo(
+                        videoMid = mediaItems[idx].mid,
+                        videoUrl = attachment.url
+                    )
+                )
+            }
+            else -> {
+                // Navigate to media viewer for images and other media
+                navController.navigate(
+                    NavTweet.MediaViewer(MediaViewerParams(
+                        attachments, idx, tweet.mid, tweet.authorId
+                    ))
+                )
+            }
+        }
     }
 
     Box(

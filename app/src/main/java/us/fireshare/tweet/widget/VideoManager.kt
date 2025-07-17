@@ -141,6 +141,16 @@ object VideoManager {
     fun getActiveVideoCount(): Int = activeVideos.size
     
     /**
+     * Check if a specific video is active
+     */
+    fun isVideoActive(videoMid: MimeiId): Boolean = activeVideos.containsKey(videoMid)
+    
+    /**
+     * Get the active count for a specific video
+     */
+    fun getVideoActiveCount(videoMid: MimeiId): Int = activeVideos.getOrDefault(videoMid, 0)
+    
+    /**
      * Check if a video is cached
      */
     fun isVideoCached(videoMid: MimeiId): Boolean = videoPlayers.containsKey(videoMid)

@@ -64,6 +64,9 @@ sealed interface NavTweet {
     data class MediaViewer(val params: MediaViewerParams) : NavTweet
 
     @Serializable
+    data class FullScreenVideo(val videoMid: MimeiId, val videoUrl: String) : NavTweet
+
+    @Serializable
     data class DeepLink(val tweetId: MimeiId, val authorId: MimeiId) : NavTweet
 
     @Serializable
