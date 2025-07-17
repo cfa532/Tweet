@@ -53,10 +53,7 @@ fun UserAvatar(
             imageSize = size
         )
     } ?: Image(
-        painter = painterResource(id =
-            if (user.isGuest()) R.drawable.ic_splash
-            else R.drawable.ic_user_avatar
-        ),
+        painter = painterResource(id = R.drawable.ic_splash),
         contentDescription = "Placeholder Avatar",
         modifier = modifier
             .size(size.dp)

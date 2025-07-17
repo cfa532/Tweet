@@ -26,6 +26,7 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import java.util.concurrent.TimeUnit
+import us.fireshare.tweet.datamodel.User
 
 // Tweet header when displayed as an item in a list.
 @Composable
@@ -64,7 +65,7 @@ fun TweetItemHeader(
                     navController.navigate(NavTweet.UserProfile(tweet.authorId))
                 }
             }) {
-                UserAvatar(user = if (author?.isGuest() == true) appUser else author ?: appUser, size = 36)
+                UserAvatar(user = author ?: (tweet.authorId?.let { User.getInstance(it) } ?: User.getInstance("unknown")), size = 36)
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),
