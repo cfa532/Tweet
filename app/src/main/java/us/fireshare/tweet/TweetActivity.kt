@@ -156,7 +156,7 @@ class ActivityViewModel: ViewModel() {
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(IO) {
             try {
-                delay(60000)
+                delay(30000)
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
                 val currentVersion =
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName

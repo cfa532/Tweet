@@ -130,6 +130,8 @@ dependencies {
     implementation(libs.androidx.media3.media3.exoplayer)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.datasource)
+    implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     implementation(libs.androidx.navigation.runtime.ktx)

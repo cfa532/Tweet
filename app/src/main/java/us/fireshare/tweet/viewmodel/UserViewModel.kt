@@ -112,7 +112,7 @@ class UserViewModel @AssistedInject constructor(
         return topTweets.value.any { it.mid == tweet.mid }
     }
 
-    suspend fun getHostId() {
+    fun getHostId() {
         hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
             HproseInstance.getHostId() ?: ""
         } else user.value.hostIds!!.first()
@@ -336,7 +336,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get bookmarks of the user
      * */
-    suspend fun getBookmarks(start: Int) {
+    fun getBookmarks(start: Int) {
         getUserTweetsByType(user.value, UserContentType.BOOKMARKS)?.let {
             _bookmarks.value = it.map { tweet ->
                 tweet.author = getUser(tweet.authorId)
@@ -364,7 +364,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get favorite Tweets of the user.
      * */
-    suspend fun getFavorites(start: Int) {
+    fun getFavorites(start: Int) {
         getUserTweetsByType(user.value, UserContentType.FAVORITES)?.let {
             _favorites.value = it.map { tweet ->
                 tweet.author = getUser(tweet.authorId)

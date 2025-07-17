@@ -36,7 +36,6 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.widget.Gadget.isElementVisible
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoDimensions
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -100,11 +99,11 @@ fun VideoPreview(
         }
     }
 
-    var videoRatio by remember { mutableFloatStateOf(aspectRatio?: 1f) }
+    var videoRatio by remember { mutableFloatStateOf(aspectRatio?: 16f/9f) }
     LaunchedEffect(url.getMimeiKeyFromUrl()) {
         if (aspectRatio == null) {
-            val (width, height) = getVideoDimensions(url) ?: Pair(400, 400)
-            videoRatio = width.toFloat() / height.toFloat()
+            // Default to 16:9 aspect ratio if not provided
+            videoRatio = 16f / 9f
         }
     }
 

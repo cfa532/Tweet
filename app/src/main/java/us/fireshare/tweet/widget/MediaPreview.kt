@@ -46,23 +46,16 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.media3.common.Player
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.LoadControl
-import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -280,8 +273,8 @@ fun downloadFile(context: Context, url: String, fileName: String) {
 
 
 /**
- * Creates an ExoPlayer instance that automatically handles both progressive and HLS videos
- * Uses ExoPlayer's built-in caching - no custom implementation needed
+ * Creates an ExoPlayer instance that prioritizes HLS videos (backend default) 
+ * and falls back to progressive video only when HLS fails
  * 
  * @param context Android context
  * @param url Video URL
@@ -290,12 +283,20 @@ fun downloadFile(context: Context, url: String, fileName: String) {
  */
 @OptIn(UnstableApi::class)
 fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
-    // Use simplified cache manager that leverages ExoPlayer's built-in capabilities
-    return SimplifiedVideoCacheManager.createExoPlayer(context, url)
+    val dataSourceFactory = DefaultDataSource.Factory(context)
+    
+    // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
+    val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
+    
+    return ExoPlayer.Builder(context)
+        .build()
+        .apply {
+            setMediaSource(mediaSource)
+        }
 }
 
-// Simplified approach - no custom HLS detection or separate progressive handling needed
-// ExoPlayer automatically detects and handles both HLS and progressive videos
+// DefaultMediaSourceFactory automatically handles HLS and progressive videos
 
 @OptIn(UnstableApi::class)
 @Composable
