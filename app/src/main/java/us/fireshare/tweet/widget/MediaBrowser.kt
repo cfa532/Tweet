@@ -359,9 +359,12 @@ fun MediaBrowser(
                 }
                 // image view with enhanced drag effects
                 else -> {
-                    ImageViewer(
-                        mediaItem.url,
-                        isFullSize = true,  // show original image
+                    // Get the preview URL for this image to use as placeholder
+                    val previewUrl = mediaItem.url // The same URL is used for both preview and full-size
+                    
+                    FullScreenImageViewer(
+                        imageUrl = mediaItem.url,
+                        previewUrl = previewUrl, // Use the same URL as placeholder (Coil will use cached version)
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), 0) }
                             .draggable(

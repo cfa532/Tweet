@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import us.fireshare.tweet.R
 
@@ -43,6 +44,8 @@ import us.fireshare.tweet.R
  * @param imageUrl: Image URL in the format of http://ip/ipfs/mimeiId or http://ip/mm/mimeiId
  * @param isFullSize: If true, shows full-size image
  * @param imageSize: Preview size in KB (default 200KB)
+ * @param placeholderUrl: Optional placeholder image URL to show while main image loads
+ * @param enableLongPress: Whether to enable long press gesture for context menu
  * */
 @Composable
 fun ImageViewer(
@@ -50,6 +53,7 @@ fun ImageViewer(
     modifier: Modifier = Modifier,
     isFullSize: Boolean = false,
     imageSize: Int = 200,    // Preview size in KB
+    placeholderUrl: String? = null,
     enableLongPress: Boolean = true
 ) {
     val context = LocalContext.current
@@ -82,6 +86,85 @@ fun ImageViewer(
                     }
             } else {
                 adjustedModifier
+            }
+        )
+        
+        if (showMenu) {
+            // Calculate DropdownMenu position
+            var parentSize by remember { mutableStateOf(IntSize.Zero) }
+            val density = LocalDensity.current
+
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier
+                    .onGloballyPositioned { coordinates ->
+                        parentSize = coordinates.size
+                    }
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                offset = DpOffset(
+                    with(density) { menuPosition.x.toDp() },
+                    with(density) { menuPosition.y.toDp() }
+                )
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Download",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    onClick = {
+                        showMenu = false
+                        // Download functionality can be implemented here if needed
+                    },
+                    modifier = Modifier.heightIn(max = 30.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Enhanced image viewer for full-screen mode that shows cached preview as placeholder
+ * @param imageUrl: Full-size image URL
+ * @param previewUrl: Preview image URL (should be cached by Coil)
+ * @param modifier: Modifier for the image
+ * @param enableLongPress: Whether to enable long press gesture
+ */
+@Composable
+fun FullScreenImageViewer(
+    imageUrl: String,
+    previewUrl: String,
+    modifier: Modifier = Modifier,
+    enableLongPress: Boolean = true
+) {
+    val context = LocalContext.current
+    var showMenu by remember { mutableStateOf(false) }
+    var menuPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    Box(modifier = modifier) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .crossfade(true)
+                .placeholderMemoryCacheKey(previewUrl) // Use cached preview as placeholder
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = if (enableLongPress) {
+                Modifier.fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = { offset ->
+                                showMenu = true
+                                menuPosition = offset
+                            }
+                        )
+                    }
+            } else {
+                Modifier.fillMaxSize()
             }
         )
         
