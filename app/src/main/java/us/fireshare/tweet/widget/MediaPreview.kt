@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +63,7 @@ import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import androidx.core.net.toUri
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 @Composable
 fun MediaPreviewGrid(
@@ -144,39 +146,32 @@ fun MediaItemView(
         if (it.type == null) {
             Timber.d("MediaItemView - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
         }
-        MediaItem(
-            getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-            inferredType
-        )
+        val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
+        val extractedMid = mediaUrl.getMimeiKeyFromUrl()
+        Timber.d("MediaPreview - MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl, extractedMid=$extractedMid")
+        MediaItem(mediaUrl, inferredType)
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
     // Add logging for debugging
     Timber.d("MediaItemView - index: $index, type: ${attachment.type}, url: ${attachment.url}")
     /**
-     * Action to take when the Full Screen button on video is clicked.
-     * Image is opened in full screen automatically when clicked upon.
+     * Action to take when any media item is clicked.
+     * All media types open in MediaBrowser for browsing with swipe navigation.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
-        val attachment = attachments[idx]
-        when (attachment.type) {
-            MediaType.Video -> {
-                // Navigate to full-screen video player
-                navController.navigate(
-                    NavTweet.FullScreenVideo(
-                        videoMid = mediaItems[idx].mid,
-                        videoUrl = attachment.url
-                    )
-                )
-            }
-            else -> {
-                // Navigate to media viewer for images and other media
-                navController.navigate(
-                    NavTweet.MediaViewer(MediaViewerParams(
-                        attachments, idx, tweet.mid, tweet.authorId
-                    ))
-                )
-            }
+        Timber.d("MediaPreview - goto called for index: $idx, tweet.mid: ${tweet.mid}, tweet.authorId: ${tweet.authorId}")
+        Timber.d("MediaPreview - attachments size: ${attachments.size}")
+        // Navigate to MediaBrowser for all media types to enable swipe navigation
+        try {
+            navController.navigate(
+                NavTweet.MediaViewer(MediaViewerParams(
+                    attachments, idx, tweet.mid, tweet.authorId
+                ))
+            )
+            Timber.d("MediaPreview - Navigation successful")
+        } catch (e: Exception) {
+            Timber.e("MediaPreview - Navigation failed: ${e.message}")
         }
     }
 
@@ -185,7 +180,19 @@ fun MediaItemView(
     ) {
         when (attachment.type) {
             MediaType.Image -> {
-                ImageViewer(attachment.url, modifier)
+                // Use a Box with clickable modifier to handle image clicks
+                Box(
+                    modifier = modifier.clickable { 
+                        Timber.d("MediaPreview - Image clicked at index: $index")
+                        goto(index) 
+                    }
+                ) {
+                    ImageViewer(
+                        attachment.url, 
+                        modifier = Modifier.fillMaxSize(),
+                        enableLongPress = false // Disable long press to allow clickable to work
+                    )
+                }
             }
             MediaType.Video -> {
                 VideoPreview(
@@ -351,10 +358,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     val playlistUrl = "${baseUrl}playlist.m3u8"
     
     // Log the URLs being accessed
-    Timber.d("VideoPreview - Original URL: $url")
-    Timber.d("VideoPreview - Base URL: $baseUrl")
-    Timber.d("VideoPreview - Master URL: $masterUrl")
-    Timber.d("VideoPreview - Playlist URL: $playlistUrl")
+    Timber.d("createExoPlayer - Original URL: $url")
+    Timber.d("createExoPlayer - Base URL: $baseUrl")
+    Timber.d("createExoPlayer - Master URL: $masterUrl")
+    Timber.d("createExoPlayer - Playlist URL: $playlistUrl")
     
     // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
@@ -370,7 +377,9 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
             // Add comprehensive listener for debugging
             addListener(object : androidx.media3.common.Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.d("VideoPreview - Player error: ${error.message}, trying playlist URL: $playlistUrl")
+                    Timber.e("createExoPlayer - Player error: ${error.message}, trying playlist URL: $playlistUrl")
+                    Timber.e("createExoPlayer - Error cause: ${error.cause}")
+                    Timber.e("createExoPlayer - Error code: ${error.errorCode}")
                     // If master.m3u8 fails, try playlist.m3u8
                     val fallbackMediaSource = mediaSourceFactory.createMediaSource(
                         androidx.media3.common.MediaItem.fromUri(playlistUrl)
@@ -387,24 +396,24 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         androidx.media3.common.Player.STATE_ENDED -> "ENDED"
                         else -> "UNKNOWN"
                     }
-                    Timber.d("VideoPreview - Playback state changed to: $stateName")
+                    Timber.d("createExoPlayer - Playback state changed to: $stateName")
                 }
                 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Timber.d("VideoPreview - Is playing changed to: $isPlaying")
+                    Timber.d("createExoPlayer - Is playing changed to: $isPlaying")
                 }
                 
                 override fun onIsLoadingChanged(isLoading: Boolean) {
-                    Timber.d("VideoPreview - Is loading changed to: $isLoading")
+                    Timber.d("createExoPlayer - Is loading changed to: $isLoading")
                 }
             })
             
             // Prepare the player immediately after setting up the listener
-            Timber.d("VideoPreview - Preparing ExoPlayer after creation")
+            Timber.d("createExoPlayer - Preparing ExoPlayer after creation")
             prepare()
         }
     
-    Timber.d("VideoPreview - ExoPlayer created successfully")
+    Timber.d("createExoPlayer - ExoPlayer created successfully")
     return player
 }
 

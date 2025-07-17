@@ -49,7 +49,8 @@ fun ImageViewer(
     imageUrl: String,
     modifier: Modifier = Modifier,
     isFullSize: Boolean = false,
-    imageSize: Int = 200    // Preview size in KB
+    imageSize: Int = 200,    // Preview size in KB
+    enableLongPress: Boolean = true
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
@@ -69,15 +70,19 @@ fun ImageViewer(
                 .build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = adjustedModifier
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = { offset ->
-                            showMenu = true
-                            menuPosition = offset
-                        }
-                    )
-                }
+            modifier = if (enableLongPress) {
+                adjustedModifier
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = { offset ->
+                                showMenu = true
+                                menuPosition = offset
+                            }
+                        )
+                    }
+            } else {
+                adjustedModifier
+            }
         )
         
         if (showMenu) {

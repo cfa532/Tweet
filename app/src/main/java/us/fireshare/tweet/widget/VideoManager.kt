@@ -29,9 +29,15 @@ object VideoManager {
      * @return ExoPlayer instance
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
+        Timber.d("VideoManager - getVideoPlayer called for videoMid: $videoMid, videoUrl: $videoUrl")
+        Timber.d("VideoManager - Existing players: ${videoPlayers.keys}")
+        
         return videoPlayers.getOrPut(videoMid) {
             Timber.d("VideoManager - Creating new ExoPlayer for video: $videoMid")
-            createExoPlayer(context, videoUrl, MediaType.Video)
+            Timber.d("VideoManager - Video URL for new player: $videoUrl")
+            val player = createExoPlayer(context, videoUrl, MediaType.Video)
+            Timber.d("VideoManager - New player created successfully: ${player != null}")
+            player
         }
     }
     

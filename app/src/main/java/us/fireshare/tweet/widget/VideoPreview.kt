@@ -160,7 +160,7 @@ fun VideoPreview(
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
             .clickable {
-                Timber.d("VideoPreview - Video tapped, navigating to full screen")
+                Timber.d("VideoPreview - Video tapped at index: $index, calling callback")
                 callback(index)
             }
     ) {

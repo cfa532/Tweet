@@ -47,8 +47,10 @@ import us.fireshare.tweet.datamodel.MimeiId
 fun FullScreenVideoPlayer(
     videoMid: MimeiId,
     videoUrl: String,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    enableImmersiveMode: Boolean = true
 ) {
+    Timber.d("FullScreenVideoPlayer - Composable called with videoMid: $videoMid, videoUrl: $videoUrl")
     val context = LocalContext.current
     val activity = context as? Activity
     var isMuted by remember { mutableStateOf(false) } // Always unmute in full screen
@@ -58,16 +60,42 @@ fun FullScreenVideoPlayer(
     // Get the existing player from VideoManager
     val exoPlayer = remember(videoMid) {
         Timber.d("FullScreenVideoPlayer - Getting ExoPlayer from VideoManager for video: $videoMid")
-        VideoManager.getVideoPlayer(context, videoMid, videoUrl)
+        val player = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
+        Timber.d("FullScreenVideoPlayer - Player obtained: ${player != null}")
+        if (player != null) {
+            Timber.d("FullScreenVideoPlayer - Player state: ${player.playbackState}, isPlaying: ${player.isPlaying}")
+        }
+        player
     }
 
     // Autoplay when entering full screen
     LaunchedEffect(exoPlayer) {
         Timber.d("FullScreenVideoPlayer - Starting autoplay for video: $videoMid")
+        Timber.d("FullScreenVideoPlayer - Video URL: $videoUrl")
         // Mark video as active in VideoManager
         VideoManager.markVideoActive(videoMid)
         exoPlayer.playWhenReady = true
         exoPlayer.play()
+        
+        // Add error listener to catch source errors
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Timber.e("FullScreenVideoPlayer - Player error: ${error.message}")
+                Timber.e("FullScreenVideoPlayer - Error cause: ${error.cause}")
+                Timber.e("FullScreenVideoPlayer - Error code: ${error.errorCode}")
+            }
+            
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val stateName = when (playbackState) {
+                    androidx.media3.common.Player.STATE_IDLE -> "IDLE"
+                    androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
+                    androidx.media3.common.Player.STATE_READY -> "READY"
+                    androidx.media3.common.Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN"
+                }
+                Timber.d("FullScreenVideoPlayer - Playback state changed to: $stateName")
+            }
+        })
     }
 
     // Immersive full screen and audio control
@@ -75,7 +103,7 @@ fun FullScreenVideoPlayer(
         // Unmute video and hide system bars on enter
         exoPlayer.volume = 1f
         Timber.d("FullScreenVideoPlayer - Unmuted video and set volume to 1.0")
-        if (activity != null) {
+        if (enableImmersiveMode && activity != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity.window.insetsController?.let { controller ->
                     controller.hide(WindowInsets.Type.systemBars())
@@ -97,7 +125,7 @@ fun FullScreenVideoPlayer(
             Timber.d("FullScreenVideoPlayer - Muted video on exit")
             // Mark video as inactive in VideoManager
             VideoManager.markVideoInactive(videoMid)
-            if (activity != null) {
+            if (enableImmersiveMode && activity != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     activity.window.insetsController?.show(WindowInsets.Type.systemBars())
                 } else {
@@ -149,12 +177,14 @@ fun FullScreenVideoPlayer(
         // Video Player
         AndroidView(
             factory = {
+                Timber.d("FullScreenVideoPlayer - Creating PlayerView")
                 PlayerView(context).apply {
                     player = exoPlayer
                     useController = true // Always enable controller, we'll control visibility manually
                     controllerShowTimeoutMs = 1000
                     controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    Timber.d("FullScreenVideoPlayer - PlayerView created with player: ${player != null}")
                 }
             },
             update = { playerView ->

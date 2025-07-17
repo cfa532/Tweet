@@ -64,12 +64,15 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import us.fireshare.tweet.tweet.BookmarkButton
 import us.fireshare.tweet.tweet.CommentButton
 import us.fireshare.tweet.tweet.LikeButton
@@ -87,6 +90,7 @@ fun MediaBrowser(
     tweetId: MimeiId,
     authorId: MimeiId
 ) {
+    Timber.d("MediaBrowser - Composable called with startIndex: $startIndex, tweetId: $tweetId, authorId: $authorId")
     /**
      *  Create a tweetViewModel with given tweetId to remember the position of this tweet
      *  in the feed list. When user closes the Media browser, goes back to the right position.
@@ -98,9 +102,16 @@ fun MediaBrowser(
     ) { factory ->
         factory.create(Tweet(mid = tweetId, authorId = authorId))
     }
+    val tweet by viewModel.tweetState.collectAsState()
     val tweetAttachments by viewModel.attachments.collectAsState()
     val mediaItems = tweetAttachments?.map {
-        MediaItem(HproseInstance.getMediaUrl(it.mid, HproseInstance.appUser.baseUrl)!!, it.type)
+        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
+        val inferredType = it.type ?: inferMediaTypeFromAttachment(it)
+        if (it.type == null) {
+            Timber.d("MediaBrowser - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
+        }
+        Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
+        MediaItem(mediaUrl, inferredType)
     } ?: return
 
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
@@ -198,8 +209,29 @@ fun MediaBrowser(
         ) { page ->
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
-                // video preview
-                MediaType.Video, MediaType.Audio -> {
+                // video preview - use new FullScreenVideoPlayer
+                MediaType.Video -> {
+                    Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
+                    // Extract video mid from URL for VideoManager using the same method as VideoPreview
+                    val videoMid = mediaItem.url.getMimeiKeyFromUrl()
+                    Timber.d("MediaBrowser - Video URL: ${mediaItem.url}, extracted videoMid: $videoMid")
+                    
+                    // Add more debugging
+                    Timber.d("MediaBrowser - Creating FullScreenVideoPlayer for video: $videoMid")
+                    Timber.d("MediaBrowser - Video type: ${mediaItem.type}")
+                    
+                    FullScreenVideoPlayer(
+                        videoMid = videoMid,
+                        videoUrl = mediaItem.url,
+                        onClose = {
+                            Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
+                            navController.popBackStack()
+                        },
+                        enableImmersiveMode = false // MediaBrowser already handles immersive mode
+                    )
+                }
+                // audio preview - keep existing implementation
+                MediaType.Audio -> {
                     exoPlayer = remember(mediaItem.url) { viewModel.getExoPlayer(mediaItem.url, context) }
                     exoPlayer?.volume = 1f
 
