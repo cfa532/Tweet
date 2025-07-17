@@ -9,11 +9,11 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -117,6 +118,24 @@ fun MediaBrowser(
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
+    
+    // Handle page changes to pause/resume videos
+    LaunchedEffect(pagerState.currentPage) {
+        Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
+        // Pause all videos except the current one
+        mediaItems.forEachIndexed { index, mediaItem ->
+            if (mediaItem.type == MediaType.Video) {
+                val videoMid = mediaItem.url.getMimeiKeyFromUrl()
+                if (index == pagerState.currentPage) {
+                    // Resume current video
+                    VideoManager.resumeVideo(videoMid, true)
+                } else {
+                    // Pause other videos
+                    VideoManager.pauseVideo(videoMid)
+                }
+            }
+        }
+    }
     val context = LocalContext.current
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -219,6 +238,10 @@ fun MediaBrowser(
                     // Add more debugging
                     Timber.d("MediaBrowser - Creating FullScreenVideoPlayer for video: $videoMid")
                     Timber.d("MediaBrowser - Video type: ${mediaItem.type}")
+                    Timber.d("MediaBrowser - Current page: ${pagerState.currentPage}, Video page: $page")
+                    
+                    // Only activate video if it's the current page
+                    val isCurrentPage = pagerState.currentPage == page
                     
                     FullScreenVideoPlayer(
                         videoMid = videoMid,
@@ -227,7 +250,24 @@ fun MediaBrowser(
                             Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
                             navController.popBackStack()
                         },
-                        enableImmersiveMode = false // MediaBrowser already handles immersive mode
+                        enableImmersiveMode = false, // MediaBrowser already handles immersive mode
+                        autoPlay = isCurrentPage, // Only autoplay if it's the current page
+                        onHorizontalSwipe = { direction ->
+                            Timber.d("MediaBrowser - Horizontal swipe detected: $direction")
+                            animationScope.launch {
+                                if (direction > 0) {
+                                    // Swipe right, go to next page
+                                    pagerState.animateScrollToPage(
+                                        pagerState.currentPage + 1
+                                    )
+                                } else {
+                                    // Swipe left, go to previous page
+                                    pagerState.animateScrollToPage(
+                                        pagerState.currentPage - 1
+                                    )
+                                }
+                            }
+                        }
                     )
                 }
                 // audio preview - keep existing implementation

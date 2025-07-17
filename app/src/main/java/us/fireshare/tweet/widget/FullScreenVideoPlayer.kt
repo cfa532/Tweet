@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -48,7 +49,9 @@ fun FullScreenVideoPlayer(
     videoMid: MimeiId,
     videoUrl: String,
     onClose: () -> Unit,
-    enableImmersiveMode: Boolean = true
+    enableImmersiveMode: Boolean = true,
+    autoPlay: Boolean = true,
+    onHorizontalSwipe: ((direction: Int) -> Unit)? = null // -1 for left, 1 for right
 ) {
     Timber.d("FullScreenVideoPlayer - Composable called with videoMid: $videoMid, videoUrl: $videoUrl")
     val context = LocalContext.current
@@ -70,12 +73,16 @@ fun FullScreenVideoPlayer(
 
     // Autoplay when entering full screen
     LaunchedEffect(exoPlayer) {
-        Timber.d("FullScreenVideoPlayer - Starting autoplay for video: $videoMid")
+        Timber.d("FullScreenVideoPlayer - Starting autoplay for video: $videoMid, autoPlay: $autoPlay")
         Timber.d("FullScreenVideoPlayer - Video URL: $videoUrl")
         // Mark video as active in VideoManager
         VideoManager.markVideoActive(videoMid)
-        exoPlayer.playWhenReady = true
-        exoPlayer.play()
+        if (autoPlay) {
+            exoPlayer.playWhenReady = true
+            exoPlayer.play()
+        } else {
+            exoPlayer.playWhenReady = false
+        }
         
         // Add error listener to catch source errors
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
@@ -155,6 +162,13 @@ fun FullScreenVideoPlayer(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        showControls = !showControls
+                    }
+                )
+            }
+            .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
                         if (dragOffset > 200f) {
@@ -165,13 +179,15 @@ fun FullScreenVideoPlayer(
                         }
                     }
                 ) { _, dragAmount ->
-                    if (dragAmount.y > 0) {
+                    // Handle vertical drag for swipe-down-to-exit
+                    if (dragAmount.y > 0 && kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)) {
                         dragOffset += dragAmount.y
                     }
+                    // Handle horizontal drag for pager navigation
+                    else if (kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y)) {
+                        onHorizontalSwipe?.invoke(if (dragAmount.x > 0) -1 else 1)
+                    }
                 }
-            }
-            .clickable {
-                showControls = !showControls
             }
     ) {
         // Video Player
