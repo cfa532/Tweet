@@ -56,9 +56,6 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
 
-import us.fireshare.tweet.widget.IpfsCacheManager
-import androidx.media3.common.util.UnstableApi
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
@@ -115,47 +112,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text(if (showCacheInfo) "Hide" else "Show")
                 }
             }
-            
-            if (showCacheInfo) {
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(8.dp)
-                        )
-                        .padding(8.dp)
-                ) {
-                    // Unified cache statistics
-                    @Suppress("UnsafeOptInUsageError")
-                    val cacheSummary = IpfsCacheManager.getCacheSummary(navController.context)
-                    val summaryLines = cacheSummary.split("\n")
-                    
-                    summaryLines.forEach { line ->
-                        if (line.isNotEmpty()) {
-                            Text(
-                                text = line,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    // Test IPFS ID extraction with sample URLs
-                    val testImageUrl = "http://example.com/mm/QmImage123456789"
-                    val testVideoUrl = "http://example.com/mm/QmVideo123456789"
-                    @Suppress("UnsafeOptInUsageError")
-                    val unifiedTestResult = IpfsCacheManager.testIpfsIdExtraction(testVideoUrl)
-                    
-                    Text(
-                        text = "Unified IPFS Test: ${unifiedTestResult.split("\n").firstOrNull() ?: ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
+
             Row(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -168,7 +125,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         dao.clearAllCachedTweets()
                         @Suppress("UnsafeOptInUsageError")
-                        IpfsCacheManager.clearAllCaches(navController.context)
                         isCachedCleared = true
                     } },
                     enabled = !isCachedCleared
