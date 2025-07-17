@@ -7,7 +7,6 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import us.fireshare.tweet.widget.CacheManager
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import java.util.Calendar
 
@@ -24,9 +23,7 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
             cachedTweetDao.deleteOldCachedTweets(oneMonthAgo)
 
             // clear old cached images after 30 days.
-            val cacheManager = CacheManager(applicationContext)
             val oneMonthInMillis = 30L * 24L * 60L * 60L * 1000L
-            cacheManager.clearOldCachedImages(oneMonthInMillis)
             SimplifiedVideoCacheManager.clearOldCachedVideos(applicationContext, oneMonthInMillis)
             Timber.tag("CleanUpWorker").d("Clean up finished!!!!")
 

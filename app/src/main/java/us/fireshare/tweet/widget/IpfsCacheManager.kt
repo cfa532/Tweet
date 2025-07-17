@@ -17,37 +17,7 @@ import java.io.File
  */
 @UnstableApi
 object IpfsCacheManager {
-    
-    /**
-     * Get unified cache statistics for all media types
-     */
-    fun getUnifiedCacheStats(context: Context): String {
-        val imageCache = CacheManager(context)
-        val videoCache = SimplifiedVideoCacheManager.getCacheStats(context)
-        
-        return buildString {
-            appendLine("Unified IPFS Cache Statistics:")
-            appendLine("Image Cache: ${getImageCacheStats(context)}")
-            appendLine("Video Cache (Progressive + HLS): $videoCache")
-        }
-    }
-    
-    /**
-     * Get image cache statistics
-     */
-    private fun getImageCacheStats(context: Context): String {
-        val imageCacheDir = File(context.cacheDir, "image_cache")
-        if (!imageCacheDir.exists()) {
-            return "0MB / 0MB (0%)"
-        }
-        
-        val totalSize = getDirectorySize(imageCacheDir)
-        val maxSize = 500L * 1024 * 1024 // 500MB max for images
-        val usedPercentage = (totalSize * 100 / maxSize).toInt()
-        
-        return "${totalSize / (1024 * 1024)}MB / ${maxSize / (1024 * 1024)}MB ($usedPercentage%)"
-    }
-    
+
     /**
      * Calculate directory size recursively
      */
@@ -61,28 +31,6 @@ object IpfsCacheManager {
             }
         }
         return size
-    }
-    
-    /**
-     * Check if any media type is cached using IPFS ID
-     */
-    fun isMediaCached(context: Context, mediaUrl: String): Boolean {
-        val ipfsId = mediaUrl.getMimeiKeyFromUrl()
-        
-        // Check image cache
-        val imageCache = CacheManager(context)
-        if (imageCache.isCached(mediaUrl)) {
-            Timber.d("Media cached as image: $ipfsId")
-            return true
-        }
-        
-        // Check video cache (handles both progressive and HLS)
-        if (SimplifiedVideoCacheManager.isVideoCached(context, mediaUrl)) {
-            Timber.d("Media cached as video: $ipfsId")
-            return true
-        }
-        
-        return false
     }
     
     /**
@@ -103,24 +51,6 @@ object IpfsCacheManager {
     }
     
     /**
-     * Get detailed cache information for all media types
-     */
-    fun getDetailedCacheInfo(context: Context): String {
-        return buildString {
-            appendLine("=== IPFS Cache Information ===")
-            appendLine()
-            appendLine("Image Cache:")
-            appendLine(CacheManager(context).let { cache ->
-                val imageCacheDir = File(context.cacheDir, "image_cache")
-                "Directory: ${imageCacheDir.absolutePath}"
-            })
-            appendLine()
-            appendLine("Video Cache (Progressive + HLS):")
-            appendLine(SimplifiedVideoCacheManager.getDetailedCacheInfo(context))
-        }
-    }
-    
-    /**
      * Test IPFS ID extraction for all media types
      */
     fun testIpfsIdExtraction(mediaUrl: String): String {
@@ -136,31 +66,7 @@ object IpfsCacheManager {
             appendLine("- Video: $ipfsId")
         }
     }
-    
-    /**
-     * Get cache key for a specific media type
-     */
-    fun getCacheKey(mediaUrl: String, mediaType: String): String {
-        val ipfsId = mediaUrl.getMimeiKeyFromUrl()
-        
-        return when (mediaType.lowercase()) {
-            "image" -> "${ipfsId}_preview.jpg"
-            "video" -> ipfsId
-            else -> ipfsId
-        }
-    }
-    
-    /**
-     * Get cache directory for a specific media type
-     */
-    fun getCacheDirectory(context: Context, mediaType: String): File {
-        return when (mediaType.lowercase()) {
-            "image" -> File(context.cacheDir, "image_cache")
-            "video" -> File(context.cacheDir, "video_cache")
-            else -> File(context.cacheDir, "unknown_cache")
-        }
-    }
-    
+
     /**
      * Get total cache size across all media types
      */
