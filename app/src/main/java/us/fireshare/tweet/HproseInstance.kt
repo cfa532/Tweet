@@ -461,16 +461,16 @@ object HproseInstance {
         )
 
         val response =
-            user.hproseService?.runMApp<List<Tweet?>?>(entry, params)
+            user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
-        return response?.map { t ->
+        return response?.map { tweetJson ->
             // If the element is null, keep it as null
-            if (t == null) {
+            if (tweetJson == null) {
                 null
             } else {
                 // Try to decode the tweet
                 try {
-                    val tweet = t
+                    val tweet = Tweet.from(tweetJson)
                     tweet.author = getUser(tweet.authorId)
 
                     if (tweet.originalTweetId != null) {
