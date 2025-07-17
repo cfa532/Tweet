@@ -98,14 +98,18 @@ data class User(
                 // Keep original baseUrl when updated by user dictionary from backend
                 val instance = getInstance(mid = decodedUser.mid)
                 val oldBaseUrl = instance.baseUrl
+                val oldWritableUrl = instance.writableUrl
                 decodedUser.baseUrl = instance.baseUrl
                 decodedUser.writableUrl = instance.writableUrl
                 
                 updateUserInstance(decodedUser)
                 
-                // Clear cached service if baseUrl changed
+                // Clear cached services if URLs changed
                 if (oldBaseUrl != instance.baseUrl) {
                     instance.clearHproseService()
+                }
+                if (oldWritableUrl != instance.writableUrl) {
+                    instance.clearUploadService()
                 }
                 
                 return userInstances[decodedUser.mid]!!
@@ -121,6 +125,7 @@ data class User(
         private fun updateUserInstance(user: User) {
             val instance = getInstance(mid = user.mid)
             val oldBaseUrl = instance.baseUrl
+            val oldWritableUrl = instance.writableUrl
             instance.apply {
                 name = user.name
                 username = user.username
@@ -142,9 +147,12 @@ data class User(
                 commentsCount = user.commentsCount
             }
             
-            // Clear cached service if baseUrl changed
+            // Clear cached services if URLs changed
             if (oldBaseUrl != instance.baseUrl) {
                 instance.clearHproseService()
+            }
+            if (oldWritableUrl != instance.writableUrl) {
+                instance.clearUploadService()
             }
         }
     }
@@ -189,15 +197,34 @@ data class User(
         _hproseService = null
         _lastBaseUrl = null
     }
+    
+    /**
+     * Clear all cached services to force recreation on next access
+     */
+    fun clearAllServices() {
+        clearHproseService()
+        clearUploadService()
+    }
 
     @IgnoredOnParcel
     private var _uploadService: HproseService? = null
+    @IgnoredOnParcel
+    private var _lastWritableUrl: String? = null
+    
     val uploadService: HproseService?
         get() {
             val writableUrl = writableUrl ?: return null
-            if (_uploadService != null) {
+            
+            // Check if writableUrl has changed since last service creation
+            if (_uploadService != null && _lastWritableUrl == writableUrl) {
                 return _uploadService
             } else {
+                // Clear old service if writableUrl changed
+                if (_lastWritableUrl != writableUrl) {
+                    _uploadService = null
+                    _lastWritableUrl = writableUrl
+                }
+                
                 try {
                     // Use factory method to create client based on URL scheme
                     val client = HproseClient.create("$writableUrl/webapi/")
@@ -210,6 +237,14 @@ data class User(
                 }
             }
         }
+    
+    /**
+     * Clear cached upload service to force recreation on next access
+     */
+    fun clearUploadService() {
+        _uploadService = null
+        _lastWritableUrl = null
+    }
 
     /**
      * Check if user is guest
@@ -361,6 +396,7 @@ data class User(
             }
             
             val oldBaseUrl = baseUrl
+            val oldWritableUrl = writableUrl
             name = processedData["name"] as? String ?: name
             username = processedData["username"] as? String ?: username
             avatar = processedData["avatar"] as? String ?: avatar
@@ -377,9 +413,12 @@ data class User(
             
             hostIds = (processedData["hostIds"] as? List<*>)?.mapNotNull { id -> id as? String } ?: hostIds
             
-            // Clear cached service if baseUrl changed
+            // Clear cached services if URLs changed
             if (oldBaseUrl != baseUrl) {
                 clearHproseService()
+            }
+            if (oldWritableUrl != writableUrl) {
+                clearUploadService()
             }
         } catch (e: Exception) {
             Timber.tag("User.from").e("Error updating user from map: $e")
@@ -388,6 +427,7 @@ data class User(
 
     fun from(userData: User) {
         val oldBaseUrl = baseUrl
+        val oldWritableUrl = writableUrl
         name = userData.name
         username = userData.username
         avatar = userData.avatar
@@ -403,9 +443,12 @@ data class User(
         commentsCount = userData.commentsCount
         hostIds = userData.hostIds
         
-        // Clear cached service if baseUrl changed
+        // Clear cached services if URLs changed
         if (oldBaseUrl != baseUrl) {
             clearHproseService()
+        }
+        if (oldWritableUrl != writableUrl) {
+            clearUploadService()
         }
     }
 
@@ -449,7 +492,7 @@ data class User(
     /**
      * Get writable URL with fallback
      */
-    suspend fun writableUrl(): String? {
+    fun writableUrl(): String? {
         return if (!writableUrl.isNullOrEmpty()) {
             writableUrl
         } else {
