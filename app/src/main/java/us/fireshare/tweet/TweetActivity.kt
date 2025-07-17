@@ -156,7 +156,7 @@ class ActivityViewModel: ViewModel() {
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(IO) {
             try {
-                delay(10000)
+                delay(60000)
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
                 val currentVersion =
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName
@@ -179,7 +179,7 @@ class ActivityViewModel: ViewModel() {
                     }
                 }
             } catch (e: Exception) {
-                Timber.tag("checkForUpgrade").e("$e")
+                Timber.tag("checkForUpgrade").e(e)
             }
         }
     }
