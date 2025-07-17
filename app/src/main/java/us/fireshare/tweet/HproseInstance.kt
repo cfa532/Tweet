@@ -35,10 +35,7 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
-import us.fireshare.tweet.widget.Gadget.getAccessibleUser
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
-import java.net.ConnectException
-import java.net.SocketTimeoutException
 import java.util.regex.Pattern
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -1219,7 +1216,7 @@ object HproseInstance {
         )
         return try {
             val hproseClient = HproseClient.create("http://$ip/webapi/")
-            hproseClient.timeout = 300
+            hproseClient.timeout = 30000
             val service = hproseClient.useService(HproseService::class.java)
             val response = service.runMApp<Map<String, Any>>(entry, params)
 
@@ -1243,35 +1240,6 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("getUserCoreData").e(e)
-            null
-        }
-    }
-
-    /**
-     * @param ip
-     * Check the versions of AppId on the given IP. It shall return a list of versions.
-     * */
-    fun isAccessible(ip: String): String? {
-        return try {
-            val entry = "getvar"
-            val params = mapOf(
-                "name" to "mmversions",
-                "arg0" to appId
-            )
-            val hproseClient = HproseClient.create("http://$ip/webapi/")
-            hproseClient.timeout = 300
-            val service = hproseClient.useService(HproseService::class.java)
-            val response = service.runMApp<Array<String>>(entry, params)
-
-            response?.firstOrNull()?.let { ip } // Return IP if found
-        } catch (e: Exception) {
-            when (e) {
-                is ConnectException, is SocketTimeoutException -> {
-                    // Ignore these exceptions and continue
-                    Timber.tag("isAccessible").w(e, "Timeout for IP: $ip")
-                }
-//                else -> Timber.tag("isAccessible").e(e, "Error accessing appId for IP: $ip")
-            }
             null
         }
     }

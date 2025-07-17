@@ -89,7 +89,7 @@ class TweetViewModel @AssistedInject constructor(
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
-        if (tweetState.value.author == null) {
+        if (tweetState.value.author == null && tweetState.value.authorId != null) {
             viewModelScope.launch(Dispatchers.IO) {
                 HproseInstance.getTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
                     _tweetState.value = tweet
