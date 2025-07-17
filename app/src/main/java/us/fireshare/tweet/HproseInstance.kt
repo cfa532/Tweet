@@ -505,7 +505,7 @@ object HproseInstance {
      * Load tweets of a specific user by rank.
      * Handles null elements in the response list and preserves their positions.
      * */
-    fun getTweetListByRank(
+    fun getTweetsByUser(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
@@ -521,7 +521,7 @@ object HproseInstance {
                 "appuserid" to appUser.mid
             )
 
-            Timber.tag("getTweetListByRank")
+            Timber.tag("getTweetsByUser")
                 .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
             val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
 
@@ -551,18 +551,18 @@ object HproseInstance {
                         // Do NOT cache tweets from profile screens
                         tweet
                     } catch (e: Exception) {
-                        Timber.tag("getTweetListByRank").e("Error decoding tweet: $e")
+                        Timber.tag("getTweetsByUser").e("Error decoding tweet: $e")
                         null
                     }
                 }
             } ?: emptyList()
 
-            Timber.tag("getTweetListByRank")
+            Timber.tag("getTweetsByUser")
                 .d("Received ${response?.size ?: 0} tweets (${result.filterNotNull().size} valid) for user: ${user.mid}")
 
             return result
         } catch (e: Exception) {
-            Timber.tag("getTweetListByRank").e(e, "Error fetching tweets for user: ${user.mid}")
+            Timber.tag("getTweetsByUser").e(e, "Error fetching tweets for user: ${user.mid}")
             throw e
         }
     }

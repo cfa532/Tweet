@@ -2,7 +2,6 @@ package us.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -419,7 +418,7 @@ class UserViewModel @AssistedInject constructor(
         }
 
         // Fetch tweets of the author and update _tweets
-        val newTweetsWithNulls = HproseInstance.getTweetListByRank(user.value, pageNumber)
+        val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
 
         // Filter out null elements and get valid tweets
         val newTweets = newTweetsWithNulls.filterNotNull()
@@ -448,7 +447,7 @@ class UserViewModel @AssistedInject constructor(
         return newTweetsWithNulls
     }
 
-    private suspend fun loadPinnedTweets() {
+    private fun loadPinnedTweets() {
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         val pinnedTweets = mutableSetOf<Tweet>()
         HproseInstance.getPinnedList(user.value)?.forEach { map ->

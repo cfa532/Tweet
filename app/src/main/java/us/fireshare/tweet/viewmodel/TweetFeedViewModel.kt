@@ -35,9 +35,6 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -206,7 +203,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
     private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
         try {
             getUser(userId)?.let { user ->
-                val tweetsWithNulls = HproseInstance.getTweetListByRank(
+                val tweetsWithNulls = HproseInstance.getTweetsByUser(
                     user,
                     pageNumber,
                 )

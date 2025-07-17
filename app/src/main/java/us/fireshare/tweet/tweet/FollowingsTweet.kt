@@ -29,14 +29,10 @@ fun FollowingsTweet(
     onScrollStateChange: (ScrollState) -> Unit = {},
 ) {
     val tweets by viewModel.tweets.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
-
-    // Debug logging
-    timber.log.Timber.tag("FollowingsTweet").d("Collected tweets size: ${tweets.size}")
 
     TweetListView(
         tweets = tweets.also { 
-            timber.log.Timber.tag("FollowingsTweet").d("Passing tweets to TweetListView: ${it.size}")
+//            timber.log.Timber.tag("FollowingsTweet").d("Passing tweets to TweetListView: ${it.size}")
         },
         fetchTweets = { pageNumber ->
             // Call the ViewModel's fetchTweets and return the result

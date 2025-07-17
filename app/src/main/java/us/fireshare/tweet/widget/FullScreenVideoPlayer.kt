@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,7 +62,7 @@ fun FullScreenVideoPlayer(
     val activity = context as? Activity
     var isMuted by remember { mutableStateOf(false) } // Always unmute in full screen
     var showControls by remember { mutableStateOf(true) }
-    var dragOffset by remember { mutableStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
     // Get the existing player from VideoManager
@@ -69,9 +70,7 @@ fun FullScreenVideoPlayer(
         Timber.d("FullScreenVideoPlayer - Getting ExoPlayer from VideoManager for video: $videoMid")
         val player = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
         Timber.d("FullScreenVideoPlayer - Player obtained: ${player != null}")
-        if (player != null) {
-            Timber.d("FullScreenVideoPlayer - Player state: ${player.playbackState}, isPlaying: ${player.isPlaying}")
-        }
+        Timber.d("FullScreenVideoPlayer - Player state: ${player.playbackState}, isPlaying: ${player.isPlaying}")
         player
     }
 
