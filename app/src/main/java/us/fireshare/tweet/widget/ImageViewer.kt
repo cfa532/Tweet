@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
+
 /**
  * Image viewer that caches compressed previews and loads full-size images on demand
  * @param imageUrl: Image URL in the format of http://ip/ipfs/mimeiId or http://ip/mm/mimeiId
@@ -63,7 +64,8 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     val cacheManager = remember { CacheManager(context) }
-    val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageUrl))
+    val imageMid = imageUrl.getMimeiKeyFromUrl()
+    val cachedPath = rememberUpdatedState(cacheManager.getCachedImagePath(imageMid))
 
     var isDownloading by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf(false) }
@@ -75,7 +77,7 @@ fun ImageViewer(
     val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Check if preview is already cached
-    val cachedPreview = remember(imageUrl.getMimeiKeyFromUrl()) {
+    val cachedPreview = remember(imageMid) {
         mutableStateOf(cacheManager.loadImageFromCache(cachedPath.value))
     }
     
@@ -86,12 +88,12 @@ fun ImageViewer(
     }
 
     // Load preview if not cached
-    LaunchedEffect(imageUrl) {
+    LaunchedEffect(imageMid) {
         if (cachedPreview.value == null) {
             downloadScope.launch {
                 isDownloading = true
                 downloadError = false
-                val downloadedPath = cacheManager.downloadImageToCache(imageUrl, imageSize)
+                val downloadedPath = cacheManager.downloadImageToCache(imageUrl)
 
                 isDownloading = false
                 if (downloadedPath != null) {
@@ -104,7 +106,7 @@ fun ImageViewer(
     }
 
     // Load full-size image when needed
-    LaunchedEffect(imageUrl, isFullSize) {
+    LaunchedEffect(imageMid, isFullSize) {
         if (isFullSize && fullSizeImage == null && !isLoadingFullSize) {
             downloadScope.launch {
                 isLoadingFullSize = true
