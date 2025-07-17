@@ -8,6 +8,8 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.annotation.OptIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -44,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -145,10 +148,31 @@ fun MediaBrowser(
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
     var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
 
     // prevent double trigger of popBack event
     val isNavigationTriggered = remember { mutableStateOf(false) }
+
+    // Animate the drag offset for smooth exit animation
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = offsetY,
+        animationSpec = tween(if (isDragging) 0 else 300),
+        label = "offsetY"
+    )
+
+    // Calculate visual effects based on drag for images
+    val maxDragDistance = 800f
+    val dragProgress = (animatedOffsetY / maxDragDistance).coerceIn(0f, 1f)
+    
+    // Translation effect - content moves down with finger
+    val translationY = animatedOffsetY * 0.5f
+    
+    // Scale effect - content gets slightly smaller as it's dragged
+    val scale = 1f - (dragProgress * 0.1f)
+    
+    // Alpha effect - content fades out as it's dragged
+    val alpha = 1f - (dragProgress * 0.3f)
 
     /**
      * Keep screen ON when video is playing in full screen mode.
@@ -333,13 +357,13 @@ fun MediaBrowser(
                             )
                     )
                 }
-                // image view
+                // image view with enhanced drag effects
                 else -> {
                     ImageViewer(
                         mediaItem.url,
                         isFullSize = true,  // show original image
                         modifier = Modifier
-                            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                            .offset { IntOffset(offsetX.roundToInt(), 0) }
                             .draggable(
                                 orientation = Orientation.Horizontal,
                                 state = rememberDraggableState { delta ->
@@ -366,16 +390,19 @@ fun MediaBrowser(
                             .draggable(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
+                                    isDragging = true
                                     offsetY += delta
-                                    if (offsetY > 20f && scaleFactor <= 1 && !isNavigationTriggered.value) {
+                                    if (offsetY > 200f && scaleFactor <= 1 && !isNavigationTriggered.value) {
                                         isNavigationTriggered.value = true    // prevent multiple popBack
                                         navController.popBackStack()
                                     }
                                 }
                             )
                             .graphicsLayer(
-                                scaleX = scaleFactor,
-                                scaleY = scaleFactor
+                                scaleX = scaleFactor * scale,
+                                scaleY = scaleFactor * scale,
+                                translationY = translationY,
+                                alpha = alpha
                             )
                             .align(Alignment.Center)
                     )
@@ -383,6 +410,7 @@ fun MediaBrowser(
             }
         }
 
+        // Controls with enhanced visual effects
         if (showControls) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(
@@ -399,6 +427,12 @@ fun MediaBrowser(
                         modifier = Modifier
                             .padding(24.dp)
                             .align(Alignment.TopStart)
+                            .graphicsLayer(
+                                translationY = translationY,
+                                scaleX = scale,
+                                scaleY = scale,
+                                alpha = alpha
+                            )
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -418,6 +452,12 @@ fun MediaBrowser(
                         modifier = Modifier
                             .padding(24.dp)
                             .align(Alignment.TopEnd)
+                            .graphicsLayer(
+                                translationY = translationY,
+                                scaleX = scale,
+                                scaleY = scale,
+                                alpha = alpha
+                            )
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_rotate),

@@ -6,6 +6,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -28,7 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -59,6 +62,7 @@ fun FullScreenVideoPlayer(
     var isMuted by remember { mutableStateOf(false) } // Always unmute in full screen
     var showControls by remember { mutableStateOf(true) }
     var dragOffset by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
 
     // Get the existing player from VideoManager
     val exoPlayer = remember(videoMid) {
@@ -154,8 +158,22 @@ fun FullScreenVideoPlayer(
     // Animate the drag offset for smooth exit animation
     val animatedDragOffset by animateFloatAsState(
         targetValue = dragOffset,
+        animationSpec = tween(if (isDragging) 0 else 300),
         label = "dragOffset"
     )
+
+    // Calculate visual effects based on drag
+    val maxDragDistance = 800f
+    val dragProgress = (animatedDragOffset / maxDragDistance).coerceIn(0f, 1f)
+    
+    // Translation effect - content moves down with finger
+    val translationY = animatedDragOffset * 0.5f
+    
+    // Scale effect - content gets slightly smaller as it's dragged
+    val scale = 1f - (dragProgress * 0.1f)
+    
+    // Alpha effect - content fades out as it's dragged
+    val alpha = 1f - (dragProgress * 0.3f)
 
     Box(
         modifier = Modifier
@@ -170,7 +188,11 @@ fun FullScreenVideoPlayer(
             }
             .pointerInput(Unit) {
                 detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                    },
                     onDragEnd = {
+                        isDragging = false
                         if (dragOffset > 200f) {
                             Timber.d("FullScreenVideoPlayer - Swipe down detected, closing player")
                             onClose()
@@ -190,7 +212,7 @@ fun FullScreenVideoPlayer(
                 }
             }
     ) {
-        // Video Player
+        // Video Player with enhanced visual effects
         AndroidView(
             factory = {
                 Timber.d("FullScreenVideoPlayer - Creating PlayerView")
@@ -213,7 +235,12 @@ fun FullScreenVideoPlayer(
             },
             modifier = Modifier
                 .fillMaxSize()
-                .alpha(1f - (animatedDragOffset / 1000f).coerceIn(0f, 0.5f))
+                .graphicsLayer(
+                    translationY = translationY,
+                    scaleX = scale,
+                    scaleY = scale,
+                    alpha = alpha
+                )
         )
 
         // Close button - only show when controls are visible
@@ -226,6 +253,12 @@ fun FullScreenVideoPlayer(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp)
+                    .graphicsLayer(
+                        translationY = translationY,
+                        scaleX = scale,
+                        scaleY = scale,
+                        alpha = alpha
+                    )
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
