@@ -97,10 +97,17 @@ data class User(
                 
                 // Keep original baseUrl when updated by user dictionary from backend
                 val instance = getInstance(mid = decodedUser.mid)
+                val oldBaseUrl = instance.baseUrl
                 decodedUser.baseUrl = instance.baseUrl
                 decodedUser.writableUrl = instance.writableUrl
                 
                 updateUserInstance(decodedUser)
+                
+                // Clear cached service if baseUrl changed
+                if (oldBaseUrl != instance.baseUrl) {
+                    instance.clearHproseService()
+                }
+                
                 return userInstances[decodedUser.mid]!!
             } catch (e: Exception) {
                 Timber.e("Cannot decode dict to user: $e")
@@ -113,6 +120,7 @@ data class User(
          */
         private fun updateUserInstance(user: User) {
             val instance = getInstance(mid = user.mid)
+            val oldBaseUrl = instance.baseUrl
             instance.apply {
                 name = user.name
                 username = user.username
@@ -133,18 +141,34 @@ data class User(
                 favoritesCount = user.favoritesCount
                 commentsCount = user.commentsCount
             }
+            
+            // Clear cached service if baseUrl changed
+            if (oldBaseUrl != instance.baseUrl) {
+                instance.clearHproseService()
+            }
         }
     }
 
     // Hprose service management
     @IgnoredOnParcel
     private var _hproseService: HproseService? = null
+    @IgnoredOnParcel
+    private var _lastBaseUrl: String? = null
+    
     val hproseService: HproseService?
         get() {
             val baseUrl = baseUrl ?: return null
-            if (_hproseService != null) {
+            
+            // Check if baseUrl has changed since last service creation
+            if (_hproseService != null && _lastBaseUrl == baseUrl) {
                 return _hproseService
             } else {
+                // Clear old service if baseUrl changed
+                if (_lastBaseUrl != baseUrl) {
+                    _hproseService = null
+                    _lastBaseUrl = baseUrl
+                }
+                
                 try {
                     // Use factory method to create client based on URL scheme
                     val client = HproseClient.create("$baseUrl/webapi/")
@@ -157,6 +181,14 @@ data class User(
                 }
             }
         }
+    
+    /**
+     * Clear cached Hprose service to force recreation on next access
+     */
+    fun clearHproseService() {
+        _hproseService = null
+        _lastBaseUrl = null
+    }
 
     @IgnoredOnParcel
     private var _uploadService: HproseService? = null
@@ -328,6 +360,7 @@ data class User(
                 }
             }
             
+            val oldBaseUrl = baseUrl
             name = processedData["name"] as? String ?: name
             username = processedData["username"] as? String ?: username
             avatar = processedData["avatar"] as? String ?: avatar
@@ -343,12 +376,18 @@ data class User(
             commentsCount = (processedData["commentsCount"] as? Number)?.toInt() ?: commentsCount
             
             hostIds = (processedData["hostIds"] as? List<*>)?.mapNotNull { id -> id as? String } ?: hostIds
+            
+            // Clear cached service if baseUrl changed
+            if (oldBaseUrl != baseUrl) {
+                clearHproseService()
+            }
         } catch (e: Exception) {
             Timber.tag("User.from").e("Error updating user from map: $e")
         }
     }
 
     fun from(userData: User) {
+        val oldBaseUrl = baseUrl
         name = userData.name
         username = userData.username
         avatar = userData.avatar
@@ -363,6 +402,11 @@ data class User(
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
         hostIds = userData.hostIds
+        
+        // Clear cached service if baseUrl changed
+        if (oldBaseUrl != baseUrl) {
+            clearHproseService()
+        }
     }
 
     /**
