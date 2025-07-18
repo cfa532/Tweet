@@ -175,7 +175,7 @@ fun TweetDetailBody(
                         }
                         
                         if (isLoadingOriginal) {
-                            // Show loading state for quoted tweet
+                            // Show loading state for quoted tweet with spinner
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 2.dp,
@@ -184,12 +184,12 @@ fun TweetDetailBody(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp)
+                                        .padding(16.dp),
+                                    contentAlignment = androidx.compose.ui.Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "Loading quoted tweet...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
                                     )
                                 }
                             }
@@ -380,7 +380,7 @@ fun TweetDropdownMenuItems(
                 tweetFeedViewModel.delTweet(navController, tweet.mid) {
                     applicationScope.launch(IO) {
                         if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            val originalTweet = HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)
                             originalTweet?.let {
                                 originTweetViewModel?.updateRetweetCount(
                                     it,      // original tweet

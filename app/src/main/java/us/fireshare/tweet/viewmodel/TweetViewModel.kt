@@ -140,8 +140,28 @@ class TweetViewModel @AssistedInject constructor(
                 // Pure retweet - get fresh data
                 HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)
             } else {
-                // Quoted tweet - use cached data for the quoted original tweet
+                // Quoted tweet - use fetchTweet without caching (for non-feed contexts)
                 HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = false)
+            }
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Load the original tweet if this tweet is a retweet (for feed context - with caching)
+     */
+    suspend fun loadOriginalTweetForFeed(): Tweet? {
+        val currentTweet = tweetState.value
+        return if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
+            // For pure retweets, use refreshTweet to get the latest data
+            // For quoted tweets, use fetchTweet with caching for feed context
+            if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
+                // Pure retweet - get fresh data
+                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)
+            } else {
+                // Quoted tweet - use fetchTweet with caching for feed context
+                HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = true)
             }
         } else {
             null

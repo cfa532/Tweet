@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +51,7 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
+    isFromFeed: Boolean = false, // indicates if this is from the feed context
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
@@ -83,22 +85,26 @@ fun TweetItem(
                     
                     LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
                         if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                            originalTweet = viewModel.loadOriginalTweet()
+                            originalTweet = if (isFromFeed) {
+                                viewModel.loadOriginalTweetForFeed()
+                            } else {
+                                viewModel.loadOriginalTweet()
+                            }
                             isLoadingOriginal = false
                         }
                     }
                     
                     if (isLoadingOriginal) {
-                        // Show loading state
+                        // Show loading state with spinner
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(16.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
                         ) {
-                            Text(
-                                text = "Loading original tweet...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
                             )
                         }
                     } else if (originalTweet != null) {
@@ -202,13 +208,17 @@ fun TweetItem(
                         
                         LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                originalTweet = viewModel.loadOriginalTweet()
+                                originalTweet = if (isFromFeed) {
+                                    viewModel.loadOriginalTweetForFeed()
+                                } else {
+                                    viewModel.loadOriginalTweet()
+                                }
                                 isLoadingOriginal = false
                             }
                         }
                         
                         if (isLoadingOriginal) {
-                            // Show loading state for quoted tweet
+                            // Show loading state for quoted tweet with spinner
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 8.dp,
@@ -217,12 +227,12 @@ fun TweetItem(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp)
+                                        .padding(16.dp),
+                                    contentAlignment = androidx.compose.ui.Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "Loading quoted tweet...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
                                     )
                                 }
                             }

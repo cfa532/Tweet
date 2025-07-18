@@ -267,7 +267,7 @@ fun TweetListView(
                 key = { it.mid }
             ) { tweet ->
                 if (showPrivateTweets || !tweet.isPrivate) {
-                    parentEntry?.let { TweetItem(tweet, it) }
+                    parentEntry?.let { TweetItem(tweet, it, isFromFeed = true) }
                 }
             }
             if (isRefreshingAtTop) {
@@ -328,7 +328,7 @@ fun SimpleTweetListView(
             key = { it.mid }
         ) { tweet ->
             if (!tweet.isPrivate) {
-                parentEntry.let { TweetItem(tweet, it) }
+                parentEntry.let { TweetItem(tweet, it, isFromFeed = true) }
             }
         }
     }
