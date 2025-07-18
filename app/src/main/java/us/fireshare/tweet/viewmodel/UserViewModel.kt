@@ -350,11 +350,11 @@ class UserViewModel @AssistedInject constructor(
      * */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
         if (isBookmarked) {
-            _user.value = user.value.copy(bookmarksCount = (user.value.bookmarksCount ?: 0) + 1)
+            _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount + 1)
             _bookmarks.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                bookmarksCount = max((user.value.bookmarksCount ?: 0) - 1, 0)
+                bookmarksCount = max(user.value.bookmarksCount - 1, 0)
             )
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
