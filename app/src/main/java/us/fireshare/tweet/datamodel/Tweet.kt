@@ -58,6 +58,7 @@ data class Tweet(
             originalTweetId: String? = null,
             originalAuthorId: String? = null,
             author: User? = null,
+            originalTweet: Tweet? = null,
             favorites: List<Boolean>? = listOf(false, false, false),
             favoriteCount: Int = 0,
             bookmarkCount: Int = 0,
@@ -74,6 +75,7 @@ data class Tweet(
                     content?.let { existingInstance.content = it }
                     title?.let { existingInstance.title = it }
                     author?.let { existingInstance.author = it }
+                    originalTweet?.let { existingInstance.originalTweet = it }
                     favorites?.let { existingInstance.favorites = it.toMutableList() }
                     existingInstance.favoriteCount = favoriteCount
                     existingInstance.bookmarkCount = bookmarkCount
@@ -94,6 +96,7 @@ data class Tweet(
                     originalTweetId = originalTweetId,
                     originalAuthorId = originalAuthorId,
                     author = author,
+                    originalTweet = originalTweet,
                     favorites = favorites?.toMutableList(),
                     favoriteCount = favoriteCount,
                     bookmarkCount = bookmarkCount,
@@ -189,7 +192,7 @@ data class Tweet(
                     title = tweet.title,
                     originalTweetId = tweet.originalTweetId,
                     originalAuthorId = tweet.originalAuthorId,
-                    author = tweet.author,
+                    author = null,  // Leave author as null, will be populated by other code
                     favorites = tweet.favorites,
                     favoriteCount = tweet.favoriteCount,
                     bookmarkCount = tweet.bookmarkCount,
@@ -363,42 +366,6 @@ data class Tweet(
     }
 
     /**
-     * Creates a copy of the tweet with updated attributes
-     */
-    fun copy(
-        content: String? = null,
-        title: String? = null,
-        author: User? = null,
-        favorites: List<Boolean>? = null,
-        favoriteCount: Int? = null,
-        bookmarkCount: Int? = null,
-        retweetCount: Int? = null,
-        commentCount: Int? = null,
-        attachments: List<MimeiFileType>? = null,
-        isPrivate: Boolean? = null,
-        downloadable: Boolean? = null
-    ): Tweet {
-        return getInstance(
-            mid = this.mid,
-            authorId = this.authorId,
-            content = content ?: this.content,
-            timestamp = this.timestamp,
-            title = title ?: this.title,
-            originalTweetId = this.originalTweetId,
-            originalAuthorId = this.originalAuthorId,
-            author = author ?: this.author,
-            favorites = favorites ?: this.favorites,
-            favoriteCount = favoriteCount ?: this.favoriteCount,
-            bookmarkCount = bookmarkCount ?: this.bookmarkCount,
-            retweetCount = retweetCount ?: this.retweetCount,
-            commentCount = commentCount ?: this.commentCount,
-            attachments = attachments ?: this.attachments,
-            isPrivate = isPrivate ?: this.isPrivate,
-            downloadable = downloadable ?: this.downloadable
-        )
-    }
-
-    /**
      * Checks if this tweet is pinned based on a list of pinned tweets
      */
     fun isPinned(pinnedTweets: List<Map<String, Any>>): Boolean {
@@ -408,8 +375,6 @@ data class Tweet(
         }
     }
 }
-
-
 
 @Serializable
 enum class MediaType {

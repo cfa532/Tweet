@@ -473,7 +473,7 @@ object HproseInstance {
 
                         if (tweet.originalTweetId != null) {
                             val originalTweet =
-                                getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                                fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
                             if (originalTweet != null) {
                                 tweet.originalTweet = originalTweet
                             } else {
@@ -536,7 +536,7 @@ object HproseInstance {
                         tweet.author = user
                         if (tweet.originalTweetId != null) {
                             val originalTweet =
-                                getTweet(
+                                fetchTweet(
                                     tweet.originalTweetId!!,
                                     tweet.originalAuthorId!!,
                                     shouldCache = false
@@ -572,10 +572,9 @@ object HproseInstance {
      * Let the caller to decide if go further on the tweet hierarchy.
      * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
-    fun getTweet(
+    fun fetchTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
-        nodeUrl: String? = null,
         shouldCache: Boolean = true
     ): Tweet? {
         return try {
@@ -598,7 +597,7 @@ object HproseInstance {
             )
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
-                Tweet.from(tweetData).copy(author = author).apply {
+                Tweet.from(tweetData).apply {
                     TweetCacheManager.saveTweet(
                         this,
                         userId = appUser.mid,
@@ -616,7 +615,7 @@ object HproseInstance {
      * Update cached but keep its timestamp when it was cached.
      * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
-    suspend fun updateCachedTweet(tweet: Tweet, shouldCache: Boolean = true) {
+    fun updateCachedTweet(tweet: Tweet, shouldCache: Boolean = true) {
         TweetCacheManager.updateCachedTweet(tweet, appUser.mid, shouldCache = shouldCache)
     }
 

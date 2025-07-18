@@ -28,7 +28,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.updateCachedTweet
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -91,7 +90,7 @@ class TweetViewModel @AssistedInject constructor(
          * */
         if (tweetState.value.author == null && tweetState.value.authorId != null) {
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.getTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
+                HproseInstance.fetchTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
                     _tweetState.value = tweet
                 }
             }
@@ -103,7 +102,7 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun refreshTweet() {
         HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
             if (tweet.originalTweetId != null) {
-                HproseInstance.getTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)?.let {
+                HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)?.let {
                     tweet.originalTweet = it
                 }
             }

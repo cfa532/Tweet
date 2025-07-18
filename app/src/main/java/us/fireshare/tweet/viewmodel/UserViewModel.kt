@@ -456,10 +456,10 @@ class UserViewModel @AssistedInject constructor(
                 // add tweet to topTweets, update its timestamp to when it is pinned.
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
-                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
+                HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
                     tweet1.originalTweetId?.let {
                         tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.getTweet(it, it1, shouldCache = false)
+                            tweet1.originalTweet = HproseInstance.fetchTweet(it, it1, shouldCache = false)
                         }
                     }
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
@@ -496,10 +496,10 @@ class UserViewModel @AssistedInject constructor(
                  * */
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
-                HproseInstance.getTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
+                HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
                     tweet1.originalTweetId?.let {
                         tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.getTweet(it, it1, shouldCache = false)
+                            tweet1.originalTweet = HproseInstance.fetchTweet(it, it1, shouldCache = false)
                         }
                     }
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))

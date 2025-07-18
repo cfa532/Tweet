@@ -65,7 +65,7 @@ fun TweetItemHeader(
                     navController.navigate(NavTweet.UserProfile(tweet.authorId))
                 }
             }) {
-                UserAvatar(user = author ?: (tweet.authorId?.let { User.getInstance(it) } ?: User.getInstance("unknown")), size = 36)
+                author?.let { UserAvatar(user = it, size = 36) }
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),

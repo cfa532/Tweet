@@ -24,7 +24,7 @@ import java.util.Date
 data class CachedTweet(
     @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
     val uid: MimeiId,       // user Id
-    val originalTweet: Tweet,
+    val originalTweet: Tweet,   // tweet object.
     val timestamp: Date = Date() // Automatically set to the current date and time
 )
 

@@ -135,10 +135,8 @@ fun TweetItem(
                                 maxLines = 10
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    HproseInstance.getUserId(username)?.let {
-                                        withContext(Dispatchers.Main) {
-                                            navController.navigate(NavTweet.UserProfile(it))
-                                        }
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
                                     }
                                 }
                             }

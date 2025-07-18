@@ -103,7 +103,7 @@ object TweetCacheManager {
      * Update an existing cached tweet
      * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
-    suspend fun updateCachedTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
+    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
         saveTweet(tweet, userId, shouldCache)
     }
 
