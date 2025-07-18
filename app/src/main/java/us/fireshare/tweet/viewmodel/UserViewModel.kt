@@ -335,7 +335,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get bookmarks of the user
      * */
-    fun getBookmarks(start: Int) {
+    suspend fun getBookmarks(start: Int) {
         getUserTweetsByType(user.value, UserContentType.BOOKMARKS)?.let {
             _bookmarks.value = it.map { tweet ->
                 tweet.author = getUser(tweet.authorId)
@@ -363,7 +363,7 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get favorite Tweets of the user.
      * */
-    fun getFavorites(start: Int) {
+    suspend fun getFavorites(start: Int) {
         getUserTweetsByType(user.value, UserContentType.FAVORITES)?.let {
             _favorites.value = it.map { tweet ->
                 tweet.author = getUser(tweet.authorId)
@@ -374,11 +374,11 @@ class UserViewModel @AssistedInject constructor(
 
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
         if (isFavorite) {
-            _user.value = user.value.copy(favoritesCount = (user.value.favoritesCount ?: 0) + 1)
+            _user.value = user.value.copy(favoritesCount = user.value.favoritesCount + 1)
             _favorites.update { bs -> listOf(tweet) + bs }
         } else {
             _user.value = user.value.copy(
-                favoritesCount = max((user.value.favoritesCount ?: 0) - 1, 0)
+                favoritesCount = max(user.value.favoritesCount - 1, 0)
             )
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
         }
@@ -406,7 +406,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun refreshUser() {
+    suspend fun refreshUser() {
         TweetCacheManager.removeCachedUser(userId)
         _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
     }
@@ -447,7 +447,7 @@ class UserViewModel @AssistedInject constructor(
         return newTweetsWithNulls
     }
 
-    private fun loadPinnedTweets() {
+    private suspend fun loadPinnedTweets() {
         // 2. Get pinned tweets and update _topTweets, while avoiding duplication
         val pinnedTweets = mutableSetOf<Tweet>()
         HproseInstance.getPinnedList(user.value)?.forEach { map ->

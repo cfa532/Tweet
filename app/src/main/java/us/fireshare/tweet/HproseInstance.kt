@@ -154,7 +154,7 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-    fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
         val entry = "message_outgoing"
         val params = mapOf(
             "aid" to appId,
@@ -274,7 +274,7 @@ object HproseInstance {
      * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
      * */
-    fun login(
+    suspend fun login(
         username: String,
         password: String,
         context: Context
@@ -442,7 +442,7 @@ object HproseInstance {
      * Load tweets of appUser and its followings from network.
      * Keep null elements in the response list and preserves their positions.
      * */
-    fun getTweetFeed(
+    suspend fun getTweetFeed(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
@@ -505,7 +505,7 @@ object HproseInstance {
      * Load tweets of a specific user by rank.
      * Handles null elements in the response list and preserves their positions.
      * */
-    fun getTweetsByUser(
+    suspend fun getTweetsByUser(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
@@ -572,7 +572,7 @@ object HproseInstance {
      * Let the caller to decide if go further on the tweet hierarchy.
      * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
      * */
-    fun fetchTweet(
+    suspend fun fetchTweet(
         tweetId: MimeiId,
         authorId: MimeiId,
         shouldCache: Boolean = true
@@ -626,7 +626,7 @@ object HproseInstance {
      * Get tweet from node Mimei DB to refresh cached tweet.
      * Called when the given tweet is visible.
      * */
-    fun refreshTweet(
+    suspend fun refreshTweet(
         tweetId: MimeiId?,
         authorId: MimeiId?
     ): Tweet? {
@@ -816,7 +816,7 @@ object HproseInstance {
      * an argument instead of toggling the status of a follower, because toggling
      * following/follower status happens on two different hosts.
      * */
-    fun toggleFollower(
+    suspend fun toggleFollower(
         userId: MimeiId,
         isFollowing: Boolean,
         followerId: MimeiId = appUser.mid
@@ -1036,7 +1036,7 @@ object HproseInstance {
      * Load all comments of a tweet.
      * @param pageNumber
      * */
-    fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
+    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
         return try {
             if (tweet.author == null) tweet.author = getUser(tweet.authorId)
             val entry = "get_comments"
@@ -1127,7 +1127,7 @@ object HproseInstance {
      *
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
-    fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
+    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
@@ -1160,7 +1160,7 @@ object HproseInstance {
     /**
      * Update user data from server using "get_user" entry
      */
-    private fun updateUserFromServer(user: User) {
+    private suspend fun updateUserFromServer(user: User) {
         val entry = "get_user"
         val params = mapOf(
             "aid" to appId,
@@ -1188,6 +1188,8 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("updateUserFromServer").e("$e ${user.mid}")
+            // it is possible user's node has changed its IP. Try to fetch user data from another node.
+            initAppEntry()
         }
     }
 
