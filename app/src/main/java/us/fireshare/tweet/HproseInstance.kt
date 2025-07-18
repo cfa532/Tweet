@@ -66,15 +66,6 @@ object HproseInstance {
         initAppEntry()
     }
 
-    val httpClient = HttpClient(CIO) {
-        install(HttpTimeout) {
-            requestTimeoutMillis = 300_000 // Total request timeout (5 minutes)
-            connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
-            socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
-        }
-    }
-
-
     /**
      * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
      * */
@@ -663,7 +654,7 @@ object HproseInstance {
     ): List<Tweet> {
         try {
             return dao.getCachedTweets(startRank, count).map {
-                // cached tweet is full object with original tweet.
+                // cached tweet is full object.
                 it.originalTweet
             }
         } catch (e: Exception) {
@@ -1444,6 +1435,14 @@ object HproseInstance {
             Timber.tag("uploadToIPFSOriginal()").e(e, "Error: ${e.message}")
         }
         return null
+    }
+
+    val httpClient = HttpClient(CIO) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 300_000 // Total request timeout (5 minutes)
+            connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
+            socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
+        }
     }
 }
 

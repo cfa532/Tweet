@@ -62,34 +62,25 @@ object TweetCacheManager {
 
     /**
      * Get a cached tweet by ID
+     * Note: Expiration checks are not performed when fetching tweets.
+     * Timestamps are only used by the system for cleanup purposes.
      */
     fun getCachedTweet(tweetId: MimeiId): Tweet? {
         return try {
             synchronized(cacheLock) {
                 // Check memory cache first
                 memoryCache[tweetId]?.let { cachedTweet ->
-                    if (!isExpired(cachedTweet)) {
-                        Timber.d("Tweet found in memory cache: $tweetId")
-                        return cachedTweet.originalTweet
-                    } else {
-                        // Remove expired tweet from memory cache
-                        memoryCache.remove(tweetId)
-                    }
+                    Timber.d("Tweet found in memory cache: $tweetId")
+                    return cachedTweet.originalTweet
                 }
 
                 // Check database cache
                 val dbCachedTweet = HproseInstance.dao.getCachedTweet(tweetId)
                 dbCachedTweet?.let { cachedTweet ->
-                    if (!isExpired(cachedTweet)) {
-                        // Add to memory cache for faster access
-                        memoryCache[tweetId] = cachedTweet
-                        Timber.d("Tweet found in database cache: $tweetId")
-                        return cachedTweet.originalTweet
-                    } else {
-                        // Remove expired tweet from database
-                        HproseInstance.dao.deleteCachedTweet(tweetId)
-                        Timber.d("Expired tweet removed from cache: $tweetId")
-                    }
+                    // Add to memory cache for faster access
+                    memoryCache[tweetId] = cachedTweet
+                    Timber.d("Tweet found in database cache: $tweetId")
+                    return cachedTweet.originalTweet
                 }
 
                 null
@@ -209,7 +200,6 @@ object TweetCacheManager {
 
             memoryUser?.let { user ->
                 if (!isUserExpired(user)) {
-                    Timber.d("User found in memory cache: $userId")
                     return user
                 } else {
                     // Remove expired user from both memory and database cache

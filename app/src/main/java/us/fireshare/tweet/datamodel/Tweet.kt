@@ -209,60 +209,6 @@ data class Tweet(
                 throw RuntimeException("Cannot convert dictionary to Tweet", e)
             }
         }
-
-        /**
-         * Legacy decode method for backward compatibility
-         */
-        fun decode(jsonString: String): Tweet? {
-            return try {
-                val gson = com.google.gson.Gson()
-                val jsonObject = gson.fromJson(jsonString, com.google.gson.JsonObject::class.java)
-
-                // Validate required fields
-                if (!jsonObject.has("mid") || !jsonObject.has("authorId")) {
-                    Timber.e("Tweet.decode() - Missing required fields in JSON: $jsonString")
-                    return null
-                }
-                
-                val mid = jsonObject.get("mid")?.asString
-                val authorId = jsonObject.get("authorId")?.asString
-                
-                if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
-                    Timber.e("Tweet.decode() - Required fields are null/blank: mid=$mid, authorId=$authorId")
-                    return null
-                }
-
-                // Convert timestamp to Long if it's a string
-                if (jsonObject.has("timestamp")) {
-                    val timestamp = jsonObject.get("timestamp")
-                    if (timestamp.isJsonPrimitive && timestamp.asJsonPrimitive.isString) {
-                        jsonObject.addProperty("timestamp", timestamp.asString.toLong())
-                    }
-                }
-
-                // Handle attachments timestamps if present
-                if (jsonObject.has("attachments")) {
-                    val attachmentsArray = jsonObject.getAsJsonArray("attachments")
-                    attachmentsArray?.forEach { attachment ->
-                        if (attachment.isJsonObject) {
-                            val attachmentObj = attachment.asJsonObject
-                            if (attachmentObj.has("timestamp")) {
-                                val timestamp = attachmentObj.get("timestamp")
-                                if (timestamp.isJsonPrimitive && timestamp.asJsonPrimitive.isString) {
-                                    attachmentObj.addProperty("timestamp", timestamp.asString.toLong())
-                                }
-                            }
-                        }
-                    }
-                }
-
-                val tweet = gson.fromJson(jsonObject, Tweet::class.java)
-                tweet
-            } catch (e: Exception) {
-                Timber.e("Tweet.decode() - Error decoding JSON: $e")
-                null
-            }
-        }
     }
 
     // Computed properties for user interaction states
