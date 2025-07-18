@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -159,19 +160,72 @@ fun TweetDetailBody(
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
-                    if (tweet.originalTweet != null) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            tonalElevation = 2.dp,
-                            modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
-                        ) {
-                            TweetItemBody(
-                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                    parentEntry, key = tweet.originalTweetId
-                                ) { factory -> factory.create(tweet.originalTweet!!) },
-                                true,
-                                parentEntry
-                            )
+                    if (tweet.originalTweetId != null) {
+                        // Load original tweet dynamically
+                        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+                        var isLoadingOriginal by remember { mutableStateOf(true) }
+                        
+                        val currentTweet by viewModel.tweetState.collectAsState()
+                        
+                        LaunchedEffect(tweet.originalTweetId, currentTweet) {
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                originalTweet = viewModel.loadOriginalTweet()
+                                isLoadingOriginal = false
+                            }
+                        }
+                        
+                        if (isLoadingOriginal) {
+                            // Show loading state for quoted tweet
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 2.dp,
+                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Loading quoted tweet...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else if (originalTweet != null) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 2.dp,
+                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
+                            ) {
+                                TweetItemBody(
+                                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                        parentEntry, key = tweet.originalTweetId
+                                    ) { factory -> factory.create(originalTweet!!) },
+                                    true,
+                                    parentEntry
+                                )
+                            }
+                        } else {
+                            // Show error state for quoted tweet
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 2.dp,
+                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Quoted tweet not available",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -307,10 +361,13 @@ fun TweetDropdownMenuItems(
     val appUserViewModel = sharedViewModel.appUserViewModel
     val navController = LocalNavController.current
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
+    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
             parentEntry, key = tweet.originalTweetId
-        ) { factory -> factory.create(tweet.originalTweet!!) }
+        ) { factory -> 
+            // Create a temporary tweet for the ViewModel, the actual tweet will be loaded by the ViewModel
+            factory.create(Tweet(mid = tweet.originalTweetId!!, authorId = tweet.originalAuthorId!!))
+        }
     } else null
     val context = LocalContext.current
 
@@ -322,11 +379,16 @@ fun TweetDropdownMenuItems(
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
                 tweetFeedViewModel.delTweet(navController, tweet.mid) {
                     applicationScope.launch(IO) {
-                        originTweetViewModel?.updateRetweetCount(
-                            tweet.originalTweet!!,      // original tweet
-                            tweet.mid,      // retweet Id
-                            -1
-                        )
+                        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            originalTweet?.let {
+                                originTweetViewModel?.updateRetweetCount(
+                                    it,      // original tweet
+                                    tweet.mid,      // retweet Id
+                                    -1
+                                )
+                            }
+                        }
                     }
                 }
                 onDismissRequest()

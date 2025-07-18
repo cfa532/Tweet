@@ -457,11 +457,7 @@ class UserViewModel @AssistedInject constructor(
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
                 HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
-                    tweet1.originalTweetId?.let {
-                        tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.fetchTweet(it, it1, shouldCache = false)
-                        }
-                    }
+                    // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                 }
             }
@@ -497,11 +493,7 @@ class UserViewModel @AssistedInject constructor(
                 pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
             } else {
                 HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
-                    tweet1.originalTweetId?.let {
-                        tweet1.originalAuthorId?.let { it1 ->
-                            tweet1.originalTweet = HproseInstance.fetchTweet(it, it1, shouldCache = false)
-                        }
-                    }
+                    // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                     pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
                 }
             }

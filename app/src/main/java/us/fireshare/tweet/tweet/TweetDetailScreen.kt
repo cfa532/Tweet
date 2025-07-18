@@ -64,7 +64,7 @@ fun TweetDetailScreen(
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            viewModel.refreshTweet()
+            viewModel.refreshTweetAndOriginal()
             viewModel.loadComments(tweet)
             Timber.tag("TweetDetailScreen").d("$tweet")
         }
@@ -73,7 +73,7 @@ fun TweetDetailScreen(
         while (true) {
             delay(1 * 60 * 1000) // Delay for 1 minute
             withContext(Dispatchers.IO) {
-                viewModel.refreshTweet()
+                viewModel.refreshTweetAndOriginal()
                 viewModel.loadComments(tweet)
             }
         }
@@ -150,11 +150,6 @@ fun TweetDetailScreen(
                 /**
                  * Tweet content and attachments. This is the main body.
                  * */
-                val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalTweet != null) {
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweet.originalTweetId
-                    ) { factory -> factory.create(tweet.originalTweet!!) }
-                } else null
                 TweetDetailBody(viewModel, parentEntry, gridColumns)
 
                 // divider between tweet and its comment list

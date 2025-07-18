@@ -462,16 +462,7 @@ object HproseInstance {
                         val tweet = Tweet.from(tweetJson)
                         tweet.author = getUser(tweet.authorId)
 
-                        if (tweet.originalTweetId != null) {
-                            val originalTweet =
-                                fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                            if (originalTweet != null) {
-                                tweet.originalTweet = originalTweet
-                            } else {
-                                // If original tweet cannot be fetched, return null
-                                return@map null
-                            }
-                        }
+                        // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
 
                         // Skip private tweets in feed
                         if (tweet.isPrivate) {
@@ -525,20 +516,7 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetJson)
                         tweet.author = user
-                        if (tweet.originalTweetId != null) {
-                            val originalTweet =
-                                fetchTweet(
-                                    tweet.originalTweetId!!,
-                                    tweet.originalAuthorId!!,
-                                    shouldCache = false
-                                )
-                            if (originalTweet != null) {
-                                tweet.originalTweet = originalTweet
-                            } else {
-                                // If original tweet cannot be fetched, return null
-                                return@map null
-                            }
-                        }
+                        // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                         // Do NOT cache tweets from profile screens
                         tweet
                     } catch (e: Exception) {
@@ -850,7 +828,6 @@ object HproseInstance {
                 )
             ) ?: return
 
-            retweet.originalTweet = tweet
             addTweetToFeed(retweet)
 
             updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->

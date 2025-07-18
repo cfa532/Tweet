@@ -19,9 +19,8 @@ data class Tweet(
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
     var originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet
 
-    // the following six attributes are for display only. Not stored in database.
+    // the following five attributes are for display only. Not stored in database.
     var author: User? = null,
-    var originalTweet: Tweet? = null,        // the original tweet for display only.
 
     // if the current user has liked or bookmarked this tweet
     var favorites: MutableList<Boolean>? = mutableListOf(false, false, false),
@@ -243,7 +242,7 @@ data class Tweet(
      * Updates the tweet instance with values from another tweet
      */
     fun update(from: Tweet) {
-        // Update all properties except author
+        // Update all properties except author and originalTweet
         from.content?.let { this.content = it }
         from.title?.let { this.title = it }
         from.favorites?.let { this.favorites = it.toMutableList() }
@@ -314,7 +313,6 @@ data class Tweet(
             tempTweet.content?.let { this.content = it }
             tempTweet.title?.let { this.title = it }
             tempTweet.author?.let { this.author = it }
-            tempTweet.originalTweet?.let { this.originalTweet = it}
             tempTweet.favorites?.let { this.favorites = it.toMutableList() }
             this.favoriteCount = tempTweet.favoriteCount
             this.bookmarkCount = tempTweet.bookmarkCount

@@ -100,13 +100,51 @@ class TweetViewModel @AssistedInject constructor(
      * Reload Tweet from database instead of cache.
      * */
     suspend fun refreshTweet() {
-        HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
-            if (tweet.originalTweetId != null) {
-                HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)?.let {
-                    tweet.originalTweet = it
-                }
+        HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
+            _tweetState.value = refreshedTweet
+        }
+    }
+
+    /**
+     * Refresh the appropriate tweet based on whether this is a retweet or not
+     */
+    suspend fun refreshTweetAndOriginal() {
+        val currentTweet = tweetState.value
+        
+        if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
+            // Check if this is a pure retweet (no content/attachments) or a quoted tweet (has content/attachments)
+            if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
+                // Pure retweet - refresh the original tweet that the user actually sees
+                // Since we don't store the original tweet in the ViewModel, we trigger a reload
+                // by updating the tweet state, which will cause the UI to reload the original tweet
+                _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
+            } else {
+                // Quoted tweet - refresh the quoting tweet itself (the one with content/attachments)
+                refreshTweet()
             }
-            _tweetState.value = tweet
+        } else {
+            // This is an original tweet - refresh it directly
+            refreshTweet()
+        }
+    }
+
+    /**
+     * Load the original tweet if this tweet is a retweet
+     */
+    suspend fun loadOriginalTweet(): Tweet? {
+        val currentTweet = tweetState.value
+        return if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
+            // For pure retweets, use refreshTweet to get the latest data
+            // For quoted tweets, use fetchTweet since we're just displaying the original as a quote
+            if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
+                // Pure retweet - get fresh data
+                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)
+            } else {
+                // Quoted tweet - use cached data for the quoted original tweet
+                HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = false)
+            }
+        } else {
+            null
         }
     }
 
@@ -177,7 +215,6 @@ class TweetViewModel @AssistedInject constructor(
                                 // the comment is also posted as an tweet.
                                 if (map["retweet"].toString() != "null") {
                                     val retweet = gson.fromJson(map["retweet"].toString(), Tweet::class.java)
-                                    retweet.originalTweet = tweetState.value
                                     retweet.author = appUser
                                     // Retweet will be added via notification system
                                     // tweetFeedViewModel.addTweetToFeed(retweet) // Removed - use notifications instead

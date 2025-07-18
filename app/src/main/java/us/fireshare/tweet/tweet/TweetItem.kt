@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,46 +69,86 @@ fun TweetItem(
             .padding(bottom = 1.dp),
         tonalElevation = 0.dp
     ) {
-        if (tweet.originalTweet != null) {
-            if (tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty())
-            {
+        if (tweet.originalTweetId != null) {
+            if (tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
                 // this is a retweet of another tweet.
                 Surface(
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    // The tweet area
-                    val originalTweetViewModel =
-                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
-                        ) { factory -> factory.create(tweet.originalTweet!!) }
-
-                    TweetItemBody(
-                        originalTweetViewModel,
-                        parentTweet = tweet,
-                        parentEntry = parentEntry
-                    )
-
-                    // Label: Forward by user, on top of original tweet
-                    Box {
-                        val forwardBy = if (tweet.authorId == appUser.mid)
-                            stringResource(R.string.forward_by)
-                        else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
-                        Text(
-                            text = forwardBy,
-                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                            color = MaterialTheme.colorScheme.tertiary,
+                    // Load original tweet dynamically
+                    var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+                    var isLoadingOriginal by remember { mutableStateOf(true) }
+                    
+                    val currentTweet by viewModel.tweetState.collectAsState()
+                    
+                    LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
+                        if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                            originalTweet = viewModel.loadOriginalTweet()
+                            isLoadingOriginal = false
+                        }
+                    }
+                    
+                    if (isLoadingOriginal) {
+                        // Show loading state
+                        Box(
                             modifier = Modifier
-                                .padding(start = 60.dp)
-                                .offset(
-                                    y = (-0).dp,
-                                    x = (-8).dp
-                                ) // Adjust the offset value as needed
-                                .zIndex(1f) // Ensure it appears above the tweet area
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Loading original tweet...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (originalTweet != null) {
+                        // The tweet area
+                        val originalTweetViewModel =
+                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                parentEntry, key = tweet.originalTweetId
+                            ) { factory -> factory.create(originalTweet!!) }
+
+                        TweetItemBody(
+                            originalTweetViewModel,
+                            parentTweet = tweet,
+                            parentEntry = parentEntry
                         )
+
+                        // Label: Forward by user, on top of original tweet
+                        Box {
+                            val forwardBy = if (tweet.authorId == appUser.mid)
+                                stringResource(R.string.forward_by)
+                            else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
+                            Text(
+                                text = forwardBy,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier
+                                    .padding(start = 60.dp)
+                                    .offset(
+                                        y = (-0).dp,
+                                        x = (-8).dp
+                                    ) // Adjust the offset value as needed
+                                    .zIndex(1f) // Ensure it appears above the tweet area
+                            )
+                        }
+                    } else {
+                        // Show error state
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Original tweet not available",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             } else {
-                // retweet with comments. Eiter text or media files.
+                // retweet with comments. Either text or media files.
                 val navController = LocalNavController.current
                 Surface(
                     modifier = Modifier.padding(top = 8.dp)
@@ -141,8 +182,8 @@ fun TweetItem(
                                 }
                             }
                         }
-                        if (! tweet.attachments.isNullOrEmpty()) {
-                            Surface (
+                        if (!tweet.attachments.isNullOrEmpty()) {
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(start = 16.dp, end = 8.dp, top = 4.dp)
@@ -153,22 +194,76 @@ fun TweetItem(
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            tonalElevation = 8.dp,
-                            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
-                        ) {
-                            // quoted tweet
-                            TweetItemBody(
-                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                    parentEntry, key = tweet.originalTweetId
-                                ) { factory ->
-                                    factory.create(tweet.originalTweet!!)
-                                },
-                                isQuoted = true,
-                                parentEntry = parentEntry
-                            )
+                        // Load and display original tweet
+                        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+                        var isLoadingOriginal by remember { mutableStateOf(true) }
+                        
+                        val currentTweet by viewModel.tweetState.collectAsState()
+                        
+                        LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                                originalTweet = viewModel.loadOriginalTweet()
+                                isLoadingOriginal = false
+                            }
                         }
+                        
+                        if (isLoadingOriginal) {
+                            // Show loading state for quoted tweet
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 8.dp,
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Loading quoted tweet...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else if (originalTweet != null) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 8.dp,
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                            ) {
+                                // quoted tweet
+                                TweetItemBody(
+                                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                        parentEntry, key = tweet.originalTweetId
+                                    ) { factory ->
+                                        factory.create(originalTweet!!)
+                                    },
+                                    isQuoted = true,
+                                    parentEntry = parentEntry
+                                )
+                            }
+                        } else {
+                            // Show error state for quoted tweet
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 8.dp,
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Quoted tweet not available",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                        
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -201,7 +296,7 @@ fun TweetItem(
  */
 @Composable
 fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
-    val refreshIntervalMillis = 3000L // 2 seconds
+    val refreshIntervalMillis = 3000L // 3 seconds
 
     // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
     val scope = rememberCoroutineScope()
@@ -211,7 +306,7 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
             // Launch a coroutine to handle the refresh after the delay
             scope.launch(Dispatchers.IO) {
                 delay(refreshIntervalMillis)
-                viewModel.refreshTweet()
+                viewModel.refreshTweetAndOriginal()
             }
         }
     }
