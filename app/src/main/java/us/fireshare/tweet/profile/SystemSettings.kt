@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
@@ -55,12 +57,20 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+import us.fireshare.tweet.widget.VideoManager
+import us.fireshare.tweet.datamodel.Tweet
+import androidx.compose.ui.platform.LocalContext
+import androidx.media3.common.util.UnstableApi
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
     val appUser by appUserViewModel.user.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -91,14 +101,15 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             )
         },
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxWidth()
-            .padding(innerPadding)
-            .padding(horizontal = 8.dp),
+        Column(
+            modifier = Modifier.fillMaxWidth()
+                .padding(innerPadding)
+                .padding(horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             var showCacheInfo by remember { mutableStateOf(false) }
             var isCachedCleared by remember { mutableStateOf(false) }
-            
+
             // Cache information section
             Row(
                 modifier = Modifier
@@ -113,6 +124,49 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
             }
 
+            // Show cache information when expanded
+            if (showCacheInfo) {
+                var tweetCacheStats by remember {
+                    mutableStateOf(
+                        TweetCacheManager.CacheStats(
+                            0,
+                            0,
+                            0
+                        )
+                    )
+                }
+                var userCacheStats by remember {
+                    mutableStateOf(
+                        TweetCacheManager.UserCacheStats(
+                            0,
+                            0,
+                            0,
+                            0
+                        )
+                    )
+                }
+                var videoCacheStats by remember { mutableStateOf("") }
+                var videoManagerStats by remember { mutableStateOf("") }
+
+                LaunchedEffect(Unit) {
+                    tweetCacheStats = TweetCacheManager.getCacheStats()
+                    userCacheStats = TweetCacheManager.getUserCacheStats()
+                    videoCacheStats = SimplifiedVideoCacheManager.getCacheStats(context)
+                    videoManagerStats = VideoManager.getCacheStats()
+                }
+
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text("Tweet Cache: ${tweetCacheStats.memoryCacheSize} in memory, ${tweetCacheStats.databaseCacheSize} in database")
+                    Text("User Cache: ${userCacheStats.totalUsers} total, ${userCacheStats.validUsers} valid")
+                    Text("Video Cache: $videoCacheStats")
+                    Text("Video Players: $videoManagerStats")
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -121,15 +175,41 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("Clear all cached data")
-                Button(onClick = {
-                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                        dao.clearAllCachedTweets()
-                        @Suppress("UnsafeOptInUsageError")
-                        isCachedCleared = true
-                    } },
+                Button(
+                    onClick = {
+                        appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                            // Clear all tweet cache (memory + database)
+                            TweetCacheManager.clearAllCachedTweets()
+
+                            // Clear video cache
+                            SimplifiedVideoCacheManager.clearVideoCache(context)
+
+                            // Clear user cache
+                            TweetCacheManager.cleanupExpiredUsers()
+
+                            @Suppress("UnsafeOptInUsageError")
+                            isCachedCleared = true
+                        }
+                    },
                     enabled = !isCachedCleared
                 ) {
-                    Text("Clear")
+                    Text(if (isCachedCleared) "Cleared!" else "Clear")
+                }
+
+                // Show success message and reset button
+                if (isCachedCleared) {
+                    Text(
+                        "All cache cleared successfully!",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    Button(
+                        onClick = { isCachedCleared = false },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text("Clear Again")
+                    }
                 }
             }
             // save cloud port# to user object
@@ -161,7 +241,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     HproseInstance.setUserData(appUser)
                                 }
                             } catch (e: NumberFormatException) {
-                                Timber.tag("SystemSettings").e("Invalid cloudPort value: $cloudPort - ${e.message}")
+                                Timber.tag("SystemSettings")
+                                    .e("Invalid cloudPort value: $cloudPort - ${e.message}")
                             } catch (e: Exception) {
                                 Timber.tag("SystemSettings").e("An unexpected error occurred: $e")
                             }
@@ -182,20 +263,25 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("") // Empty text to take up space
-                Text("Privacy policy",
+                Text(
+                    "Privacy policy",
                     modifier = Modifier
                         .clickable { showDialog = true }
-                        .background(MaterialTheme.colorScheme.onTertiary,
-                            shape = RoundedCornerShape(12.dp))
+                        .background(
+                            MaterialTheme.colorScheme.onTertiary,
+                            shape = RoundedCornerShape(12.dp)
+                        )
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                         .width(intrinsicSize = IntrinsicSize.Max),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Text("Version: ${BuildConfig.VERSION_NAME}",
+            Text(
+                "Version: ${BuildConfig.VERSION_NAME}",
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp))
+                modifier = Modifier.padding(top = 8.dp)
+            )
             SelectableText(
                 modifier = Modifier.padding(top = 8.dp),
                 text = appUser.mid,
@@ -220,7 +306,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             .height(800.dp)
                     ) {
                         item {
-                            Text("\nPrivacy Policy\n" +
+                            Text(
+                                "\nPrivacy Policy\n" +
                                         "\n" +
                                         "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
                                         "\n" +
@@ -259,7 +346,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     centerHorizontallyTo(parent)
                                 },
                             ) {
-                                Text("Confirm",
+                                Text(
+                                    "Confirm",
                                     fontWeight = FontWeight.Bold
                                 )
                             }

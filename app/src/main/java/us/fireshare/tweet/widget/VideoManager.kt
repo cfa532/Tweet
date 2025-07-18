@@ -115,21 +115,43 @@ object VideoManager {
     /**
      * Release a specific video player
      * @param videoMid Video's unique identifier
+     * Note: This method must be called on the main thread
      */
     fun releaseVideo(videoMid: MimeiId) {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - releaseVideo() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.releaseVideo() must be called on the main thread")
+        }
+        
         videoPlayers.remove(videoMid)?.let { player ->
-            player.release()
-            activeVideos.remove(videoMid)
-            Timber.d("VideoManager - Released video: $videoMid")
+            try {
+                player.release()
+                activeVideos.remove(videoMid)
+                Timber.d("VideoManager - Released video: $videoMid")
+            } catch (e: Exception) {
+                Timber.e("VideoManager - Error releasing video $videoMid: $e")
+            }
         }
     }
     
     /**
      * Release all video players
+     * Note: This method must be called on the main thread
      */
     fun releaseAllVideos() {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - releaseAllVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.releaseAllVideos() must be called on the main thread")
+        }
+        
         videoPlayers.values.forEach { player ->
-            player.release()
+            try {
+                player.release()
+            } catch (e: Exception) {
+                Timber.e("VideoManager - Error releasing player: $e")
+            }
         }
         videoPlayers.clear()
         activeVideos.clear()
@@ -171,8 +193,15 @@ object VideoManager {
     /**
      * Clean up unused video players (optional - for memory management)
      * This can be called periodically to free up memory
+     * Note: This method must be called on the main thread
      */
     fun cleanupUnusedVideos() {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - cleanupUnusedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.cleanupUnusedVideos() must be called on the main thread")
+        }
+        
         val unusedVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
         unusedVideos.forEach { videoMid ->
             releaseVideo(videoMid)
