@@ -442,7 +442,7 @@ object HproseInstance {
      * Load tweets of appUser and its followings from network.
      * Keep null elements in the response list and preserves their positions.
      * */
-    suspend fun getTweetFeed(
+    fun getTweetFeed(
         user: User,
         pageNumber: Int = 0,
         pageSize: Int = 20,
@@ -579,15 +579,17 @@ object HproseInstance {
     ): Tweet? {
         return try {
             // Check cache first using TweetCacheManager
+            val author = getUser(authorId)
             val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
             if (cachedTweet != null) {
                 return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
                     null
-                else
+                else {
+                    cachedTweet.author = author
                     cachedTweet
+                }
             }
 
-            val author = getUser(authorId)
             val entry = "get_tweet"
             val params = mapOf(
                 "aid" to appId,
@@ -598,6 +600,7 @@ object HproseInstance {
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
                 Tweet.from(tweetData).apply {
+                    this.author = author
                     TweetCacheManager.saveTweet(
                         this,
                         userId = appUser.mid,
@@ -623,7 +626,7 @@ object HproseInstance {
      * Get tweet from node Mimei DB to refresh cached tweet.
      * Called when the given tweet is visible.
      * */
-    suspend fun refreshTweet(
+    fun refreshTweet(
         tweetId: MimeiId?,
         authorId: MimeiId?
     ): Tweet? {
@@ -813,7 +816,7 @@ object HproseInstance {
      * an argument instead of toggling the status of a follower, because toggling
      * following/follower status happens on two different hosts.
      * */
-    suspend fun toggleFollower(
+    fun toggleFollower(
         userId: MimeiId,
         isFollowing: Boolean,
         followerId: MimeiId = appUser.mid
@@ -1033,7 +1036,7 @@ object HproseInstance {
      * Load all comments of a tweet.
      * @param pageNumber
      * */
-    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
+    fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
         return try {
             if (tweet.author == null) tweet.author = getUser(tweet.authorId)
             val entry = "get_comments"
@@ -1128,14 +1131,9 @@ object HproseInstance {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
-            // Check if user is expired
-            if (cachedUser.hasExpired) {
-                Timber.tag("getUser").d("User $userId is expired, refreshing from backend")
-                TweetCacheManager.removeCachedUser(userId)
-            } else {
-                Timber.tag("getUser").d("User $userId found in cache (not expired)")
-                return cachedUser
-            }
+            Timber.tag("getUser").d("User $userId found in cache (not expired)")
+            return cachedUser
+
         }
 
         // Step 2: Create user instance, which was either expired or not found in cache.
@@ -1152,7 +1150,7 @@ object HproseInstance {
 
         // Step 4: Set the base URL and fetch user data
         user.baseUrl = finalBaseUrl
-        updateUserFromServer(user)
+        updateUserFromServer(user)  // user object is updated in this function
 
         // Step 5: Cache the user and return
         TweetCacheManager.saveUser(user)

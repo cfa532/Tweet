@@ -123,6 +123,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text(if (showCacheInfo) "Hide" else "Show")
                 }
             }
+            
+
 
             // Show cache information when expanded
             if (showCacheInfo) {
@@ -178,17 +180,25 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Button(
                     onClick = {
                         appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                            // Clear all tweet cache (memory + database)
-                            TweetCacheManager.clearAllCachedTweets()
-
+                                                    // Clear all tweet cache (memory + database)
+                        TweetCacheManager.clearAllCachedTweets()
+                        
                             // Clear video cache
                             SimplifiedVideoCacheManager.clearVideoCache(context)
 
-                            // Clear user cache
-                            TweetCacheManager.cleanupExpiredUsers()
+                                                                            // Clear all user cache
+                        TweetCacheManager.clearAllCachedUsers()
+                        
+                        // Clear tweet instances from memory
+                        Tweet.clearAllInstances()
+                        
+                        // Release all video players on main thread
+                        withContext(Dispatchers.Main) {
+                            VideoManager.releaseAllVideos()
+                        }
 
-                            @Suppress("UnsafeOptInUsageError")
-                            isCachedCleared = true
+                        @Suppress("UnsafeOptInUsageError")
+                        isCachedCleared = true
                         }
                     },
                     enabled = !isCachedCleared

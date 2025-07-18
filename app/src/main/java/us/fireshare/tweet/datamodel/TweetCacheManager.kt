@@ -33,7 +33,8 @@ object TweetCacheManager {
      * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
     fun saveTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
-        if (tweet == null || !shouldCache || !isValidTweet(tweet)) {
+        if (tweet == null || !shouldCache) {
+            Timber.w("Should not cache: $tweet")
             return
         }
 
@@ -194,10 +195,14 @@ object TweetCacheManager {
 
     /**
      * Get a cached user by ID
+     * Returns a valid user or null, ensuring expired users are cleared from cache
+     * 
+     * Optimization: If memory copy is expired, database copy must also be expired
+     * since they share the same timestamp, so we clear both immediately.
      */
     fun getCachedUser(userId: MimeiId): User? {
         return try {
-            // Check memory cache first (outside synchronized block)
+            // Check memory cache first
             val memoryUser = synchronized(userCacheLock) {
                 userMemoryCache[userId]
             }
@@ -207,15 +212,14 @@ object TweetCacheManager {
                     Timber.d("User found in memory cache: $userId")
                     return user
                 } else {
-                    // Remove expired user from memory cache
-                    synchronized(userCacheLock) {
-                        userMemoryCache.remove(userId)
-                        userCacheTimestamps.remove(userId)
-                    }
+                    // Remove expired user from both memory and database cache
+                    // If memory copy is expired, database copy must also be expired
+                    removeCachedUserInternal(userId)
+                    Timber.d("Expired user removed from cache (memory + database): $userId")
                 }
             }
 
-            // Check database cache
+            // Check database cache (only if not found in memory)
             val dbCachedUser = HproseInstance.dao.getCachedUser(userId)
             dbCachedUser?.let { cachedUser ->
                 val user = cachedUser.user
@@ -228,12 +232,14 @@ object TweetCacheManager {
                     Timber.d("User found in database cache: $userId")
                     return user
                 } else {
-                    // Remove expired user from database (outside synchronized block)
+                    // Remove expired user from database cache
                     removeCachedUserInternal(userId)
-                    Timber.d("Expired user removed from cache: $userId")
+                    Timber.d("Expired user removed from database cache: $userId")
                 }
             }
 
+            // User not found in cache or was expired and removed
+            Timber.d("User not found in cache: $userId")
             null
         } catch (e: Exception) {
             Timber.e("Error retrieving cached user: $e")
@@ -250,21 +256,22 @@ object TweetCacheManager {
 
     /**
      * Internal method to remove a user from cache (non-suspend)
+     * Ensures complete removal from both memory and database cache
      */
     private fun removeCachedUserInternal(userId: MimeiId) {
         try {
+            // Remove from memory cache
             synchronized(userCacheLock) {
-                // Remove from memory cache
                 userMemoryCache.remove(userId)
                 userCacheTimestamps.remove(userId)
             }
 
-            // Remove from database cache (outside synchronized block)
+            // Remove from database cache
             HproseInstance.dao.deleteCachedUser(userId)
 
-            Timber.d("User removed from cache: $userId")
+            Timber.d("User completely removed from cache (memory + database): $userId")
         } catch (e: Exception) {
-            Timber.e("Error removing cached user: $e")
+            Timber.e("Error removing cached user $userId: $e")
         }
     }
 
@@ -289,6 +296,26 @@ object TweetCacheManager {
             }
         } catch (e: Exception) {
             Timber.e("Error cleaning up expired users: $e")
+        }
+    }
+
+    /**
+     * Clear all cached users (memory + database)
+     */
+    fun clearAllCachedUsers() {
+        try {
+            synchronized(userCacheLock) {
+                // Clear memory cache
+                userMemoryCache.clear()
+                userCacheTimestamps.clear()
+            }
+
+            // Clear database cache using bulk delete
+            HproseInstance.dao.clearAllCachedUsers()
+
+            Timber.d("All cached users cleared (memory + database)")
+        } catch (e: Exception) {
+            Timber.e("Error clearing cached users: $e")
         }
     }
 
@@ -325,28 +352,6 @@ object TweetCacheManager {
     }
 
     /**
-     * Check if a tweet is valid for caching
-     */
-    private fun isValidTweet(tweet: Tweet): Boolean {
-        // Check if tweet has valid ID and author
-        if (tweet.mid.isBlank() || tweet.authorId.isBlank()) {
-            return false
-        }
-
-        // Check if tweet has content or attachments
-        if (tweet.content.isNullOrBlank() && (tweet.attachments.isNullOrEmpty())) {
-            return false
-        }
-
-        // Check if tweet has a valid author
-        if (tweet.author == null) {
-            return false
-        }
-
-        return true
-    }
-
-    /**
      * Check if a cached tweet is expired
      */
     private fun isExpired(cachedTweet: CachedTweet): Boolean {
@@ -370,15 +375,17 @@ object TweetCacheManager {
     fun getCacheStats(): CacheStats {
         return try {
             synchronized(cacheLock) {
+                val dbTweets = HproseInstance.dao.getCachedTweets(0, Int.MAX_VALUE)
+                
                 CacheStats(
                     memoryCacheSize = memoryCache.size,
-                    databaseCacheSize = HproseInstance.dao.getCachedTweets(0, Int.MAX_VALUE).size,
+                    databaseCacheSize = dbTweets.size,
                     expirationTimeMs = CACHE_EXPIRATION_TIME
                 )
             }
         } catch (e: Exception) {
             Timber.e("Error getting cache stats: $e")
-            CacheStats(0, 0, CACHE_EXPIRATION_TIME)
+            CacheStats(0, 0, 0)
         }
     }
 

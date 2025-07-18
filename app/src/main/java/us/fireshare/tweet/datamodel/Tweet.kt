@@ -68,6 +68,11 @@ data class Tweet(
             isPrivate: Boolean = false,
             downloadable: Boolean = false
         ): Tweet {
+            // Validate required fields
+            if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
+                Timber.e("Tweet.getInstance() - Invalid parameters: mid=$mid, authorId=$authorId")
+                throw IllegalArgumentException("Tweet.getInstance() - mid and authorId cannot be null or blank")
+            }
             synchronized(instanceLock) {
                 val existingInstance = instances[mid]
                 if (existingInstance != null) {
@@ -141,6 +146,15 @@ data class Tweet(
                 // Pre-process the dictionary to handle scientific notation in numeric fields
                 val processedDict = dict.toMutableMap()
                 
+                // Validate required fields before processing
+                val mid = processedDict["mid"] as? String
+                val authorId = processedDict["authorId"] as? String
+                
+                if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
+                    Timber.e("Tweet.from() - Missing required fields: mid=$mid, authorId=$authorId, dict=$dict")
+                    throw IllegalArgumentException("Tweet missing required fields: mid=$mid, authorId=$authorId")
+                }
+                
                 // Handle timestamp field
                 processedDict["timestamp"]?.let { value ->
                     when (value) {
@@ -184,6 +198,12 @@ data class Tweet(
                 val jsonString = gson.toJson(processedDict)
                 val tweet = gson.fromJson(jsonString, Tweet::class.java)
                 
+                // Double-check that required fields are not null after deserialization
+                if (tweet.mid.isNullOrBlank() || tweet.authorId.isNullOrBlank()) {
+                    Timber.e("Tweet.from() - Deserialized tweet has null/blank required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
+                    throw IllegalArgumentException("Deserialized tweet missing required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
+                }
+                
                 return getInstance(
                     mid = tweet.mid,
                     authorId = tweet.authorId,
@@ -216,6 +236,20 @@ data class Tweet(
                 val gson = com.google.gson.Gson()
                 val jsonObject = gson.fromJson(jsonString, com.google.gson.JsonObject::class.java)
 
+                // Validate required fields
+                if (!jsonObject.has("mid") || !jsonObject.has("authorId")) {
+                    Timber.e("Tweet.decode() - Missing required fields in JSON: $jsonString")
+                    return null
+                }
+                
+                val mid = jsonObject.get("mid")?.asString
+                val authorId = jsonObject.get("authorId")?.asString
+                
+                if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
+                    Timber.e("Tweet.decode() - Required fields are null/blank: mid=$mid, authorId=$authorId")
+                    return null
+                }
+
                 // Convert timestamp to Long if it's a string
                 if (jsonObject.has("timestamp")) {
                     val timestamp = jsonObject.get("timestamp")
@@ -240,8 +274,17 @@ data class Tweet(
                     }
                 }
 
-                gson.fromJson(jsonObject, Tweet::class.java)
+                val tweet = gson.fromJson(jsonObject, Tweet::class.java)
+                
+                // Double-check that required fields are not null after deserialization
+                if (tweet.mid.isNullOrBlank() || tweet.authorId.isNullOrBlank()) {
+                    Timber.e("Tweet.decode() - Deserialized tweet has null/blank required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
+                    return null
+                }
+                
+                tweet
             } catch (e: Exception) {
+                Timber.e("Tweet.decode() - Error decoding JSON: $e")
                 null
             }
         }
