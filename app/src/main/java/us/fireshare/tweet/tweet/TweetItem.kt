@@ -52,6 +52,7 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     isFromFeed: Boolean = false, // indicates if this is from the feed context
+    onTweetUnavailable: ((String) -> Unit)? = null, // callback when tweet becomes unavailable
 ) {
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
@@ -139,18 +140,12 @@ fun TweetItem(
                             )
                         }
                     } else {
-                        // Show error state
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                        ) {
-                            Text(
-                                text = "Original tweet not available",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
+                        // Original tweet not available - this retweet should be removed from the list
+                        LaunchedEffect(Unit) {
+                            onTweetUnavailable?.invoke(tweet.mid)
                         }
+                        // Return empty content to effectively hide this item
+                        Box(modifier = Modifier.size(0.dp))
                     }
                 }
             } else {
@@ -254,24 +249,12 @@ fun TweetItem(
                                 )
                             }
                         } else {
-                            // Show error state for quoted tweet
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                tonalElevation = 8.dp,
-                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                ) {
-                                    Text(
-                                        text = "Quoted tweet not available",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                            // Original tweet not available - this quoted tweet should be removed from the list
+                            LaunchedEffect(Unit) {
+                                onTweetUnavailable?.invoke(tweet.mid)
                             }
+                            // Return empty content to effectively hide this item
+                            Box(modifier = Modifier.size(0.dp))
                         }
                         
                         Row(

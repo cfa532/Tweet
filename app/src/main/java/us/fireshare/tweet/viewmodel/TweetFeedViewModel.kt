@@ -260,6 +260,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         _tweets.value = emptyList()
     }
 
+    /**
+     * Remove a tweet from the list when it becomes unavailable (e.g., original tweet deleted)
+     */
+    fun removeTweet(tweetId: MimeiId) {
+        _tweets.update { currentTweets ->
+            val filteredTweets = currentTweets.filterNot { it.mid == tweetId }
+            Timber.tag("TweetFeedViewModel").d("Removed tweet $tweetId, updated from ${currentTweets.size} to ${filteredTweets.size} tweets")
+            filteredTweets
+        }
+    }
+
     // order of deletion is critical here.
     fun delTweet(
         navController: NavController,

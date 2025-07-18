@@ -208,24 +208,9 @@ fun TweetDetailBody(
                                 )
                             }
                         } else {
-                            // Show error state for quoted tweet
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                tonalElevation = 2.dp,
-                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                ) {
-                                    Text(
-                                        text = "Quoted tweet not available",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
+                            // Original tweet not available - this quoted tweet should be removed from the list
+                            // Return empty content to effectively hide this item
+                            Box(modifier = Modifier.size(0.dp))
                         }
                     }
 

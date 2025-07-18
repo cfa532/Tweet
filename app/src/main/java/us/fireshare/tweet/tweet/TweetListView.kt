@@ -81,6 +81,7 @@ fun TweetListView(
     parentEntry: NavBackStackEntry? = null,
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
     currentUserId: MimeiId? = null, // Add current user ID to detect user changes
+    onTweetUnavailable: ((MimeiId) -> Unit)? = null, // Callback when tweet becomes unavailable
 ) {
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -267,7 +268,14 @@ fun TweetListView(
                 key = { it.mid }
             ) { tweet ->
                 if (showPrivateTweets || !tweet.isPrivate) {
-                    parentEntry?.let { TweetItem(tweet, it, isFromFeed = true) }
+                    parentEntry?.let { 
+                        TweetItem(
+                            tweet = tweet, 
+                            parentEntry = it, 
+                            isFromFeed = true,
+                            onTweetUnavailable = onTweetUnavailable
+                        ) 
+                    }
                 }
             }
             if (isRefreshingAtTop) {
@@ -311,12 +319,14 @@ fun TweetListView(
  * 
  * @param tweets The list of tweets to display
  * @param parentEntry Navigation back stack entry for navigation context
+ * @param onTweetUnavailable Callback when a tweet becomes unavailable (e.g., original tweet deleted)
  * @param modifier Additional modifier for the component
  */
 @Composable
 fun SimpleTweetListView(
     tweets: List<Tweet>,
     parentEntry: NavBackStackEntry,
+    onTweetUnavailable: (Tweet) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -328,7 +338,19 @@ fun SimpleTweetListView(
             key = { it.mid }
         ) { tweet ->
             if (!tweet.isPrivate) {
-                parentEntry.let { TweetItem(tweet, it, isFromFeed = true) }
+                parentEntry.let { 
+                    TweetItem(
+                        tweet = tweet, 
+                        parentEntry = it, 
+                        isFromFeed = true,
+                        onTweetUnavailable = { tweetId ->
+                            // Find the tweet by ID and call the callback with the Tweet object
+                            tweets.find { it.mid == tweetId }?.let { foundTweet ->
+                                onTweetUnavailable(foundTweet)
+                            }
+                        }
+                    ) 
+                }
             }
         }
     }
