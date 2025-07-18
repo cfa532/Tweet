@@ -143,7 +143,7 @@ fun FollowingItem(
         IconButton(onClick = {
             navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-            UserAvatar(user = user, size = 40)
+            UserAvatar(user = user, size = 40, enableLongPress = false)
         }
         Column {
             Row(

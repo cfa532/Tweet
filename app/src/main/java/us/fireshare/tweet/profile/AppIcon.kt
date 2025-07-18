@@ -19,6 +19,9 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.ImageViewer
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun AppIcon() {
@@ -33,10 +36,47 @@ fun AppIcon() {
 }
 
 @Composable
-fun UserAvatar(
+fun SimpleAvatar(
     modifier: Modifier = Modifier,
     user: User,
     size: Int = 40
+) {
+    var avatarUrl by remember(key1 = user.avatar) {
+        mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
+    }
+    LaunchedEffect(key1 = user.avatar) {
+        avatarUrl = getMediaUrl(user.avatar, user.baseUrl)
+    }
+    
+    // Use AsyncImage directly instead of ImageViewer to avoid touch event conflicts
+    avatarUrl?.let {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(it)
+                .crossfade(true)
+                .build(),
+            contentDescription = "User Avatar",
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(size.dp)
+                .clip(CircleShape)
+        )
+    } ?: Image(
+        painter = painterResource(id = R.drawable.ic_splash),
+        contentDescription = "Placeholder Avatar",
+        modifier = modifier
+            .size(size.dp)
+            .clip(CircleShape),
+        contentScale = ContentScale.Crop
+    )
+}
+
+@Composable
+fun UserAvatar(
+    modifier: Modifier = Modifier,
+    user: User,
+    size: Int = 40,
+    enableLongPress: Boolean = false  // Disable long press by default to prevent conflicts with clickable parents
 ) {
     var avatarUrl by remember(key1 = user.avatar) {
         mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
@@ -50,7 +90,8 @@ fun UserAvatar(
             modifier = modifier
                 .size(size.dp)
                 .clip(CircleShape),
-            imageSize = size
+            imageSize = size,
+            enableLongPress = enableLongPress
         )
     } ?: Image(
         painter = painterResource(id = R.drawable.ic_splash),

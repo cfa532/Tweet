@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon
-import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.profile.SimpleAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,11 +58,13 @@ fun MainTopAppBar(
         },
         navigationIcon = {
             IconButton(onClick = {
-                if (appUser.isGuest()) navController.navigate(NavTweet.Login) else navController.navigate(
-                    NavTweet.UserProfile(appUser.mid)
-                )
+                if (appUser.isGuest()) {
+                    navController.navigate(NavTweet.Login)
+                } else {
+                    navController.navigate(NavTweet.UserProfile(appUser.mid))
+                }
             }) {
-                UserAvatar(user = appUser, size = 32)
+                SimpleAvatar(user = appUser, size = 32)
             }
         },
         actions = {

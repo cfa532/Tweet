@@ -52,7 +52,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.profile.SimpleAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
@@ -87,7 +87,7 @@ fun CommentItem(
             IconButton(onClick = {
                 navController.navigate(NavTweet.UserProfile(comment.authorId)) }
             ) {
-                UserAvatar(user = author, size = 32)
+                SimpleAvatar(user = author, size = 32)
             }
             Column(
                 modifier = Modifier.fillMaxWidth()

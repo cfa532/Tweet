@@ -18,12 +18,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.toRoute
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.profile.SimpleAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import java.util.concurrent.TimeUnit
 import us.fireshare.tweet.datamodel.User
@@ -48,24 +49,14 @@ fun TweetItemHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /**
-             * If the appUser is not the author of the tweet, navigate to the author's profile.
-             * If the appUser is the author of the tweet, or the user profile is already
-             * opened, do nothing.
+             * Navigate to the user's profile when avatar is tapped.
+             * Simplified logic to always navigate to avoid potential issues.
              * */
             IconButton(onClick = {
-                val currentRoute = navController.currentBackStackEntry?.destination?.route
-                if (currentRoute?.contains("UserProfile") == true) {
-                    // On profile screen of an user, when avatar of the user is clicked, do nothing.
-                    val currentUserId = navController.currentBackStackEntry?.arguments?.getString("userId")
-                    if (currentUserId != tweet.authorId) {
-                        // navigate to profile if it is a different user.
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                    }
-                }else {
-                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                }
+                // Always navigate to the user's profile when avatar is tapped
+                navController.navigate(NavTweet.UserProfile(tweet.authorId))
             }) {
-                author?.let { UserAvatar(user = it, size = 36) }
+                author?.let { SimpleAvatar(user = it, size = 36) }
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),
