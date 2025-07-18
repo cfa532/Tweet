@@ -57,8 +57,6 @@ data class Tweet(
             title: String? = null,
             originalTweetId: String? = null,
             originalAuthorId: String? = null,
-            author: User? = null,
-            originalTweet: Tweet? = null,
             favorites: List<Boolean>? = listOf(false, false, false),
             favoriteCount: Int = 0,
             bookmarkCount: Int = 0,
@@ -68,19 +66,12 @@ data class Tweet(
             isPrivate: Boolean = false,
             downloadable: Boolean = false
         ): Tweet {
-            // Validate required fields
-            if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
-                Timber.e("Tweet.getInstance() - Invalid parameters: mid=$mid, authorId=$authorId")
-                throw IllegalArgumentException("Tweet.getInstance() - mid and authorId cannot be null or blank")
-            }
             synchronized(instanceLock) {
                 val existingInstance = instances[mid]
                 if (existingInstance != null) {
                     // Update existing instance with new values
                     content?.let { existingInstance.content = it }
                     title?.let { existingInstance.title = it }
-                    author?.let { existingInstance.author = it }
-                    originalTweet?.let { existingInstance.originalTweet = it }
                     favorites?.let { existingInstance.favorites = it.toMutableList() }
                     existingInstance.favoriteCount = favoriteCount
                     existingInstance.bookmarkCount = bookmarkCount
@@ -100,8 +91,6 @@ data class Tweet(
                     title = title,
                     originalTweetId = originalTweetId,
                     originalAuthorId = originalAuthorId,
-                    author = author,
-                    originalTweet = originalTweet,
                     favorites = favorites?.toMutableList(),
                     favoriteCount = favoriteCount,
                     bookmarkCount = bookmarkCount,
@@ -197,13 +186,7 @@ data class Tweet(
                 
                 val jsonString = gson.toJson(processedDict)
                 val tweet = gson.fromJson(jsonString, Tweet::class.java)
-                
-                // Double-check that required fields are not null after deserialization
-                if (tweet.mid.isNullOrBlank() || tweet.authorId.isNullOrBlank()) {
-                    Timber.e("Tweet.from() - Deserialized tweet has null/blank required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
-                    throw IllegalArgumentException("Deserialized tweet missing required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
-                }
-                
+
                 return getInstance(
                     mid = tweet.mid,
                     authorId = tweet.authorId,
@@ -212,7 +195,6 @@ data class Tweet(
                     title = tweet.title,
                     originalTweetId = tweet.originalTweetId,
                     originalAuthorId = tweet.originalAuthorId,
-                    author = null,  // Leave author as null, will be populated by other code
                     favorites = tweet.favorites,
                     favoriteCount = tweet.favoriteCount,
                     bookmarkCount = tweet.bookmarkCount,
@@ -275,13 +257,6 @@ data class Tweet(
                 }
 
                 val tweet = gson.fromJson(jsonObject, Tweet::class.java)
-                
-                // Double-check that required fields are not null after deserialization
-                if (tweet.mid.isNullOrBlank() || tweet.authorId.isNullOrBlank()) {
-                    Timber.e("Tweet.decode() - Deserialized tweet has null/blank required fields: mid=${tweet.mid}, authorId=${tweet.authorId}")
-                    return null
-                }
-                
                 tweet
             } catch (e: Exception) {
                 Timber.e("Tweet.decode() - Error decoding JSON: $e")
@@ -393,6 +368,7 @@ data class Tweet(
             tempTweet.content?.let { this.content = it }
             tempTweet.title?.let { this.title = it }
             tempTweet.author?.let { this.author = it }
+            tempTweet.originalTweet?.let { this.originalTweet = it}
             tempTweet.favorites?.let { this.favorites = it.toMutableList() }
             this.favoriteCount = tempTweet.favoriteCount
             this.bookmarkCount = tempTweet.bookmarkCount
