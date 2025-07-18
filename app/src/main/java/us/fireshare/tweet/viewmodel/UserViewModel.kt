@@ -83,17 +83,21 @@ class UserViewModel @AssistedInject constructor(
      * Initial load of tweets of an user. Execute only once.
      * */
     suspend fun initLoad() {
-        // Load first page (page 0) which includes pinned tweets
-        getTweets(0)
+        try {
+            // Load first page (page 0) which includes pinned tweets
+            getTweets(0)
 
-        // Load additional pages if needed to get at least 5 viewable tweets
-        var pageNumber = 1
-        while (tweets.value.count { !it.isPrivate || it.authorId == appUser.mid } < 5 && pageNumber < 3) {
-            getTweets(pageNumber)
-            pageNumber++
+            // Load additional pages if needed to get at least 5 viewable tweets
+            var pageNumber = 1
+            while (tweets.value.count { !it.isPrivate || it.authorId == appUser.mid } < 5 && pageNumber < 3) {
+                getTweets(pageNumber)
+                pageNumber++
+            }
+        } catch (e: Exception) {
+            Timber.tag("initLoad").e(e, "Error during initial load for user: ${user.value.mid}")
+        } finally {
+            initState.value = false
         }
-
-        initState.value = false
     }
 
     /**
@@ -424,69 +428,78 @@ class UserViewModel @AssistedInject constructor(
     }
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
-        // When pageNumber is 0, load pinned tweets first
-        if (pageNumber == 0) {
-            loadPinnedTweets()
-        }
-
-        // Fetch tweets of the author and update _tweets
-        val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
-
-        // Filter out null elements and get valid tweets
-        val newTweets = newTweetsWithNulls.filterNotNull()
-
-        Timber.tag("getTweets")
-            .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
-
-        if (pageNumber == 0) {
-            // For refresh (page 0), replace the list
-            _tweets.value =
-                newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-        } else {
-            // For load more (page > 0), append to the list
-            _tweets.update { currentTweets ->
-                val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
-                val updatedTweets = currentTweets.map { tweet ->
-                    newTweetsMap[tweet.mid] ?: tweet
-                }
-                (updatedTweets + newTweets)
-                    .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+        return try {
+            // When pageNumber is 0, load pinned tweets first
+            if (pageNumber == 0) {
+                loadPinnedTweets()
             }
-        }
 
-        return newTweetsWithNulls
+            // Fetch tweets of the author and update _tweets
+            val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
+
+            // Filter out null elements and get valid tweets
+            val newTweets = newTweetsWithNulls.filterNotNull()
+
+            Timber.tag("getTweets")
+                .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
+
+            if (pageNumber == 0) {
+                // For refresh (page 0), replace the list
+                _tweets.value =
+                    newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+            } else {
+                // For load more (page > 0), append to the list
+                _tweets.update { currentTweets ->
+                    val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
+                    val updatedTweets = currentTweets.map { tweet ->
+                        newTweetsMap[tweet.mid] ?: tweet
+                    }
+                    (updatedTweets + newTweets)
+                        .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                }
+            }
+
+            newTweetsWithNulls
+        } catch (e: Exception) {
+            Timber.tag("getTweets").e(e, "Error fetching tweets for user: ${user.value.mid}, page: $pageNumber")
+            emptyList()
+        }
     }
 
     private suspend fun loadPinnedTweets() {
-        // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-        val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.getPinnedList(user.value)?.forEach { map ->
-            val tweet = tweets.value.find { it.mid == map["tweetId"] }
-            if (tweet != null) {
-                // add tweet to topTweets, update its timestamp to when it is pinned.
-                pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
-            } else {
-                HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
-                    // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
-                    pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
+        try {
+            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
+            val pinnedTweets = mutableSetOf<Tweet>()
+            HproseInstance.getPinnedList(user.value)?.forEach { map ->
+                val tweet = tweets.value.find { it.mid == map["tweetId"] }
+                if (tweet != null) {
+                    // add tweet to topTweets, update its timestamp to when it is pinned.
+                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
+                } else {
+                    HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
+                        // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
+                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
+                    }
                 }
             }
-        }
-        // 3. overwrite any tweet in _topTweets with one from pinnedTweets
-        _topTweets.update { currentTopTweets ->
-            val pinnedTweetsFiltered = pinnedTweets.toList()
-                .distinctBy { tweet: Tweet -> tweet.mid }
-                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+            // 3. overwrite any tweet in _topTweets with one from pinnedTweets
+            _topTweets.update { currentTopTweets ->
+                val pinnedTweetsFiltered = pinnedTweets.toList()
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
 
-            val currentTopTweetsMap = currentTopTweets.associateBy { it.mid }.toMutableMap()
+                val currentTopTweetsMap = currentTopTweets.associateBy { it.mid }.toMutableMap()
 
-            pinnedTweetsFiltered.forEach { pinnedTweet ->
-                currentTopTweetsMap[pinnedTweet.mid] = pinnedTweet // Overwrite or add
+                pinnedTweetsFiltered.forEach { pinnedTweet ->
+                    currentTopTweetsMap[pinnedTweet.mid] = pinnedTweet // Overwrite or add
+                }
+
+                currentTopTweetsMap.values.toList() // Convert back to a list
             }
-
-            currentTopTweetsMap.values.toList() // Convert back to a list
+        } catch (e: Exception) {
+            Timber.tag("loadPinnedTweets").e(e, "Error loading pinned tweets for user: ${user.value.mid}")
         }
     }
 
