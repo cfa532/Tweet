@@ -39,6 +39,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
 import us.fireshare.tweet.viewmodel.UserViewModel
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,9 +90,8 @@ fun FollowerScreen(
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
             UserListView(
-                users = followersOfProfile,
-                fetchUsers = { pageNumber ->
-                    viewModel.fetchFollowers(pageNumber)
+                fetchUserIds = { batchNumber ->
+                    viewModel.fetchFollowers(batchNumber)
                 },
                 contentPadding = PaddingValues(bottom = 60.dp),
                 userItem = { followerUserId ->
@@ -121,12 +121,17 @@ fun FollowerItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    if (user.isGuest()) {
-        // Try to reload the user data when the user is not loaded properly
-        LaunchedEffect(userId) {
-            withContext(Dispatchers.IO) {
-                viewModel.refreshUser()
-            }
+    // Proactively load user data for every user ID
+    LaunchedEffect(userId) {
+        Timber.tag("FollowerItem").d("Loading user data for userId: $userId")
+        viewModel.refreshUser()
+    }
+
+    // Retry loading if the user data failed to load (user is guest)
+    LaunchedEffect(user) {
+        if (user.isGuest()) {
+            Timber.tag("FollowerItem").d("Retrying user data load for userId: $userId (user is guest)")
+            viewModel.refreshUser()
         }
     }
 
@@ -142,9 +147,11 @@ fun FollowerItem(
             .fillMaxWidth()
     ) {
         IconButton(onClick = {
-            navController.navigate(NavTweet.UserProfile(user.mid))
+            if (!user.isGuest()) {
+                navController.navigate(NavTweet.UserProfile(user.mid))
+            }
         }) {
-            UserAvatar(user = user, size = 40, enableLongPress = false)
+            SimpleAvatar(user = user, size = 40)
         }
         Column {
             Row(

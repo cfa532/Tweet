@@ -52,23 +52,21 @@ data class UserScrollState(
 
 /**
  * Enhanced UserListView: Material3 style list view for displaying user lists (followers/following).
- * Self-contained with built-in pagination, pull-to-refresh, infinite scroll, and loading indicators.
- * Similar to TweetListView but optimized for user lists.
+ * Receives user IDs in batches and progressively shows more user items.
+ * Each user item is responsible for retrieving its own data using the provided user ID.
  *
- * @param users List of user IDs to display
- * @param fetchUsers Function to fetch users for a specific page number (returns List<MimeiId?>)
+ * @param fetchUserIds Function to fetch user IDs for a specific batch number (returns List<MimeiId>)
  * @param scrollBehavior Optional TopAppBar scroll behavior
  * @param contentPadding Padding for the list content
  * @param modifier Modifier for the component
- * @param userItem Composable for rendering each user item
+ * @param userItem Composable for rendering each user item (receives user ID)
  * @param onScrollStateChange Optional callback for scroll state changes
  * @param currentUserId Optional current user ID for change detection
  */
 @Composable
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun UserListView(
-    users: List<MimeiId>,
-    fetchUsers: suspend (Int) -> List<MimeiId?>,
+    fetchUserIds: suspend (Int) -> List<MimeiId>,
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
@@ -76,16 +74,14 @@ fun UserListView(
     onScrollStateChange: ((UserScrollState) -> Unit)? = null,
     currentUserId: MimeiId? = null,
 ) {
-    // Debug logging
-    Timber.tag("UserListView").d("UserListView received users: ${users.size}")
-    
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
     var isLoadingMore by remember { mutableStateOf(false) }
     var lastUserId by remember { mutableStateOf(currentUserId) }
-    var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
+    var serverDepleted by remember { mutableStateOf(false) }
+    var allUserIds by remember { mutableStateOf(emptyList<MimeiId>()) }
+    var displayedUserCount by remember { mutableIntStateOf(0) }
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -97,30 +93,38 @@ fun UserListView(
 
     val SCROLL_OFFSET_THRESHOLD = 8
     val ITEM_INDEX_THRESHOLD = 1
-    val MINIMUM_USER_COUNT = 4
 
     // Detect user changes and initialize data
     LaunchedEffect(currentUserId) {
-        if (currentUserId != lastUserId) {
+        Timber.tag("UserListView").d("LaunchedEffect triggered with currentUserId: $currentUserId, lastUserId: $lastUserId")
+        if (currentUserId != lastUserId || allUserIds.isEmpty()) {
             Timber.tag("UserListView").d("User changed from $lastUserId to $currentUserId, initializing data")
             lastUserId = currentUserId
-            lastLoadedPage = -1 // Reset last loaded page
-            serverDepleted = false // Reset server depleted flag for new user
+            allUserIds = emptyList()
+            displayedUserCount = 0
+            serverDepleted = false
             
-            // Load initial data (page 0)
+            // Load initial batch
             try {
-                val initialUsers = fetchUsers(0)
-                if (initialUsers.isNotEmpty()) {
-                    lastLoadedPage = 0
-                    Timber.tag("UserListView").d("Initial load completed: fetched ${initialUsers.size} users")
+                Timber.tag("UserListView").d("Calling fetchUserIds(0)")
+                val initialUserIds = fetchUserIds(0)
+                Timber.tag("UserListView").d("fetchUserIds(0) returned: ${initialUserIds.size} user IDs")
+                if (initialUserIds.isNotEmpty()) {
+                    // Ensure no duplicates in initial load
+                    val uniqueInitialUserIds = initialUserIds.distinct()
+                    allUserIds = uniqueInitialUserIds
+                    displayedUserCount = minOf(uniqueInitialUserIds.size, TW_CONST.USER_BATCH_SIZE)
+                    Timber.tag("UserListView").d("Initial load completed: fetched ${uniqueInitialUserIds.size} unique user IDs, displaying $displayedUserCount")
                 } else {
                     serverDepleted = true
-                    Timber.tag("UserListView").d("No initial users found, server depleted")
+                    Timber.tag("UserListView").d("No initial user IDs found, server depleted")
                 }
             } catch (e: Exception) {
                 Timber.tag("UserListView").e(e, "Error during initial load")
                 serverDepleted = true
             }
+        } else {
+            Timber.tag("UserListView").d("No change detected, skipping initialization")
         }
     }
 
@@ -159,9 +163,17 @@ fun UserListView(
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        lastLoadedPage = -1 // Reset to page 0 for refresh
-                        serverDepleted = false // Reset server depleted flag
-                        fetchUsers(0)
+                        // Reset and reload initial batch
+                        allUserIds = emptyList()
+                        displayedUserCount = 0
+                        serverDepleted = false
+                        val initialUserIds = fetchUserIds(0)
+                        if (initialUserIds.isNotEmpty()) {
+                            allUserIds = initialUserIds
+                            displayedUserCount = minOf(initialUserIds.size, TW_CONST.USER_BATCH_SIZE)
+                        } else {
+                            serverDepleted = true
+                        }
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -178,47 +190,53 @@ fun UserListView(
         }
     }
 
-    // Infinite scroll
+    // Infinite scroll - load more user IDs in batches
     LaunchedEffect(isAtBottom) {
-        Timber.tag("UserListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, users.size: ${users.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
+        Timber.tag("UserListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, displayedUserCount: $displayedUserCount, allUserIds.size: ${allUserIds.size}, serverDepleted: $serverDepleted")
         
-        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && users.size >= 4 && !serverDepleted && lastLoadedPage >= 0) { // Only trigger if we have enough users, server not depleted, and we've loaded at least one page
+        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && !serverDepleted) {
             Timber.tag("UserListView").d("Triggering load more...")
             isLoadingMore = true
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
-                        val nextPage = lastLoadedPage + 1 // Load the next page after the last loaded page
-                        Timber.tag("UserListView").d("Loading more users, next page: $nextPage, lastLoadedPage: $lastLoadedPage, current users: ${users.size}")
-                        val usersWithNulls = fetchUsers(nextPage)
+                        val nextBatchNumber = (allUserIds.size / TW_CONST.USER_BATCH_SIZE)
+                        Timber.tag("UserListView").d("Loading more user IDs, next batch: $nextBatchNumber")
+                        val newUserIds = fetchUserIds(nextBatchNumber)
                         
-                        if (usersWithNulls.isEmpty()) {
-                            // No more users available
+                        if (newUserIds.isEmpty()) {
+                            // No more user IDs available
                             serverDepleted = true
-                            Timber.tag("UserListView").d("No more users available, server depleted")
-                        } else if (usersWithNulls.size == TW_CONST.USER_BATCH_SIZE) {
-                            // Full page loaded, continue loading
-                            lastLoadedPage = nextPage
-                            Timber.tag("UserListView").d("Full page loaded, continuing to page ${nextPage + 1}")
+                            Timber.tag("UserListView").d("No more user IDs available, server depleted")
                         } else {
-                            // Partial page loaded, server is depleted
-                            serverDepleted = true
-                            lastLoadedPage = nextPage
-                            Timber.tag("UserListView").d("Partial page loaded (${usersWithNulls.size} users), server depleted")
+                            // Add new user IDs to the list, ensuring no duplicates
+                            val uniqueNewUserIds = newUserIds.filter { newId -> !allUserIds.contains(newId) }
+                            if (uniqueNewUserIds.isNotEmpty()) {
+                                allUserIds = allUserIds + uniqueNewUserIds
+                                displayedUserCount = minOf(displayedUserCount + TW_CONST.USER_BATCH_SIZE, allUserIds.size)
+                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs, total: ${allUserIds.size}, displayed: $displayedUserCount")
+                            } else {
+                                // All new IDs were duplicates, mark as depleted
+                                serverDepleted = true
+                                Timber.tag("UserListView").d("All new user IDs were duplicates, server depleted")
+                            }
                         }
                     }
                 } catch (e: Exception) {
-                    Timber.tag("UserListView").e(e, "Error loading more users")
+                    Timber.tag("UserListView").e(e, "Error loading more user IDs")
                     serverDepleted = true
                 } finally {
-                    isRefreshingAtBottom = false // Ensure state is reset
+                    isRefreshingAtBottom = false
                     isLoadingMore = false
                     Timber.tag("UserListView").d("Load more completed, isRefreshingAtBottom set to false, isLoadingMore set to false")
                 }
             }
         }
     }
+
+    // Get the subset of user IDs to display, ensuring uniqueness
+    val displayedUserIds = allUserIds.take(displayedUserCount).distinct()
 
     Box(
         modifier = modifier
@@ -234,25 +252,14 @@ fun UserListView(
             contentPadding = contentPadding
         ) {
             items(
-                items = users,
-                key = { it }
+                items = displayedUserIds,
+                key = { userId -> "${userId}_${displayedUserIds.indexOf(userId)}" }
             ) { userId ->
                 userItem(userId)
             }
-            if (isRefreshingAtTop) {
-                item {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 60.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                            .size(48.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp
-                    )
-                }
-            }
-            if (isRefreshingAtBottom) {
+            
+            // Show loading indicator if there are more user IDs to load
+            if (isRefreshingAtBottom || (!serverDepleted && displayedUserCount < allUserIds.size)) {
                 item {
                     CircularProgressIndicator(
                         modifier = Modifier

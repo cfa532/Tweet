@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -187,20 +188,29 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Fetch followers with pagination support
-     * Returns List<MimeiId?> including null elements from the backend
+     * Returns List<MimeiId> (null values are filtered out)
      */
-    suspend fun fetchFollowers(pageNumber: Int): List<MimeiId?> {
+    suspend fun fetchFollowers(pageNumber: Int): List<MimeiId> {
+        Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {
                 // For page 0, refresh the entire list
+                Timber.tag("fetchFollowers").d("Loading all followers for user: ${user.value.mid}")
                 val allFollowers = HproseInstance.getFans(user.value) ?: emptyList()
+                Timber.tag("fetchFollowers").d("getFans returned: ${allFollowers.size} followers")
+                
+                // Check for duplicates in the raw data
+                val duplicates = allFollowers.groupingBy { it }.eachCount().filter { it.value > 1 }
+                if (duplicates.isNotEmpty()) {
+                    Timber.tag("fetchFollowers").w("Found duplicate user IDs in raw data: $duplicates")
+                }
+                
                 _followers.value = allFollowers
                 
-                // Fetch user data in batches from appUser's node
-                fetchUserDataInBatches(allFollowers)
-                
-                // Return the first batch of users
-                allFollowers.take(TW_CONST.USER_BATCH_SIZE).map { it }
+                // Return the first batch of users, filtering out nulls
+                val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE).filterNotNull()
+                Timber.tag("fetchFollowers").d("Returning first batch: ${firstBatch.size} user IDs")
+                firstBatch
             } else {
                 // For subsequent pages, return the appropriate slice of already-loaded followers
                 val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
@@ -209,9 +219,12 @@ class UserViewModel @AssistedInject constructor(
                 
                 if (slice.isEmpty()) {
                     // No more followers to return
+                    Timber.tag("fetchFollowers").d("No more followers to return for page: $pageNumber")
                     emptyList()
                 } else {
-                    slice.map { it }
+                    val filteredSlice = slice.filterNotNull()
+                    Timber.tag("fetchFollowers").d("Returning slice for page $pageNumber: ${filteredSlice.size} user IDs")
+                    filteredSlice
                 }
             }
         } catch (e: Exception) {
@@ -222,20 +235,17 @@ class UserViewModel @AssistedInject constructor(
     
     /**
      * Fetch followings with pagination support
-     * Returns List<MimeiId?> including null elements from the backend
+     * Returns List<MimeiId> (null values are filtered out)
      */
-    suspend fun fetchFollowings(pageNumber: Int): List<MimeiId?> {
+    suspend fun fetchFollowings(pageNumber: Int): List<MimeiId> {
         return try {
             if (pageNumber == 0) {
                 // For page 0, refresh the entire list
                 val allFollowings = HproseInstance.getFollowings(user.value)
                 _followings.value = allFollowings
                 
-                // Fetch user data in batches from appUser's node
-                fetchUserDataInBatches(allFollowings)
-                
-                // Return the first batch of users
-                allFollowings.take(TW_CONST.USER_BATCH_SIZE).map { it }
+                // Return the first batch of users, filtering out nulls
+                allFollowings.take(TW_CONST.USER_BATCH_SIZE).filterNotNull()
             } else {
                 // For subsequent pages, return the appropriate slice of already-loaded followings
                 val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
@@ -246,7 +256,7 @@ class UserViewModel @AssistedInject constructor(
                     // No more followings to return
                     emptyList()
                 } else {
-                    slice.map { it }
+                    slice.filterNotNull()
                 }
             }
         } catch (e: Exception) {
@@ -407,8 +417,10 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun refreshUser() {
-        TweetCacheManager.removeCachedUser(userId)
-        _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        withContext(Dispatchers.IO) {
+            TweetCacheManager.removeCachedUser(userId)
+            _user.value = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+        }
     }
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {

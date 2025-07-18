@@ -40,6 +40,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
 import us.fireshare.tweet.viewmodel.UserViewModel
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,9 +91,8 @@ fun FollowingScreen(
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
             UserListView(
-                users = followingsOfProfile,
-                fetchUsers = { pageNumber ->
-                    viewModel.fetchFollowings(pageNumber)
+                fetchUserIds = { batchNumber ->
+                    viewModel.fetchFollowings(batchNumber)
                 },
                 contentPadding = PaddingValues(bottom = 60.dp),
                 userItem = { followingUserId ->
@@ -122,9 +122,16 @@ fun FollowingItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    if (user.isGuest()) {
-        // Try to reload the user data when the user is not loaded properly
-        LaunchedEffect(userId) {
+    // Proactively load user data for every user ID
+    LaunchedEffect(userId) {
+        Timber.tag("FollowingItem").d("Loading user data for userId: $userId")
+        viewModel.refreshUser()
+    }
+
+    // Retry loading if the user data failed to load (user is guest)
+    LaunchedEffect(user) {
+        if (user.isGuest()) {
+            Timber.tag("FollowingItem").d("Retrying user data load for userId: $userId (user is guest)")
             viewModel.refreshUser()
         }
     }
@@ -141,9 +148,11 @@ fun FollowingItem(
             .fillMaxWidth()
     ) {
         IconButton(onClick = {
-            navController.navigate(NavTweet.UserProfile(user.mid))
+            if (!user.isGuest()) {
+                navController.navigate(NavTweet.UserProfile(user.mid))
+            }
         }) {
-            UserAvatar(user = user, size = 40, enableLongPress = false)
+            SimpleAvatar(user = user, size = 40)
         }
         Column {
             Row(
