@@ -142,6 +142,14 @@ fun TweetListView(
             Timber.tag("TweetListView").d("Initialization completed: total tweets: ${tweets.size}, server depleted: $localServerDepleted, lastLoadedPage: $lastLoadedPage")
         }
     }
+    
+    // Initialize lastLoadedPage if it's still -1 and we have tweets
+    LaunchedEffect(tweets, lastLoadedPage) {
+        if (lastLoadedPage == -1 && tweets.isNotEmpty()) {
+            Timber.tag("TweetListView").d("Initializing lastLoadedPage from -1 to 0 since we have ${tweets.size} tweets")
+            lastLoadedPage = 0
+        }
+    }
 
     // Track scroll state and notify parent
     LaunchedEffect(listState) {
@@ -228,18 +236,41 @@ fun TweetListView(
             coroutineScope.launch {
                 try {
                     withContext(Dispatchers.IO) {
-                        val nextPage = lastLoadedPage + 1 // Load the next page after the last loaded page
-                        Timber.tag("TweetListView").d("Loading more tweets, next page: $nextPage, lastLoadedPage: $lastLoadedPage, current tweets: ${tweets.size}")
-                        val tweetsWithNulls = fetchTweets(nextPage)
+                        var currentPage = lastLoadedPage + 1 // Start with the next page after the last loaded page
+                        var foundValidTweets = false
+                        var localServerDepleted = false
                         
-                        // Only increment lastLoadedPage if we got a full page of results
-                        if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
-                            lastLoadedPage = nextPage
+                        // Keep trying pages until we find valid tweets or server is depleted
+                        while (!foundValidTweets && !localServerDepleted) {
+                            Timber.tag("TweetListView").d("Loading tweets, page: $currentPage, lastLoadedPage: $lastLoadedPage, current tweets: ${tweets.size}")
+                            val tweetsWithNulls = fetchTweets(currentPage)
+                            
+                            // Count valid (non-null) tweets
+                            val validTweetsCount = tweetsWithNulls.count { it != null }
+                            Timber.tag("TweetListView").d("Page $currentPage: returned ${tweetsWithNulls.size} tweets, valid tweets: $validTweetsCount")
+                            
+                            if (validTweetsCount > 0) {
+                                // Found valid tweets, stop searching
+                                foundValidTweets = true
+                                lastLoadedPage = currentPage
+                                Timber.tag("TweetListView").d("Found valid tweets on page $currentPage, stopping search")
+                            } else if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE) {
+                                // Partial page with no valid tweets - server is depleted
+                                localServerDepleted = true
+                                serverDepleted = true
+                                lastLoadedPage = currentPage
+                                Timber.tag("TweetListView").d("Server depleted at page $currentPage, returned ${tweetsWithNulls.size} tweets (all null)")
+                            } else {
+                                // Full page with all null tweets, try next page
+                                Timber.tag("TweetListView").d("Page $currentPage has all null tweets, trying next page")
+                                currentPage++
+                            }
+                        }
+                        
+                        if (localServerDepleted) {
+                            Timber.tag("TweetListView").d("Server depleted after searching through pages")
                         } else {
-                            // Server is depleted (returned fewer tweets than expected)
-                            serverDepleted = true // Auto-load: stop further auto-loads
-                            lastLoadedPage = nextPage // This is the last page we can load
-                            Timber.tag("TweetListView").d("Server depleted at page $nextPage, returned ${tweetsWithNulls.size} tweets")
+                            Timber.tag("TweetListView").d("Successfully loaded valid tweets from page $currentPage")
                         }
                     }
                 } finally {
