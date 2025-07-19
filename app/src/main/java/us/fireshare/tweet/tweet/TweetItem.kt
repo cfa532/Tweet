@@ -41,20 +41,36 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
+import timber.log.Timber
 
 @Composable
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     isFromFeed: Boolean = false, // indicates if this is from the feed context
-    onTweetUnavailable: ((String) -> Unit)? = null, // callback when tweet becomes unavailable
+    onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
 ) {
+    // Check if tweet or author is null and remove the item if so
+    LaunchedEffect(tweet, tweet.author) {
+        if (tweet.author == null) {
+            Timber.tag("TweetItem").d("Tweet ${tweet.mid} has null author, removing from list")
+            if (tweet.mid != null) onTweetUnavailable?.invoke(tweet.mid)
+        }
+    }
+    
+    // If tweet or author is null, return empty content to effectively hide this item
+    if (tweet.author == null) {
+        Box(modifier = Modifier.size(0.dp))
+        return
+    }
+    
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
     ) { factory ->

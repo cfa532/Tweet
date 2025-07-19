@@ -48,7 +48,8 @@ fun TweetItemBody(
         modifier = Modifier
             .padding(top = 8.dp)
             .clickable(onClick = {
-                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                if (tweet.authorId != null && tweet.mid != null)
+                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             })
     ) {
         Column(

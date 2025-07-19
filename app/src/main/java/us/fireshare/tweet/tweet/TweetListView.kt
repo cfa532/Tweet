@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import com.google.android.gms.common.internal.Constants
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.datamodel.Tweet
@@ -192,15 +193,30 @@ fun TweetListView(
                 try {
                     withContext(Dispatchers.IO) {
                         serverDepleted = false // User-initiated: allow loading again
+                        lastLoadedPage = -1 // Reset last loaded page for fresh start
                         Timber.tag("TweetListView").d("Pull refresh: Loading page 0, current tweets: ${tweets.size}")
                         fetchTweets(0)
                     }
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Error during pull refresh")
                 } finally {
                     isRefreshingAtTop = false
+                    Timber.tag("TweetListView").d("Pull refresh completed, isRefreshingAtTop set to false")
                 }
             }
         }
     )
+    
+    // Safety timeout to reset top loading state if it gets stuck
+    LaunchedEffect(isRefreshingAtTop) {
+        if (isRefreshingAtTop) {
+            delay(10000) // 10 second timeout
+            if (isRefreshingAtTop) {
+                Timber.tag("TweetListView").w("Top loading state stuck for 10 seconds, forcing reset")
+                isRefreshingAtTop = false
+            }
+        }
+    }
 
     val isAtBottom by remember(tweets) {
         derivedStateOf {
