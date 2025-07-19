@@ -448,11 +448,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             
                             // Update on main thread to ensure UI updates
                             withContext(Main) {
-                                _tweets.value = listOf(tweetWithAuthor) + _tweets.value
-                                Timber.tag("TweetFeedViewModel")
-                                    .d("Updated tweets count: ${_tweets.value.size}")
-                                Timber.tag("TweetFeedViewModel")
-                                    .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
+                                // Check if tweet already exists to avoid duplicates
+                                val existingTweetIds = _tweets.value.map { it.mid }.toSet()
+                                if (tweetWithAuthor.mid !in existingTweetIds) {
+                                    _tweets.value = listOf(tweetWithAuthor) + _tweets.value
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Updated tweets count: ${_tweets.value.size}")
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
+                                } else {
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Tweet already exists in feed: ${tweetWithAuthor.mid}")
+                                }
                             }
                         }
 
@@ -461,8 +468,31 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId}")
                             Timber.tag("TweetFeedViewModel").d("Current tweets count: ${_tweets.value.size}")
                             withContext(Main) {
+                                // Find the deleted tweet to check if it's a retweet
+                                val deletedTweet = _tweets.value.find { it.mid == event.tweetId }
+                                val isRetweet = deletedTweet?.originalTweetId != null
+                                val originalTweetId = deletedTweet?.originalTweetId
+                                
+                                // Remove the deleted tweet from feed
                                 _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
+                                
+                                // If it was a retweet, decrease the retweet count of the original tweet
+                                if (isRetweet && originalTweetId != null) {
+                                    _tweets.value = _tweets.value.map { tweet ->
+                                        if (tweet.mid == originalTweetId) {
+                                            val newRetweetCount = max(0, tweet.retweetCount - 1)
+                                            Timber.tag("TweetFeedViewModel").d("Decreased retweet count for original tweet ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
+                                            tweet.copy(retweetCount = newRetweetCount)
+                                        } else {
+                                            tweet
+                                        }
+                                    }
+                                }
+                                
                                 Timber.tag("TweetFeedViewModel").d("Updated tweets count: ${_tweets.value.size}")
+                                if (isRetweet) {
+                                    Timber.tag("TweetFeedViewModel").d("Retweet deleted: ${event.tweetId}, original tweet: $originalTweetId")
+                                }
                             }
                         }
 
@@ -527,7 +557,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 event.retweet.copy(author = appUser)
                             }
                             withContext(Main) {
-                                _tweets.value = listOf(retweetWithAuthor) + _tweets.value
+                                // Check if retweet already exists to avoid duplicates
+                                val existingTweetIds = _tweets.value.map { it.mid }.toSet()
+                                if (retweetWithAuthor.mid !in existingTweetIds) {
+                                    _tweets.value = listOf(retweetWithAuthor) + _tweets.value
+                                    Timber.tag("TweetFeedViewModel").d("Retweet added to feed: ${retweetWithAuthor.mid}")
+                                } else {
+                                    Timber.tag("TweetFeedViewModel").d("Retweet already exists in feed: ${retweetWithAuthor.mid}")
+                                }
                             }
                         }
 

@@ -692,10 +692,14 @@ object HproseInstance {
                     // Create a new tweet with the updated mid
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
 
-                    // Post notification for successful upload
-                    Timber.tag("HproseInstance").d("Posting TweetUploaded notification for tweet: $newTweetId")
-                    TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                    Timber.tag("HproseInstance").d("TweetUploaded notification posted successfully")
+                    // Post notification for successful upload (only for original tweets, not retweets)
+                    if (tweet.originalTweetId == null) {
+                        Timber.tag("HproseInstance").d("Posting TweetUploaded notification for original tweet: $newTweetId")
+                        TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
+                        Timber.tag("HproseInstance").d("TweetUploaded notification posted successfully")
+                    } else {
+                        Timber.tag("HproseInstance").d("Skipping TweetUploaded notification for retweet: $newTweetId (will be handled by TweetRetweeted)")
+                    }
 
                     updatedTweet
                 } else null
@@ -817,8 +821,7 @@ object HproseInstance {
      * Send a retweet request to backend and get a new tweet object back.
      * */
     suspend fun retweet(
-        tweet: Tweet,                       // original tweet to be retweeted
-        addTweetToFeed: (Tweet) -> Unit     // add retweet to user's feed
+        tweet: Tweet                       // original tweet to be retweeted
     ) {
         try {
             // upload the retweet, simply a few dozen bytes.
@@ -831,8 +834,6 @@ object HproseInstance {
                     originalAuthorId = tweet.authorId
                 )
             ) ?: return
-
-            addTweetToFeed(retweet)
 
             updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
                 updateCachedTweet(updatedTweet)

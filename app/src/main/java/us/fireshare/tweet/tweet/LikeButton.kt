@@ -31,6 +31,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import android.widget.Toast
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.UserActions
@@ -109,12 +112,23 @@ fun RetweetButton(viewModel: TweetViewModel) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
-        } else
+        } else {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                // update retweet count in this viewModel right away
-                viewModel.increaseRetweetCount()
-            } }
-    ) {
+                try {
+                    // Perform the actual retweet action
+                    // The retweet will be added to feed automatically via notification system
+                    viewModel.retweetTweet()
+                    Timber.tag("RetweetButton").d("Retweet action completed")
+                } catch (e: Exception) {
+                    Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
+                    // Show error message to user
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),

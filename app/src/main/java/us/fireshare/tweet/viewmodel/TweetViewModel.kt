@@ -335,6 +335,32 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = HproseInstance.toggleBookmark(tweetState.value)
     }
 
+    /**
+     * Perform a retweet action and update the UI immediately for better user experience.
+     * */
+    suspend fun retweetTweet() {
+        // Update retweet count and status immediately for better UX
+        val hasRetweeted = tweetState.value.favorites?.get(UserActions.RETWEET) ?: false
+        _tweetState.value.favorites?.set(UserActions.RETWEET, !hasRetweeted)
+        _tweetState.value = tweetState.value.copy(
+            retweetCount = if (hasRetweeted) max(0, tweetState.value.retweetCount - 1)
+            else tweetState.value.retweetCount + 1,
+        )
+        
+        // Perform the actual retweet operation
+        try {
+            HproseInstance.retweet(tweetState.value)
+        } catch (e: Exception) {
+            // Revert the UI changes if the retweet failed
+            _tweetState.value.favorites?.set(UserActions.RETWEET, hasRetweeted)
+            _tweetState.value = tweetState.value.copy(
+                retweetCount = if (hasRetweeted) tweetState.value.retweetCount + 1
+                else max(0, tweetState.value.retweetCount - 1),
+            )
+            throw e
+        }
+    }
+
     fun increaseRetweetCount() {
         _tweetState.value = tweetState.value.copy(retweetCount = tweetState.value.retweetCount + 1)
     }
