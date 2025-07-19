@@ -217,14 +217,15 @@ fun TweetListView(
     }
 
     // Infinite scroll
-    LaunchedEffect(isAtBottom) {
+    LaunchedEffect(isAtBottom, isRefreshingAtBottom, isLoadingMore, serverDepleted) {
         Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
         
         if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && tweets.size >= 4 && !serverDepleted) { // Only trigger if we have enough tweets and server not depleted
             Timber.tag("TweetListView").d("Triggering load more...")
             isLoadingMore = true
+            isRefreshingAtBottom = true // Set loading state immediately
+            
             coroutineScope.launch {
-                isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
                         val nextPage = lastLoadedPage + 1 // Load the next page after the last loaded page

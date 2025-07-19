@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,13 +86,15 @@ fun TweetItem(
                     val currentTweet by viewModel.tweetState.collectAsState()
                     
                     LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
-                        if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                            originalTweet = if (isFromFeed) {
-                                viewModel.loadOriginalTweetForFeed()
-                            } else {
-                                viewModel.loadOriginalTweet()
+                        withContext(IO) {
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                                originalTweet = if (isFromFeed) {
+                                    viewModel.loadOriginalTweetForFeed()
+                                } else {
+                                    viewModel.loadOriginalTweet()
+                                }
+                                isLoadingOriginal = false
                             }
-                            isLoadingOriginal = false
                         }
                     }
                     
@@ -202,13 +205,15 @@ fun TweetItem(
                         val currentTweet by viewModel.tweetState.collectAsState()
                         
                         LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
-                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                originalTweet = if (isFromFeed) {
-                                    viewModel.loadOriginalTweetForFeed()
-                                } else {
-                                    viewModel.loadOriginalTweet()
+                            withContext(IO) {
+                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                                    originalTweet = if (isFromFeed) {
+                                        viewModel.loadOriginalTweetForFeed()
+                                    } else {
+                                        viewModel.loadOriginalTweet()
+                                    }
+                                    isLoadingOriginal = false
                                 }
-                                isLoadingOriginal = false
                             }
                         }
                         

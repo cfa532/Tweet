@@ -340,24 +340,22 @@ fun downloadFile(context: Context, url: String, fileName: String) {
 
 
 /**
- * Creates an ExoPlayer instance that handles HLS videos properly with improved fallback
+ * Creates an ExoPlayer instance that handles video data blobs with HLS fallback
  * 
  * @param context Android context
- * @param url Video URL (points to directory containing HLS files)
- * @param mediaType Optional MediaType (not used in simplified approach)
+ * @param url Video URL (data blob)
+ * @param mediaType Optional MediaType (not used in this system)
  * @return Configured ExoPlayer instance
  */
 @OptIn(UnstableApi::class)
 fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
     val dataSourceFactory = DefaultDataSource.Factory(context)
     
-    // For HLS videos, the URL points to a directory containing the manifest file
-    // Try master.m3u8 first (multiple quality streams), then fall back to playlist.m3u8 (single resolution)
+    // For data blobs, try HLS first, then fallback to original URL
     val baseUrl = if (url.endsWith("/")) url else "$url/"
     val masterUrl = "${baseUrl}master.m3u8"
     val playlistUrl = "${baseUrl}playlist.m3u8"
     
-    // Log the URLs being accessed
     Timber.d("createExoPlayer - Original URL: $url")
     Timber.d("createExoPlayer - Base URL: $baseUrl")
     Timber.d("createExoPlayer - Master URL: $masterUrl")
@@ -371,16 +369,18 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
         .apply {
             // Add comprehensive listener for debugging and fallback
             addListener(object : androidx.media3.common.Player.Listener {
-                private var hasTriedFallback = false
+                private var hasTriedPlaylist = false
+                private var hasTriedOriginal = false
                 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     Timber.e("createExoPlayer - Player error: ${error.message}")
                     Timber.e("createExoPlayer - Error cause: ${error.cause}")
                     Timber.e("createExoPlayer - Error code: ${error.errorCode}")
-                    Timber.e("createExoPlayer - Has tried fallback: $hasTriedFallback")
+                    Timber.e("createExoPlayer - Has tried playlist: $hasTriedPlaylist")
+                    Timber.e("createExoPlayer - Has tried original: $hasTriedOriginal")
                     
-                    if (!hasTriedFallback) {
-                        hasTriedFallback = true
+                    if (!hasTriedPlaylist) {
+                        hasTriedPlaylist = true
                         Timber.d("createExoPlayer - Trying fallback to playlist URL: $playlistUrl")
                         
                         // If master.m3u8 fails, try playlist.m3u8
@@ -389,14 +389,19 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         )
                         setMediaSource(fallbackMediaSource)
                         prepare()
-                    } else {
-                        Timber.e("createExoPlayer - Both master.m3u8 and playlist.m3u8 failed")
-                        // Try the original URL as a last resort
+                    } else if (!hasTriedOriginal) {
+                        hasTriedOriginal = true
+                        Timber.d("createExoPlayer - Trying original URL as last resort: $url")
+                        
+                        // If both HLS attempts fail, try the original URL (progressive video)
                         val originalMediaSource = mediaSourceFactory.createMediaSource(
                             androidx.media3.common.MediaItem.fromUri(url)
                         )
                         setMediaSource(originalMediaSource)
                         prepare()
+                    } else {
+                        Timber.e("createExoPlayer - All fallback attempts failed for URL: $url")
+                        Timber.e("createExoPlayer - Video playback failed after trying HLS and original URL")
                     }
                 }
                 
@@ -421,7 +426,7 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
             })
         }
     
-    // Start with master.m3u8 (multiple quality streams)
+    // Start with master.m3u8 (try HLS first)
     val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
     player.setMediaSource(mediaSource)
     

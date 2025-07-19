@@ -434,7 +434,7 @@ object HproseInstance {
      * Keep null elements in the response list and preserves their positions.
      * */
     suspend fun getTweetFeed(
-        user: User,
+        user: User = appUser,
         pageNumber: Int = 0,
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
@@ -578,7 +578,7 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("getTweet").e("$tweetId $authorId $e")
+            Timber.tag("fetchTweet").e("$tweetId $authorId $e")
             null
         }
     }
@@ -1118,9 +1118,7 @@ object HproseInstance {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
-            Timber.tag("getUser").d("User $userId found in cache (not expired)")
             return cachedUser
-
         }
 
         // Step 2: Create user instance, which was either expired or not found in cache.

@@ -52,8 +52,6 @@ object TweetCacheManager {
 
                 // Update database cache
                 HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
-
-                Timber.d("Tweet cached: ${tweet.mid}")
             }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")
@@ -176,8 +174,6 @@ object TweetCacheManager {
 
                 // Update database cache
                 HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user))
-
-                Timber.d("User cached: ${user.mid}")
             }
         } catch (e: Exception) {
             Timber.e("Error saving user to cache: $e")

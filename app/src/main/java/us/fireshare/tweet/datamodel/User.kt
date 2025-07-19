@@ -254,19 +254,6 @@ data class User(
     }
 
     /**
-     * Get avatar URL
-     */
-    fun getAvatarUrl(): String? {
-        return if (avatar != null && baseUrl != null) {
-            if (avatar!!.length > 27) {
-                "$baseUrl/ipfs/$avatar"
-            } else {
-                "$baseUrl/mm/$avatar"
-            }
-        } else null
-    }
-
-    /**
      * Resolve writable URL from hostIds
      */
     suspend fun resolveWritableUrl(): String? {

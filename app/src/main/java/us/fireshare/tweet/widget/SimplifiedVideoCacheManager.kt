@@ -56,7 +56,7 @@ object SimplifiedVideoCacheManager {
     }
 
     /**
-     * Creates an ExoPlayer that automatically handles both progressive and HLS videos
+     * Creates an ExoPlayer that handles video data blobs with HLS fallback
      * Uses ExoPlayer's built-in caching with improved fallback mechanism
      */
     fun createExoPlayer(context: Context, url: String): ExoPlayer {
@@ -70,7 +70,7 @@ object SimplifiedVideoCacheManager {
         // Use IPFS ID as cache key for all video types
         val ipfsId = url.getMimeiKeyFromUrl()
         
-        // For HLS videos, try different manifest files
+        // For data blobs, try HLS first, then fallback to original URL
         val baseUrl = if (url.endsWith("/")) url else "$url/"
         val masterUrl = "${baseUrl}master.m3u8"
         val playlistUrl = "${baseUrl}playlist.m3u8"
@@ -85,7 +85,7 @@ object SimplifiedVideoCacheManager {
 
         // Add listener for video events with fallback mechanism
         exoPlayer.addListener(object : Player.Listener {
-            private var hasTriedFallback = false
+            private var hasTriedPlaylist = false
             private var hasTriedOriginal = false
             
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -109,14 +109,14 @@ object SimplifiedVideoCacheManager {
                 Timber.e("Video player error for URL: $url", error)
                 Timber.e("SimplifiedVideoCacheManager - Error cause: ${error.cause}")
                 Timber.e("SimplifiedVideoCacheManager - Error code: ${error.errorCode}")
-                Timber.e("SimplifiedVideoCacheManager - Has tried fallback: $hasTriedFallback")
+                Timber.e("SimplifiedVideoCacheManager - Has tried playlist: $hasTriedPlaylist")
                 Timber.e("SimplifiedVideoCacheManager - Has tried original: $hasTriedOriginal")
                 
-                if (!hasTriedFallback) {
-                    hasTriedFallback = true
+                if (!hasTriedPlaylist) {
+                    hasTriedPlaylist = true
                     Timber.d("SimplifiedVideoCacheManager - Trying fallback to playlist URL: $playlistUrl")
                     
-                    // Try playlist.m3u8 as fallback
+                    // If master.m3u8 fails, try playlist.m3u8
                     val fallbackMediaItem = MediaItem.Builder()
                         .setUri(playlistUrl)
                         .setCustomCacheKey(ipfsId)
@@ -131,7 +131,7 @@ object SimplifiedVideoCacheManager {
                     hasTriedOriginal = true
                     Timber.d("SimplifiedVideoCacheManager - Trying original URL as last resort: $url")
                     
-                    // Try the original URL as last resort
+                    // If both HLS attempts fail, try the original URL (progressive video)
                     val originalMediaItem = MediaItem.Builder()
                         .setUri(url)
                         .setCustomCacheKey(ipfsId)
@@ -144,11 +144,12 @@ object SimplifiedVideoCacheManager {
                     exoPlayer.prepare()
                 } else {
                     Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
+                    Timber.e("SimplifiedVideoCacheManager - Video playback failed after trying HLS and original URL")
                 }
             }
         })
 
-        // Start with master.m3u8 (multiple quality streams)
+        // Start with master.m3u8 (try HLS first)
         val initialMediaItem = MediaItem.Builder()
             .setUri(masterUrl)
             .setCustomCacheKey(ipfsId)
