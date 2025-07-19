@@ -87,7 +87,6 @@ fun TweetListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
-    var isLoadingMore by remember { mutableStateOf(false) }
     var lastUserId by remember { mutableStateOf(currentUserId) }
     var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
     
@@ -225,12 +224,11 @@ fun TweetListView(
     }
 
     // Infinite scroll
-    LaunchedEffect(isAtBottom, isRefreshingAtBottom, isLoadingMore, serverDepleted) {
-        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, isLoadingMore: $isLoadingMore, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
+    LaunchedEffect(isAtBottom, isRefreshingAtBottom, serverDepleted) {
+        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
         
-        if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && tweets.size >= 4 && !serverDepleted) { // Only trigger if we have enough tweets and server not depleted
+        if (isAtBottom && !isRefreshingAtBottom && tweets.size >= 4 && !serverDepleted) { // Only trigger if we have enough tweets and server not depleted
             Timber.tag("TweetListView").d("Triggering load more...")
-            isLoadingMore = true
             isRefreshingAtBottom = true // Set loading state immediately
             
             coroutineScope.launch {
@@ -275,8 +273,7 @@ fun TweetListView(
                     }
                 } finally {
                     isRefreshingAtBottom = false // Ensure state is reset
-                    isLoadingMore = false
-                    Timber.tag("TweetListView").d("Load more completed, isRefreshingAtBottom set to false, isLoadingMore set to false")
+                    Timber.tag("TweetListView").d("Load more completed, isRefreshingAtBottom set to false")
                 }
             }
         }
