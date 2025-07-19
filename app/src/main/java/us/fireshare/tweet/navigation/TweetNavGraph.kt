@@ -70,7 +70,8 @@ fun TweetNavGraph(
         ){ factory ->
             factory.create(appUser.mid)
     }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    // Use the singleton TweetFeedViewModel from AppModule
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {

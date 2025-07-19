@@ -121,10 +121,7 @@ fun TweetFeedScreen(
         selectedTabIndex = pagerState.currentPage
     }
     
-    // Start listening to tweet and comment notifications
-    LaunchedEffect(Unit) {
-        viewModel.startListeningToNotifications()
-    }
+    // Notification listening is now handled in ViewModel's init block
 
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(

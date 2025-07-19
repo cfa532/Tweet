@@ -59,6 +59,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             refresh(0)
             initState.value = false
         }
+        
+        // Start listening to notifications immediately when ViewModel is created
+        startListeningToNotifications()
     }
 
     /**
@@ -427,7 +430,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      */
     fun startListeningToNotifications() {
         Timber.tag("TweetFeedViewModel").d("Starting to listen to notifications")
-        viewModelScope.launch {
+        applicationScope.launch {
             try {
                 Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
                 Timber.tag("TweetFeedViewModel")

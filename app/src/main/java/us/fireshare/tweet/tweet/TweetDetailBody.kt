@@ -345,7 +345,8 @@ fun TweetDropdownMenuItems(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
     val navController = LocalNavController.current
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    // Use the singleton TweetFeedViewModel from AppModule
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
             parentEntry, key = tweet.originalTweetId
