@@ -618,7 +618,9 @@ object HproseInstance {
                 "hostid" to (author.hostIds?.first() ?: "")
             )
             author.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
-                Tweet.from(tweetData)
+                val tweet = Tweet.from(tweetData)
+                tweet.author = author
+                tweet
             }
         } catch (e: Exception) {
             Timber.tag("refreshTweet").e("$tweetId $authorId $e")

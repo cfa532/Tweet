@@ -440,65 +440,85 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
                             // Add new tweet to the beginning of the feed
-                            // Ensure the author is set correctly
-                            val tweetWithAuthor = event.tweet.copy(author = appUser)
+                            // The notification already contains the author, but ensure it's set correctly
+                            val tweetWithAuthor = if (event.tweet.author != null) {
+                                event.tweet
+                            } else {
+                                event.tweet.copy(author = appUser)
+                            }
                             Timber.tag("TweetFeedViewModel")
                                 .d("Received TweetUploaded notification for tweet: ${event.tweet.mid}")
                             Timber.tag("TweetFeedViewModel")
                                 .d("Current tweets count: ${_tweets.value.size}")
-                            _tweets.value = listOf(tweetWithAuthor) + _tweets.value
-                            Timber.tag("TweetFeedViewModel")
-                                .d("Updated tweets count: ${_tweets.value.size}")
+                            
+                            // Update on main thread to ensure UI updates
+                            withContext(Main) {
+                                _tweets.value = listOf(tweetWithAuthor) + _tweets.value
+                                Timber.tag("TweetFeedViewModel")
+                                    .d("Updated tweets count: ${_tweets.value.size}")
+                                Timber.tag("TweetFeedViewModel")
+                                    .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
+                            }
                         }
 
                         is TweetEvent.TweetDeleted -> {
                             // Remove tweet from feed
                             Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId}")
                             Timber.tag("TweetFeedViewModel").d("Current tweets count: ${_tweets.value.size}")
-                            _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
-                            Timber.tag("TweetFeedViewModel").d("Updated tweets count: ${_tweets.value.size}")
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
+                                Timber.tag("TweetFeedViewModel").d("Updated tweets count: ${_tweets.value.size}")
+                            }
                         }
 
                         is TweetEvent.CommentUploaded -> {
                             // Update comment count for parent tweet
-                            _tweets.value = _tweets.value.map { tweet ->
-                                if (tweet.mid == event.parentTweet.mid) {
-                                    tweet.copy(commentCount = event.parentTweet.commentCount)
-                                } else {
-                                    tweet
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.map { tweet ->
+                                    if (tweet.mid == event.parentTweet.mid) {
+                                        tweet.copy(commentCount = event.parentTweet.commentCount)
+                                    } else {
+                                        tweet
+                                    }
                                 }
                             }
                         }
 
                         is TweetEvent.CommentDeleted -> {
                             // Decrease comment count for parent tweet
-                            _tweets.value = _tweets.value.map { tweet ->
-                                if (tweet.mid == event.parentTweetId) {
-                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                                } else {
-                                    tweet
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.map { tweet ->
+                                    if (tweet.mid == event.parentTweetId) {
+                                        tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                    } else {
+                                        tweet
+                                    }
                                 }
                             }
                         }
 
                         is TweetEvent.TweetLiked -> {
                             // Update like status and count
-                            _tweets.value = _tweets.value.map { tweet ->
-                                if (tweet.mid == event.tweet.mid) {
-                                    event.tweet
-                                } else {
-                                    tweet
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.map { tweet ->
+                                    if (tweet.mid == event.tweet.mid) {
+                                        event.tweet
+                                    } else {
+                                        tweet
+                                    }
                                 }
                             }
                         }
 
                         is TweetEvent.TweetBookmarked -> {
                             // Update bookmark status and count
-                            _tweets.value = _tweets.value.map { tweet ->
-                                if (tweet.mid == event.tweet.mid) {
-                                    event.tweet
-                                } else {
-                                    tweet
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.map { tweet ->
+                                    if (tweet.mid == event.tweet.mid) {
+                                        event.tweet
+                                    } else {
+                                        tweet
+                                    }
                                 }
                             }
                         }
@@ -506,17 +526,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         is TweetEvent.TweetRetweeted -> {
                             // Add retweet to feed
                             // Ensure the author is set correctly
-                            val retweetWithAuthor = event.retweet.copy(author = appUser)
-                            _tweets.value = listOf(retweetWithAuthor) + _tweets.value
+                            val retweetWithAuthor = if (event.retweet.author != null) {
+                                event.retweet
+                            } else {
+                                event.retweet.copy(author = appUser)
+                            }
+                            withContext(Main) {
+                                _tweets.value = listOf(retweetWithAuthor) + _tweets.value
+                            }
                         }
 
                         is TweetEvent.TweetUpdated -> {
                             // Update existing tweet
-                            _tweets.value = _tweets.value.map { tweet ->
-                                if (tweet.mid == event.tweet.mid) {
-                                    event.tweet
-                                } else {
-                                    tweet
+                            withContext(Main) {
+                                _tweets.value = _tweets.value.map { tweet ->
+                                    if (tweet.mid == event.tweet.mid) {
+                                        event.tweet
+                                    } else {
+                                        tweet
+                                    }
                                 }
                             }
                         }

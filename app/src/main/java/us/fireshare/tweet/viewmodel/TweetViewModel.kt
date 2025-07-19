@@ -88,7 +88,7 @@ class TweetViewModel @AssistedInject constructor(
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
-        if (tweetState.value.author == null && tweetState.value.authorId != null) {
+        if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
                 HproseInstance.fetchTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
                     _tweetState.value = tweet
@@ -101,7 +101,7 @@ class TweetViewModel @AssistedInject constructor(
      * */
     suspend fun refreshTweet() {
         HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
-            _tweetState.value = refreshedTweet
+            refreshedTweet
         }
     }
 
@@ -138,7 +138,15 @@ class TweetViewModel @AssistedInject constructor(
             // For quoted tweets, use fetchTweet since we're just displaying the original as a quote
             if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
                 // Pure retweet - get fresh data
-                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)
+                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)?.let { refreshedTweet ->
+                    // Preserve author information
+                    if (refreshedTweet.author != null) {
+                        refreshedTweet
+                    } else {
+                        val author = HproseInstance.getUser(currentTweet.originalAuthorId!!)
+                        refreshedTweet.copy(author = author)
+                    }
+                }
             } else {
                 // Quoted tweet - use fetchTweet without caching (for non-feed contexts)
                 HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = false)
@@ -158,7 +166,15 @@ class TweetViewModel @AssistedInject constructor(
             // For quoted tweets, use fetchTweet with caching for feed context
             if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
                 // Pure retweet - get fresh data
-                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)
+                HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)?.let { refreshedTweet ->
+                    // Preserve author information
+                    if (refreshedTweet.author != null) {
+                        refreshedTweet
+                    } else {
+                        val author = HproseInstance.getUser(currentTweet.originalAuthorId!!)
+                        refreshedTweet.copy(author = author)
+                    }
+                }
             } else {
                 // Quoted tweet - use fetchTweet with caching for feed context
                 HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = true)
