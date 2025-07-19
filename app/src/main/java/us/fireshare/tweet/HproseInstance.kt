@@ -935,32 +935,47 @@ object HproseInstance {
 
     /**
      * Load favorite tweets, bookmarks or comments of an user.
+     * Handles null elements in the response list and preserves their positions.
      * */
-    fun getUserTweetsByType(
+    suspend fun getUserTweetsByType(
         user: User,
-        type: UserContentType
-    ): List<Tweet>? {
-        val typeString = when (type) {
-            UserContentType.FAVORITES -> "favorite_list" // Or whatever your backend expects
-            UserContentType.BOOKMARKS -> "bookmark_list"
-            UserContentType.COMMENTS -> "comment_list"
-        }
+        type: UserContentType,
+        pageNumber: Int = 0,
+        pageSize: Int = TW_CONST.PAGE_SIZE
+    ): List<Tweet?> {
         val entry = "get_user_meta"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "entry" to entry,
             "userid" to user.mid,
-            "type" to typeString,
+            "type" to type.value,
+            "pn" to pageNumber,
+            "ps" to pageSize,
             "appuserid" to appUser.mid
         )
         return try {
-            user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)?.map { tweetData ->
-                Tweet.from(tweetData)
-            }
+            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            
+            response?.map { tweetJson ->
+                // If the element is null, keep it as null
+                if (tweetJson == null) {
+                    null
+                } else {
+                    // Try to decode the tweet
+                    try {
+                        val tweet = Tweet.from(tweetJson)
+                        tweet.author = getUser(tweet.authorId)
+                        tweet
+                    } catch (e: Exception) {
+                        Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")
+                        null
+                    }
+                }
+            } ?: emptyList()
         } catch (e: Exception) {
             Timber.tag("getUserTweetsByType").e(e)
-            null
+            emptyList()
         }
     }
 

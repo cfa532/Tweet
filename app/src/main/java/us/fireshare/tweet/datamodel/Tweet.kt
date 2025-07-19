@@ -392,10 +392,12 @@ object UserActions {
     const val BOOKMARK = 1
     const val RETWEET = 2
 }
-enum class UserContentType {
-    FAVORITES,
-    BOOKMARKS,
-    COMMENTS
+enum class UserContentType(val value: String) {
+    FAVORITES("favorite_list"),
+    BOOKMARKS("bookmark_list"),
+    COMMENTS("comment_list"),
+    FOLLOWER("get_followers_sorted"),      // follower list of an user
+    FOLLOWING("get_followings_sorted")    // following list
 }
 
 /**

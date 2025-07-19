@@ -349,11 +349,28 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get bookmarks of the user
      * */
-    suspend fun getBookmarks(start: Int) {
-        getUserTweetsByType(user.value, UserContentType.BOOKMARKS)?.let {
-            _bookmarks.value = it.map { tweet ->
-                tweet.author = getUser(tweet.authorId)
-                tweet
+    suspend fun getBookmarks(pageNumber: Int) {
+        val tweetsWithNulls = getUserTweetsByType(user.value, UserContentType.BOOKMARKS, pageNumber, TW_CONST.PAGE_SIZE)
+        
+        // Filter out null elements and get valid tweets
+        val validTweets = tweetsWithNulls.filterNotNull()
+        
+        Timber.tag("getBookmarks")
+            .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
+        
+        if (pageNumber == 0) {
+            // For refresh (page 0), replace the list
+            _bookmarks.value = validTweets
+        } else {
+            // For load more (page > 0), append to the list
+            _bookmarks.update { currentBookmarks ->
+                val newTweetsMap = validTweets.associateBy { it.mid }
+                val updatedBookmarks = currentBookmarks.map { bookmark ->
+                    newTweetsMap[bookmark.mid] ?: bookmark
+                }
+                (updatedBookmarks + validTweets)
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
             }
         }
     }
@@ -377,11 +394,28 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Get favorite Tweets of the user.
      * */
-    suspend fun getFavorites(start: Int) {
-        getUserTweetsByType(user.value, UserContentType.FAVORITES)?.let {
-            _favorites.value = it.map { tweet ->
-                tweet.author = getUser(tweet.authorId)
-                tweet
+    suspend fun getFavorites(pageNumber: Int) {
+        val tweetsWithNulls = getUserTweetsByType(user.value, UserContentType.FAVORITES, pageNumber, TW_CONST.PAGE_SIZE)
+        
+        // Filter out null elements and get valid tweets
+        val validTweets = tweetsWithNulls.filterNotNull()
+        
+        Timber.tag("getFavorites")
+            .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
+        
+        if (pageNumber == 0) {
+            // For refresh (page 0), replace the list
+            _favorites.value = validTweets
+        } else {
+            // For load more (page > 0), append to the list
+            _favorites.update { currentFavorites ->
+                val newTweetsMap = validTweets.associateBy { it.mid }
+                val updatedFavorites = currentFavorites.map { favorite ->
+                    newTweetsMap[favorite.mid] ?: favorite
+                }
+                (updatedFavorites + validTweets)
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.timestamp }
             }
         }
     }

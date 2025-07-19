@@ -5,11 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,17 +20,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
@@ -48,10 +42,8 @@ fun UserFavorites(
     parentEntry: NavBackStackEntry
 ) {
     val navController = LocalNavController.current
-    val start = remember { mutableIntStateOf(0) }
     val favorites by viewModel.favorites.collectAsState()
     val user = appUser
-    val isLoading by viewModel.isLoading.collectAsState()
     
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
@@ -59,11 +51,9 @@ fun UserFavorites(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.isLoading.value = true
         withContext(Dispatchers.IO) {
-            viewModel.getFavorites(start.intValue)
+            viewModel.getFavorites(0) // Load first page
         }
-        viewModel.isLoading.value = false
     }
 
     Scaffold(
@@ -102,31 +92,15 @@ fun UserFavorites(
                 .background(color = Color.LightGray)
                 .padding(innerPadding),
         ) {
-            if (isLoading) {
-                // Show a large loading indicator when data is being loaded
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .wrapContentSize(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 8.dp
-                )
-            } else {
-                TweetListView(
-                    tweets = favorites,
-                    fetchTweets = { pageNumber ->
-                        if (pageNumber == 0) {
-                            start.intValue = 0
-                        } else {
-                            start.intValue += 10
-                        }
-                        viewModel.getFavorites(start.intValue)
-                        emptyList<Tweet?>() // Return empty list since getFavorites updates the state
-                    },
-                    showPrivateTweets = false,
-                    parentEntry = parentEntry
-                )
-            }
+            TweetListView(
+                tweets = favorites,
+                fetchTweets = { pageNumber ->
+                    viewModel.getFavorites(pageNumber)
+                    emptyList<Tweet?>() // Return empty list since getFavorites updates the state
+                },
+                showPrivateTweets = false,
+                parentEntry = parentEntry
+            )
         }
     }
 }
