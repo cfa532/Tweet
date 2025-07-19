@@ -317,6 +317,9 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
+            // Start listening to notifications for this TweetViewModel
+            viewModel.startListeningToNotifications()
+            
             // Launch a coroutine to handle the refresh after the delay
             scope.launch(Dispatchers.IO) {
                 delay(refreshIntervalMillis)

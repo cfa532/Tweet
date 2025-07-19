@@ -917,6 +917,8 @@ class UserViewModel @AssistedInject constructor(
         Timber.tag("UserViewModel").d("Updated user tweet count to: ${tweets.value.size}")
     }
 
+
+
     fun someFunctionThatCallsSaveUser() {
         viewModelScope.launch(Dispatchers.IO) {
             TweetCacheManager.saveUser(appUser)

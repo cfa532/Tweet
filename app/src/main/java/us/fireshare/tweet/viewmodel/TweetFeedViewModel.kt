@@ -301,9 +301,37 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         callback: () -> Unit,
         userViewModel: us.fireshare.tweet.viewmodel.UserViewModel? = null
     ) {
-        // OPTIMISTIC UPDATE: Remove from UI and cache immediately for instant feedback
+        // Check if this is a retweet and get original tweet info
+        val tweetToDelete = _tweets.value.find { it.mid == tweetId }
+        val isRetweet = tweetToDelete?.originalTweetId != null
+        val originalTweetId = tweetToDelete?.originalTweetId
+        
         Timber.tag("TweetFeedViewModel").d("Optimistic deletion: Removing tweet $tweetId from UI immediately")
+        
+        // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
+        
+        // Optimistically decrease retweet count if this is a retweet
+        if (isRetweet && originalTweetId != null) {
+            _tweets.value = _tweets.value.map { tweet ->
+                if (tweet.mid == originalTweetId) {
+                    val newRetweetCount = max(0, tweet.retweetCount - 1)
+                    Timber.tag("TweetFeedViewModel").d("Optimistically decreased retweet count for ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
+                    tweet.copy(retweetCount = newRetweetCount)
+                } else {
+                    tweet
+                }
+            }
+            
+            // Post TweetUpdated notification to update individual TweetViewModel instances
+            val updatedOriginalTweet = _tweets.value.find { it.mid == originalTweetId }
+            if (updatedOriginalTweet != null) {
+                applicationScope.launch {
+                    TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
+                    Timber.tag("TweetFeedViewModel").d("Posted TweetUpdated notification for optimistically updated original tweet ${originalTweetId}")
+                }
+            }
+        }
         
         // Also remove from UserViewModel lists if provided (for profile screen)
         userViewModel?.removeTweetFromAllLists(tweetId)
@@ -331,11 +359,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     callback()
                 }
             } catch (e: Exception) {
-                // If backend deletion fails, we could potentially restore the tweet
-                // For now, just log the error since the user already sees it as deleted
+                // If backend deletion fails, just log the error
                 Timber.tag("TweetFeedViewModel").e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
                 
-                // Still call callback to complete the UI flow
+                // Call callback on main thread
                 withContext(Main) {
                     callback()
                 }
@@ -464,36 +491,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.TweetDeleted -> {
-                            // Remove tweet from feed
-                            Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId}")
-                            Timber.tag("TweetFeedViewModel").d("Current tweets count: ${_tweets.value.size}")
-                            withContext(Main) {
-                                // Find the deleted tweet to check if it's a retweet
-                                val deletedTweet = _tweets.value.find { it.mid == event.tweetId }
-                                val isRetweet = deletedTweet?.originalTweetId != null
-                                val originalTweetId = deletedTweet?.originalTweetId
-                                
-                                // Remove the deleted tweet from feed
-                                _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
-                                
-                                // If it was a retweet, decrease the retweet count of the original tweet
-                                if (isRetweet && originalTweetId != null) {
-                                    _tweets.value = _tweets.value.map { tweet ->
-                                        if (tweet.mid == originalTweetId) {
-                                            val newRetweetCount = max(0, tweet.retweetCount - 1)
-                                            Timber.tag("TweetFeedViewModel").d("Decreased retweet count for original tweet ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
-                                            tweet.copy(retweetCount = newRetweetCount)
-                                        } else {
-                                            tweet
-                                        }
-                                    }
-                                }
-                                
-                                Timber.tag("TweetFeedViewModel").d("Updated tweets count: ${_tweets.value.size}")
-                                if (isRetweet) {
-                                    Timber.tag("TweetFeedViewModel").d("Retweet deleted: ${event.tweetId}, original tweet: $originalTweetId")
-                                }
-                            }
+                            // Tweet is already removed optimistically, just log
+                            Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
                         }
 
                         is TweetEvent.CommentUploaded -> {
