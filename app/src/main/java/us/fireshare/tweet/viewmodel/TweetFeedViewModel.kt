@@ -375,7 +375,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 val outputData = workInfo.outputData
                                 val json = outputData.getString("tweet")
                                 // Handle the success and update UI
-                                val gson = com.google.gson.Gson().newBuilder()
+                                val gson = Gson().newBuilder()
                                     .excludeFieldsWithoutExposeAnnotation()
                                     .create()
                                 val tweet = json?.let { gson.fromJson(it, Tweet::class.java) }
@@ -440,12 +440,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
                             // Add new tweet to the beginning of the feed
-                            // The notification already contains the author, but ensure it's set correctly
-                            val tweetWithAuthor = if (event.tweet.author != null) {
-                                event.tweet
-                            } else {
-                                event.tweet.copy(author = appUser)
-                            }
+                            val tweetWithAuthor = event.tweet
                             Timber.tag("TweetFeedViewModel")
                                 .d("Received TweetUploaded notification for tweet: ${event.tweet.mid}")
                             Timber.tag("TweetFeedViewModel")
