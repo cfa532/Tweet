@@ -16,6 +16,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -56,7 +57,7 @@ object SimplifiedVideoCacheManager {
 
     /**
      * Creates an ExoPlayer that automatically handles both progressive and HLS videos
-     * Uses ExoPlayer's built-in caching - no custom implementation needed
+     * Uses ExoPlayer's built-in caching with improved fallback mechanism
      */
     fun createExoPlayer(context: Context, url: String): ExoPlayer {
         val cache = getCache(context)
@@ -68,22 +69,25 @@ object SimplifiedVideoCacheManager {
 
         // Use IPFS ID as cache key for all video types
         val ipfsId = url.getMimeiKeyFromUrl()
-        val mediaItem = MediaItem.Builder()
-            .setUri(url)
-            .setCustomCacheKey(ipfsId)
-            .build()
-
-        // Let ExoPlayer automatically detect and handle the video format
-        // It will automatically use HlsMediaSource for HLS and ProgressiveMediaSource for others
-        val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-            .createMediaSource(mediaItem)
-            .also { Timber.d("Created Progressive MediaSource for URL: $url") }
+        
+        // For HLS videos, try different manifest files
+        val baseUrl = if (url.endsWith("/")) url else "$url/"
+        val masterUrl = "${baseUrl}master.m3u8"
+        val playlistUrl = "${baseUrl}playlist.m3u8"
+        
+        Timber.d("SimplifiedVideoCacheManager - Original URL: $url")
+        Timber.d("SimplifiedVideoCacheManager - Base URL: $baseUrl")
+        Timber.d("SimplifiedVideoCacheManager - Master URL: $masterUrl")
+        Timber.d("SimplifiedVideoCacheManager - Playlist URL: $playlistUrl")
 
         val exoPlayer = ExoPlayer.Builder(context)
             .build()
 
-        // Add listener for video events
+        // Add listener for video events with fallback mechanism
         exoPlayer.addListener(object : Player.Listener {
+            private var hasTriedFallback = false
+            private var hasTriedOriginal = false
+            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_READY -> {
@@ -103,11 +107,59 @@ object SimplifiedVideoCacheManager {
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 Timber.e("Video player error for URL: $url", error)
+                Timber.e("SimplifiedVideoCacheManager - Error cause: ${error.cause}")
+                Timber.e("SimplifiedVideoCacheManager - Error code: ${error.errorCode}")
+                Timber.e("SimplifiedVideoCacheManager - Has tried fallback: $hasTriedFallback")
+                Timber.e("SimplifiedVideoCacheManager - Has tried original: $hasTriedOriginal")
+                
+                if (!hasTriedFallback) {
+                    hasTriedFallback = true
+                    Timber.d("SimplifiedVideoCacheManager - Trying fallback to playlist URL: $playlistUrl")
+                    
+                    // Try playlist.m3u8 as fallback
+                    val fallbackMediaItem = MediaItem.Builder()
+                        .setUri(playlistUrl)
+                        .setCustomCacheKey(ipfsId)
+                        .build()
+                    
+                    val fallbackMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
+                        .createMediaSource(fallbackMediaItem)
+                    
+                    exoPlayer.setMediaSource(fallbackMediaSource)
+                    exoPlayer.prepare()
+                } else if (!hasTriedOriginal) {
+                    hasTriedOriginal = true
+                    Timber.d("SimplifiedVideoCacheManager - Trying original URL as last resort: $url")
+                    
+                    // Try the original URL as last resort
+                    val originalMediaItem = MediaItem.Builder()
+                        .setUri(url)
+                        .setCustomCacheKey(ipfsId)
+                        .build()
+                    
+                    val originalMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
+                        .createMediaSource(originalMediaItem)
+                    
+                    exoPlayer.setMediaSource(originalMediaSource)
+                    exoPlayer.prepare()
+                } else {
+                    Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
+                }
             }
         })
 
+        // Start with master.m3u8 (multiple quality streams)
+        val initialMediaItem = MediaItem.Builder()
+            .setUri(masterUrl)
+            .setCustomCacheKey(ipfsId)
+            .build()
+        
+        val initialMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
+            .createMediaSource(initialMediaItem)
+            .also { Timber.d("Created MediaSource for URL: $masterUrl") }
+
         return exoPlayer.apply {
-            setMediaSource(mediaSource)
+            setMediaSource(initialMediaSource)
             prepare()
         }
     }

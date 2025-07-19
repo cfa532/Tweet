@@ -32,12 +32,69 @@ object VideoManager {
         Timber.d("VideoManager - getVideoPlayer called for videoMid: $videoMid, videoUrl: $videoUrl")
         Timber.d("VideoManager - Existing players: ${videoPlayers.keys}")
         
+        val isReusing = videoPlayers.containsKey(videoMid)
+        
         return videoPlayers.getOrPut(videoMid) {
             Timber.d("VideoManager - Creating new ExoPlayer for video: $videoMid")
             Timber.d("VideoManager - Video URL for new player: $videoUrl")
             val player = createExoPlayer(context, videoUrl, MediaType.Video)
             Timber.d("VideoManager - New player created successfully: ${player != null}")
             player
+        }.also { player ->
+            // Reset player state when reusing an existing player
+            if (isReusing) {
+                Timber.d("VideoManager - Resetting reused player for video: $videoMid")
+                resetPlayerState(player)
+            }
+        }
+    }
+    
+    /**
+     * Reset player state to ensure proper playback when reused
+     * @param player ExoPlayer instance to reset
+     */
+    private fun resetPlayerState(player: ExoPlayer) {
+        try {
+            Timber.d("VideoManager - Resetting player state. Current state: ${getPlayerStateName(player.playbackState)}")
+            
+            // Stop playback and reset to beginning
+            player.stop()
+            player.seekTo(0)
+            player.playWhenReady = false
+            
+            // Clear any error state
+            if (player.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                Timber.d("VideoManager - Player was in IDLE state, preparing again")
+                player.prepare()
+            }
+            
+            Timber.d("VideoManager - Player state reset successfully. New state: ${getPlayerStateName(player.playbackState)}")
+        } catch (e: Exception) {
+            Timber.e("VideoManager - Error resetting player state: $e")
+        }
+    }
+    
+    /**
+     * Get human-readable player state name
+     */
+    private fun getPlayerStateName(state: Int): String {
+        return when (state) {
+            androidx.media3.common.Player.STATE_IDLE -> "IDLE"
+            androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
+            androidx.media3.common.Player.STATE_READY -> "READY"
+            androidx.media3.common.Player.STATE_ENDED -> "ENDED"
+            else -> "UNKNOWN"
+        }
+    }
+    
+    /**
+     * Force reset a specific video player (for debugging/testing)
+     * @param videoMid Video's unique identifier
+     */
+    fun forceResetVideo(videoMid: MimeiId) {
+        videoPlayers[videoMid]?.let { player ->
+            Timber.d("VideoManager - Force resetting video: $videoMid")
+            resetPlayerState(player)
         }
     }
     

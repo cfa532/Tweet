@@ -340,7 +340,7 @@ fun downloadFile(context: Context, url: String, fileName: String) {
 
 
 /**
- * Creates an ExoPlayer instance that handles HLS videos properly
+ * Creates an ExoPlayer instance that handles HLS videos properly with improved fallback
  * 
  * @param context Android context
  * @param url Video URL (points to directory containing HLS files)
@@ -366,26 +366,38 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
     
-    // Start with master.m3u8 (multiple quality streams)
-    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
-    
     val player = ExoPlayer.Builder(context)
         .build()
         .apply {
-            setMediaSource(mediaSource)
-            
-            // Add comprehensive listener for debugging
+            // Add comprehensive listener for debugging and fallback
             addListener(object : androidx.media3.common.Player.Listener {
+                private var hasTriedFallback = false
+                
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.e("createExoPlayer - Player error: ${error.message}, trying playlist URL: $playlistUrl")
+                    Timber.e("createExoPlayer - Player error: ${error.message}")
                     Timber.e("createExoPlayer - Error cause: ${error.cause}")
                     Timber.e("createExoPlayer - Error code: ${error.errorCode}")
-                    // If master.m3u8 fails, try playlist.m3u8
-                    val fallbackMediaSource = mediaSourceFactory.createMediaSource(
-                        androidx.media3.common.MediaItem.fromUri(playlistUrl)
-                    )
-                    setMediaSource(fallbackMediaSource)
-                    prepare()
+                    Timber.e("createExoPlayer - Has tried fallback: $hasTriedFallback")
+                    
+                    if (!hasTriedFallback) {
+                        hasTriedFallback = true
+                        Timber.d("createExoPlayer - Trying fallback to playlist URL: $playlistUrl")
+                        
+                        // If master.m3u8 fails, try playlist.m3u8
+                        val fallbackMediaSource = mediaSourceFactory.createMediaSource(
+                            androidx.media3.common.MediaItem.fromUri(playlistUrl)
+                        )
+                        setMediaSource(fallbackMediaSource)
+                        prepare()
+                    } else {
+                        Timber.e("createExoPlayer - Both master.m3u8 and playlist.m3u8 failed")
+                        // Try the original URL as a last resort
+                        val originalMediaSource = mediaSourceFactory.createMediaSource(
+                            androidx.media3.common.MediaItem.fromUri(url)
+                        )
+                        setMediaSource(originalMediaSource)
+                        prepare()
+                    }
                 }
                 
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -407,11 +419,15 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                     Timber.d("createExoPlayer - Is loading changed to: $isLoading")
                 }
             })
-            
-            // Prepare the player immediately after setting up the listener
-            Timber.d("createExoPlayer - Preparing ExoPlayer after creation")
-            prepare()
         }
+    
+    // Start with master.m3u8 (multiple quality streams)
+    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+    player.setMediaSource(mediaSource)
+    
+    // Prepare the player immediately after setting up the listener
+    Timber.d("createExoPlayer - Preparing ExoPlayer after creation")
+    player.prepare()
     
     Timber.d("createExoPlayer - ExoPlayer created successfully")
     return player

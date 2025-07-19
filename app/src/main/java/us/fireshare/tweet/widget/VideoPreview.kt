@@ -118,7 +118,13 @@ fun VideoPreview(
                 VideoManager.markVideoActive(mid)
             }
             
-            // Player is already prepared when created, just set playWhenReady
+            // Ensure player is in a good state before playing
+            if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                Timber.d("VideoPreview - Player in IDLE state, preparing again")
+                exoPlayer.prepare()
+            }
+            
+            // Set playWhenReady after ensuring player is ready
             Timber.d("VideoPreview - Setting playWhenReady to: $autoPlay")
             exoPlayer.playWhenReady = autoPlay
         } else {
