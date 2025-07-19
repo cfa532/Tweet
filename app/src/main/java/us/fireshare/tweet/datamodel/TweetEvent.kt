@@ -4,6 +4,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * Events for tweet and comment operations
@@ -30,7 +31,9 @@ object TweetNotificationCenter {
      * Post an event to all listeners
      */
     suspend fun post(event: TweetEvent) {
+        Timber.tag("TweetNotificationCenter").d("Emitting event: $event")
         _events.emit(event)
+        Timber.tag("TweetNotificationCenter").d("Event emitted successfully")
     }
     
     /**

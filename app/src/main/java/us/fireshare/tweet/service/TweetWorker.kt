@@ -36,7 +36,10 @@ class UploadCommentWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             val tweetString = inputData.getString("tweet") ?: return Result.failure()
-            val originalTweet = Json.decodeFromString<Tweet>(tweetString)
+            val gson = Gson().newBuilder()
+                .excludeFieldsWithoutExposeAnnotation()
+                .create()
+            val originalTweet = gson.fromJson(tweetString, Tweet::class.java)
 
             // whether the comment is also posted as a tweet.
             val isChecked = inputData.getBoolean("isChecked", false)
@@ -80,7 +83,9 @@ class UploadCommentWorker @AssistedInject constructor(
                     }
                 } else null
 
-                val gson = Gson()
+                val gson = Gson().newBuilder()
+                    .excludeFieldsWithoutExposeAnnotation()
+                    .create()
                 val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
                     "updatedTweet" to gson.toJson(updatedTweet))
                 Timber.tag("UploadCommentWorker").d(map.toString())
@@ -117,7 +122,8 @@ class UploadTweetWorker @AssistedInject constructor(
                 val attachments = mutableListOf<MimeiFileType>() // Changed to MimeiFileType
                 val uriPairs = attachmentUris.chunked(2)
                 for (pair in uriPairs) {
-                    val deferreds = mutableListOf<Deferred<MimeiFileType?>>() // Changed to MimeiFileType?
+                    val deferreds =
+                        mutableListOf<Deferred<MimeiFileType?>>() // Changed to MimeiFileType?
                     for (uriString in pair) {
                         val deferred = CoroutineScope(Dispatchers.IO).async {
                             try {
@@ -160,7 +166,9 @@ class UploadTweetWorker @AssistedInject constructor(
                 withContext(Dispatchers.IO) {
                     HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                         Timber.tag("UploadTweetWorker").d(tweet.toString())
-                        val gson = Gson()
+                        val gson = Gson().newBuilder()
+                            .excludeFieldsWithoutExposeAnnotation()
+                            .create()
                         val outputData = workDataOf("tweet" to gson.toJson(t))
                         return@withContext Result.success(outputData)
                     }

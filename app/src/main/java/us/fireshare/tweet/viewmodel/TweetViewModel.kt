@@ -337,58 +337,65 @@ class TweetViewModel @AssistedInject constructor(
      */
     fun startListeningToNotifications() {
         viewModelScope.launch {
-            TweetNotificationCenter.events.collect { event ->
-                when (event) {
-                    is TweetEvent.CommentUploaded -> {
-                        // Only handle if this is the parent tweet for the comment
-                        if (event.parentTweet.mid == tweetState.value.mid) {
-                            // Update the tweet state with new comment count
-                            _tweetState.value = event.parentTweet
-                            
-                            // Add the new comment to the comments list
-                            _comments.update { currentComments ->
-                                (listOf(event.comment) + currentComments)
-                                    .distinctBy { it.mid }
-                                    .sortedByDescending { it.timestamp }
+            try {
+                TweetNotificationCenter.events.collect { event ->
+                    when (event) {
+                        is TweetEvent.CommentUploaded -> {
+                            // Only handle if this is the parent tweet for the comment
+                            if (event.parentTweet.mid == tweetState.value.mid) {
+                                // Update the tweet state with new comment count
+                                _tweetState.value = event.parentTweet
+                                
+                                // Add the new comment to the comments list
+                                _comments.update { currentComments ->
+                                    (listOf(event.comment) + currentComments)
+                                        .distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp }
+                                }
                             }
                         }
-                    }
-                    is TweetEvent.CommentDeleted -> {
-                        // Only handle if this is the parent tweet for the comment
-                        if (event.parentTweetId == tweetState.value.mid) {
-                            // Remove the comment from the comments list
-                            _comments.update { currentComments ->
-                                currentComments.filterNot { it.mid == event.commentId }
+                        is TweetEvent.CommentDeleted -> {
+                            // Only handle if this is the parent tweet for the comment
+                            if (event.parentTweetId == tweetState.value.mid) {
+                                // Remove the comment from the comments list
+                                _comments.update { currentComments ->
+                                    currentComments.filterNot { it.mid == event.commentId }
+                                }
+                                
+                                // Update comment count
+                                _tweetState.value = tweetState.value.copy(
+                                    commentCount = max(0, tweetState.value.commentCount - 1)
+                                )
                             }
-                            
-                            // Update comment count
-                            _tweetState.value = tweetState.value.copy(
-                                commentCount = max(0, tweetState.value.commentCount - 1)
-                            )
                         }
-                    }
-                    is TweetEvent.TweetLiked -> {
-                        // Update like status if this is the same tweet
-                        if (event.tweet.mid == tweetState.value.mid) {
-                            _tweetState.value = event.tweet
+                        is TweetEvent.TweetLiked -> {
+                            // Update like status if this is the same tweet
+                            if (event.tweet.mid == tweetState.value.mid) {
+                                _tweetState.value = event.tweet
+                            }
                         }
-                    }
-                    is TweetEvent.TweetBookmarked -> {
-                        // Update bookmark status if this is the same tweet
-                        if (event.tweet.mid == tweetState.value.mid) {
-                            _tweetState.value = event.tweet
+                        is TweetEvent.TweetBookmarked -> {
+                            // Update bookmark status if this is the same tweet
+                            if (event.tweet.mid == tweetState.value.mid) {
+                                _tweetState.value = event.tweet
+                            }
                         }
-                    }
-                    is TweetEvent.TweetUpdated -> {
-                        // Update tweet if this is the same tweet
-                        if (event.tweet.mid == tweetState.value.mid) {
-                            _tweetState.value = event.tweet
+                        is TweetEvent.TweetUpdated -> {
+                            // Update tweet if this is the same tweet
+                            if (event.tweet.mid == tweetState.value.mid) {
+                                _tweetState.value = event.tweet
+                            }
                         }
-                    }
-                    else -> {
-                        // Handle other events if needed
+                        else -> {
+                            // Handle other events if needed
+                        }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // This is expected when the ViewModel is destroyed
+                Timber.tag("TweetViewModel").d("Notification listener cancelled: ${e.message}")
+            } catch (e: Exception) {
+                Timber.tag("TweetViewModel").e(e, "Error in notification listener: ${e.message}")
             }
         }
     }

@@ -721,8 +721,10 @@ class UserViewModel @AssistedInject constructor(
                     is TweetEvent.TweetUploaded -> {
                         // Only add if it's the current user's tweet
                         if (event.tweet.authorId == user.value.mid) {
+                            // Ensure the author is set correctly
+                            val tweetWithAuthor = event.tweet.copy(author = user.value)
                             _tweets.update { currentTweets ->
-                                (listOf(event.tweet) + currentTweets)
+                                (listOf(tweetWithAuthor) + currentTweets)
                                     .distinctBy { it.mid }
                                     .sortedByDescending { it.timestamp }
                             }
@@ -845,6 +847,40 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Remove a tweet from all user lists (tweets, topTweets, favorites, bookmarks)
+     * This is used for optimistic updates when tweets are deleted.
+     */
+    fun removeTweetFromAllLists(tweetId: MimeiId) {
+        Timber.tag("UserViewModel").d("Optimistic deletion: Removing tweet $tweetId from all user lists")
+        
+        // Remove from all lists
+        _tweets.update { currentTweets -> 
+            val filtered = currentTweets.filterNot { it.mid == tweetId }
+            Timber.tag("UserViewModel").d("Removed from tweets: ${currentTweets.size} -> ${filtered.size}")
+            filtered
+        }
+        _topTweets.update { topTweets -> 
+            val filtered = topTweets.filterNot { it.mid == tweetId }
+            Timber.tag("UserViewModel").d("Removed from topTweets: ${topTweets.size} -> ${filtered.size}")
+            filtered
+        }
+        _favorites.update { currentTweets -> 
+            val filtered = currentTweets.filterNot { it.mid == tweetId }
+            Timber.tag("UserViewModel").d("Removed from favorites: ${currentTweets.size} -> ${filtered.size}")
+            filtered
+        }
+        _bookmarks.update { currentTweets -> 
+            val filtered = currentTweets.filterNot { it.mid == tweetId }
+            Timber.tag("UserViewModel").d("Removed from bookmarks: ${currentTweets.size} -> ${filtered.size}")
+            filtered
+        }
+
+        // Update user's tweet count
+        _user.value = user.value.copy(tweetCount = tweets.value.size)
+        Timber.tag("UserViewModel").d("Updated user tweet count to: ${tweets.value.size}")
     }
 
     fun someFunctionThatCallsSaveUser() {

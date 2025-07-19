@@ -22,7 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.math.max
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import com.google.gson.Gson
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -44,8 +46,7 @@ import javax.inject.Inject
 import us.fireshare.tweet.datamodel.TweetCacheManager
 
 @HiltViewModel
-class TweetFeedViewModel @Inject constructor() : ViewModel()
-{
+class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
@@ -64,8 +65,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh(pageNumber: Int = 0)
-    {
+    suspend fun refresh(pageNumber: Int = 0) {
         if (!appUser.isGuest())
             TweetCacheManager.saveUser(appUser)
         fetchTweets(pageNumber)
@@ -80,14 +80,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
-        Timber.tag("getTweets").d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
+        Timber.tag("getTweets")
+            .d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
 
         /**
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
         Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for page $pageNumber")
-        
+
         if (appUser.isGuest()) {
             // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
@@ -98,30 +99,34 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                     .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                Timber.tag("getTweets").d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
+                Timber.tag("getTweets")
+                    .d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
                 allTweets
             }
             val result = getTweets(defaultUserId, pageNumber)
-            Timber.tag("getTweets").d("Guest: After getTweets, _tweets.size = ${_tweets.value.size}")
+            Timber.tag("getTweets")
+                .d("Guest: After getTweets, _tweets.size = ${_tweets.value.size}")
             return result
         } else {
             // Immediately merge cached tweets if they're not already in the list
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
                 val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
-                
+
                 if (newCachedTweets.isNotEmpty()) {
                     val allTweets = (currentTweets + newCachedTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    Timber.tag("getTweets").d("Cached: Added ${newCachedTweets.size} new cached tweets, updated from ${currentTweets.size} to ${allTweets.size}")
+                    Timber.tag("getTweets")
+                        .d("Cached: Added ${newCachedTweets.size} new cached tweets, updated from ${currentTweets.size} to ${allTweets.size}")
                     allTweets
                 } else {
-                    Timber.tag("getTweets").d("Cached: No new cached tweets to add, keeping ${currentTweets.size} tweets")
+                    Timber.tag("getTweets")
+                        .d("Cached: No new cached tweets to add, keeping ${currentTweets.size} tweets")
                     currentTweets
                 }
             }
-            
+
             /**
              * Load tweet feed from network
              * */
@@ -130,32 +135,36 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 pageNumber,
                 pageSize,
             )
-            
+
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
-            
-            Timber.tag("getTweets").d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for page $pageNumber")
+
+            Timber.tag("getTweets")
+                .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for page $pageNumber")
             if (validTweets.isNotEmpty()) {
-                Timber.tag("getTweets").d("First tweet: ${validTweets.first().mid}, Last tweet: ${validTweets.last().mid}")
+                Timber.tag("getTweets")
+                    .d("First tweet: ${validTweets.first().mid}, Last tweet: ${validTweets.last().mid}")
             }
-            
+
             // Always merge new tweets with existing ones, never replace
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
                 val trulyNewTweets = validTweets.filter { it.mid !in currentTweetIds }
-                
+
                 if (trulyNewTweets.isNotEmpty()) {
                     val mergedTweets = (currentTweets + trulyNewTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    Timber.tag("getTweets").d("Network: Added ${trulyNewTweets.size} new tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
+                    Timber.tag("getTweets")
+                        .d("Network: Added ${trulyNewTweets.size} new tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
                     mergedTweets
                 } else {
-                    Timber.tag("getTweets").d("Network: No new tweets to add, keeping ${currentTweets.size} tweets")
+                    Timber.tag("getTweets")
+                        .d("Network: No new tweets to add, keeping ${currentTweets.size} tweets")
                     currentTweets
                 }
             }
-            
+
             /**
              * Check for new tweets of followings when page number is 0
              * */
@@ -209,17 +218,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                 )
                 // Filter out null elements and get valid tweets
                 val validTweets = tweetsWithNulls.filterNotNull()
-                
-                Timber.tag("getTweets").d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: $userId")
-                
+
+                Timber.tag("getTweets")
+                    .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: $userId")
+
                 _tweets.update { list ->
                     val beforeFilter = validTweets + list
-                    val afterPrivateFilter = beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                    val afterPrivateFilter =
+                        beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
                     val mergedTweets = afterPrivateFilter
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    
-                    Timber.tag("getTweets").d("getTweets update: beforeFilter=${beforeFilter.size}, afterPrivateFilter=${afterPrivateFilter.size}, final=${mergedTweets.size}")
+
+                    Timber.tag("getTweets")
+                        .d("getTweets update: beforeFilter=${beforeFilter.size}, afterPrivateFilter=${afterPrivateFilter.size}, final=${mergedTweets.size}")
                     mergedTweets
                 }
                 return tweetsWithNulls
@@ -262,31 +274,68 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
 
     /**
      * Remove a tweet from the list when it becomes unavailable (e.g., original tweet deleted)
+     * This is used for optimistic updates and immediate UI feedback.
      */
     fun removeTweet(tweetId: MimeiId) {
         _tweets.update { currentTweets ->
             val filteredTweets = currentTweets.filterNot { it.mid == tweetId }
-            Timber.tag("TweetFeedViewModel").d("Removed tweet $tweetId, updated from ${currentTweets.size} to ${filteredTweets.size} tweets")
+            val removedCount = currentTweets.size - filteredTweets.size
+            if (removedCount > 0) {
+                Timber.tag("TweetFeedViewModel")
+                    .d("Removed tweet $tweetId from UI, updated from ${currentTweets.size} to ${filteredTweets.size} tweets")
+            } else {
+                Timber.tag("TweetFeedViewModel")
+                    .d("Tweet $tweetId not found in current list (${currentTweets.size} tweets)")
+            }
             filteredTweets
         }
     }
 
-    // order of deletion is critical here.
+    // Optimistic deletion: Remove from UI immediately, then delete from backend
     fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
-        callback: () -> Unit
+        callback: () -> Unit,
+        userViewModel: us.fireshare.tweet.viewmodel.UserViewModel? = null
     ) {
-        // Remove manual UI updates - let notification system handle them
-        applicationScope.launch(IO) {
-            dao.deleteCachedTweet(tweetId)
-            // Use deleteTweet which posts notifications instead of delTweet
-            HproseInstance.deleteTweet(tweetId)
-            callback()
-        }
+        // OPTIMISTIC UPDATE: Remove from UI and cache immediately for instant feedback
+        Timber.tag("TweetFeedViewModel").d("Optimistic deletion: Removing tweet $tweetId from UI immediately")
+        removeTweet(tweetId)
+        
+        // Also remove from UserViewModel lists if provided (for profile screen)
+        userViewModel?.removeTweetFromAllLists(tweetId)
+        
+        // Navigate back immediately for better UX
         applicationScope.launch(Main) {
             if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                 navController.popBackStack()
+            }
+        }
+        
+        // Perform actual deletion in background
+        applicationScope.launch(IO) {
+            try {
+                // Delete from local cache first
+                dao.deleteCachedTweet(tweetId)
+                Timber.tag("TweetFeedViewModel").d("Deleted tweet $tweetId from local cache")
+                
+                // Delete from backend
+                HproseInstance.deleteTweet(tweetId)
+                Timber.tag("TweetFeedViewModel").d("Successfully deleted tweet $tweetId from backend")
+                
+                // Call callback on main thread
+                withContext(Main) {
+                    callback()
+                }
+            } catch (e: Exception) {
+                // If backend deletion fails, we could potentially restore the tweet
+                // For now, just log the error since the user already sees it as deleted
+                Timber.tag("TweetFeedViewModel").e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
+                
+                // Still call callback to complete the UI flow
+                withContext(Main) {
+                    callback()
+                }
             }
         }
     }
@@ -295,7 +344,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Use WorkManager to update tweet. When the upload succeeds, a message will be sent back.
      * Show a snackbar to inform user of the result.
      * */
-    fun uploadTweet(context: Context, content: String, attachments: List<Uri>?, isPrivate: Boolean = false) {
+    fun uploadTweet(
+        context: Context,
+        content: String,
+        attachments: List<Uri>?,
+        isPrivate: Boolean = false
+    ) {
         val data = workDataOf(
             "tweetContent" to content,
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
@@ -318,35 +372,48 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
                                 val outputData = workInfo.outputData
                                 val json = outputData.getString("tweet")
                                 // Handle the success and update UI
-                                val tweet = json?.let { Json.decodeFromString<Tweet>(it) }
+                                val gson = com.google.gson.Gson().newBuilder()
+                                    .excludeFieldsWithoutExposeAnnotation()
+                                    .create()
+                                val tweet = json?.let { gson.fromJson(it, Tweet::class.java) }
                                 Timber.tag("UploadTweet").d("Tweet uploaded successfully: $tweet")
                                 if (tweet != null) {
                                     tweet.author = appUser
+                                    Timber.tag("UploadTweet")
+                                        .d("Tweet author set to: ${tweet.author?.username}")
 
                                     // Tweet will be added via notification system
                                     // addTweetToFeed(tweet) // Removed - use notifications instead
                                     // notify user the result of tweet upload
-                                    Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.tweet_uploaded),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    Timber.tag("UploadTweet")
+                                        .e("Tweet is null after deserialization")
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("UploadTweet").e("$e")
                             }
                         }
+
                         WorkInfo.State.FAILED -> {
                             // Handle the failure and update UI
                             Timber.tag("UploadTweet").e("Tweet upload failed")
-                            (context as? LifecycleOwner)?.lifecycleScope?.launch {
-                                SnackbarController.sendEvent(
-                                    event = SnackbarEvent(
-                                        message = context.getString(R.string.tweet_failed)
-                                    )
-                                )
-                            }
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.tweet_failed),
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
+
                         WorkInfo.State.RUNNING -> {
                             // Optionally, show a progress indicator
                             Timber.tag("UploadTweet").d("Tweet upload in progress")
                         }
+
                         else -> {
                             // Handle other states if necessary
                         }
@@ -359,72 +426,105 @@ class TweetFeedViewModel @Inject constructor() : ViewModel()
      * Listen to tweet notifications and update the feed accordingly
      */
     fun startListeningToNotifications() {
+        Timber.tag("TweetFeedViewModel").d("Starting to listen to notifications")
         viewModelScope.launch {
-            TweetNotificationCenter.events.collect { event ->
-                when (event) {
-                    is TweetEvent.TweetUploaded -> {
-                        // Add new tweet to the beginning of the feed
-                        _tweets.value = listOf(event.tweet) + _tweets.value
-                    }
-                    is TweetEvent.TweetDeleted -> {
-                        // Remove tweet from feed
-                        _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
-                    }
-                    is TweetEvent.CommentUploaded -> {
-                        // Update comment count for parent tweet
-                        _tweets.value = _tweets.value.map { tweet ->
-                            if (tweet.mid == event.parentTweet.mid) {
-                                tweet.copy(commentCount = event.parentTweet.commentCount)
-                            } else {
-                                tweet
+            try {
+                Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
+                Timber.tag("TweetFeedViewModel")
+                    .d("About to start collecting events from TweetNotificationCenter")
+                TweetNotificationCenter.events.collect { event ->
+                    Timber.tag("TweetFeedViewModel").d("Received notification event: $event")
+                    when (event) {
+                        is TweetEvent.TweetUploaded -> {
+                            // Add new tweet to the beginning of the feed
+                            // Ensure the author is set correctly
+                            val tweetWithAuthor = event.tweet.copy(author = appUser)
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Received TweetUploaded notification for tweet: ${event.tweet.mid}")
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Current tweets count: ${_tweets.value.size}")
+                            _tweets.value = listOf(tweetWithAuthor) + _tweets.value
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Updated tweets count: ${_tweets.value.size}")
+                        }
+
+                        is TweetEvent.TweetDeleted -> {
+                            // Remove tweet from feed
+                            Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId}")
+                            Timber.tag("TweetFeedViewModel").d("Current tweets count: ${_tweets.value.size}")
+                            _tweets.value = _tweets.value.filter { it.mid != event.tweetId }
+                            Timber.tag("TweetFeedViewModel").d("Updated tweets count: ${_tweets.value.size}")
+                        }
+
+                        is TweetEvent.CommentUploaded -> {
+                            // Update comment count for parent tweet
+                            _tweets.value = _tweets.value.map { tweet ->
+                                if (tweet.mid == event.parentTweet.mid) {
+                                    tweet.copy(commentCount = event.parentTweet.commentCount)
+                                } else {
+                                    tweet
+                                }
                             }
                         }
-                    }
-                    is TweetEvent.CommentDeleted -> {
-                        // Decrease comment count for parent tweet
-                        _tweets.value = _tweets.value.map { tweet ->
-                            if (tweet.mid == event.parentTweetId) {
-                                tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                            } else {
-                                tweet
+
+                        is TweetEvent.CommentDeleted -> {
+                            // Decrease comment count for parent tweet
+                            _tweets.value = _tweets.value.map { tweet ->
+                                if (tweet.mid == event.parentTweetId) {
+                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
+                                } else {
+                                    tweet
+                                }
                             }
                         }
-                    }
-                    is TweetEvent.TweetLiked -> {
-                        // Update like status and count
-                        _tweets.value = _tweets.value.map { tweet ->
-                            if (tweet.mid == event.tweet.mid) {
-                                event.tweet
-                            } else {
-                                tweet
+
+                        is TweetEvent.TweetLiked -> {
+                            // Update like status and count
+                            _tweets.value = _tweets.value.map { tweet ->
+                                if (tweet.mid == event.tweet.mid) {
+                                    event.tweet
+                                } else {
+                                    tweet
+                                }
                             }
                         }
-                    }
-                    is TweetEvent.TweetBookmarked -> {
-                        // Update bookmark status and count
-                        _tweets.value = _tweets.value.map { tweet ->
-                            if (tweet.mid == event.tweet.mid) {
-                                event.tweet
-                            } else {
-                                tweet
+
+                        is TweetEvent.TweetBookmarked -> {
+                            // Update bookmark status and count
+                            _tweets.value = _tweets.value.map { tweet ->
+                                if (tweet.mid == event.tweet.mid) {
+                                    event.tweet
+                                } else {
+                                    tweet
+                                }
                             }
                         }
-                    }
-                    is TweetEvent.TweetRetweeted -> {
-                        // Add retweet to feed
-                        _tweets.value = listOf(event.retweet) + _tweets.value
-                    }
-                    is TweetEvent.TweetUpdated -> {
-                        // Update existing tweet
-                        _tweets.value = _tweets.value.map { tweet ->
-                            if (tweet.mid == event.tweet.mid) {
-                                event.tweet
-                            } else {
-                                tweet
+
+                        is TweetEvent.TweetRetweeted -> {
+                            // Add retweet to feed
+                            // Ensure the author is set correctly
+                            val retweetWithAuthor = event.retweet.copy(author = appUser)
+                            _tweets.value = listOf(retweetWithAuthor) + _tweets.value
+                        }
+
+                        is TweetEvent.TweetUpdated -> {
+                            // Update existing tweet
+                            _tweets.value = _tweets.value.map { tweet ->
+                                if (tweet.mid == event.tweet.mid) {
+                                    event.tweet
+                                } else {
+                                    tweet
+                                }
                             }
                         }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // This is expected when the ViewModel is destroyed
+                Timber.tag("TweetFeedViewModel").d("Notification listener cancelled: ${e.message}")
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel")
+                    .e(e, "Error in notification listener: ${e.message}")
             }
         }
     }

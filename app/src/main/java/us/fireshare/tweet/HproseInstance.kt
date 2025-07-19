@@ -691,7 +691,9 @@ object HproseInstance {
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
 
                     // Post notification for successful upload
+                    Timber.tag("HproseInstance").d("Posting TweetUploaded notification for tweet: $newTweetId")
                     TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
+                    Timber.tag("HproseInstance").d("TweetUploaded notification posted successfully")
 
                     updatedTweet
                 } else null
