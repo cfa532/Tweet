@@ -362,7 +362,7 @@ fun TweetDropdownMenuItems(
             modifier = Modifier.alpha(0.8f),
             onClick = {
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
-                tweetFeedViewModel.delTweet(navController, tweet.mid) {
+                tweetFeedViewModel.delTweet(navController, tweet.mid, {
                     applicationScope.launch(IO) {
                         if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
                             val originalTweet = HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)
@@ -375,7 +375,7 @@ fun TweetDropdownMenuItems(
                             }
                         }
                     }
-                }
+                }, appUserViewModel)
                 onDismissRequest()
             },
             text = {
