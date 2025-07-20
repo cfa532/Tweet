@@ -495,7 +495,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                     // Update user's tweet count if it's the current user's tweet
                                     if (tweetWithAuthor.authorId == appUser.mid) {
                                         appUser = appUser.copy(tweetCount = appUser.tweetCount + 1)
-                                        TweetCacheManager.saveUser(appUser)
+                                        withContext(IO) {
+                                            TweetCacheManager.saveUser(appUser)
+                                        }
                                         Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
                                     }
                                 } else {

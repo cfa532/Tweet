@@ -138,7 +138,7 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
-                // reassign the appUserViewModel here. Maybe after the user login with
+                // reassign the appUserViewModel here, in case the user login with
                 // a different username.
                 sharedViewModel.appUserViewModel =
                     hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(

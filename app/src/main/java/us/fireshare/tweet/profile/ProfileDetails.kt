@@ -38,9 +38,6 @@ fun ProfileDetail(
     appUserViewModel: UserViewModel
 ) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
-    
-
-    
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
     
