@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,7 @@ import us.fireshare.tweet.profile.SimpleAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
+import timber.log.Timber
 
 @Composable
 fun CommentItem(
@@ -163,8 +165,15 @@ fun CommentItem(
 
 @Composable
 fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
-    var expanded by remember { mutableStateOf(false) }
+    // Use comment.mid as key to ensure state is reset when comment changes
+    var expanded by remember(comment.mid) { mutableStateOf(false) }
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState() ?: remember { mutableStateOf(null) }
+
+    // Dismiss popup menu when comment is deleted or becomes unavailable
+    LaunchedEffect(comment.mid) {
+        // Reset expanded state when comment changes
+        expanded = false
+    }
 
     Box {
         // the 3 dots button on the right
@@ -190,8 +199,15 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
             if (parentTweet?.authorId == appUser.mid || comment.authorId == appUser.mid) {
                 DropdownMenuItem( modifier = Modifier.alpha(0.9f),
                     onClick = {
+                        // Dismiss popup immediately for better UX
+                        expanded = false
+                        
                         parentTweetViewModel?.viewModelScope?.launch(Dispatchers.IO) {
-                            parentTweetViewModel?.delComment(comment.mid)
+                            try {
+                                parentTweetViewModel.delComment(comment.mid)
+                            } catch (e: Exception) {
+                                Timber.tag("CommentDropdownMenu").e(e, "Error deleting comment: ${e.message}")
+                            }
                         }
                     },
                     text = {

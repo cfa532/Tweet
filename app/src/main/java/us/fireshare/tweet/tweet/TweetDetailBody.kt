@@ -79,6 +79,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.MediaItemView
 import us.fireshare.tweet.widget.SelectableText
+import timber.log.Timber
 
 @Composable
 fun TweetDetailBody(
@@ -293,7 +294,15 @@ fun TweetDropdownMenu(
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    // Use tweet.mid as key to ensure state is reset when tweet changes
+    var expanded by remember(tweet.mid) { mutableStateOf(false) }
+    
+    // Dismiss popup menu when tweet is deleted or becomes unavailable
+    LaunchedEffect(tweet.mid) {
+        // Reset expanded state when tweet changes
+        expanded = false
+    }
+    
     Box {
         IconButton(
             modifier = Modifier
@@ -363,21 +372,33 @@ fun TweetDropdownMenuItems(
             modifier = Modifier.alpha(0.8f),
             onClick = {
                 Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
-                tweetFeedViewModel.delTweet(navController, tweet.mid, {
-                    applicationScope.launch(IO) {
-                        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                            val originalTweet = HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!, shouldCache = false)
-                            originalTweet?.let {
-                                originTweetViewModel?.updateRetweetCount(
-                                    it,      // original tweet
-                                    tweet.mid,      // retweet Id
-                                    -1
-                                )
-                            }
-                        }
-                    }
-                }, appUserViewModel)
+                // Dismiss popup immediately for better UX
                 onDismissRequest()
+                
+                tweetFeedViewModel.viewModelScope.launch(IO) {
+                    try {
+                        tweetFeedViewModel.delTweet(navController, tweet.mid, {
+                            applicationScope.launch(IO) {
+                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                    val originalTweet = HproseInstance.fetchTweet(
+                                        tweet.originalTweetId!!,
+                                        tweet.originalAuthorId!!,
+                                        shouldCache = false
+                                    )
+                                    originalTweet?.let {
+                                        originTweetViewModel?.updateRetweetCount(
+                                            it,      // original tweet
+                                            tweet.mid,      // retweet Id
+                                            -1
+                                        )
+                                    }
+                                }
+                            }
+                        }, appUserViewModel)
+                    } catch (e: Exception) {
+                        Timber.tag("TweetDropdownMenuItems").e(e, "Error deleting tweet: ${e.message}")
+                    }
+                }
             },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

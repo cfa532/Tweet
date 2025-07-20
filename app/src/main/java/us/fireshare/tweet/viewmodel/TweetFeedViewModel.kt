@@ -296,7 +296,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     // Optimistic deletion: Remove from UI immediately, then delete from backend
-    fun delTweet(
+    suspend fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
         callback: () -> Unit,
