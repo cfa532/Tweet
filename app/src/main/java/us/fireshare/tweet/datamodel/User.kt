@@ -14,7 +14,7 @@ import timber.log.Timber
 data class User(
     @Expose var baseUrl: String? = null,
     @Expose var writableUrl: String? = null,
-    @Expose var mid: MimeiId,
+    @Expose val mid: MimeiId,
     @Expose var name: String? = null,
     @Expose var username: String? = null,
     @Expose var password: String? = null,

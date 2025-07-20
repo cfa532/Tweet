@@ -42,6 +42,7 @@ import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.datamodel.UserActions
 import javax.inject.Inject
 import us.fireshare.tweet.datamodel.TweetCacheManager
 
@@ -311,6 +312,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
         
+        // Update user's tweet count if it's the current user's tweet
+        if (tweetToDelete?.authorId == appUser.mid) {
+            appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
+            TweetCacheManager.saveUser(appUser)
+            Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
+        }
+        
         // Optimistically decrease retweet count if this is a retweet
         if (isRetweet && originalTweetId != null) {
             _tweets.value = _tweets.value.map { tweet ->
@@ -483,6 +491,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                         .d("Updated tweets count: ${_tweets.value.size}")
                                     Timber.tag("TweetFeedViewModel")
                                         .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
+                                    
+                                    // Update user's tweet count if it's the current user's tweet
+                                    if (tweetWithAuthor.authorId == appUser.mid) {
+                                        appUser = appUser.copy(tweetCount = appUser.tweetCount + 1)
+                                        TweetCacheManager.saveUser(appUser)
+                                        Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
+                                    }
                                 } else {
                                     Timber.tag("TweetFeedViewModel")
                                         .d("Tweet already exists in feed: ${tweetWithAuthor.mid}")
@@ -522,7 +537,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.TweetLiked -> {
-                            // Update like status and count
+                            // Update like status and count (for other users' actions)
                             withContext(Main) {
                                 _tweets.value = _tweets.value.map { tweet ->
                                     if (tweet.mid == event.tweet.mid) {
@@ -535,7 +550,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.TweetBookmarked -> {
-                            // Update bookmark status and count
+                            // Update bookmark status and count (for other users' actions)
                             withContext(Main) {
                                 _tweets.value = _tweets.value.map { tweet ->
                                     if (tweet.mid == event.tweet.mid) {

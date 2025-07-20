@@ -873,15 +873,7 @@ object HproseInstance {
                     favorites = favorites,
                     favoriteCount = favoriteCount
                 )
-                response["user"]?.let { userData ->
-                    // Note: updateUser method needs to be implemented in User class
-                    // appUser.updateUser(userData)
-                }
                 updateCachedTweet(tweet)
-
-                // Post notification for like toggle
-                TweetNotificationCenter.post(TweetEvent.TweetLiked(ret, isFavorite))
-
                 ret
             } else tweet
         } catch (e: Exception) {
@@ -917,15 +909,7 @@ object HproseInstance {
                     favorites = favorites,
                     bookmarkCount = bookmarkCount
                 )
-                response["user"]?.let { userData ->
-                    // Note: updateUser method needs to be implemented in User class
-                    // appUser.updateUser(userData)
-                }
                 updateCachedTweet(tweet)
-
-                // Post notification for bookmark toggle
-                TweetNotificationCenter.post(TweetEvent.TweetBookmarked(ret, hasBookmarked))
-
                 ret
             } else tweet
         } catch (e: Exception) {

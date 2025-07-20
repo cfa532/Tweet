@@ -301,11 +301,11 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Update favorite count and icon right away for better user experience.
      * */
-    suspend fun likeTweet(
+    suspend fun toggleFavorite(
         updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
     ) {
-        val isFavorite = tweetState.value.favorites?.get(UserActions.FAVORITE) ?: false
-        _tweetState.value.favorites?.set(UserActions.FAVORITE, ! isFavorite)
+        val isFavorite = tweetState.value.isFavorite
+        _tweetState.value.isFavorite = ! isFavorite
         _tweetState.value = tweetState.value.copy(
             favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
             else tweetState.value.favoriteCount + 1,
@@ -320,9 +320,9 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Update bookmark count and icon right away for better user experience.
      * */
-    suspend fun bookmarkTweet(updateAppUser: (Tweet, Boolean) -> Unit) {
-        val hasBookmarked = tweetState.value.favorites?.get(UserActions.BOOKMARK) ?: false
-        _tweetState.value.favorites?.set(UserActions.BOOKMARK, ! hasBookmarked)
+    suspend fun toggleBookmark(updateAppUser: (Tweet, Boolean) -> Unit) {
+        val hasBookmarked = tweetState.value.isBookmarked
+        _tweetState.value.isBookmarked = ! hasBookmarked
         _tweetState.value = tweetState.value.copy(
             bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
             else tweetState.value.bookmarkCount + 1,
@@ -331,6 +331,7 @@ class TweetViewModel @AssistedInject constructor(
 
         /**
          * Overwrite in-memory bookmark with result from database call that persists the change.
+         * If backend fails, the original value will be restored.
          * */
         _tweetState.value = HproseInstance.toggleBookmark(tweetState.value)
     }
@@ -340,8 +341,8 @@ class TweetViewModel @AssistedInject constructor(
      * */
     suspend fun retweetTweet() {
         // Update retweet count and status immediately for better UX
-        val hasRetweeted = tweetState.value.favorites?.get(UserActions.RETWEET) ?: false
-        _tweetState.value.favorites?.set(UserActions.RETWEET, !hasRetweeted)
+        val hasRetweeted = tweetState.value.isRetweeted
+        _tweetState.value.isRetweeted = ! hasRetweeted
         _tweetState.value = tweetState.value.copy(
             retweetCount = if (hasRetweeted) max(0, tweetState.value.retweetCount - 1)
             else tweetState.value.retweetCount + 1,
@@ -352,7 +353,7 @@ class TweetViewModel @AssistedInject constructor(
             HproseInstance.retweet(tweetState.value)
         } catch (e: Exception) {
             // Revert the UI changes if the retweet failed
-            _tweetState.value.favorites?.set(UserActions.RETWEET, hasRetweeted)
+            _tweetState.value.isRetweeted = hasRetweeted
             _tweetState.value = tweetState.value.copy(
                 retweetCount = if (hasRetweeted) tweetState.value.retweetCount + 1
                 else max(0, tweetState.value.retweetCount - 1),
@@ -361,14 +362,10 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    fun increaseRetweetCount() {
-        _tweetState.value = tweetState.value.copy(retweetCount = tweetState.value.retweetCount + 1)
-    }
-
     /**
      * Update retweet account on the original tweet after retweet is deleted.
      * */
-    suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
+    fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
         HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
             _tweetState.value = it
         }
@@ -408,18 +405,6 @@ class TweetViewModel @AssistedInject constructor(
                                 _tweetState.value = tweetState.value.copy(
                                     commentCount = max(0, tweetState.value.commentCount - 1)
                                 )
-                            }
-                        }
-                        is TweetEvent.TweetLiked -> {
-                            // Update like status if this is the same tweet
-                            if (event.tweet.mid == tweetState.value.mid) {
-                                _tweetState.value = event.tweet
-                            }
-                        }
-                        is TweetEvent.TweetBookmarked -> {
-                            // Update bookmark status if this is the same tweet
-                            if (event.tweet.mid == tweetState.value.mid) {
-                                _tweetState.value = event.tweet
                             }
                         }
                         is TweetEvent.TweetUpdated -> {

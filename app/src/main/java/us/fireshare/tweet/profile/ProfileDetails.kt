@@ -29,6 +29,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
+import timber.log.Timber
 
 @Composable
 fun ProfileDetail(
@@ -37,13 +38,21 @@ fun ProfileDetail(
     appUserViewModel: UserViewModel
 ) {
     val appUserFollowings by appUserViewModel.followings.collectAsState()
+    
+
+    
     val user by viewModel.user.collectAsState()
-    val profile by remember { derivedStateOf { user.profile } }
-    val bookmarksCount by remember { derivedStateOf { user.bookmarksCount } }
-    val favoritesCount by remember { derivedStateOf { user.favoritesCount } }
-    val followingsCount by remember { derivedStateOf { user.followingCount } }
-    val followersCount by remember { derivedStateOf { user.followersCount } }
-    val tweetCount by remember { derivedStateOf { user.tweetCount } }
+    val appUser by appUserViewModel.user.collectAsState()
+    
+    // Use appUser data when viewing own profile, otherwise use profile user data
+    val displayUser = if (user.mid == appUser.mid) appUser else user
+    
+    val profile by remember { derivedStateOf { displayUser.profile } }
+    val bookmarksCount by remember { derivedStateOf { displayUser.bookmarksCount } }
+    val favoritesCount by remember { derivedStateOf { displayUser.favoritesCount } }
+    val followingsCount by remember { derivedStateOf { displayUser.followingCount } }
+    val followersCount by remember { derivedStateOf { displayUser.followersCount } }
+    val tweetCount by remember { derivedStateOf { displayUser.tweetCount } }
 
     LaunchedEffect(appUserFollowings) {
         viewModel.refreshFollowingsAndFans()
@@ -64,7 +73,7 @@ fun ProfileDetail(
             )
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp, end = if (user.mid == appUser.mid ) 20.dp else 120.dp),
+                    .padding(start = 0.dp, end = if (displayUser.mid == appUser.mid ) 20.dp else 120.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
@@ -72,7 +81,7 @@ fun ProfileDetail(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.clickable(
                         onClick = {
-                            navController.navigate((NavTweet.Follower(user.mid)))
+                            navController.navigate((NavTweet.Follower(displayUser.mid)))
                         }
                     ))
                 Text(
@@ -80,7 +89,7 @@ fun ProfileDetail(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
                         .clickable(onClick = {
-                            navController.navigate(NavTweet.Following(user.mid))
+                            navController.navigate(NavTweet.Following(displayUser.mid))
                         }),
                 )
                 Text(
@@ -88,12 +97,12 @@ fun ProfileDetail(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 // show the following buttons only on appUser's profile
-                if (user.mid == appUser.mid) {
+                if (displayUser.mid == appUser.mid) {
                     bookmarksCount?.let {
                         Row(
                             modifier = Modifier.clickable(
                                 onClick = {
-                                    navController.navigate((NavTweet.Bookmarks(user.mid)))
+                                    navController.navigate((NavTweet.Bookmarks(displayUser.mid)))
                                 }
                             )
                         ) {
@@ -112,7 +121,7 @@ fun ProfileDetail(
                         Row(
                             modifier = Modifier.clickable(
                                 onClick = {
-                                    navController.navigate((NavTweet.Favorites(user.mid)))
+                                    navController.navigate((NavTweet.Favorites(displayUser.mid)))
                                 }
                             )
                         ) {

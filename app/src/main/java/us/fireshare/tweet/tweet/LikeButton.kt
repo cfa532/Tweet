@@ -163,7 +163,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.likeTweet {tweet, isFavorite ->
+                viewModel.toggleFavorite { tweet, isFavorite ->
                     appUserViewModel.updateFavorite(tweet, isFavorite)
                 }
             }
@@ -202,7 +202,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.bookmarkTweet {tweet, isBookmarked ->
+                viewModel.toggleBookmark { tweet, isBookmarked ->
                     appUserViewModel.updateBookmark(tweet, isBookmarked)
                 }
             }

@@ -12,6 +12,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,7 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -42,9 +44,11 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
-    @Assisted private val userId: MimeiId,
+    @Assisted val userId: MimeiId,
 //    private val savedStateHandle: SavedStateHandle
 ): ViewModel() {
+    
+
     private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -270,83 +274,6 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Fetch user data in batches from appUser's node
-     * First tries to fetch in batches of USER_BATCH_SIZE, then falls back to individual calls for unavailable users
-     */
-    private suspend fun fetchUserDataInBatches(userIds: List<MimeiId>) {
-        if (userIds.isEmpty()) return
-        
-        Timber.tag("fetchUserDataInBatches").d("Fetching user data for ${userIds.size} users in batches")
-        
-        // Process users in batches
-        val batches = userIds.chunked(TW_CONST.USER_BATCH_SIZE)
-        
-        for ((batchIndex, batch) in batches.withIndex()) {
-            Timber.tag("fetchUserDataInBatches").d("Processing batch $batchIndex with ${batch.size} users")
-            
-            // Try to fetch batch from appUser's node first
-            val batchResults = fetchUserBatchFromAppUserNode(batch)
-            
-            // For users not available in batch, fetch individually
-            val unavailableUsers = batch.filterIndexed { index, _ -> batchResults[index] == null }
-            
-            if (unavailableUsers.isNotEmpty()) {
-                Timber.tag("fetchUserDataInBatches").d("Fetching ${unavailableUsers.size} users individually")
-                unavailableUsers.forEach { userId ->
-                    try {
-                        HproseInstance.getUser(userId)
-                    } catch (e: Exception) {
-                        Timber.tag("fetchUserDataInBatches").e(e, "Error fetching individual user: $userId")
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Try to fetch a batch of users from appUser's node
-     * Returns a list where each element is either a User object or null if not available
-     */
-    private suspend fun fetchUserBatchFromAppUserNode(userIds: List<MimeiId>): List<User?> {
-        return try {
-            // Try to fetch users from appUser's node using a batch endpoint
-            // If the endpoint doesn't exist, this will return nulls and we'll fall back to individual calls
-            val entry = "get_users_batch"
-            val params = mapOf(
-                "aid" to HproseInstance.appId,
-                "ver" to "last",
-                "userids" to userIds
-            )
-            
-            // Add timeout to prevent hanging
-            val response = withTimeoutOrNull(5000L) { // 5 second timeout
-                HproseInstance.appUser.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
-            }
-            
-            response?.map { userData ->
-                if (userData == null) {
-                    null
-                } else {
-                    try {
-                        val user = User.from(userData)
-                        // Cache the user
-                        TweetCacheManager.saveUser(user)
-                        user
-                    } catch (e: Exception) {
-                        Timber.tag("fetchUserBatchFromAppUserNode").e(e, "Error parsing user data")
-                        null
-                    }
-                }
-            } ?: List(userIds.size) { null }
-            
-        } catch (e: Exception) {
-            Timber.tag("fetchUserBatchFromAppUserNode").d("Batch endpoint not available or failed, will use individual calls: $e")
-            // Return nulls to indicate batch fetch failed, will fall back to individual calls
-            List(userIds.size) { null }
-        }
-    }
-
-    /**
      * Get bookmarks of the user
      * */
     suspend fun getBookmarks(pageNumber: Int) {
@@ -380,14 +307,32 @@ class UserViewModel @AssistedInject constructor(
      * if bookmarks screen of an user never opened, the bookmarks are empty.
      * */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
+        val currentCount = user.value.bookmarksCount
+        val currentUser = user.value
+        Timber.tag("UserViewModel").d("updateBookmark: Current bookmarks count before update: $currentCount")
+        Timber.tag("UserViewModel").d("updateBookmark: Current user ID: ${currentUser.mid}")
+        Timber.tag("UserViewModel").d("updateBookmark: Tweet author ID: ${tweet.authorId}")
+        Timber.tag("UserViewModel").d("updateBookmark: Is bookmark action: $isBookmarked")
+        
         if (isBookmarked) {
-            _user.value = user.value.copy(bookmarksCount = user.value.bookmarksCount + 1)
+            val newCount = currentCount + 1
+            _user.value = currentUser.copy(bookmarksCount = newCount)
             _bookmarks.update { bs -> listOf(tweet) + bs }
+            Timber.tag("UserViewModel").d("Optimistic bookmark: User bookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
+            Timber.tag("UserViewModel").d("Optimistic bookmark: Updated user bookmarksCount: ${user.value.bookmarksCount}")
         } else {
-            _user.value = user.value.copy(
-                bookmarksCount = max(user.value.bookmarksCount - 1, 0)
-            )
+            val newCount = max(currentCount - 1, 0)
+            _user.value = currentUser.copy(bookmarksCount = newCount)
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
+            Timber.tag("UserViewModel").d("Optimistic bookmark: User unbookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
+            Timber.tag("UserViewModel").d("Optimistic bookmark: Updated user bookmarksCount: ${user.value.bookmarksCount}")
+        }
+        
+        // Save to cache immediately
+        viewModelScope.launch(IO) {
+            Timber.tag("UserViewModel").d("updateBookmark: Saving user to cache with bookmarksCount: ${user.value.bookmarksCount}")
+            TweetCacheManager.saveUser(user.value)
+            Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
         }
     }
 
@@ -421,14 +366,35 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
+        val currentCount = user.value.favoritesCount
+        val currentUser = user.value
+        Timber.tag("UserViewModel").d("updateFavorite: Current favorites count before update: $currentCount")
+        Timber.tag("UserViewModel").d("updateFavorite: Current user ID: ${currentUser.mid}")
+        Timber.tag("UserViewModel").d("updateFavorite: Tweet author ID: ${tweet.authorId}")
+        Timber.tag("UserViewModel").d("updateFavorite: Is favorite action: $isFavorite")
+        
+        val newCount = if (isFavorite) currentCount + 1 else max(currentCount - 1, 0)
+        val updatedUser = currentUser.copy(favoritesCount = newCount)
+        
+        // Update the user state
+        _user.value = updatedUser
+        
+        // Update the favorites list
         if (isFavorite) {
-            _user.value = user.value.copy(favoritesCount = user.value.favoritesCount + 1)
             _favorites.update { bs -> listOf(tweet) + bs }
+            Timber.tag("UserViewModel").d("Optimistic favorite: User favorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
         } else {
-            _user.value = user.value.copy(
-                favoritesCount = max(user.value.favoritesCount - 1, 0)
-            )
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
+            Timber.tag("UserViewModel").d("Optimistic favorite: User unfavorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
+        }
+        
+        Timber.tag("UserViewModel").d("Optimistic favorite: Updated user favoritesCount: ${updatedUser.favoritesCount}")
+        
+        // Save to cache immediately
+        viewModelScope.launch(IO) {
+            Timber.tag("UserViewModel").d("updateFavorite: Saving user to cache with favoritesCount: ${updatedUser.favoritesCount}")
+            TweetCacheManager.saveUser(updatedUser)
+            Timber.tag("UserViewModel").d("updateFavorite: User saved to cache successfully")
         }
     }
 
@@ -440,8 +406,8 @@ class UserViewModel @AssistedInject constructor(
     init {
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
-                _user.value =
-                    getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                val loadedUser = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                _user.value = loadedUser
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -773,106 +739,8 @@ class UserViewModel @AssistedInject constructor(
                         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
                         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
 
-                        // Update user's tweet count
-                        _user.value = user.value.copy(tweetCount = tweets.value.size)
-                    }
-
-                    is TweetEvent.TweetLiked -> {
-                        // Update like status in favorites list
-                        _favorites.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.tweet.mid) event.tweet else tweet
-                            }
-                        }
-                    }
-
-                    is TweetEvent.TweetBookmarked -> {
-                        // Update bookmark status in bookmarks list
-                        _bookmarks.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.tweet.mid) event.tweet else tweet
-                            }
-                        }
-                    }
-
-                    is TweetEvent.CommentUploaded -> {
-                        // Update comment count for parent tweet in all lists
-                        _tweets.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweet.mid) {
-                                    tweet.copy(commentCount = event.parentTweet.commentCount)
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _topTweets.update { topTweets ->
-                            topTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweet.mid) {
-                                    tweet.copy(commentCount = event.parentTweet.commentCount)
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _favorites.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweet.mid) {
-                                    tweet.copy(commentCount = event.parentTweet.commentCount)
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _bookmarks.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweet.mid) {
-                                    tweet.copy(commentCount = event.parentTweet.commentCount)
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                    }
-
-                    is TweetEvent.CommentDeleted -> {
-                        // Decrease comment count for parent tweet in all lists
-                        _tweets.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweetId) {
-                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _topTweets.update { topTweets ->
-                            topTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweetId) {
-                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _favorites.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweetId) {
-                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
-                        _bookmarks.update { currentTweets ->
-                            currentTweets.map { tweet ->
-                                if (tweet.mid == event.parentTweetId) {
-                                    tweet.copy(commentCount = max(0, tweet.commentCount - 1))
-                                } else {
-                                    tweet
-                                }
-                            }
-                        }
+                        // Update user's tweet count while preserving other fields
+                        _user.value = _user.value.copy(tweetCount = tweets.value.size)
                     }
 
                     else -> {
@@ -888,40 +756,13 @@ class UserViewModel @AssistedInject constructor(
      * This is used for optimistic updates when tweets are deleted.
      */
     fun removeTweetFromAllLists(tweetId: MimeiId) {
-        Timber.tag("UserViewModel").d("Optimistic deletion: Removing tweet $tweetId from all user lists")
-        
         // Remove from all lists
-        _tweets.update { currentTweets -> 
-            val filtered = currentTweets.filterNot { it.mid == tweetId }
-            Timber.tag("UserViewModel").d("Removed from tweets: ${currentTweets.size} -> ${filtered.size}")
-            filtered
-        }
-        _topTweets.update { topTweets -> 
-            val filtered = topTweets.filterNot { it.mid == tweetId }
-            Timber.tag("UserViewModel").d("Removed from topTweets: ${topTweets.size} -> ${filtered.size}")
-            filtered
-        }
-        _favorites.update { currentTweets -> 
-            val filtered = currentTweets.filterNot { it.mid == tweetId }
-            Timber.tag("UserViewModel").d("Removed from favorites: ${currentTweets.size} -> ${filtered.size}")
-            filtered
-        }
-        _bookmarks.update { currentTweets -> 
-            val filtered = currentTweets.filterNot { it.mid == tweetId }
-            Timber.tag("UserViewModel").d("Removed from bookmarks: ${currentTweets.size} -> ${filtered.size}")
-            filtered
-        }
+        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
+        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
 
-        // Update user's tweet count
-        _user.value = user.value.copy(tweetCount = tweets.value.size)
-        Timber.tag("UserViewModel").d("Updated user tweet count to: ${tweets.value.size}")
-    }
-
-
-
-    fun someFunctionThatCallsSaveUser() {
-        viewModelScope.launch(Dispatchers.IO) {
-            TweetCacheManager.saveUser(appUser)
-        }
+        // Update user's tweet count while preserving other fields
+        _user.value = _user.value.copy(tweetCount = tweets.value.size)
     }
 }
