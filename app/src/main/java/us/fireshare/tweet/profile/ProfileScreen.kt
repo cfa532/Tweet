@@ -193,7 +193,7 @@ fun ProfileScreen(
                 ) {
                     // Profile details section
                     item {
-                        ProfileDetail(viewModel, navController, appUserViewModel)
+                        ProfileDetail(viewModel, navController)
                     }
                     
                     // Pinned tweets section

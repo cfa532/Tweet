@@ -24,32 +24,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
 import timber.log.Timber
+import us.fireshare.tweet.navigation.SharedViewModel
 
 @Composable
 fun ProfileDetail(
     viewModel: UserViewModel,
     navController: NavHostController,
-    appUserViewModel: UserViewModel
 ) {
+    val sharedViewModel = hiltViewModel<SharedViewModel>()
+    val appUserViewModel = sharedViewModel.appUserViewModel
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
     
     // Use appUser data when viewing own profile, otherwise use profile user data
     val displayUser = if (user.mid == appUser.mid) appUser else user
-    
     val profile by remember { derivedStateOf { displayUser.profile } }
-    val bookmarksCount by remember { derivedStateOf { displayUser.bookmarksCount } }
-    val favoritesCount by remember { derivedStateOf { displayUser.favoritesCount } }
-    val followingsCount by remember { derivedStateOf { displayUser.followingCount } }
-    val followersCount by remember { derivedStateOf { displayUser.followersCount } }
-    val tweetCount by remember { derivedStateOf { displayUser.tweetCount } }
+    
+    // Use ViewModel's public count variables
+    val bookmarksCount by viewModel.bookmarksCount.collectAsState()
+    val favoritesCount by viewModel.favoritesCount.collectAsState()
+    val followingsCount by viewModel.followingsCount.collectAsState()
+    val followersCount by viewModel.followersCount.collectAsState()
+    val tweetCount by viewModel.tweetCount.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
         viewModel.refreshFollowingsAndFans()
@@ -95,43 +99,39 @@ fun ProfileDetail(
                 )
                 // show the following buttons only on appUser's profile
                 if (displayUser.mid == appUser.mid) {
-                    bookmarksCount?.let {
-                        Row(
-                            modifier = Modifier.clickable(
-                                onClick = {
-                                    navController.navigate((NavTweet.Bookmarks(displayUser.mid)))
-                                }
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Bookmarks,
-                                contentDescription = stringResource(R.string.user_bookmarks),
-                                modifier = Modifier.size(IconSize)
-                            )
-                            Text(
-                                text = "${if (it>0) it else ""}",
+                    Row(
+                        modifier = Modifier.clickable(
+                            onClick = {
+                                navController.navigate((NavTweet.Bookmarks(displayUser.mid)))
+                            }
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bookmarks,
+                            contentDescription = stringResource(R.string.user_bookmarks),
+                            modifier = Modifier.size(IconSize)
+                        )
+                                                    Text(
+                                text = "${if (bookmarksCount > 0) bookmarksCount else ""}",
                                 style = MaterialTheme.typography.bodySmall,
                             )
-                        }
                     }
-                    favoritesCount?.let {
-                        Row(
-                            modifier = Modifier.clickable(
-                                onClick = {
-                                    navController.navigate((NavTweet.Favorites(displayUser.mid)))
-                                }
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FavoriteBorder,
-                                contentDescription = stringResource(R.string.user_favorites),
-                                modifier = Modifier.size(IconSize)
-                            )
-                            Text(
-                                text = "${if (it>0) it else ""}",
+                    Row(
+                        modifier = Modifier.clickable(
+                            onClick = {
+                                navController.navigate((NavTweet.Favorites(displayUser.mid)))
+                            }
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = stringResource(R.string.user_favorites),
+                            modifier = Modifier.size(IconSize)
+                        )
+                                                    Text(
+                                text = "${if (favoritesCount > 0) favoritesCount else ""}",
                                 style = MaterialTheme.typography.bodySmall,
                             )
-                        }
                     }
                 }
             }

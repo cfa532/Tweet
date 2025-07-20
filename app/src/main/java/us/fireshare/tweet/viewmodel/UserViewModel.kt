@@ -47,8 +47,6 @@ class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId,
 //    private val savedStateHandle: SavedStateHandle
 ): ViewModel() {
-    
-
     private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -71,6 +69,22 @@ class UserViewModel @AssistedInject constructor(
     val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
     private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
+
+    // Public count variables for UI display
+    private val _bookmarksCount = MutableStateFlow(0)
+    val bookmarksCount: StateFlow<Int> get() = _bookmarksCount.asStateFlow()
+    
+    private val _favoritesCount = MutableStateFlow(0)
+    val favoritesCount: StateFlow<Int> get() = _favoritesCount.asStateFlow()
+    
+    private val _followersCount = MutableStateFlow(0)
+    val followersCount: StateFlow<Int> get() = _followersCount.asStateFlow()
+    
+    private val _followingsCount = MutableStateFlow(0)
+    val followingsCount: StateFlow<Int> get() = _followingsCount.asStateFlow()
+    
+    private val _tweetCount = MutableStateFlow(0)
+    val tweetCount: StateFlow<Int> get() = _tweetCount.asStateFlow()
 
     // variable for login management
     var username = mutableStateOf(appUser.username)
@@ -186,8 +200,15 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun refreshFollowingsAndFans() {
-        _followers.value = HproseInstance.getFans(user.value) ?: emptyList()
-        _followings.value = HproseInstance.getFollowings(user.value)
+        val fans = HproseInstance.getFans(user.value) ?: emptyList()
+        val followings = HproseInstance.getFollowings(user.value)
+        
+        _followers.value = fans
+        _followings.value = followings
+        
+        // Update the public count variables for UI
+        _followersCount.value = fans.size
+        _followingsCount.value = followings.size
     }
     
     companion object {
@@ -198,7 +219,7 @@ class UserViewModel @AssistedInject constructor(
      * Fetch followers with pagination support
      * Returns List<MimeiId> (null values are filtered out)
      */
-    suspend fun fetchFollowers(pageNumber: Int): List<MimeiId> {
+    fun fetchFollowers(pageNumber: Int): List<MimeiId> {
         Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {
@@ -245,7 +266,7 @@ class UserViewModel @AssistedInject constructor(
      * Fetch followings with pagination support
      * Returns List<MimeiId> (null values are filtered out)
      */
-    suspend fun fetchFollowings(pageNumber: Int): List<MimeiId> {
+    fun fetchFollowings(pageNumber: Int): List<MimeiId> {
         return try {
             if (pageNumber == 0) {
                 // For page 0, refresh the entire list
@@ -288,6 +309,7 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
             _bookmarks.value = validTweets
+            _bookmarksCount.value = validTweets.size
         } else {
             // For load more (page > 0), append to the list
             _bookmarks.update { currentBookmarks ->
@@ -295,43 +317,64 @@ class UserViewModel @AssistedInject constructor(
                 val updatedBookmarks = currentBookmarks.map { bookmark ->
                     newTweetsMap[bookmark.mid] ?: bookmark
                 }
-                (updatedBookmarks + validTweets)
+                val finalBookmarks = (updatedBookmarks + validTweets)
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
+                
+                _bookmarksCount.value = finalBookmarks.size
+                finalBookmarks
             }
         }
     }
 
     /**
      * Update in-memory bookmark data for display.
-     * if bookmarks screen of an user never opened, the bookmarks are empty.
-     * */
+     * This method performs optimistic updates to provide immediate UI feedback.
+     * 
+     * @param tweet The tweet to bookmark or unbookmark
+     * @param isBookmarked True to add bookmark, false to remove bookmark
+     */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
+        // Get current bookmark count and user state for logging
         val currentCount = user.value.bookmarksCount
         val currentUser = user.value
+        
+        // Log the operation details for debugging
         Timber.tag("UserViewModel").d("updateBookmark: Current bookmarks count before update: $currentCount")
         Timber.tag("UserViewModel").d("updateBookmark: Current user ID: ${currentUser.mid}")
         Timber.tag("UserViewModel").d("updateBookmark: Tweet author ID: ${tweet.authorId}")
         Timber.tag("UserViewModel").d("updateBookmark: Is bookmark action: $isBookmarked")
         
+        // Calculate new bookmark count (ensure it doesn't go below 0)
+        val newCount = if (isBookmarked) currentCount + 1 else max(currentCount - 1, 0)
+        
+        // Create updated user object with new bookmark count
+        val updatedUser = currentUser.copy(bookmarksCount = newCount)
+        
+        // Update the user state immediately for UI responsiveness
+        _user.value = updatedUser
+        
+        // Update the public bookmarks count for UI
+        _bookmarksCount.value = newCount
+        
+        // Update the bookmarks list optimistically
         if (isBookmarked) {
-            val newCount = currentCount + 1
-            _user.value = currentUser.copy(bookmarksCount = newCount)
+            // Add tweet to the beginning of bookmarks list
             _bookmarks.update { bs -> listOf(tweet) + bs }
             Timber.tag("UserViewModel").d("Optimistic bookmark: User bookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
-            Timber.tag("UserViewModel").d("Optimistic bookmark: Updated user bookmarksCount: ${user.value.bookmarksCount}")
         } else {
-            val newCount = max(currentCount - 1, 0)
-            _user.value = currentUser.copy(bookmarksCount = newCount)
+            // Remove tweet from bookmarks list
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
             Timber.tag("UserViewModel").d("Optimistic bookmark: User unbookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
-            Timber.tag("UserViewModel").d("Optimistic bookmark: Updated user bookmarksCount: ${user.value.bookmarksCount}")
         }
         
-        // Save to cache immediately
+        // Log the final updated bookmark count
+        Timber.tag("UserViewModel").d("Optimistic bookmark: Updated user bookmarksCount: ${updatedUser.bookmarksCount}")
+        
+        // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
-            Timber.tag("UserViewModel").d("updateBookmark: Saving user to cache with bookmarksCount: ${user.value.bookmarksCount}")
-            TweetCacheManager.saveUser(user.value)
+            Timber.tag("UserViewModel").d("updateBookmark: Saving user to cache with bookmarksCount: ${updatedUser.bookmarksCount}")
+            TweetCacheManager.saveUser(updatedUser)
             Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
         }
     }
@@ -351,6 +394,7 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
             _favorites.value = validTweets
+            _favoritesCount.value = validTweets.size
         } else {
             // For load more (page > 0), append to the list
             _favorites.update { currentFavorites ->
@@ -358,39 +402,61 @@ class UserViewModel @AssistedInject constructor(
                 val updatedFavorites = currentFavorites.map { favorite ->
                     newTweetsMap[favorite.mid] ?: favorite
                 }
-                (updatedFavorites + validTweets)
+                val finalFavorites = (updatedFavorites + validTweets)
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
+                
+                _favoritesCount.value = finalFavorites.size
+                finalFavorites
             }
         }
     }
 
+    /**
+     * Update in-memory favorite data for display.
+     * This method performs optimistic updates to provide immediate UI feedback.
+     * 
+     * @param tweet The tweet to favorite or unfavorite
+     * @param isFavorite True to add favorite, false to remove favorite
+     */
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
+        // Get current favorite count and user state for logging
         val currentCount = user.value.favoritesCount
         val currentUser = user.value
+        
+        // Log the operation details for debugging
         Timber.tag("UserViewModel").d("updateFavorite: Current favorites count before update: $currentCount")
         Timber.tag("UserViewModel").d("updateFavorite: Current user ID: ${currentUser.mid}")
         Timber.tag("UserViewModel").d("updateFavorite: Tweet author ID: ${tweet.authorId}")
         Timber.tag("UserViewModel").d("updateFavorite: Is favorite action: $isFavorite")
         
+        // Calculate new favorite count (ensure it doesn't go below 0)
         val newCount = if (isFavorite) currentCount + 1 else max(currentCount - 1, 0)
+        
+        // Create updated user object with new favorite count
         val updatedUser = currentUser.copy(favoritesCount = newCount)
         
-        // Update the user state
+        // Update the user state immediately for UI responsiveness
         _user.value = updatedUser
         
-        // Update the favorites list
+        // Update the public favorites count for UI
+        _favoritesCount.value = newCount
+        
+        // Update the favorites list optimistically
         if (isFavorite) {
+            // Add tweet to the beginning of favorites list
             _favorites.update { bs -> listOf(tweet) + bs }
             Timber.tag("UserViewModel").d("Optimistic favorite: User favorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
         } else {
+            // Remove tweet from favorites list
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
             Timber.tag("UserViewModel").d("Optimistic favorite: User unfavorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
         }
         
+        // Log the final updated favorite count
         Timber.tag("UserViewModel").d("Optimistic favorite: Updated user favoritesCount: ${updatedUser.favoritesCount}")
         
-        // Save to cache immediately
+        // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
             Timber.tag("UserViewModel").d("updateFavorite: Saving user to cache with favoritesCount: ${updatedUser.favoritesCount}")
             TweetCacheManager.saveUser(updatedUser)
@@ -408,6 +474,14 @@ class UserViewModel @AssistedInject constructor(
             viewModelScope.launch(Dispatchers.IO) {
                 val loadedUser = getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 _user.value = loadedUser
+                
+                // Initialize count variables from user data
+                _bookmarksCount.value = loadedUser.bookmarksCount
+                _favoritesCount.value = loadedUser.favoritesCount
+                _followersCount.value = loadedUser.followersCount
+                _followingsCount.value = loadedUser.followingCount
+                _tweetCount.value = loadedUser.tweetCount
+                
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
                     // Do it only when opening the user's profile page.
@@ -417,6 +491,13 @@ class UserViewModel @AssistedInject constructor(
             }
         } else {
             _user.value = appUser
+            
+            // Initialize count variables from appUser data
+            _bookmarksCount.value = appUser.bookmarksCount
+            _favoritesCount.value = appUser.favoritesCount
+            _followersCount.value = appUser.followersCount
+            _followingsCount.value = appUser.followingCount
+            _tweetCount.value = appUser.tweetCount
         }
     }
 
@@ -445,8 +526,9 @@ class UserViewModel @AssistedInject constructor(
 
             if (pageNumber == 0) {
                 // For refresh (page 0), replace the list
-                _tweets.value =
-                    newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                val filteredTweets = newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+                _tweets.value = filteredTweets
+                _tweetCount.value = filteredTweets.size
             } else {
                 // For load more (page > 0), append to the list
                 _tweets.update { currentTweets ->
@@ -454,10 +536,13 @@ class UserViewModel @AssistedInject constructor(
                     val updatedTweets = currentTweets.map { tweet ->
                         newTweetsMap[tweet.mid] ?: tweet
                     }
-                    (updatedTweets + newTweets)
+                    val finalTweets = (updatedTweets + newTweets)
                         .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    
+                    _tweetCount.value = finalTweets.size
+                    finalTweets
                 }
             }
 
@@ -729,6 +814,7 @@ class UserViewModel @AssistedInject constructor(
                                     .sortedByDescending { it.timestamp }
                             }
                             _user.value = user.value.copy(tweetCount = tweets.value.size)
+                            _tweetCount.value = tweets.value.size
                         }
                     }
 
@@ -741,6 +827,7 @@ class UserViewModel @AssistedInject constructor(
 
                         // Update user's tweet count while preserving other fields
                         _user.value = _user.value.copy(tweetCount = tweets.value.size)
+                        _tweetCount.value = tweets.value.size
                     }
 
                     else -> {
