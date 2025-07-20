@@ -53,8 +53,8 @@ class UserViewModel @AssistedInject constructor(
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
     // pinned tweets
-    private val _topTweets = MutableStateFlow<List<Tweet>>(emptyList())
-    val topTweets: StateFlow<List<Tweet>> get() = _topTweets.asStateFlow()
+    private val _pinnedTweets = MutableStateFlow<List<Tweet>>(emptyList())
+    val pinnedTweets: StateFlow<List<Tweet>> get() = _pinnedTweets.asStateFlow()
 
     private var _followers = MutableStateFlow(emptyList<MimeiId>())
     val followers: StateFlow<List<MimeiId>> get() = _followers.asStateFlow()
@@ -129,7 +129,7 @@ class UserViewModel @AssistedInject constructor(
      * Whether the tweet is pinned to top list.
      * */
     fun hasPinned(tweet: Tweet): Boolean {
-        return topTweets.value.any { it.mid == tweet.mid }
+        return pinnedTweets.value.any { it.mid == tweet.mid }
     }
 
     fun getHostId() {
@@ -568,7 +568,7 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
             // 3. overwrite any tweet in _topTweets with one from pinnedTweets
-            _topTweets.update { currentTopTweets ->
+            _pinnedTweets.update { currentTopTweets ->
                 val pinnedTweetsFiltered = pinnedTweets.toList()
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
@@ -596,7 +596,7 @@ class UserViewModel @AssistedInject constructor(
                 _tweets.update { currentTweets ->
                     currentTweets.filterNot { it.mid == tweet.mid }
                 }
-                _topTweets.update { currentTopTweets ->
+                _pinnedTweets.update { currentTopTweets ->
                     (listOf(tweet) + currentTopTweets)
                         .distinctBy { it.mid }
                         .sortedByDescending { it.timestamp }
@@ -604,7 +604,7 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("pinToTop").d("Tweet ${tweet.mid} pinned successfully")
             } else {
                 // Tweet is now unpinned: remove from pinned tweets and add back to tweets
-                _topTweets.update { currentTopTweets ->
+                _pinnedTweets.update { currentTopTweets ->
                     currentTopTweets.filterNot { it.mid == tweet.mid }
                 }
                 _tweets.update { currentTweets ->
@@ -662,7 +662,7 @@ class UserViewModel @AssistedInject constructor(
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * */
         _tweets.value = emptyList()
-        _topTweets.value = emptyList()
+        _pinnedTweets.value = emptyList()
         dao.clearAllCachedTweets()
         popBack()
     }
@@ -825,7 +825,7 @@ class UserViewModel @AssistedInject constructor(
                     is TweetEvent.TweetDeleted -> {
                         // Remove from all lists
                         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
-                        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == event.tweetId } }
+                        _pinnedTweets.update { topTweets -> topTweets.filterNot { it.mid == event.tweetId } }
                         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
                         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
 
@@ -849,7 +849,7 @@ class UserViewModel @AssistedInject constructor(
     fun removeTweetFromAllLists(tweetId: MimeiId) {
         // Remove from all lists
         _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _topTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
+        _pinnedTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
         _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
         _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
 
