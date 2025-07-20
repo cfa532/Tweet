@@ -1205,7 +1205,7 @@ object HproseInstance {
      * the tweet is pinned.
      * */
     fun getPinnedList(user: User): List<Map<*, *>>? {
-        val entry = "get_top_tweets"
+        val entry = "get_pinned_tweets"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
