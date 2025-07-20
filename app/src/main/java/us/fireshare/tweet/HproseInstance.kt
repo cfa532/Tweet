@@ -1184,16 +1184,16 @@ object HproseInstance {
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    fun togglePinnedTweet(tweetId: MimeiId): List<Map<*, *>>? {
-        val entry = "toggle_top_tweets"
+    fun togglePinnedTweet(tweetId: MimeiId): Boolean? {
+        val entry = "toggle_pinned_tweet"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "userid" to appUser.mid,
+            "appuserid" to appUser.mid,
             "tweetid" to tweetId
         )
         return try {
-            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            appUser.hproseService?.runMApp<Boolean>(entry, params)
         } catch (e: Exception) {
             Timber.tag("togglePinnedTweet").e(e)
             null

@@ -112,8 +112,8 @@ fun TweetDropdownMenuItems(
             modifier = Modifier.alpha(1f),
             onClick = {
                 appUserViewModel.viewModelScope.launch(IO) {
-                    appUserViewModel.pinToTop(tweet.mid)
                     onDismissRequest()
+                    appUserViewModel.pinToTop(tweet)
                 }
             },
             text = {

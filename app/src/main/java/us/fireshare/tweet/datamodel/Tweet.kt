@@ -327,16 +327,6 @@ data class Tweet(
             throw RuntimeException("Cannot update tweet from dictionary", e)
         }
     }
-
-    /**
-     * Checks if this tweet is pinned based on a list of pinned tweets
-     */
-    fun isPinned(pinnedTweets: List<Map<String, Any>>): Boolean {
-        return pinnedTweets.any { dict ->
-            val pinnedTweet = dict["tweet"] as? Tweet
-            pinnedTweet?.mid == this.mid
-        }
-    }
 }
 
 @Serializable

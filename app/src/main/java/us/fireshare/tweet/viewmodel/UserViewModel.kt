@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -35,7 +34,6 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 
 import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
@@ -591,28 +589,34 @@ class UserViewModel @AssistedInject constructor(
     /**
      * User can pin or unpin any tweet, including quoted or retweet by this user.
      * */
-    suspend fun pinToTop(tweetId: MimeiId) {
-        val pinnedTweets = mutableSetOf<Tweet>()
-        HproseInstance.togglePinnedTweet(tweetId)?.forEach { map ->
-            val tweet = tweets.value.find { it.mid == map["tweetId"] }
-            if (tweet != null) {
-                /**
-                 * add tweet to topTweets, update its timestamp to when it is pinned,
-                 * instead of when it was created.
-                 * */
-                pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
-            } else {
-                HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
-                    // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
-                    pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
+    suspend fun pinToTop(tweet: Tweet) {
+        HproseInstance.togglePinnedTweet(tweet.mid)?.let { isPinned ->
+            if (isPinned) {
+                // Tweet is now pinned: remove from tweets and add to pinned tweets
+                _tweets.update { currentTweets ->
+                    currentTweets.filterNot { it.mid == tweet.mid }
                 }
+                _topTweets.update { currentTopTweets ->
+                    (listOf(tweet) + currentTopTweets)
+                        .distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
+                }
+                Timber.tag("pinToTop").d("Tweet ${tweet.mid} pinned successfully")
+            } else {
+                // Tweet is now unpinned: remove from pinned tweets and add back to tweets
+                _topTweets.update { currentTopTweets ->
+                    currentTopTweets.filterNot { it.mid == tweet.mid }
+                }
+                _tweets.update { currentTweets ->
+                    (listOf(tweet) + currentTweets)
+                        .distinctBy { it.mid }
+                        .sortedByDescending { it.timestamp }
+                }
+                Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
             }
-        }
-        _topTweets.update {
-            pinnedTweets.toList()
-                .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-                .distinctBy { tweet: Tweet -> tweet.mid }
-                .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+            
+            // Update tweet count
+            _tweetCount.value = tweets.value.size
         }
     }
 
