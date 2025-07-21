@@ -10,11 +10,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,63 +73,366 @@ import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 fun MediaPreviewGrid(
     mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel,
-    containerWidth: Dp = 400.dp
-) {    // need to check container width later
+    containerWidth: Dp = 320.dp // This will be ignored in favor of maxWidth
+) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
-    // check if all attachments are audio
-    val isAllAudio = mediaItems.all { it.type == MediaType.Audio }
-    val gridCells = if (isAllAudio) 1 else if (mediaItems.size > 1) 2 else 1
-    val maxItems = if (isAllAudio) 9 else when (mediaItems.size) {
+    val maxItems = when (mediaItems.size) {
         1 -> 1
-        in 2..3 -> 2
+        2, 3 -> mediaItems.size
         else -> 4
     }
     val limitedMediaList = mediaItems.take(maxItems)
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(gridCells),
+    fun aspectRatioOf(item: MimeiFileType): Float {
+        return item.aspectRatio?.toFloat()?.takeIf { it > 0 } ?: 1f
+    }
+
+    fun isPortrait(item: MimeiFileType) = aspectRatioOf(item) < 1f
+    fun isLandscape(item: MimeiFileType) = aspectRatioOf(item) > 1f
+
+    var isFirstVideo = false
+
+    BoxWithConstraints(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
+            .fillMaxWidth()
     ) {
-        val modifier = if (gridCells == 1) Modifier.fillMaxWidth()
-            else Modifier.size(containerWidth / gridCells)
-        var isFirstVideo = false
-        itemsIndexed(limitedMediaList) { index, mediaItem ->
-            MediaItemView(
-                limitedMediaList,
-                modifier = modifier
-                    .wrapContentSize()
-                    .clickable {
-                        val params = MediaViewerParams(
-                            mediaItems.map {
-                                MediaItem(
-                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                    it.type
+        val gridWidth = maxWidth
+        val gridHeight = gridWidth // For simplicity, use square grid
+
+        when (limitedMediaList.size) {
+            1 -> {
+                MediaItemView(
+                    limitedMediaList,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clickable {
+                            val params = MediaViewerParams(
+                                mediaItems.map {
+                                    MediaItem(
+                                        getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                        it.type
+                                    )
+                                }, 0, tweet.mid, tweet.authorId
+                            )
+                            navController.navigate(NavTweet.MediaViewer(params))
+                        },
+                    index = 0,
+                    numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
+                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                        isFirstVideo = true
+                        true
+                    } else false,
+                    inPreviewGrid = true,
+                    viewModel = viewModel
+                )
+            }
+            2 -> {
+                val ar0 = aspectRatioOf(limitedMediaList[0])
+                val ar1 = aspectRatioOf(limitedMediaList[1])
+                val isPortrait0 = ar0 < 1f
+                val isPortrait1 = ar1 < 1f
+                val isLandscape0 = ar0 > 1f
+                val isLandscape1 = ar1 > 1f
+                if (isPortrait0 && isPortrait1) {
+                    Row(Modifier.height(gridHeight)) {
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth / 2 - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
                                 )
-                            }, index, tweet.mid, tweet.authorId
-                        )
-                        navController.navigate(NavTweet.MediaViewer(params))
-                    },
-                index = index,
-                /**
-                 * If the last item previewed is not the last of the attachments, show a plus sign
-                 * to indicate there are more items hidden.
-                 * */
-                numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
-                    mediaItems.size - maxItems else 0,
-                // autoplay first video item
-                autoPlay = if ((mediaItem.type ?: inferMediaTypeFromAttachment(mediaItem)) == MediaType.Video && !isFirstVideo) {
+                            }
+                        }
+                    }
+                } else if (isLandscape0 && isLandscape1) {
+                    Column(Modifier.width(gridWidth)) {
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth)
+                                    .height(gridHeight / 2 - 1.dp)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Row(Modifier.height(gridHeight)) {
+                        if (isPortrait0) {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth * 1f / 3f - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 0,
+                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth * 2f / 3f - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth * 2f / 3f - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 0,
+                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth * 1f / 3f - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            3 -> {
+                val ar0 = aspectRatioOf(limitedMediaList[0])
+                val ar1 = aspectRatioOf(limitedMediaList[1])
+                val ar2 = aspectRatioOf(limitedMediaList[2])
+                val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
+                val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
+                if (allPortrait) {
+                    // All portrait: horizontal stack (3 equal columns)
+                    Row(Modifier.height(gridHeight)) {
+                        for (idx in 0..2) {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth / 3 - 1.dp)
+                                    .height(gridHeight)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                    }
+                } else if (allLandscape) {
+                    // All landscape: vertical stack (3 equal rows)
+                    Column(Modifier.width(gridWidth)) {
+                        for (idx in 0..2) {
+                            Box(
+                                modifier = Modifier
+                                    .width(gridWidth)
+                                    .height(gridHeight / 3 - 1.dp)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                    }
+                } else if (ar0 < 1f) {
+                    // First is portrait: left column tall, right column two stacked
+                    Row(Modifier.height(gridHeight)) {
+                        Box(
+                            modifier = Modifier
+                                .width(gridWidth / 2 - 1.dp)
+                                .height(gridHeight)
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier.fillMaxSize(),
+                                index = 0,
+                                autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                    isFirstVideo = true
+                                    true
+                                } else false,
+                                inPreviewGrid = true,
+                                viewModel = viewModel
+                            )
+                        }
+                        Column {
+                            for (idx in 1..2) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(gridWidth / 2 - 1.dp)
+                                        .height(gridHeight / 2 - 1.dp)
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = idx,
+                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                            isFirstVideo = true
+                                            true
+                                        } else false,
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // First is landscape: top row wide, bottom row two images
+                    Column(Modifier.width(gridWidth)) {
+                        Box(
+                            modifier = Modifier
+                                .width(gridWidth)
+                                .height(gridHeight / 2 - 1.dp)
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier.fillMaxSize(),
+                                index = 0,
+                                autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                    isFirstVideo = true
+                                    true
+                                } else false,
+                                inPreviewGrid = true,
+                                viewModel = viewModel
+                            )
+                        }
+                        Row {
+                            for (idx in 1..2) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(gridWidth / 2 - 1.dp)
+                                        .height(gridHeight / 2 - 1.dp)
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = idx,
+                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                            isFirstVideo = true
+                                            true
+                                        } else false,
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            4 -> {
+                // Use original grid method for 4 items
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    itemsIndexed(limitedMediaList) { index, mediaItem ->
+                        MediaItemView(
+                            limitedMediaList,
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .clickable {
+                                    val params = MediaViewerParams(
+                                        mediaItems.map {
+                                            MediaItem(
+                                                getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                                it.type
+                                            )
+                                        }, index, tweet.mid, tweet.authorId
+                                    )
+                                    navController.navigate(NavTweet.MediaViewer(params))
+                                },
+                            index = index,
+                            numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
+                                mediaItems.size - maxItems else 0,
+                            autoPlay = if ((mediaItem.type ?: inferMediaTypeFromAttachment(mediaItem)) == MediaType.Video && !isFirstVideo) {
                                 isFirstVideo = true
                                 true
-                            } else {
-                                false
-                            },
-                inPreviewGrid = true,
-                viewModel
-            )
+                            } else false,
+                            inPreviewGrid = true,
+                            viewModel = viewModel
+                        )
+                    }
+                }
+            }
         }
     }
 }

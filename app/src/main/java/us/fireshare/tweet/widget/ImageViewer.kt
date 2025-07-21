@@ -66,14 +66,17 @@ fun ImageViewer(
         modifier.fillMaxSize()      // Preview image fits within parent
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center // Center the image in the cell
+    ) {
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(imageUrl)
                 .crossfade(true)
                 .build(),
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Crop, // Always crop to fill the cell
             modifier = if (enableLongPress) {
                 adjustedModifier
                     .pointerInput(Unit) {
