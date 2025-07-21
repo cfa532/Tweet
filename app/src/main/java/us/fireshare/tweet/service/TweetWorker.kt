@@ -168,13 +168,11 @@ class UploadTweetWorker @AssistedInject constructor(
                     isPrivate = isPrivate
                 )
 
-                withContext(Dispatchers.IO) {
-                    HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
-                        Timber.tag("UploadTweetWorker").d(tweet.toString())
-                        return@withContext Result.success()
-                    }
-                    return@withContext Result.failure()
+                HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
+                    Timber.tag("UploadTweetWorker").d(tweet.toString())
+                    return Result.success()
                 }
+                Result.failure()
             } finally {
                 wakeLock.release()
             }
