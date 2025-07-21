@@ -213,13 +213,12 @@ class TweetViewModel @AssistedInject constructor(
         context: Context,
         content: String,
         attachments: List<Uri>? = null,
-        tweetFeedViewModel: TweetFeedViewModel
     ) {
-        val gson = Gson()
         val data = workDataOf(
-            "tweet" to gson.toJson(tweetState.value),
-            "isChecked" to isCheckedToTweet.value,
-            "content" to content,
+            "tweetId" to tweetState.value.mid,
+            "authorId" to tweetState.value.authorId,
+            "isCheckedToTweet" to isCheckedToTweet.value,
+            "content" to content,   // content for new comment
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
         )
         val uploadRequest = OneTimeWorkRequest.Builder(UploadCommentWorker::class.java)
@@ -242,6 +241,7 @@ class TweetViewModel @AssistedInject constructor(
                                 val json = outputData.getString("commentedTweet") ?: return@observe
                                 Timber.tag("UploadComment").d("Comment added successfully: $json")
                                 // Handle the success and update UI
+                                val gson = Gson()
                                 val map = gson.fromJson(json, Map::class.java) as Map<*, *>
 
                                 // UI updates are now handled by the notification system

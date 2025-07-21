@@ -1049,9 +1049,9 @@ object HproseInstance {
             val response =
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            if (response != null) {
+            if (response != null && response["success"] == true) {
                 // update mid of comment, which was null when passed as argument
-                val newCommentId = response["commentId"] as? MimeiId ?: comment.mid
+                val newCommentId = response["mid"] as? MimeiId ?: comment.mid
                 val updatedComment = comment.copy(mid = newCommentId)
 
                 val updatedTweet = tweet.copy(
@@ -1066,9 +1066,12 @@ object HproseInstance {
                         updatedTweet
                     )
                 )
-
                 updatedTweet
-            } else tweet
+            } else {
+                val errorMessage = response?.get("message") as? String ?: "Unknown error"
+                Timber.tag("uploadComment").e("Failed to upload comment: $errorMessage")
+                tweet
+            }
         } catch (e: Exception) {
             Timber.tag("uploadComment()").e(e)
             tweet

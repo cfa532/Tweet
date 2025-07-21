@@ -169,7 +169,6 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     val isLoading = remember { mutableStateOf(false) }
-                    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
                     IconButton(enabled = !isLoading.value,
                         onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
@@ -178,7 +177,6 @@ fun ComposeCommentScreen(
                                 context,
                                 tweetContent.trim(),
                                 selectedAttachments,
-                                tweetFeedViewModel
                             )
                             // clear and return to previous screen
                             selectedAttachments.clear()

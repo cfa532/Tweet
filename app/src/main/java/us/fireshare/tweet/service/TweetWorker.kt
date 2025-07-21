@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -35,15 +34,15 @@ class UploadCommentWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         return try {
-            val tweetString = inputData.getString("tweet") ?: return Result.failure()
-            val gson = Gson().newBuilder()
-                .excludeFieldsWithoutExposeAnnotation()
-                .create()
-            val originalTweet = gson.fromJson(tweetString, Tweet::class.java)
+            val tweetId = inputData.getString("tweetId") ?: return Result.failure()
+            val authorId = inputData.getString("authorId") ?: return Result.failure()
+            
+            // Fetch the parent tweet using ID and author ID
+            val parentTweet = HproseInstance.fetchTweet(tweetId, authorId) ?: return Result.failure()
 
             // whether the comment is also posted as a tweet.
-            val isChecked = inputData.getBoolean("isChecked", false)
-            val commentContent = inputData.getString("content")
+            val isChecked = inputData.getBoolean("isCheckedToTweet", false)
+            val commentContent = inputData.getString("content")     // comment content
             val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
             val attachments = withContext(Dispatchers.IO) {
@@ -76,15 +75,15 @@ class UploadCommentWorker @AssistedInject constructor(
                 timestamp = System.currentTimeMillis()
             )
 
-            HproseInstance.uploadComment(originalTweet, comment).let { updatedTweet: Tweet ->
+            HproseInstance.uploadComment(parentTweet, comment).let { updatedTweet: Tweet ->
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 // retweet is a new tweet with the comment as its content.
                 val retweet = if (isChecked) {
-                    comment.originalTweetId = originalTweet.mid
-                    comment.originalAuthorId = originalTweet.authorId
+                    comment.originalTweetId = parentTweet.mid
+                    comment.originalAuthorId = parentTweet.authorId
                     HproseInstance.uploadTweet(comment)?.let { retweet ->
-                        updateRetweetCount(originalTweet, retweet.mid)?.let {
+                        updateRetweetCount(parentTweet, retweet.mid)?.let {
                             updatedTweet.retweetCount = it.retweetCount
                         }
                         retweet
