@@ -49,7 +49,15 @@ class UploadCommentWorker @AssistedInject constructor(
             val attachments = withContext(Dispatchers.IO) {
                 attachmentUris.mapNotNull { uri ->
                     try {
-                        uploadToIPFS(applicationContext, uri.toString().toUri())
+                        Timber.tag("UploadCommentWorker").d("Starting upload for URI: $uri")
+                        Timber.tag("UploadCommentWorker").d("Calling uploadToIPFS for URI: $uri")
+                        val result = uploadToIPFS(applicationContext, uri.toString().toUri())
+                        if (result != null) {
+                            Timber.tag("UploadCommentWorker").d("Successfully uploaded attachment: ${result.mid}")
+                        } else {
+                            Timber.tag("UploadCommentWorker").e("uploadToIPFS returned null for URI: $uri")
+                        }
+                        result
                     } catch (e: Exception) {
                         Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
                         null // Return null in case of error
@@ -128,6 +136,7 @@ class UploadTweetWorker @AssistedInject constructor(
                         Timber.tag("UploadTweetWorker").d("Starting upload for URI: $uriString")
                         val deferred = CoroutineScope(Dispatchers.IO).async {
                             try {
+                                Timber.tag("UploadTweetWorker").d("Calling uploadToIPFS for URI: $uriString")
                                 val result = uploadToIPFS(applicationContext, uriString.toUri())
                                 if (result != null) {
                                     Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment: ${result.mid}")

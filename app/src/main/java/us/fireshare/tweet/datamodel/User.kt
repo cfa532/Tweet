@@ -264,11 +264,15 @@ data class User(
         Timber.d("[resolveWritableUrl] Current baseUrl: $baseUrl")
         Timber.d("[resolveWritableUrl] Current writableUrl: $writableUrl")
 
-        // If writableUrl is null or empty, clear uploadService and resolve
-        if (writableUrl.isNullOrEmpty()) {
-            Timber.d("[resolveWritableUrl] writableUrl is null/empty, clearing uploadService and resolving...")
-            clearUploadService()
+        // If writableUrl is already valid, return it immediately
+        if (!writableUrl.isNullOrEmpty()) {
+            Timber.d("[resolveWritableUrl] Using existing writableUrl: $writableUrl")
+            return writableUrl
         }
+        
+        // If writableUrl is null or empty, clear uploadService and resolve
+        Timber.d("[resolveWritableUrl] writableUrl is null/empty, clearing uploadService and resolving...")
+        clearUploadService()
 
         if (hostIds.isNullOrEmpty()) {
             Timber.d("[resolveWritableUrl] No hostIds available, keeping existing writableUrl")

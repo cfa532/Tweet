@@ -1247,6 +1247,7 @@ object HproseInstance {
         referenceId: MimeiId? = null
     ): MimeiFileType? {
         Timber.tag("uploadToIPFS").d("Starting upload for URI: $uri")
+        Timber.tag("uploadToIPFS").d("Reference ID: $referenceId")
         // Get file name
         var fileName: String? = null
         try {
@@ -1308,9 +1309,10 @@ object HproseInstance {
 
         // For video files, try uploading to netdisk first
         if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
+            Timber.tag("uploadToIPFS").d("Detected video file, attempting netdisk upload first")
             try {
                 val netdiskResult =
-                    uploadVideoToNetdisk(context, uri, fileName, fileTimestamp, referenceId)
+                    uploadVideoToNetDisk(context, uri, fileName, fileTimestamp, referenceId)
                 if (netdiskResult != null) {
                     Timber.tag("uploadToIPFS()")
                         .d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
@@ -1320,6 +1322,8 @@ object HproseInstance {
                 Timber.tag("uploadToIPFS()")
                     .w("Failed to upload video to netdisk, falling back to IPFS: ${e.message}")
             }
+        } else {
+            Timber.tag("uploadToIPFS").d("Non-video file, proceeding with IPFS upload")
         }
 
         // Fall back to original IPFS method for non-video files or if netdisk upload fails
@@ -1330,13 +1334,14 @@ object HproseInstance {
         } else {
             Timber.tag("uploadToIPFS").e("uploadToIPFSOriginal returned null")
         }
+        Timber.tag("uploadToIPFS").d("Returning result: ${result?.mid ?: "null"}")
         return result
     }
 
     /**
      * Upload video file to netdisk URL using multipart form data
      */
-    private suspend fun uploadVideoToNetdisk(
+    private suspend fun uploadVideoToNetDisk(
         context: Context,
         uri: Uri,
         fileName: String?,
@@ -1346,15 +1351,15 @@ object HproseInstance {
         // Resolve writableUrl before using uploadService
         val resolvedUrl = appUser.resolveWritableUrl()
         if (resolvedUrl.isNullOrEmpty()) {
-            Timber.tag("uploadVideoToNetdisk").e("Failed to resolve writableUrl")
+            Timber.tag("uploadVideoToNetDisk").e("Failed to resolve writableUrl")
             return null
         }
-        Timber.tag("uploadVideoToNetdisk").d("Successfully resolved writableUrl: $resolvedUrl")
+        Timber.tag("uploadVideoToNetDisk").d("Successfully resolved writableUrl: $resolvedUrl")
         
-        val netdiskUrl = appUser.netDiskUrl ?: throw Exception("Netdisk URL not available")
-        val uploadUrl = "$netdiskUrl/upload"
+        val netdiskUrl = appUser.netDiskUrl ?: throw Exception("NetDisk URL not available")
+        val uploadUrl = "$netdiskUrl/convert-video"
 
-        Timber.tag("uploadVideoToNetdisk()").d("Uploading video to: $uploadUrl")
+        Timber.tag("uploadVideoToNetDisk()").d("Uploading video to: $uploadUrl")
 
         return try {
             val response = httpClient.post(uploadUrl) {
