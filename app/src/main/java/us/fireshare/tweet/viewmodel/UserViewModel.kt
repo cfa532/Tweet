@@ -524,9 +524,20 @@ class UserViewModel @AssistedInject constructor(
 
             if (pageNumber == 0) {
                 // For refresh (page 0), replace the list
-                val filteredTweets = newTweets.filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-                _tweets.value = filteredTweets
-                _tweetCount.value = filteredTweets.size
+                val filteredTweets = newTweets.filterNot { tweet: Tweet -> 
+                    tweet.isPrivate && tweet.authorId != appUser.mid 
+                }
+                
+                // Filter out pinned tweets from regular tweets list
+                val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
+                    pinnedTweetIds.contains(tweet.mid)
+                }
+                
+                _tweets.value = tweetsWithoutPinned
+                _tweetCount.value = tweetsWithoutPinned.size
+                
+                Timber.tag("getTweets").d("Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list")
             } else {
                 // For load more (page > 0), append to the list
                 _tweets.update { currentTweets ->
@@ -534,10 +545,15 @@ class UserViewModel @AssistedInject constructor(
                     val updatedTweets = currentTweets.map { tweet ->
                         newTweetsMap[tweet.mid] ?: tweet
                     }
-                    val finalTweets = (updatedTweets + newTweets)
+                    val combinedTweets = (updatedTweets + newTweets)
                         .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
                         .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    
+                    // Filter out pinned tweets from the combined list
+                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                    val finalTweets = combinedTweets.filterNot { tweet: Tweet ->
+                        pinnedTweetIds.contains(tweet.mid)
+                    }.sortedByDescending { tweet: Tweet -> tweet.timestamp }
                     
                     _tweetCount.value = finalTweets.size
                     finalTweets
@@ -553,34 +569,77 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun loadPinnedTweets() {
         try {
-            // 2. Get pinned tweets and update _topTweets, while avoiding duplication
-            val pinnedTweets = mutableSetOf<Tweet>()
-            HproseInstance.getPinnedList(user.value)?.forEach { map ->
-                val tweet = tweets.value.find { it.mid == map["tweetId"] }
-                if (tweet != null) {
-                    // add tweet to topTweets, update its timestamp to when it is pinned.
-                    pinnedTweets.add(tweet.copy(timestamp = map["timestamp"].toString().toLong()))
-                } else {
-                    HproseInstance.fetchTweet(map["tweetId"].toString(), user.value.mid, shouldCache = false)?.let { tweet1 ->
-                        // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
-                        pinnedTweets.add(tweet1.copy(timestamp = map["timestamp"].toString().toLong()))
+            Timber.tag("loadPinnedTweets").d("Loading pinned tweets for user: ${user.value.mid}")
+            
+            // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
+            val pinnedTweetsResponse = HproseInstance.getPinnedList(user.value)
+            
+            Timber.tag("loadPinnedTweets").d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
+            
+            if (!pinnedTweetsResponse.isNullOrEmpty()) {
+                // Parse the response: List<{tweet: Tweet, timestamp: Long}>
+                val pinnedTweetsWithPinnedTimestamp = pinnedTweetsResponse.mapNotNull { map ->
+                    try {
+                        val tweetRaw = map["tweet"]
+                        val timestampRaw = map["timestamp"]
+                        
+                        // Convert tweet data
+                        val tweet = when (tweetRaw) {
+                            is Tweet -> tweetRaw
+                            is Map<*, *> -> {
+                                try {
+                                    Tweet.from(tweetRaw as Map<String, Any>)
+                                } catch (e: Exception) {
+                                    Timber.tag("loadPinnedTweets").e(e, "Error converting Map to Tweet")
+                                    null
+                                }
+                            }
+                            else -> {
+                                Timber.tag("loadPinnedTweets").w("Unknown tweet type: ${tweetRaw?.javaClass}")
+                                null
+                            }
+                        }
+                        
+                        // Convert timestamp
+                        val pinnedTimestamp = when (timestampRaw) {
+                            is Long -> timestampRaw
+                            is Int -> timestampRaw.toLong()
+                            is String -> timestampRaw.toLongOrNull()
+                            is Double -> timestampRaw.toLong()
+                            else -> {
+                                Timber.tag("loadPinnedTweets").w("Unknown timestamp type: ${timestampRaw?.javaClass}")
+                                null
+                            }
+                        }
+                        
+                        if (tweet != null && pinnedTimestamp != null) {
+                            // Keep the original tweet, but associate it with its pinned timestamp for sorting
+                            Pair(tweet, pinnedTimestamp)
+                        } else {
+                            Timber.tag("loadPinnedTweets").w("Invalid pinned tweet data: tweet=$tweet, timestamp=$pinnedTimestamp")
+                            null
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("loadPinnedTweets").e(e, "Error parsing pinned tweet data: $map")
+                        null
                     }
                 }
+                
+                // Sort by the pinned timestamp (most recent first) but keep original tweet timestamps
+                val sortedPinnedTweets = pinnedTweetsWithPinnedTimestamp
+                    .distinctBy { (tweet, _) -> tweet.mid }
+                    .sortedByDescending { (_, pinnedTimestamp) -> pinnedTimestamp }
+                    .map { (tweet, _) -> tweet } // Extract just the tweets, keeping their original timestamps
+                
+                _pinnedTweets.value = sortedPinnedTweets
+                
+                Timber.tag("loadPinnedTweets").d("Updated pinned tweets list with ${_pinnedTweets.value.size} tweets")
+            } else {
+                // Clear pinned tweets if none found
+                _pinnedTweets.value = emptyList()
+                Timber.tag("loadPinnedTweets").d("No pinned tweets found, cleared list")
             }
-            // 3. overwrite any tweet in _topTweets with one from pinnedTweets
-            _pinnedTweets.update { currentTopTweets ->
-                val pinnedTweetsFiltered = pinnedTweets.toList()
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-
-                val currentTopTweetsMap = currentTopTweets.associateBy { it.mid }.toMutableMap()
-
-                pinnedTweetsFiltered.forEach { pinnedTweet ->
-                    currentTopTweetsMap[pinnedTweet.mid] = pinnedTweet // Overwrite or add
-                }
-
-                currentTopTweetsMap.values.toList() // Convert back to a list
-            }
+            
         } catch (e: Exception) {
             Timber.tag("loadPinnedTweets").e(e, "Error loading pinned tweets for user: ${user.value.mid}")
         }
@@ -596,22 +655,29 @@ class UserViewModel @AssistedInject constructor(
                 _tweets.update { currentTweets ->
                     currentTweets.filterNot { it.mid == tweet.mid }
                 }
-                _pinnedTweets.update { currentTopTweets ->
-                    (listOf(tweet) + currentTopTweets)
+                
+                // Add to pinned tweets with current timestamp as pinned timestamp
+                val currentTime = System.currentTimeMillis()
+                val tweetWithPinnedTimestamp = tweet.copy(timestamp = currentTime)
+                _pinnedTweets.update { currentPinnedTweets ->
+                    (listOf(tweetWithPinnedTimestamp) + currentPinnedTweets)
                         .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
                 }
-                Timber.tag("pinToTop").d("Tweet ${tweet.mid} pinned successfully")
+                
+                Timber.tag("pinToTop").d("Tweet ${tweet.mid} pinned successfully at $currentTime")
             } else {
                 // Tweet is now unpinned: remove from pinned tweets and add back to tweets
-                _pinnedTweets.update { currentTopTweets ->
-                    currentTopTweets.filterNot { it.mid == tweet.mid }
+                _pinnedTweets.update { currentPinnedTweets ->
+                    currentPinnedTweets.filterNot { it.mid == tweet.mid }
                 }
+                
+                // Add back to regular tweets with original timestamp
                 _tweets.update { currentTweets ->
                     (listOf(tweet) + currentTweets)
                         .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
+                        .sortedByDescending { it.timestamp } // Sort by original tweet timestamp
                 }
+                
                 Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
             }
             

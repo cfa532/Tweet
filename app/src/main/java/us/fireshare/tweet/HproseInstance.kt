@@ -1201,19 +1201,20 @@ object HproseInstance {
     }
 
     /**
-     * Return a list of {tweetId, timestamp} for each pinned Tweet. The timestamp is when
+     * Return a list of {tweet: Tweet, timestamp: Long} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    fun getPinnedList(user: User): List<Map<*, *>>? {
+    fun getPinnedList(user: User): List<Map<String, Any>>? {
         val entry = "get_pinned_tweets"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "userid" to user.mid,
-            "gid" to appUser.mid
+            "appuserid" to appUser.mid
         )
         return try {
-            user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
+            response
         } catch (e: Exception) {
             Timber.tag("getPinnedList").e(e)
             null
