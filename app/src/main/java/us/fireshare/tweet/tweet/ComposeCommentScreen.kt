@@ -231,7 +231,12 @@ fun ComposeCommentScreen(
                 }
                 OutlinedTextField(
                     value = tweetContent,
-                    onValueChange = { tweetContent = it },
+                    onValueChange = { 
+                        // Limit comment content to 280 characters (same as tweets)
+                        if (it.length <= 280) {
+                            tweetContent = it
+                        }
+                    },
                     label = { Text("What's happening?") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -245,6 +250,19 @@ fun ComposeCommentScreen(
                             }
                         },
                 )
+                
+                // Character counter
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "${tweetContent.length}/280",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error 
+                               else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 // row of icons at bottom of text field.
                 Row(
                     modifier = Modifier

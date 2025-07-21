@@ -227,18 +227,22 @@ fun ComposeTweetScreen(
                 OutlinedTextField(
                     value = tweetContent,
                     onValueChange = {
-                        tweetContent = it
-                        if (it.contains("@") && !isSearching) {
-                            isSearching = true  // start search for suggestions
-                            val query = it.substringAfterLast("@")
-                            tweetFeedViewModel.viewModelScope.launch {
-                                suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
+                        // Limit tweet content to 280 characters (Twitter standard)
+                        if (it.length <= 280) {
+                            tweetContent = it
+                            if (it.contains("@") && !isSearching) {
+                                isSearching = true  // start search for suggestions
+                                val query = it.substringAfterLast("@")
+                                tweetFeedViewModel.viewModelScope.launch {
+                                    suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
+                                    isSearching = false
+                                }
+                            } else {
+                                suggestions = emptyList()
                                 isSearching = false
                             }
-                        } else {
-                            suggestions = emptyList()
-                            isSearching = false
-                        } },
+                        }
+                    },
                     label = { Text("What's happening?") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -294,6 +298,20 @@ fun ComposeTweetScreen(
                         }
                     }
                 }
+                
+                // Character counter
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "${tweetContent.length}/280",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error 
+                               else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // the row of action icons.
