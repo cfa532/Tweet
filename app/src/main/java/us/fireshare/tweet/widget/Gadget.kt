@@ -109,7 +109,7 @@ object Gadget {
      * Only considers public IPs with ports between 8000 and 9000.
      * Treats IPv4 and IPv6 equally.
      * */
-    fun filterIpAddresses(nodeList: ArrayList<*>): String? {
+    fun filterIpAddresses(nodeList: List<String>): String? {
         var bestIp: String? = null
         var bestResponseTime = Double.MAX_VALUE
 
@@ -156,40 +156,65 @@ object Gadget {
         return bestIp
     }
 
+    /**
+     * Filters a list of IP addresses to find the best accessible public IP address.
+     * 
+     * This function processes a list of IP:port combinations and returns the first valid
+     * public IP address that meets the following criteria:
+     * - Port number is in the valid range (8000-8999)
+     * - IP address is a valid public IP (not local/private network)
+     * - IPv4 addresses are preferred over IPv6
+     * 
+     * @param ipList List of IP:port strings to filter (e.g., ["192.168.1.1:8010", "203.0.113.1:8010"])
+     * @return The first valid public IP:port string, or null if no valid IPs found
+     */
     fun getAccessibleIP2(ipList: List<String>): String? {
-        var ip4: String? = null;
-        var ip6: String? = null
-        ipList.forEach {
-            val i = it.substringBeforeLast(":").trim('[').trim(']')
-            val p: Int = it.substringAfterLast(":").toInt()
-            // only accept port number in a range
-            if (p !in 8000..8999)
-                return@forEach
-            if (InetAddressUtils.isIPv6Address(i)) {
-                ip6 = "[$i]:$p"
+        var ip4: String? = null  // Store the first valid IPv4 address
+        var ip6: String? = null  // Store the first valid IPv6 address
+        
+        ipList.forEach { ipPortString ->
+            // Extract IP address and port from "IP:port" format
+            val ip = ipPortString.substringBeforeLast(":").trim('[').trim(']')
+            val port: Int = ipPortString.substringAfterLast(":").toInt()
+            
+            // Only accept port numbers in the valid range (8000-8999)
+            if (port !in 8000..8999) {
+                return@forEach  // Skip this IP if port is invalid
+            }
+            
+            if (InetAddressUtils.isIPv6Address(ip)) {
+                // Handle IPv6 addresses
+                ip6 = "[$ip]:$port"
             } else {
-                // Check for invalid format using a regular expression
-                if (!i.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
-                    return@forEach
+                // Handle IPv4 addresses
+                
+                // Validate IPv4 format using regex pattern
+                // Pattern matches: xxx.xxx.xxx.xxx where each xxx is 0-255
+                if (!ip.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
+                    return@forEach  // Skip if IP format is invalid
                 }
+                
                 try {
-                    val address = InetAddress.getByName(i) as Inet4Address
+                    val address = InetAddress.getByName(ip) as Inet4Address
                     val addressBytes = address.address
 
-                    // Check if the IP falls within the local IP ranges
+                    // Filter out private/local network IP addresses
+                    // Only accept public IP addresses for external connectivity
                     when {
-                        addressBytes[0] == 10.toByte() -> return@forEach // 10.0.0.0/8
-                        addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> return@forEach // 172.16.0.0/12
-                        addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> return@forEach // 192.168.0.0/16
-                        else -> ip4 = "$i:$p"
+                        addressBytes[0] == 10.toByte() -> return@forEach  // 10.0.0.0/8 (private network)
+                        addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> return@forEach  // 172.16.0.0/12 (private network)
+                        addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> return@forEach  // 192.168.0.0/16 (private network)
+                        else -> ip4 = "$ip:$port"  // Valid public IPv4 address
                     }
                 } catch (e: Exception) {
                     Timber.tag("isValidIP").e("${e.message}")
-                    return@forEach
+                    return@forEach  // Skip if IP resolution fails
                 }
             }
         }
-        return ip4?: ip6
+        
+        // Return IPv4 if available, otherwise return IPv6, or null if neither found
+        return ip4 ?: ip6
     }
 
     private fun isValidPublicIpAddress(fullIp: String): Boolean {

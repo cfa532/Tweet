@@ -125,11 +125,18 @@ class UploadTweetWorker @AssistedInject constructor(
                     val deferreds =
                         mutableListOf<Deferred<MimeiFileType?>>() // Changed to MimeiFileType?
                     for (uriString in pair) {
+                        Timber.tag("UploadTweetWorker").d("Starting upload for URI: $uriString")
                         val deferred = CoroutineScope(Dispatchers.IO).async {
                             try {
-                                uploadToIPFS(applicationContext, uriString.toUri())
+                                val result = uploadToIPFS(applicationContext, uriString.toUri())
+                                if (result != null) {
+                                    Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment: ${result.mid}")
+                                } else {
+                                    Timber.tag("UploadTweetWorker").e("uploadToIPFS returned null for URI: $uriString")
+                                }
+                                result
                             } catch (e: Exception) {
-                                Timber.tag("UploadCommentWorker")
+                                Timber.tag("UploadTweetWorker")
                                     .e(e, "Error uploading attachment: $uriString")
                                 null // Return null in case of error
                             }
@@ -137,12 +144,13 @@ class UploadTweetWorker @AssistedInject constructor(
                         deferreds.add(deferred)
                     }
                     val results = deferreds.awaitAll()
+                    Timber.tag("UploadTweetWorker").d("Upload results for pair: ${results.map { it?.mid ?: "null" }}")
                     results.forEach { result ->
                         if (result != null) {
                             attachments.add(result)
+                            Timber.tag("UploadTweetWorker").d("Added attachment to list: ${result.mid}")
                         } else {
-                            Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair")
-                            wakeLock.release()
+                            Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair - null result")
                             return Result.failure() // Fail if any upload in the pair fails
                         }
                     }
@@ -150,7 +158,6 @@ class UploadTweetWorker @AssistedInject constructor(
 
                 if (attachmentUris.size != attachments.size) {
                     Timber.tag("UploadTweetWorker").e("Attachments upload failure")
-                    wakeLock.release()
                     return Result.failure()
                 }
 

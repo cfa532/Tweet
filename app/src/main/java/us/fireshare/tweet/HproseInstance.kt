@@ -99,7 +99,7 @@ object HproseInstance {
                          * and tries to extract appId and host IP addresses from source code.
                          * */
                         Timber.tag("initAppEntry").d("$paramMap")
-                        val bestIp = filterIpAddresses(paramMap["addrs"] as ArrayList<*>)
+                        val bestIp = filterIpAddresses(paramMap["addrs"] as List<String>)
 
                         /**
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
@@ -320,23 +320,23 @@ object HproseInstance {
      * @param nodeId
      * Find IP addresses of given node.
      * */
-    fun getHostIP(nodeId: MimeiId): String? {
-        val entry = "getvar"
-        val params = mapOf(
-            "name" to "ips",
-            "arg0" to nodeId
-        )
-        return try {
-            val response =
-                appUser.hproseService?.runMApp<String>(entry, params)
-
-            response?.trim()?.trim('"')?.trim(',')?.split(',')?.let { ips ->
-                if (ips.isNotEmpty()) getAccessibleIP2(ips) else null
+    suspend fun getHostIP(nodeId: MimeiId): String? {
+        val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
+        try {
+            val response = httpClient.get(url)
+            if (response.status == HttpStatusCode.OK) {
+                response.bodyAsText().trim().trim('"').trim(',')
+                    .split(',').let { ips ->
+                        if (ips.isNotEmpty()) {
+                            val accessibleIp = getAccessibleIP2(ips)
+                            return accessibleIp
+                        }
+                    }
             }
         } catch (e: Exception) {
-            Timber.tag("getHostIP").e("$e $nodeId")
-            null
+            Timber.tag("getHostIP").e("$e $url")
         }
+        return null
     }
 
     /**
@@ -1246,25 +1246,43 @@ object HproseInstance {
         uri: Uri,
         referenceId: MimeiId? = null
     ): MimeiFileType? {
+        Timber.tag("uploadToIPFS").d("Starting upload for URI: $uri")
         // Get file name
         var fileName: String? = null
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameIndex != -1) {
-                    fileName = cursor.getString(nameIndex)
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst() && cursor.columnCount > 0) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        fileName = cursor.getString(nameIndex)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Timber.tag("uploadToIPFS").w("Failed to get file name from content resolver: ${e.message}")
+            // Fallback: try to get filename from URI
+            fileName = uri.lastPathSegment
         }
 
         // Get file timestamp
-        val documentFile = DocumentFile.fromSingleUri(context, uri)
-        val fileTimestamp: Long = documentFile?.lastModified()?.let {
-            if (it == 0L) System.currentTimeMillis() else it
-        } ?: System.currentTimeMillis()
+        val fileTimestamp: Long = try {
+            val documentFile = DocumentFile.fromSingleUri(context, uri)
+            documentFile?.lastModified()?.let {
+                if (it == 0L) System.currentTimeMillis() else it
+            } ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            Timber.tag("uploadToIPFS").w("Failed to get file timestamp: ${e.message}")
+            System.currentTimeMillis()
+        }
 
         // Determine MediaType based on MIME type
-        val mimeType = context.contentResolver.getType(uri)
+        val mimeType = try {
+            context.contentResolver.getType(uri)
+        } catch (e: Exception) {
+            Timber.tag("uploadToIPFS").w("Failed to get MIME type: ${e.message}")
+            null
+        }
+        
         val mediaType = when {
             mimeType?.startsWith("image/") == true -> us.fireshare.tweet.datamodel.MediaType.Image
             mimeType?.startsWith("video/") == true -> us.fireshare.tweet.datamodel.MediaType.Video
@@ -1273,7 +1291,19 @@ object HproseInstance {
             mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> us.fireshare.tweet.datamodel.MediaType.Zip
             mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> us.fireshare.tweet.datamodel.MediaType.Word
             // ... add more mappings for other MediaType values ...
-            else -> us.fireshare.tweet.datamodel.MediaType.Unknown
+            else -> {
+                // Fallback: try to determine type from file extension
+                val extension = fileName?.substringAfterLast('.', "")?.lowercase()
+                when (extension) {
+                    "jpg", "jpeg", "png", "gif", "webp" -> us.fireshare.tweet.datamodel.MediaType.Image
+                    "mp4", "avi", "mov", "mkv" -> us.fireshare.tweet.datamodel.MediaType.Video
+                    "mp3", "wav", "aac" -> us.fireshare.tweet.datamodel.MediaType.Audio
+                    "pdf" -> us.fireshare.tweet.datamodel.MediaType.PDF
+                    "zip" -> us.fireshare.tweet.datamodel.MediaType.Zip
+                    "doc", "docx" -> us.fireshare.tweet.datamodel.MediaType.Word
+                    else -> us.fireshare.tweet.datamodel.MediaType.Unknown
+                }
+            }
         }
 
         // For video files, try uploading to netdisk first
@@ -1293,7 +1323,14 @@ object HproseInstance {
         }
 
         // Fall back to original IPFS method for non-video files or if netdisk upload fails
-        return uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
+        Timber.tag("uploadToIPFS").d("Calling uploadToIPFSOriginal with mediaType: $mediaType")
+        val result = uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
+        if (result != null) {
+            Timber.tag("uploadToIPFS").d("uploadToIPFSOriginal succeeded: ${result.mid}")
+        } else {
+            Timber.tag("uploadToIPFS").e("uploadToIPFSOriginal returned null")
+        }
+        return result
     }
 
     /**
@@ -1306,7 +1343,15 @@ object HproseInstance {
         fileTimestamp: Long,
         referenceId: MimeiId?
     ): MimeiFileType? {
-        val netdiskUrl = appUser.netdiskUrl ?: throw Exception("Netdisk URL not available")
+        // Resolve writableUrl before using uploadService
+        val resolvedUrl = appUser.resolveWritableUrl()
+        if (resolvedUrl.isNullOrEmpty()) {
+            Timber.tag("uploadVideoToNetdisk").e("Failed to resolve writableUrl")
+            return null
+        }
+        Timber.tag("uploadVideoToNetdisk").d("Successfully resolved writableUrl: $resolvedUrl")
+        
+        val netdiskUrl = appUser.netDiskUrl ?: throw Exception("Netdisk URL not available")
         val uploadUrl = "$netdiskUrl/upload"
 
         Timber.tag("uploadVideoToNetdisk()").d("Uploading video to: $uploadUrl")
@@ -1370,7 +1415,7 @@ object HproseInstance {
     /**
      * Original IPFS upload method as fallback
      */
-    private fun uploadToIPFSOriginal(
+    private suspend fun uploadToIPFSOriginal(
         context: Context,
         uri: Uri,
         fileName: String?,
@@ -1378,6 +1423,16 @@ object HproseInstance {
         referenceId: MimeiId?,
         mediaType: us.fireshare.tweet.datamodel.MediaType
     ): MimeiFileType? {
+        Timber.tag("uploadToIPFSOriginal").d("Starting upload for URI: $uri, mediaType: $mediaType")
+        
+        // Resolve writableUrl before using uploadService
+        val resolvedUrl = appUser.resolveWritableUrl()
+        if (resolvedUrl.isNullOrEmpty()) {
+            Timber.tag("uploadToIPFSOriginal").e("Failed to resolve writableUrl")
+            return null
+        }
+        Timber.tag("uploadToIPFSOriginal").d("Successfully resolved writableUrl: $resolvedUrl")
+        
         var offset = 0L
         var byteRead: Int
         val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
@@ -1385,13 +1440,16 @@ object HproseInstance {
         val request = Gson().fromJson(json, Map::class.java).toMutableMap()
 
         try {
+            Timber.tag("uploadToIPFSOriginal").d("Opening input stream for URI: $uri")
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 inputStream.use { stream ->
+                    Timber.tag("uploadToIPFSOriginal").d("Starting chunked upload")
                     while (stream.read(buffer).also { byteRead = it } != -1) {
-                        request["fsid"] = appUser.uploadService?.runMApp<String>(
-                            "upload_ipfs",
+                        Timber.tag("uploadToIPFSOriginal").d("Uploading chunk: offset=$offset, bytes=$byteRead")
+                        request["fsid"] = appUser.uploadService?.runMApp("upload_ipfs",
                             request.toMap(), listOf(buffer)
                         )
+                        
                         offset += byteRead
                         request["offset"] = offset
                     }
@@ -1401,21 +1459,26 @@ object HproseInstance {
             // Do it later when uploading tweet.
             request["finished"] = "true"
             referenceId?.let { request["referenceid"] = it }
-            val cid = appUser.uploadService?.runMApp<String>("upload_ipfs", request.toMap())
+            Timber.tag("uploadToIPFSOriginal").d("Finalizing upload with offset: $offset")
+            Timber.tag("uploadToIPFSOriginal").d("Final request: $request")
+            
+            val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap()) ?: return null
+            
+            Timber.tag("uploadToIPFSOriginal").d("Upload successful, CID: $cid")
 
             @OptIn(UnstableApi::class)
             val aspectRatio = if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
                 getVideoAspectRatio(context, uri)
             } else null
-            appUser.uploadService?.runMApp<String>("upload_ipfs", request.toMap())?.let { cid ->
-                Timber.tag("uploadToIPFSOriginal()").d("cid=$cid")
-                return MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
-            }
+            
+            return MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
             Timber.tag("uploadToIPFSOriginal()").e(e, "Error: ${e.message}")
         }
         return null
     }
+
+
 
     val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {

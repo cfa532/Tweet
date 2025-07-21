@@ -213,26 +213,28 @@ data class User(
     
     val uploadService: HproseService?
         get() {
-            val writableUrl = writableUrl ?: return null
+            // Note: We can't call suspend function from property getter
+            // The calling code should call resolveWritableUrl() before accessing uploadService
+            val currentWritableUrl = writableUrl ?: return null
             
             // Check if writableUrl has changed since last service creation
-            if (_uploadService != null && _lastWritableUrl == writableUrl) {
+            if (_uploadService != null && _lastWritableUrl == currentWritableUrl) {
                 return _uploadService
             } else {
                 // Clear old service if writableUrl changed
-                if (_lastWritableUrl != writableUrl) {
+                if (_lastWritableUrl != currentWritableUrl) {
                     _uploadService = null
-                    _lastWritableUrl = writableUrl
+                    _lastWritableUrl = currentWritableUrl
                 }
                 
                 try {
                     // Use factory method to create client based on URL scheme
-                    val client = HproseClient.create("$writableUrl/webapi/")
-                    client.timeout = 300000   // upload takes longer
+                    val client = HproseClient.create("$currentWritableUrl/webapi/")
+                    client.timeout = 3000000   // upload takes longer
                     _uploadService = client.useService(HproseService::class.java)
                     return _uploadService
                 } catch (e: Exception) {
-                    Timber.e(e, "Failed to create Hprose upload client for writableUrl: $writableUrl")
+                    Timber.e(e, "Failed to create Hprose upload client for writableUrl: $currentWritableUrl")
                     return null
                 }
             }
@@ -254,7 +256,7 @@ data class User(
     }
 
     /**
-     * Resolve writable URL from hostIds
+     * Resolve writable URL from hostIds and reset uploadService if needed
      */
     suspend fun resolveWritableUrl(): String? {
         Timber.d("[resolveWritableUrl] Starting resolution for user: $mid")
@@ -262,21 +264,21 @@ data class User(
         Timber.d("[resolveWritableUrl] Current baseUrl: $baseUrl")
         Timber.d("[resolveWritableUrl] Current writableUrl: $writableUrl")
 
-        if (!writableUrl.isNullOrEmpty()) {
-            Timber.d("[resolveWritableUrl] Using existing writableUrl: $writableUrl")
-            return writableUrl
+        // If writableUrl is null or empty, clear uploadService and resolve
+        if (writableUrl.isNullOrEmpty()) {
+            Timber.d("[resolveWritableUrl] writableUrl is null/empty, clearing uploadService and resolving...")
+            clearUploadService()
         }
 
-        val hostIds = hostIds ?: return writableUrl
-        if (hostIds.isEmpty()) {
+        if (hostIds.isNullOrEmpty()) {
             Timber.d("[resolveWritableUrl] No hostIds available, keeping existing writableUrl")
             return writableUrl
         }
 
-        val firstHostId = hostIds.first()
+        val firstHostId = hostIds?.first()
         Timber.d("[resolveWritableUrl] Attempting to resolve first hostId: $firstHostId")
 
-        if (firstHostId.isEmpty()) {
+        if (firstHostId.isNullOrEmpty()) {
             Timber.d("[resolveWritableUrl] First hostId is empty, keeping existing writableUrl")
             return writableUrl
         }
@@ -447,12 +449,12 @@ data class User(
     }
 
     /**
-     * Computed property that returns baseUrl with TW_CONST.CLOUD_PORT
+     * Computed property that returns writableUrl with TW_CONST.CLOUD_PORT
      * Used for accessing netdisk and transcode services
      */
-    val netdiskUrl: String?
+    val netDiskUrl: String?
         get() {
-            val baseUrl = baseUrl ?: return null
+            val baseUrl = writableUrl ?: return null
             
             return try {
                 val uri = java.net.URI(baseUrl)
@@ -475,23 +477,6 @@ data class User(
                 baseUrl
             }
         }
-
-    /**
-     * Get writable URL with fallback
-     */
-    fun writableUrl(): String? {
-        return if (!writableUrl.isNullOrEmpty()) {
-            writableUrl
-        } else {
-            hostIds?.firstOrNull()?.let { hostId ->
-                HproseInstance.getHostIP(hostId)?.let { hostIP ->
-                    "http://$hostIP".also { newUrl ->
-                        writableUrl = newUrl
-                    }
-                } ?: baseUrl
-            }
-        }
-    }
 
     /**
      * Check if this user instance has expired and needs to be fetched from backend again
