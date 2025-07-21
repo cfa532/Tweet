@@ -1052,7 +1052,7 @@ object HproseInstance {
             if (response != null && response["success"] == true) {
                 // update mid of comment, which was null when passed as argument
                 val newCommentId = response["mid"] as? MimeiId ?: comment.mid
-                val updatedComment = comment.copy(mid = newCommentId)
+                val updatedComment = comment.copy(mid = newCommentId, author = appUser)
 
                 val updatedTweet = tweet.copy(
                     commentCount = (response["count"] as? Number)?.toInt() ?: tweet.commentCount
