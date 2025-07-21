@@ -1246,6 +1246,15 @@ object HproseInstance {
         uri: Uri,
         referenceId: MimeiId? = null
     ): MimeiFileType? {
+        return uploadToIPFS(context, uri, referenceId, false)
+    }
+
+    suspend fun uploadToIPFS(
+        context: Context,
+        uri: Uri,
+        referenceId: MimeiId? = null,
+        noResample: Boolean = false
+    ): MimeiFileType? {
         Timber.tag("uploadToIPFS").d("Starting upload for URI: $uri")
         Timber.tag("uploadToIPFS").d("Reference ID: $referenceId")
         // Get file name
@@ -1312,7 +1321,7 @@ object HproseInstance {
             Timber.tag("uploadToIPFS").d("Detected video file, attempting netdisk upload first")
             try {
                 val netdiskResult =
-                    uploadVideoToNetDisk(context, uri, fileName, fileTimestamp, referenceId)
+                    uploadHLSVideo(context, uri, fileName, fileTimestamp, referenceId, noResample)
                 if (netdiskResult != null) {
                     Timber.tag("uploadToIPFS()")
                         .d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
@@ -1339,50 +1348,82 @@ object HproseInstance {
     }
 
     /**
-     * Upload video file to netdisk URL using multipart form data
+     * Upload video file to backend for HLS conversion using multipart form data
      */
-    private suspend fun uploadVideoToNetDisk(
+    private suspend fun uploadHLSVideo(
         context: Context,
         uri: Uri,
         fileName: String?,
         fileTimestamp: Long,
-        referenceId: MimeiId?
+        referenceId: MimeiId?,
+        noResample: Boolean = false
     ): MimeiFileType? {
-        // Resolve writableUrl before using uploadService
-        val resolvedUrl = appUser.resolveWritableUrl()
-        if (resolvedUrl.isNullOrEmpty()) {
-            Timber.tag("uploadVideoToNetDisk").e("Failed to resolve writableUrl")
+        Timber.tag("uploadHLSVideo").d("Uploading original video to backend for HLS conversion")
+        
+        // Get the user's cloudDrivePort with fallback to default
+        val cloudDrivePort = appUser.cloudDrivePort.takeIf { it > 0 } ?: 8010
+        
+        // Ensure writableUrl is available
+        var writableUrl = appUser.writableUrl
+        if (writableUrl.isNullOrEmpty()) {
+            writableUrl = appUser.resolveWritableUrl()
+        }
+        
+        if (writableUrl.isNullOrEmpty()) {
+            Timber.tag("uploadHLSVideo").e("Writable URL not available")
             return null
         }
-        Timber.tag("uploadVideoToNetDisk").d("Successfully resolved writableUrl: $resolvedUrl")
         
-        val netdiskUrl = appUser.netDiskUrl ?: throw Exception("NetDisk URL not available")
-        val uploadUrl = "$netdiskUrl/convert-video"
-
-        Timber.tag("uploadVideoToNetDisk()").d("Uploading video to: $uploadUrl")
-
+        // Construct convert-video endpoint URL
+        val scheme = if (writableUrl.startsWith("https")) "https" else "http"
+        val host = writableUrl.replace(Regex("^https?://"), "").split("/").firstOrNull()?.split(":")
+            ?.firstOrNull()
+            ?: writableUrl
+        val convertVideoURL = "$scheme://$host:$cloudDrivePort/convert-video"
+        
+        Timber.tag("uploadHLSVideo").d("Convert-video URL: $convertVideoURL")
+        
+        // Read the video data once
+        val videoData = context.contentResolver.openInputStream(uri)?.readBytes() ?: ByteArray(0)
+        Timber.tag("uploadHLSVideo").d("Data size: ${videoData.size} bytes")
+        
+        // Determine content type based on file extension
+        val contentType = determineVideoContentType(fileName)
+        Timber.tag("uploadHLSVideo").d("Determined content type: $contentType")
+        Timber.tag("uploadHLSVideo").d("Filename: $fileName")
+        Timber.tag("uploadHLSVideo").d("ReferenceId: $referenceId")
+        Timber.tag("uploadHLSVideo").d("NoResample: $noResample")
+        
         return try {
-            val response = httpClient.post(uploadUrl) {
+            val response = httpClient.post(convertVideoURL) {
                 setBody(
                     io.ktor.client.request.forms.MultiPartFormDataContent(
                         io.ktor.client.request.forms.formData {
+                            // Add filename if provided (server expects this field)
+                            fileName?.let { 
+                                append("filename", it)
+                            }
+                            
+                            // Add reference ID if provided (server expects this field)
+                            referenceId?.let { 
+                                append("referenceId", it)
+                            }
+                            
+                            // Add noResample parameter - use the value passed from compose view
+                            append("noResample", noResample.toString())
+                            
+                            // Add the video file (server expects field name "videoFile")
                             append(
-                                "file",
-                                context.contentResolver.openInputStream(uri)?.readBytes()
-                                    ?: ByteArray(0),
+                                "videoFile",
+                                videoData,
                                 io.ktor.http.Headers.build {
                                     append(
                                         "Content-Disposition",
                                         "filename=\"${fileName ?: "video.mp4"}\""
                                     )
-                                    append(
-                                        "Content-Type",
-                                        context.contentResolver.getType(uri) ?: "video/mp4"
-                                    )
-                                })
-                            append("aid", appId)
-                            append("ver", "last")
-                            referenceId?.let { append("referenceId", it) }
+                                    append("Content-Type", contentType)
+                                }
+                            )
                         }
                     )
                 )
@@ -1392,14 +1433,13 @@ object HproseInstance {
                 val responseText = response.bodyAsText()
                 val responseData = Gson().fromJson(responseText, Map::class.java)
 
-                val cid =
-                    responseData?.get("cid") as? String ?: throw Exception("No CID in response")
+                val cid = responseData?.get("cid") as? String ?: throw Exception("No CID in response")
                 val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
 
                 @OptIn(UnstableApi::class)
                 val aspectRatio = getVideoAspectRatio(context, uri)
 
-                Timber.tag("uploadVideoToNetdisk()").d("Video uploaded successfully: $cid")
+                Timber.tag("uploadVideoToNetDisk").d("Video uploaded successfully: $cid")
                 MimeiFileType(
                     cid,
                     us.fireshare.tweet.datamodel.MediaType.Video,
@@ -1412,8 +1452,26 @@ object HproseInstance {
                 throw Exception("Upload failed with status: ${response.status}")
             }
         } catch (e: Exception) {
-            Timber.tag("uploadVideoToNetdisk()").e("Error uploading to netdisk: ${e.message}")
+            Timber.tag("uploadVideoToNetDisk").e("Error uploading to netdisk: ${e.message}")
             throw e
+        }
+    }
+    
+    /**
+     * Determine video content type based on file extension
+     */
+    private fun determineVideoContentType(fileName: String?): String {
+        return when (fileName?.lowercase()?.substringAfterLast('.', "")) {
+            "mp4" -> "video/mp4"
+            "mov" -> "video/quicktime"
+            "avi" -> "video/x-msvideo"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "3gp" -> "video/3gpp"
+            "flv" -> "video/x-flv"
+            "wmv" -> "video/x-ms-wmv"
+            "m4v" -> "video/x-m4v"
+            else -> "video/mp4" // Default fallback
         }
     }
 
@@ -1487,7 +1545,7 @@ object HproseInstance {
 
     val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
-            requestTimeoutMillis = 300_000 // Total request timeout (5 minutes)
+            requestTimeoutMillis = 3_000_000 // Total request timeout (5 minutes)
             connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
             socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
         }
