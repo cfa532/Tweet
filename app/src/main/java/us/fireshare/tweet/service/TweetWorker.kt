@@ -79,25 +79,16 @@ class UploadCommentWorker @AssistedInject constructor(
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 // retweet is a new tweet with the comment as its content.
-                val retweet = if (isChecked) {
+                if (isChecked) {
                     comment.originalTweetId = parentTweet.mid
                     comment.originalAuthorId = parentTweet.authorId
                     HproseInstance.uploadTweet(comment)?.let { retweet ->
                         updateRetweetCount(parentTweet, retweet.mid)?.let {
                             updatedTweet.retweetCount = it.retweetCount
                         }
-                        retweet
                     }
-                } else null
-
-                val gson = Gson().newBuilder()
-                    .excludeFieldsWithoutExposeAnnotation()
-                    .create()
-                val map = mapOf("retweet" to gson.toJson(retweet), "comment" to gson.toJson(comment),
-                    "updatedTweet" to gson.toJson(updatedTweet))
-                Timber.tag("UploadCommentWorker").d(map.toString())
-                val outputData = workDataOf("commentedTweet" to gson.toJson(map))
-                return Result.success(outputData)
+                }
+                return Result.success()
             }
         } catch (e: Exception) {
             Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
@@ -126,11 +117,11 @@ class UploadTweetWorker @AssistedInject constructor(
             )
             wakeLock.acquire(10 * 60 * 1000L /*10 minutes*/)
             try {
-                val attachments = mutableListOf<MimeiFileType>() // Changed to MimeiFileType
+                val attachments = mutableListOf<MimeiFileType>()
                 val uriPairs = attachmentUris.chunked(2)
                 for (pair in uriPairs) {
                     val deferreds =
-                        mutableListOf<Deferred<MimeiFileType?>>() // Changed to MimeiFileType?
+                        mutableListOf<Deferred<MimeiFileType?>>()
                     for (uriString in pair) {
                         Timber.tag("UploadTweetWorker").d("Starting upload for URI: $uriString")
                         val deferred = CoroutineScope(Dispatchers.IO).async {
@@ -146,7 +137,7 @@ class UploadTweetWorker @AssistedInject constructor(
                             } catch (e: Exception) {
                                 Timber.tag("UploadTweetWorker")
                                     .e(e, "Error uploading attachment: $uriString")
-                                null // Return null in case of error
+                                null
                             }
                         }
                         deferreds.add(deferred)
@@ -159,7 +150,7 @@ class UploadTweetWorker @AssistedInject constructor(
                             Timber.tag("UploadTweetWorker").d("Added attachment to list: ${result.mid}")
                         } else {
                             Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair - null result")
-                            return Result.failure() // Fail if any upload in the pair fails
+                            return Result.failure()
                         }
                     }
                 }
@@ -173,19 +164,14 @@ class UploadTweetWorker @AssistedInject constructor(
                     mid = System.currentTimeMillis().toString(), // placeholder
                     authorId = appUser.mid,
                     content = tweetContent ?: " ",
-                    attachments = attachments, // Now a List<MimeiFileType>
+                    attachments = attachments,
                     isPrivate = isPrivate
                 )
 
-                // might make the upload less error prone
                 withContext(Dispatchers.IO) {
                     HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                         Timber.tag("UploadTweetWorker").d(tweet.toString())
-                        val gson = Gson().newBuilder()
-                            .excludeFieldsWithoutExposeAnnotation()
-                            .create()
-                        val outputData = workDataOf("tweet" to gson.toJson(t))
-                        return@withContext Result.success(outputData)
+                        return@withContext Result.success()
                     }
                     return@withContext Result.failure()
                 }

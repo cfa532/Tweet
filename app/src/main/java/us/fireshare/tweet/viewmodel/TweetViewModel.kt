@@ -227,57 +227,13 @@ class TweetViewModel @AssistedInject constructor(
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
 
-        // notify the user that comment is uploaded
-        Toast.makeText(context, context.getString(R.string.upload_comment), Toast.LENGTH_SHORT).show()
-
-        // Observe the work status
-        workManager.getWorkInfoByIdLiveData(uploadRequest.id)
-            .observe(context as LifecycleOwner) { workInfo ->
-                if (workInfo != null) {
-                    when (workInfo.state) {
-                        WorkInfo.State.SUCCEEDED -> {
-                            try {
-                                val outputData = workInfo.outputData
-                                val json = outputData.getString("commentedTweet") ?: return@observe
-                                Timber.tag("UploadComment").d("Comment added successfully: $json")
-                                // Handle the success and update UI
-                                val gson = Gson()
-                                val map = gson.fromJson(json, Map::class.java) as Map<*, *>
-
-                                // UI updates are now handled by the notification system
-                                // The notification will be posted by HproseInstance.uploadComment()
-                                Timber.tag("UploadComment").d("Comment upload succeeded, notification will update UI")
-
-                                // the comment is also posted as an tweet.
-                                if (map["retweet"].toString() != "null") {
-                                    val retweet = gson.fromJson(map["retweet"].toString(), Tweet::class.java)
-                                    retweet.author = appUser
-                                    // Retweet will be added via notification system
-                                    // tweetFeedViewModel.addTweetToFeed(retweet) // Removed - use notifications instead
-                                }
-                            } catch (e: Exception) {
-                                Timber.tag("UploadComment").e("${e.message}")
-                                Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
-                            }
-                        }
-
-                        WorkInfo.State.FAILED -> {
-                            // Handle the failure and update UI
-                            Timber.tag("UploadTweet").e("Tweet upload failed")
-                            Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
-                        }
-
-                        WorkInfo.State.RUNNING -> {
-                            // Optionally, show a progress indicator
-                            Timber.tag("UploadTweet").d("Tweet upload in progress")
-                        }
-
-                        else -> {
-                            // Handle other states if necessary
-                        }
-                    }
-                }
-            }
+        // Notify the user that comment upload has started
+        Toast.makeText(
+            context,
+            context.getString(R.string.upload_comment),
+            Toast.LENGTH_SHORT
+        ).show()
+        // No need to observe work status; UI will update via notification system
     }
 
     suspend fun shareTweet(context: Context) {

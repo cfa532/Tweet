@@ -821,7 +821,7 @@ object HproseInstance {
      * Send a retweet request to backend and get a new tweet object back.
      * */
     suspend fun retweet(
-        tweet: Tweet                       // original tweet to be retweeted
+        tweet: Tweet     // original tweet to be retweeted
     ) {
         try {
             // upload the retweet, simply a few dozen bytes.

@@ -400,64 +400,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
 
-        // Observe the work status
-        workManager.getWorkInfoByIdLiveData(uploadRequest.id)
-            .observe(context as LifecycleOwner) { workInfo ->
-                if (workInfo != null) {
-                    when (workInfo.state) {
-                        WorkInfo.State.SUCCEEDED -> {
-                            try {
-                                val outputData = workInfo.outputData
-                                val json = outputData.getString("tweet")
-                                // Handle the success and update UI
-                                val gson = Gson().newBuilder()
-                                    .excludeFieldsWithoutExposeAnnotation()
-                                    .create()
-                                val tweet = json?.let { gson.fromJson(it, Tweet::class.java) }
-                                Timber.tag("UploadTweet").d("Tweet uploaded successfully: $tweet")
-                                if (tweet != null) {
-                                    tweet.author = appUser
-                                    Timber.tag("UploadTweet")
-                                        .d("Tweet author set to: ${tweet.author?.username}")
-
-                                    // Tweet will be added via notification system
-                                    // addTweetToFeed(tweet) // Removed - use notifications instead
-                                    // notify user the result of tweet upload
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.tweet_uploaded),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                } else {
-                                    Timber.tag("UploadTweet")
-                                        .e("Tweet is null after deserialization")
-                                }
-                            } catch (e: Exception) {
-                                Timber.tag("UploadTweet").e("$e")
-                            }
-                        }
-
-                        WorkInfo.State.FAILED -> {
-                            // Handle the failure and update UI
-                            Timber.tag("UploadTweet").e("Tweet upload failed")
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.tweet_failed),
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-
-                        WorkInfo.State.RUNNING -> {
-                            // Optionally, show a progress indicator
-                            Timber.tag("UploadTweet").d("Tweet upload in progress")
-                        }
-
-                        else -> {
-                            // Handle other states if necessary
-                        }
-                    }
-                }
-            }
+        // Notify the user that tweet upload has started
+        Toast.makeText(
+            context,
+            context.getString(R.string.tweet_uploaded),
+            Toast.LENGTH_SHORT
+        ).show()
+        // No need to observe work status; UI will update via notification system
     }
 
     /**
