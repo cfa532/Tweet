@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -152,8 +155,8 @@ fun ProfileScreen(
 }
 
 /**
- * Custom composable that combines profile details, pinned tweets, and TweetListView
- * for a unified profile experience with proper pagination and refresh functionality.
+ * Custom composable that combines profile details, pinned tweets, and regular tweets
+ * in a single LazyColumn for unified scrolling behavior.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -168,7 +171,31 @@ private fun ProfileContentWithTweetListView(
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     val user by viewModel.user.collectAsState()
     
+    // Track scroll state for the unified list
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Monitor scroll state changes
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { isScrolling ->
+            val firstVisibleItem = listState.firstVisibleItemIndex
+            val scrollOffset = listState.firstVisibleItemScrollOffset
+            
+            // Determine scroll direction based on previous state
+            val direction = when {
+                isScrolling -> {
+                    // You can add more sophisticated direction detection here if needed
+                    ScrollDirection.DOWN // Simplified for now
+                }
+                else -> ScrollDirection.NONE
+            }
+            
+            onScrollStateChange(ScrollState(isScrolling, direction))
+        }
+    }
+    
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxWidth()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -211,27 +238,47 @@ private fun ProfileContentWithTweetListView(
             }
         }
         
-        // TweetListView for regular tweets
+        // Regular tweets section - directly as items, not nested LazyColumn
+        items(tweets, key = { it.mid }) { tweet ->
+            if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
+                TweetItem(tweet, parentEntry)
+            }
+        }
+        
+        // Loading indicator for pagination
         item {
-            TweetListView(
-                tweets = tweets,
-                fetchTweets = { pageNumber ->
-                    viewModel.fetchTweets(pageNumber)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 2000.dp), // Set maximum height to prevent infinite constraints
-                scrollBehavior = null, // We handle scroll behavior at the LazyColumn level
-                contentPadding = PaddingValues(0.dp), // No padding since we're inside a LazyColumn item
-                showPrivateTweets = true, // Show private tweets for profile view
-                parentEntry = parentEntry,
-                onScrollStateChange = onScrollStateChange,
-                currentUserId = user.mid,
-                onTweetUnavailable = { tweetId ->
-                    // Handle when a tweet becomes unavailable
-                    viewModel.removeTweetFromAllLists(tweetId)
+            if (tweets.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
-            )
+            }
+        }
+    }
+    
+    // Handle pagination when reaching the end
+    LaunchedEffect(listState) {
+        snapshotFlow { 
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            val totalItems = listState.layoutInfo.totalItemsCount
+            
+            lastVisibleItem?.let { lastItem ->
+                lastItem.index >= totalItems - 3 // Load more when 3 items from end
+            } ?: false
+        }.collect { shouldLoadMore ->
+            if (shouldLoadMore) {
+                // Load more tweets
+                coroutineScope.launch {
+                    viewModel.fetchTweets((tweets.size / 20) + 1) // Assuming 20 tweets per page
+                }
+            }
         }
     }
 }
