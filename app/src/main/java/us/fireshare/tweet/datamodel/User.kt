@@ -23,7 +23,7 @@ data class User(
     @Expose var profile: String? = null,
     @Expose var timestamp: Long = System.currentTimeMillis(),
     @Expose var lastLogin: Long? = System.currentTimeMillis(),
-    @Expose var cloudDrivePort: Int = 8010,
+    @Expose var cloudDrivePort: Int = TW_CONST.CLOUD_PORT,
 
     @Expose var tweetCount: Int = 0,
     @Expose var followingCount: Int = 0,
@@ -274,83 +274,95 @@ data class User(
         Timber.d("[resolveWritableUrl] writableUrl is null/empty, clearing uploadService and resolving...")
         clearUploadService()
 
-        if (hostIds.isNullOrEmpty()) {
-            Timber.d("[resolveWritableUrl] No hostIds available, keeping existing writableUrl")
-            return writableUrl
-        }
-
-        val firstHostId = hostIds?.first()
-        Timber.d("[resolveWritableUrl] Attempting to resolve first hostId: $firstHostId")
-
-        if (firstHostId.isNullOrEmpty()) {
-            Timber.d("[resolveWritableUrl] First hostId is empty, keeping existing writableUrl")
-            return writableUrl
-        }
-
-        val hostIP = HproseInstance.getHostIP(firstHostId)
-        if (hostIP != null) {
-            Timber.d("[resolveWritableUrl] Successfully resolved hostIP: $hostIP for hostId: $firstHostId")
-            
-            // Extract clean IP and port
-            val (cleanIP, port) = when {
-                hostIP.startsWith("[") && hostIP.contains("]:") -> {
-                    // IPv6 with port
-                    val endBracket = hostIP.indexOf("]")
-                    val colon = hostIP.indexOf(":", endBracket)
-                    if (endBracket != -1 && colon != -1) {
-                        val ipv6 = hostIP.substring(1, endBracket)
-                        val portStr = hostIP.substring(colon + 1).trim()
-                        ipv6 to portStr
-                    } else {
-                        Timber.w("[resolveWritableUrl] Failed to parse IPv6 with port: $hostIP")
-                        return writableUrl
-                    }
-                }
-                hostIP.contains(":") && !hostIP.contains("]:") && !hostIP.contains("[") -> {
-                    // IPv4 with port
-                    val parts = hostIP.split(":", limit = 2)
-                    if (parts.size == 2) {
-                        parts[0] to parts[1]
-                    } else {
-                        Timber.w("[resolveWritableUrl] Failed to parse IPv4 with port: $hostIP")
-                        return writableUrl
-                    }
-                }
-                else -> {
-                    // No port specified, use default port 8010
-                    val cleanIP = if (hostIP.startsWith("[") && hostIP.endsWith("]")) {
-                        hostIP.substring(1, hostIP.length - 1)
-                    } else {
-                        hostIP
-                    }
-                    cleanIP to "8010"
-                }
-            }
-
-            // Validate port is between 8000-9000
-            val portNumber = port.toIntOrNull()
-            if (portNumber == null || portNumber !in 8000..9000) {
-                Timber.w("[resolveWritableUrl] Port $port is not in valid range 8000-9000")
+        suspend fun tryResolve(): String? {
+            if (hostIds.isNullOrEmpty()) {
+                Timber.d("[resolveWritableUrl] No hostIds available, keeping existing writableUrl")
                 return writableUrl
             }
 
-            // Construct URL string
-            val urlString = if (isIPv6Address(cleanIP)) {
-                "http://[$cleanIP]:$port"
-            } else {
-                "http://$cleanIP:$port"
+            val firstHostId = hostIds?.first()
+            Timber.d("[resolveWritableUrl] Attempting to resolve first hostId: $firstHostId")
+
+            if (firstHostId.isNullOrEmpty()) {
+                Timber.d("[resolveWritableUrl] First hostId is empty, keeping existing writableUrl")
+                return writableUrl
             }
 
-            Timber.d("[resolveWritableUrl] Final constructed urlString: $urlString")
-            writableUrl = urlString
-            Timber.d("✅ Resolved writableUrl to: $urlString from first hostId: $firstHostId")
-            return urlString
-        } else {
-            Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
+            val hostIP = HproseInstance.getHostIP(firstHostId)
+            if (hostIP != null) {
+                Timber.d("[resolveWritableUrl] Successfully resolved hostIP: $hostIP for hostId: $firstHostId")
+                
+                // Extract clean IP and port
+                val (cleanIP, port) = when {
+                    hostIP.startsWith("[") && hostIP.contains("]:") -> {
+                        // IPv6 with port
+                        val endBracket = hostIP.indexOf("]")
+                        val colon = hostIP.indexOf(":", endBracket)
+                        if (endBracket != -1 && colon != -1) {
+                            val ipv6 = hostIP.substring(1, endBracket)
+                            val portStr = hostIP.substring(colon + 1).trim()
+                            ipv6 to portStr
+                        } else {
+                            Timber.w("[resolveWritableUrl] Failed to parse IPv6 with port: $hostIP")
+                            return writableUrl
+                        }
+                    }
+                    hostIP.contains(":") && !hostIP.contains("]: ") && !hostIP.contains("[") -> {
+                        // IPv4 with port
+                        val parts = hostIP.split(":", limit = 2)
+                        if (parts.size == 2) {
+                            parts[0] to parts[1]
+                        } else {
+                            Timber.w("[resolveWritableUrl] Failed to parse IPv4 with port: $hostIP")
+                            return writableUrl
+                        }
+                    }
+                    else -> {
+                        // No port specified, use default port 8010
+                        val cleanIP = if (hostIP.startsWith("[") && hostIP.endsWith("]")) {
+                            hostIP.substring(1, hostIP.length - 1)
+                        } else {
+                            hostIP
+                        }
+                        cleanIP to "8010"
+                    }
+                }
+
+                // Validate port is between 8000-9000
+                val portNumber = port.toIntOrNull()
+                if (portNumber == null || portNumber !in 8000..9000) {
+                    Timber.w("[resolveWritableUrl] Port $port is not in valid range 8000-9000")
+                    return writableUrl
+                }
+
+                // Construct URL string
+                val urlString = if (isIPv6Address(cleanIP)) {
+                    "http://[$cleanIP]:$port"
+                } else {
+                    "http://$cleanIP:$port"
+                }
+
+                Timber.d("[resolveWritableUrl] Final constructed urlString: $urlString")
+                writableUrl = urlString
+                Timber.d("✅ Resolved writableUrl to: $urlString from first hostId: $firstHostId")
+                return urlString
+            } else {
+                Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
+            }
+
+            Timber.d("[resolveWritableUrl] Keeping existing writableUrl")
+            return writableUrl
         }
 
-        Timber.d("[resolveWritableUrl] Keeping existing writableUrl")
-        return writableUrl
+        // First attempt
+        val firstAttempt = tryResolve()
+        if (!firstAttempt.isNullOrEmpty() && firstAttempt != writableUrl) {
+            return firstAttempt
+        }
+        // Retry once if first attempt failed
+        Timber.d("[resolveWritableUrl] First attempt failed, retrying once...")
+        val retryAttempt = tryResolve()
+        return retryAttempt
     }
 
     /**
