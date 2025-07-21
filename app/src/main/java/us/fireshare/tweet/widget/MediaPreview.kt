@@ -137,7 +137,10 @@ fun MediaPreviewGrid(
                 val isLandscape0 = ar0 > 1f
                 val isLandscape1 = ar1 > 1f
                 if (isPortrait0 && isPortrait1) {
-                    Row(Modifier.height(gridHeight)) {
+                    Row(
+                        Modifier.height(gridHeight),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         for (idx in 0..1) {
                             Box(
                                 modifier = Modifier
@@ -159,7 +162,10 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (isLandscape0 && isLandscape1) {
-                    Column(Modifier.width(gridWidth)) {
+                    Column(
+                        Modifier.width(gridWidth),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         for (idx in 0..1) {
                             Box(
                                 modifier = Modifier
@@ -181,7 +187,10 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    Row(Modifier.height(gridHeight)) {
+                    Row(
+                        Modifier.height(gridHeight),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         if (isPortrait0) {
                             Box(
                                 modifier = Modifier
@@ -263,8 +272,10 @@ fun MediaPreviewGrid(
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
                 if (allPortrait) {
-                    // All portrait: horizontal stack (3 equal columns)
-                    Row(Modifier.height(gridHeight)) {
+                    Row(
+                        Modifier.height(gridHeight),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         for (idx in 0..2) {
                             Box(
                                 modifier = Modifier
@@ -286,8 +297,10 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (allLandscape) {
-                    // All landscape: vertical stack (3 equal rows)
-                    Column(Modifier.width(gridWidth)) {
+                    Column(
+                        Modifier.width(gridWidth),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         for (idx in 0..2) {
                             Box(
                                 modifier = Modifier
@@ -309,8 +322,10 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (ar0 < 1f) {
-                    // First is portrait: left column tall, right column two stacked
-                    Row(Modifier.height(gridHeight)) {
+                    Row(
+                        Modifier.height(gridHeight),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .width(gridWidth / 2 - 1.dp)
@@ -328,7 +343,9 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
-                        Column {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
                             for (idx in 1..2) {
                                 Box(
                                     modifier = Modifier
@@ -351,8 +368,10 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    // First is landscape: top row wide, bottom row two images
-                    Column(Modifier.width(gridWidth)) {
+                    Column(
+                        Modifier.width(gridWidth),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .width(gridWidth)
@@ -370,7 +389,9 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
-                        Row {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
                             for (idx in 1..2) {
                                 Box(
                                     modifier = Modifier
