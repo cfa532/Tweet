@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -92,14 +92,12 @@ fun MediaPreviewGrid(
 
     var isFirstVideo = false
 
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .fillMaxWidth()
+            .wrapContentWidth(Alignment.CenterHorizontally)
     ) {
-        val gridWidth = maxWidth
-        val gridHeight = gridWidth // For simplicity, use square grid
-
         when (limitedMediaList.size) {
             1 -> {
                 val aspectRatio = if (aspectRatioOf(limitedMediaList[0]) > 1f) {
@@ -143,157 +141,139 @@ fun MediaPreviewGrid(
                 
                 if (isLandscape0 && isLandscape1) {
                     // Both landscape: set grid's aspectRatio to 0.8 and align items vertically
-                    BoxWithConstraints(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(0.8f)
+                            .aspectRatio(0.8f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        val gridWidth = maxWidth
-                        val gridHeight = maxHeight
-                        Column(
-                            Modifier.width(gridWidth),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            for (idx in 0..1) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth)
-                                        .height(gridHeight / 2 - 1.dp)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = idx,
-                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
                             }
                         }
                     }
                 } else if (isPortrait0 && isPortrait1) {
                     // Both portrait: set grid's aspectRatio to 1 and align them horizontally
-                    BoxWithConstraints(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f)
+                            .aspectRatio(1f),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        val gridWidth = maxWidth
-                        val gridHeight = maxHeight
-                        Row(
-                            Modifier.height(gridHeight),
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            for (idx in 0..1) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth / 2 - 1.dp)
-                                        .height(gridHeight)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = idx,
-                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
                             }
                         }
                     }
                 } else {
                     // Mixed orientations: set grid's ratio to 4:3 and let landscape item takes wider space
-                    BoxWithConstraints(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f/3f)
+                            .aspectRatio(4f/3f),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        val gridWidth = maxWidth
-                        val gridHeight = maxHeight
-                        Row(
-                            Modifier.height(gridHeight),
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            if (isPortrait0) {
-                                // First is portrait, second is landscape
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth * 1f / 3f - 1.dp)
-                                        .height(gridHeight)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = 0,
-                                        autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth * 2f / 3f - 1.dp)
-                                        .height(gridHeight)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = 1,
-                                        autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
-                            } else {
-                                // First is landscape, second is portrait
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth * 2f / 3f - 1.dp)
-                                        .height(gridHeight)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = 0,
-                                        autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .width(gridWidth * 1f / 3f - 1.dp)
-                                        .height(gridHeight)
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
-                                        index = 1,
-                                        autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel
-                                    )
-                                }
+                        if (isPortrait0) {
+                            // First is portrait, second is landscape
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 0,
+                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(2f)
+                                    .fillMaxHeight()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                        } else {
+                            // First is landscape, second is portrait
+                            Box(
+                                modifier = Modifier
+                                    .weight(2f)
+                                    .fillMaxHeight()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 0,
+                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
+                                        isFirstVideo = true
+                                        true
+                                    } else false,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel
+                                )
                             }
                         }
                     }
@@ -305,16 +285,19 @@ fun MediaPreviewGrid(
                 val ar2 = aspectRatioOf(limitedMediaList[2])
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
+                
                 if (allPortrait) {
                     Row(
-                        Modifier.height(gridHeight),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         for (idx in 0..2) {
                             Box(
                                 modifier = Modifier
-                                    .width(gridWidth / 3 - 1.dp)
-                                    .height(gridHeight)
+                                    .weight(1f)
+                                    .fillMaxHeight()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
@@ -332,14 +315,16 @@ fun MediaPreviewGrid(
                     }
                 } else if (allLandscape) {
                     Column(
-                        Modifier.width(gridWidth),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         for (idx in 0..2) {
                             Box(
                                 modifier = Modifier
-                                    .width(gridWidth)
-                                    .height(gridHeight / 3 - 1.dp)
+                                    .fillMaxWidth()
+                                    .weight(1f)
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
@@ -357,13 +342,15 @@ fun MediaPreviewGrid(
                     }
                 } else if (ar0 < 1f) {
                     Row(
-                        Modifier.height(gridHeight),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(gridWidth / 2 - 1.dp)
-                                .height(gridHeight)
+                                .weight(1f)
+                                .fillMaxHeight()
                         ) {
                             MediaItemView(
                                 limitedMediaList,
@@ -378,13 +365,14 @@ fun MediaPreviewGrid(
                             )
                         }
                         Column(
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
                                 Box(
                                     modifier = Modifier
-                                        .width(gridWidth / 2 - 1.dp)
-                                        .height(gridHeight / 2 - 1.dp)
+                                        .fillMaxWidth()
+                                        .weight(1f)
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
@@ -403,13 +391,15 @@ fun MediaPreviewGrid(
                     }
                 } else {
                     Column(
-                        Modifier.width(gridWidth),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(gridWidth)
-                                .height(gridHeight / 2 - 1.dp)
+                                .fillMaxWidth()
+                                .weight(1f)
                         ) {
                             MediaItemView(
                                 limitedMediaList,
@@ -424,13 +414,14 @@ fun MediaPreviewGrid(
                             )
                         }
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
                                 Box(
                                     modifier = Modifier
-                                        .width(gridWidth / 2 - 1.dp)
-                                        .height(gridHeight / 2 - 1.dp)
+                                        .weight(1f)
+                                        .fillMaxHeight()
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
@@ -455,7 +446,8 @@ fun MediaPreviewGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .wrapContentWidth(Alignment.CenterHorizontally),
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
