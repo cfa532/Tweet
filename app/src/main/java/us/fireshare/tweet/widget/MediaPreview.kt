@@ -295,19 +295,21 @@ fun MediaPreviewGrid(
                 val isPortrait0 = ar0 < 1f
                 val isPortrait1 = ar1 < 1f
                 val isPortrait2 = ar2 < 1f
+                val goldenRatio = 0.618f
+                val remainder = 1f - goldenRatio
 
                 if (allPortrait) {
-                    Timber.d("MediaPreviewGrid - 3 items: allPortrait branch")
+                    Timber.d("MediaPreviewGrid - 3 items: allPortrait branch (golden ratio)")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f), // square grid
+                            .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: left half
+                        // First image: left 61.8%
                         Box(
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(goldenRatio)
                                 .fillMaxHeight()
                         ) {
                             MediaItemView(
@@ -319,9 +321,9 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
-                        // Second and third: right half, stacked vertically
+                        // Second and third: right 38.2%, stacked vertically
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(remainder),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
@@ -343,18 +345,18 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (allLandscape) {
-                    Timber.d("MediaPreviewGrid - 3 items: allLandscape branch")
+                    Timber.d("MediaPreviewGrid - 3 items: allLandscape branch (golden ratio)")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(0.8f),
+                            .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: top half
+                        // First image: top 61.8%
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .weight(goldenRatio)
                         ) {
                             MediaItemView(
                                 limitedMediaList,
@@ -365,11 +367,11 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
-                        // Second and third: bottom half, side by side
+                        // Second and third: bottom 38.2%, side by side
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f),
+                                .weight(remainder),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
@@ -391,16 +393,17 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (isPortrait0) {
-                    Timber.d("MediaPreviewGrid - 3 items: isPortrait0 fallback branch")
+                    Timber.d("MediaPreviewGrid - 3 items: mixed, first portrait (golden ratio)")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f / 3f),
+                            .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
+                        // First image: left 61.8%
                         Box(
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(goldenRatio)
                                 .fillMaxHeight()
                         ) {
                             MediaItemView(
@@ -412,8 +415,9 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
+                        // Second and third: right 38.2%, stacked vertically
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(remainder),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
@@ -435,17 +439,18 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    Timber.d("MediaPreviewGrid - 3 items: else (landscape fallback) branch")
+                    Timber.d("MediaPreviewGrid - 3 items: mixed, first landscape (golden ratio)")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f / 3f),
+                            .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
+                        // First image: top 61.8%
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .weight(goldenRatio)
                         ) {
                             MediaItemView(
                                 limitedMediaList,
@@ -456,8 +461,11 @@ fun MediaPreviewGrid(
                                 viewModel = viewModel
                             )
                         }
+                        // Second and third: bottom 38.2%, side by side
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(remainder),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             for (idx in 1..2) {
