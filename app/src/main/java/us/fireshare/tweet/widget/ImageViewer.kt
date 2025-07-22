@@ -36,7 +36,13 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
+import coil.request.SuccessResult
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.widget.ImageCacheManager
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import coil.imageLoader
 
 
 /**
@@ -59,6 +65,31 @@ fun ImageViewer(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var menuPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
+    var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    // Try to load cached image on first composition
+    LaunchedEffect(mid) {
+        cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+        if (cachedBitmap == null && !isFullSize && !isLoading) {
+            isLoading = true
+            // Download, compress, and cache the image
+            val request = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .allowHardware(false)
+                .build()
+            val result = context.imageLoader.execute(request)
+            if (result is SuccessResult) {
+                val bmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                if (bmp != null) {
+                    ImageCacheManager.cacheImage(context, mid, bmp)
+                    cachedBitmap = bmp
+                }
+            }
+            isLoading = false
+        }
+    }
 
     val adjustedModifier = if (isFullSize) {
         modifier.fillMaxWidth()     // Full-size image takes full width
@@ -68,30 +99,38 @@ fun ImageViewer(
 
     Box(
         modifier = modifier,
-        contentAlignment = Alignment.Center // Center the image in the cell
+        contentAlignment = Alignment.Center
     ) {
+        if (!isFullSize && cachedBitmap != null) {
+            // Show cached/compressed image as placeholder
+            Image(
+                bitmap = cachedBitmap!!.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = adjustedModifier
+            )
+        }
+        // Always try to load the original image (for full size or as replacement)
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(imageUrl)
                 .crossfade(true)
                 .build(),
             contentDescription = null,
-            contentScale = ContentScale.Crop, // Always crop to fill the cell
+            contentScale = ContentScale.Crop,
             modifier = if (enableLongPress) {
-                adjustedModifier
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onLongPress = { offset ->
-                                showMenu = true
-                                menuPosition = offset
-                            }
-                        )
-                    }
+                adjustedModifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { offset ->
+                            showMenu = true
+                            menuPosition = offset
+                        }
+                    )
+                }
             } else {
                 adjustedModifier
             }
         )
-        
         if (showMenu) {
             // Calculate DropdownMenu position
             var parentSize by remember { mutableStateOf(IntSize.Zero) }

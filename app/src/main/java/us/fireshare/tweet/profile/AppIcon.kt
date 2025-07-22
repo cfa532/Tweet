@@ -22,6 +22,10 @@ import us.fireshare.tweet.widget.ImageViewer
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import coil.imageLoader
+import coil.request.SuccessResult
+import us.fireshare.tweet.widget.ImageCacheManager
 
 @Composable
 fun AppIcon() {
@@ -41,18 +45,46 @@ fun SimpleAvatar(
     user: User,
     size: Int = 40
 ) {
+    val context = LocalContext.current
+    val mid = user.avatar ?: ""
+    var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     var avatarUrl by remember(key1 = user.avatar) {
         mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
     }
     LaunchedEffect(key1 = user.avatar) {
         avatarUrl = getMediaUrl(user.avatar, user.baseUrl)
+        cachedBitmap = if (mid.isNotEmpty()) ImageCacheManager.getCachedImage(context, mid) else null
+        if (cachedBitmap == null && mid.isNotEmpty() && !isLoading) {
+            isLoading = true
+            val request = ImageRequest.Builder(context)
+                .data(avatarUrl)
+                .allowHardware(false)
+                .build()
+            val result = context.imageLoader.execute(request)
+            if (result is SuccessResult) {
+                val bmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                if (bmp != null) {
+                    ImageCacheManager.cacheImage(context, mid, bmp)
+                    cachedBitmap = bmp
+                }
+            }
+            isLoading = false
+        }
     }
-    
-    // Use AsyncImage directly instead of ImageViewer to avoid touch event conflicts
-    avatarUrl?.let {
+    if (cachedBitmap != null) {
+        Image(
+            bitmap = cachedBitmap!!.asImageBitmap(),
+            contentDescription = "User Avatar",
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(size.dp)
+                .clip(CircleShape)
+        )
+    } else if (!avatarUrl.isNullOrEmpty()) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(it)
+            model = ImageRequest.Builder(context)
+                .data(avatarUrl)
                 .crossfade(true)
                 .build(),
             contentDescription = "User Avatar",
@@ -61,14 +93,16 @@ fun SimpleAvatar(
                 .size(size.dp)
                 .clip(CircleShape)
         )
-    } ?: Image(
-        painter = painterResource(id = R.drawable.ic_splash),
-        contentDescription = "Placeholder Avatar",
-        modifier = modifier
-            .size(size.dp)
-            .clip(CircleShape),
-        contentScale = ContentScale.Crop
-    )
+    } else {
+        Image(
+            painter = painterResource(id = R.drawable.ic_splash),
+            contentDescription = "Placeholder Avatar",
+            modifier = modifier
+                .size(size.dp)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    }
 }
 
 @Composable
@@ -78,27 +112,59 @@ fun UserAvatar(
     size: Int = 40,
     enableLongPress: Boolean = false  // Disable long press by default to prevent conflicts with clickable parents
 ) {
+    val context = LocalContext.current
+    val mid = user.avatar ?: ""
+    var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     var avatarUrl by remember(key1 = user.avatar) {
         mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
     }
     LaunchedEffect(key1 = user.avatar) {
         avatarUrl = getMediaUrl(user.avatar, user.baseUrl)
+        cachedBitmap = if (mid.isNotEmpty()) ImageCacheManager.getCachedImage(context, mid) else null
+        if (cachedBitmap == null && mid.isNotEmpty() && !isLoading) {
+            isLoading = true
+            val request = ImageRequest.Builder(context)
+                .data(avatarUrl)
+                .allowHardware(false)
+                .build()
+            val result = context.imageLoader.execute(request)
+            if (result is SuccessResult) {
+                val bmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                if (bmp != null) {
+                    ImageCacheManager.cacheImage(context, mid, bmp)
+                    cachedBitmap = bmp
+                }
+            }
+            isLoading = false
+        }
     }
-    avatarUrl?.let {
+    if (cachedBitmap != null) {
+        Image(
+            bitmap = cachedBitmap!!.asImageBitmap(),
+            contentDescription = "User Avatar",
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(size.dp)
+                .clip(CircleShape)
+        )
+    } else if (!avatarUrl.isNullOrEmpty()) {
         ImageViewer(
-            it,
+            avatarUrl!!,
             modifier = modifier
                 .size(size.dp)
                 .clip(CircleShape),
             imageSize = size,
             enableLongPress = enableLongPress
         )
-    } ?: Image(
-        painter = painterResource(id = R.drawable.ic_splash),
-        contentDescription = "Placeholder Avatar",
-        modifier = modifier
-            .size(size.dp)
-            .clip(CircleShape),
-        contentScale = ContentScale.Crop
-    )
+    } else {
+        Image(
+            painter = painterResource(id = R.drawable.ic_splash),
+            contentDescription = "Placeholder Avatar",
+            modifier = modifier
+                .size(size.dp)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    }
 }

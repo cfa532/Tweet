@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import androidx.core.graphics.createBitmap
 
 /**
  * ImageCacheManager compresses and caches images by their mid (unique id).
@@ -20,7 +21,7 @@ import java.io.IOException
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    private const val MAX_MEMORY_CACHE_SIZE = 8 * 1024 * 1024 // 8MB
+    private const val MAX_MEMORY_CACHE_SIZE = 800 * 1024 * 1024 // 800MB
     private const val COMPRESS_QUALITY = 80 // JPEG quality
 
     // LRU memory cache (mid -> Bitmap)
@@ -55,8 +56,17 @@ object ImageCacheManager {
         if (!dir.exists()) dir.mkdirs()
         val file = File(dir, "$mid.jpg")
         try {
+            var quality = COMPRESS_QUALITY
+            var byteArray: ByteArray
+            do {
+                val stream = java.io.ByteArrayOutputStream()
+                compressed.compress(Bitmap.CompressFormat.JPEG, quality, stream)
+                byteArray = stream.toByteArray()
+                stream.close()
+                quality -= 5
+            } while (byteArray.size > 200 * 1024 && quality >= 50)
             FileOutputStream(file).use { out ->
-                compressed.compress(Bitmap.CompressFormat.JPEG, COMPRESS_QUALITY, out)
+                out.write(byteArray)
             }
         } catch (e: IOException) {
             e.printStackTrace()
@@ -67,19 +77,24 @@ object ImageCacheManager {
      * Compress a bitmap to JPEG with quality
      */
     private fun compressBitmap(bitmap: Bitmap): Bitmap {
-        // Optionally resize if too large (e.g., max 1024px)
         val maxDim = 1024
         val width = bitmap.width
         val height = bitmap.height
         if (width <= maxDim && height <= maxDim) return bitmap
-        val scale = maxDim / width.toFloat().coerceAtMost(maxDim / height.toFloat())
-        val newW = (width * scale).toInt()
-        val newH = (height * scale).toInt()
-        val resized = Bitmap.createBitmap(newW, newH, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(resized)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        canvas.drawBitmap(bitmap, null, android.graphics.Rect(0, 0, newW, newH), paint)
-        return resized
+        val scale = maxDim / maxOf(width, height).toFloat()
+        val newW = (width * scale).toInt().coerceAtLeast(1)
+        val newH = (height * scale).toInt().coerceAtLeast(1)
+        if (newW <= 0 || newH <= 0 || newW > 4096 || newH > 4096) return bitmap
+        return try {
+            val resized = Bitmap.createBitmap(newW, newH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(resized)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            canvas.drawBitmap(bitmap, null, android.graphics.Rect(0, 0, newW, newH), paint)
+            resized
+        } catch (e: OutOfMemoryError) {
+            e.printStackTrace()
+            bitmap
+        }
     }
 
     /**
