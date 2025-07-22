@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -90,7 +91,12 @@ fun MediaPreviewGrid(
     fun isPortrait(item: MimeiFileType) = aspectRatioOf(item) < 1f
     fun isLandscape(item: MimeiFileType) = aspectRatioOf(item) > 1f
 
-    var isFirstVideo = false
+    // Track which video should autoplay (first video in the grid)
+    val firstVideoIndex = remember {
+        limitedMediaList.indexOfFirst { 
+            (it.type ?: inferMediaTypeFromAttachment(it)) == MediaType.Video 
+        }.takeIf { it >= 0 } ?: -1
+    }
 
     Box(
         modifier = Modifier
@@ -123,10 +129,7 @@ fun MediaPreviewGrid(
                         },
                     index = 0,
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
-                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                        isFirstVideo = true
-                        true
-                    } else false,
+                    autoPlay = firstVideoIndex == 0,
                     inPreviewGrid = true,
                     viewModel = viewModel
                 )
@@ -157,10 +160,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = idx,
-                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -185,10 +185,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = idx,
-                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -214,10 +211,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = 0,
-                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -231,10 +225,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = 1,
-                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -250,10 +241,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = 0,
-                                    autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -267,10 +255,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = 1,
-                                    autoPlay = if ((limitedMediaList[1].type ?: inferMediaTypeFromAttachment(limitedMediaList[1])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -287,6 +272,7 @@ fun MediaPreviewGrid(
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
                 
                 if (allPortrait) {
+                    // All portrait: horizontal row with equal weights
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -303,10 +289,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = idx,
-                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -314,6 +297,7 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (allLandscape) {
+                    // All landscape: vertical column with equal weights
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -330,10 +314,7 @@ fun MediaPreviewGrid(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
                                     index = idx,
-                                    autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                        isFirstVideo = true
-                                        true
-                                    } else false,
+                                    autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
                                     viewModel = viewModel
                                 )
@@ -341,10 +322,11 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (ar0 < 1f) {
+                    // First is portrait, others are landscape - use 4:3 aspect ratio
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .aspectRatio(4f/3f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
@@ -356,10 +338,7 @@ fun MediaPreviewGrid(
                                 limitedMediaList,
                                 modifier = Modifier.fillMaxSize(),
                                 index = 0,
-                                autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                    isFirstVideo = true
-                                    true
-                                } else false,
+                                autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
                                 viewModel = viewModel
                             )
@@ -378,10 +357,7 @@ fun MediaPreviewGrid(
                                         limitedMediaList,
                                         modifier = Modifier.fillMaxSize(),
                                         index = idx,
-                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
+                                        autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
                                         viewModel = viewModel
                                     )
@@ -390,10 +366,11 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
+                    // First is landscape, others are portrait - use 4:3 aspect ratio
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .aspectRatio(4f/3f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
@@ -405,10 +382,7 @@ fun MediaPreviewGrid(
                                 limitedMediaList,
                                 modifier = Modifier.fillMaxSize(),
                                 index = 0,
-                                autoPlay = if ((limitedMediaList[0].type ?: inferMediaTypeFromAttachment(limitedMediaList[0])) == MediaType.Video && !isFirstVideo) {
-                                    isFirstVideo = true
-                                    true
-                                } else false,
+                                autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
                                 viewModel = viewModel
                             )
@@ -427,10 +401,7 @@ fun MediaPreviewGrid(
                                         limitedMediaList,
                                         modifier = Modifier.fillMaxSize(),
                                         index = idx,
-                                        autoPlay = if ((limitedMediaList[idx].type ?: inferMediaTypeFromAttachment(limitedMediaList[idx])) == MediaType.Video && !isFirstVideo) {
-                                            isFirstVideo = true
-                                            true
-                                        } else false,
+                                        autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
                                         viewModel = viewModel
                                     )
@@ -470,10 +441,7 @@ fun MediaPreviewGrid(
                             index = index,
                             numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                                 mediaItems.size - maxItems else 0,
-                            autoPlay = if ((mediaItem.type ?: inferMediaTypeFromAttachment(mediaItem)) == MediaType.Video && !isFirstVideo) {
-                                isFirstVideo = true
-                                true
-                            } else false,
+                            autoPlay = firstVideoIndex == index,
                             inPreviewGrid = true,
                             viewModel = viewModel
                         )
