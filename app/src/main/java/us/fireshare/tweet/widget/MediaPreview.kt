@@ -88,13 +88,10 @@ fun MediaPreviewGrid(
         return item.aspectRatio?.toFloat()?.takeIf { it > 0 } ?: 1f
     }
 
-    fun isPortrait(item: MimeiFileType) = aspectRatioOf(item) < 1f
-    fun isLandscape(item: MimeiFileType) = aspectRatioOf(item) > 1f
-
     // Track which video should autoplay (first video in the grid)
     val firstVideoIndex = remember {
         limitedMediaList.indexOfFirst { 
-            (it.type ?: inferMediaTypeFromAttachment(it)) == MediaType.Video 
+            inferMediaTypeFromAttachment(it) == MediaType.Video
         }.takeIf { it >= 0 } ?: -1
     }
 
@@ -464,10 +461,7 @@ fun MediaItemView(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
-        val inferredType = it.type ?: inferMediaTypeFromAttachment(it)
-        if (it.type == null) {
-            Timber.d("MediaItemView - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
-        }
+        val inferredType = inferMediaTypeFromAttachment(it)
         val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
         val extractedMid = mediaUrl.getMimeiKeyFromUrl()
         Timber.d("MediaPreview - MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl, extractedMid=$extractedMid")
