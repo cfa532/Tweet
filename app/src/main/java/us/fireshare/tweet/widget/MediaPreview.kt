@@ -504,7 +504,10 @@ fun MediaItemView(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
-        val inferredType = it.type
+        val inferredType = it.type ?: inferMediaTypeFromAttachment(it)
+        if (it.type == null) {
+            Timber.d("MediaItemView - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
+        }
         val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
         val extractedMid = mediaUrl.getMimeiKeyFromUrl()
         Timber.d("MediaPreview - MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl, extractedMid=$extractedMid")
