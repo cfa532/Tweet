@@ -273,7 +273,9 @@ private fun ProfileContentWithTweetListView(
             if (shouldLoadMore) {
                 // Load more tweets
                 coroutineScope.launch {
-                    viewModel.fetchTweets((tweets.size / 20) + 1) // Assuming 20 tweets per page
+                    withContext(Dispatchers.IO) {
+                        viewModel.fetchTweets((tweets.size / 20) + 1) // Assuming 20 tweets per page
+                    }
                 }
             }
         }
