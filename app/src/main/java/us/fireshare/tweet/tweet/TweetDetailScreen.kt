@@ -3,6 +3,7 @@ package us.fireshare.tweet.tweet
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -50,6 +51,8 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +64,7 @@ fun TweetDetailScreen(
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -140,33 +144,26 @@ fun TweetDetailScreen(
         floatingActionButtonPosition = FabPosition.End
 
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            state = listState
+                .padding(innerPadding)
         ) {
-            item {
-                /**
-                 * Tweet content and attachments. This is the main body.
-                 * */
-                TweetDetailBody(viewModel, parentEntry, gridColumns)
-
-                // divider between tweet and its comment list
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-            
-            // Comments as individual items
-            items(
-                items = comments,
-                key = { it.mid }
-            ) { comment ->
-                CommentItem(comment, viewModel, parentEntry)
-            }
+            TweetDetailBody(viewModel, parentEntry, gridColumns)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 1.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline
+            )
+            CommentListView(
+                comments = comments,
+                getComments = { pageNumber ->
+                    coroutineScope.launch {
+                        viewModel.loadComments(tweet, pageNumber)
+                    }
+                },
+                parentEntry = parentEntry
+            )
         }
     }
 }
