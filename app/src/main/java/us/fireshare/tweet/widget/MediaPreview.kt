@@ -83,6 +83,8 @@ fun MediaPreviewGrid(
         else -> 4
     }
     val limitedMediaList = mediaItems.take(maxItems)
+    // Debug logging for mediaItems and limitedMediaList sizes
+    Timber.d("MediaPreviewGrid - mediaItems.size: ${mediaItems.size}, limitedMediaList.size: ${limitedMediaList.size}")
 
     fun aspectRatioOf(item: MimeiFileType): Float {
         // For videos, use the stored aspect ratio
@@ -93,11 +95,11 @@ fun MediaPreviewGrid(
         // For images, try to infer aspect ratio from filename or use a reasonable default
         // Most images are landscape (wider than tall), so default to 4:3
         if (item.type == MediaType.Image) {
-            return 4f/3f  // Default to landscape for images
+            return 1.618f  // Default to landscape for images
         }
 
         // For other types, use square aspect ratio
-        return 1f
+        return 1.618f
     }
 
     // Track which video should autoplay (first video in the grid)
@@ -115,10 +117,10 @@ fun MediaPreviewGrid(
     ) {
         when (limitedMediaList.size) {
             1 -> {
-                val aspectRatio = if (aspectRatioOf(limitedMediaList[0]) > 1f) {
+                val aspectRatio = if (aspectRatioOf(limitedMediaList[0]) > 0.8f) {
                     aspectRatioOf(limitedMediaList[0])
                 } else {
-                    1f
+                    0.8f
                 }
                 MediaItemView(
                     limitedMediaList,
@@ -284,6 +286,7 @@ fun MediaPreviewGrid(
                 val isPortrait2 = ar2 < 1f
 
                 if (allPortrait) {
+                    Timber.d("MediaPreviewGrid - 3 items: allPortrait branch")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -329,6 +332,7 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (allLandscape) {
+                    Timber.d("MediaPreviewGrid - 3 items: allLandscape branch")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -376,7 +380,7 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (isPortrait0) {
-                    // Fallback: first is portrait, others are not
+                    Timber.d("MediaPreviewGrid - 3 items: isPortrait0 fallback branch")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -420,7 +424,7 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    // Fallback: first is landscape, others are not
+                    Timber.d("MediaPreviewGrid - 3 items: else (landscape fallback) branch")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
