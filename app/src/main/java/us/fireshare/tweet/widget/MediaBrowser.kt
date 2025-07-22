@@ -110,10 +110,7 @@ fun MediaBrowser(
     val tweetAttachments by viewModel.attachments.collectAsState()
     val mediaItems = tweetAttachments?.map {
         val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
-        val inferredType = it.type ?: inferMediaTypeFromAttachment(it)
-        if (it.type == null) {
-            Timber.d("MediaBrowser - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
-        }
+        val inferredType = it.type
         Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
         MediaItem(mediaUrl, inferredType)
     } ?: return
