@@ -85,7 +85,19 @@ fun MediaPreviewGrid(
     val limitedMediaList = mediaItems.take(maxItems)
 
     fun aspectRatioOf(item: MimeiFileType): Float {
-        return item.aspectRatio?.toFloat()?.takeIf { it > 0 } ?: 1f
+        // For videos, use the stored aspect ratio
+        if (item.type == MediaType.Video && item.aspectRatio != null && item.aspectRatio!! > 0) {
+            return item.aspectRatio!!
+        }
+
+        // For images, try to infer aspect ratio from filename or use a reasonable default
+        // Most images are landscape (wider than tall), so default to 4:3
+        if (item.type == MediaType.Image) {
+            return 4f/3f  // Default to landscape for images
+        }
+
+        // For other types, use square aspect ratio
+        return 1f
     }
 
     // Track which video should autoplay (first video in the grid)
@@ -267,63 +279,108 @@ fun MediaPreviewGrid(
                 val ar2 = aspectRatioOf(limitedMediaList[2])
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
-                
+                val isPortrait0 = ar0 < 1f
+                val isPortrait1 = ar1 < 1f
+                val isPortrait2 = ar2 < 1f
+
                 if (allPortrait) {
-                    // All portrait: horizontal row with equal weights
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .aspectRatio(1f), // square grid
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        for (idx in 0..2) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = idx,
-                                    autoPlay = firstVideoIndex == idx,
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel
-                                )
+                        // First image: left half
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier.fillMaxSize(),
+                                index = 0,
+                                autoPlay = firstVideoIndex == 0,
+                                inPreviewGrid = true,
+                                viewModel = viewModel
+                            )
+                        }
+                        // Second and third: right half, stacked vertically
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            for (idx in 1..2) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = idx,
+                                        autoPlay = firstVideoIndex == idx,
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel
+                                    )
+                                }
                             }
                         }
                     }
                 } else if (allLandscape) {
-                    // All landscape: vertical column with equal weights
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .aspectRatio(0.8f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        for (idx in 0..2) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = idx,
-                                    autoPlay = firstVideoIndex == idx,
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel
-                                )
+                        // First image: top half
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier.fillMaxSize(),
+                                index = 0,
+                                autoPlay = firstVideoIndex == 0,
+                                inPreviewGrid = true,
+                                viewModel = viewModel
+                            )
+                        }
+                        // Second and third: bottom half, side by side
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            for (idx in 1..2) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = idx,
+                                        autoPlay = firstVideoIndex == idx,
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel
+                                    )
+                                }
                             }
                         }
                     }
-                } else if (ar0 < 1f) {
-                    // First is portrait, others are landscape - use 4:3 aspect ratio
+                } else if (isPortrait0) {
+                    // Fallback: first is portrait, others are not
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f/3f),
+                            .aspectRatio(4f / 3f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
@@ -363,11 +420,11 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    // First is landscape, others are portrait - use 4:3 aspect ratio
+                    // Fallback: first is landscape, others are not
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f/3f),
+                            .aspectRatio(4f / 3f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Box(
