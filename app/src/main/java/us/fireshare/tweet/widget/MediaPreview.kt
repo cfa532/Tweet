@@ -98,7 +98,7 @@ fun MediaPreviewGrid(
             return item.aspectRatio?.takeIf { it > 0 } ?: 1f
         }
         if (itemType == MediaType.Image) {
-            var aspectRatio by remember(item.mid) { mutableStateOf<Float?>(null) }
+            var aspectRatio by remember(item.mid) { mutableStateOf(item.aspectRatio) }
             LaunchedEffect(item.mid) {
                 val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
                 aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
