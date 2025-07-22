@@ -323,19 +323,6 @@ fun TweetListView(
                     }
                 }
             }
-            if (isRefreshingAtTop) {
-                item {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 60.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                            .size(48.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp
-                    )
-                }
-            }
             if (isRefreshingAtBottom) {
                 item {
                     CircularProgressIndicator(
