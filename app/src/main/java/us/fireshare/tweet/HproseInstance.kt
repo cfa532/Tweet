@@ -37,6 +37,7 @@ import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
 import java.util.regex.Pattern
+import android.graphics.BitmapFactory
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -1481,6 +1482,7 @@ object HproseInstance {
     /**
      * Original IPFS upload method as fallback
      */
+    @OptIn(UnstableApi::class)
     private suspend fun uploadToIPFSOriginal(
         context: Context,
         uri: Uri,
@@ -1532,10 +1534,12 @@ object HproseInstance {
             
             Timber.tag("uploadToIPFSOriginal").d("Upload successful, CID: $cid")
 
-            @OptIn(UnstableApi::class)
-            val aspectRatio = if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
-                getVideoAspectRatio(context, uri)
-            } else null
+            // Calculate aspect ratio for image or video
+            val aspectRatio = when (mediaType) {
+                us.fireshare.tweet.datamodel.MediaType.Image -> getImageAspectRatio(context, uri)
+                us.fireshare.tweet.datamodel.MediaType.Video -> getVideoAspectRatio(context, uri)
+                else -> null
+            }
             
             return MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
@@ -1544,6 +1548,19 @@ object HproseInstance {
         return null
     }
 
+    fun getImageAspectRatio(context: Context, uri: Uri): Float? {
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, options)
+            }
+            if (options.outWidth > 0 && options.outHeight > 0) {
+                options.outWidth.toFloat() / options.outHeight.toFloat()
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
 
 
     val httpClient = HttpClient(CIO) {
