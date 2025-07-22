@@ -35,6 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -86,10 +89,25 @@ fun MediaPreviewGrid(
     // Debug logging for mediaItems and limitedMediaList sizes
     Timber.d("MediaPreviewGrid - mediaItems.size: ${mediaItems.size}, limitedMediaList.size: ${limitedMediaList.size}")
 
+    // Helper: get aspect ratio for an item, using Compose state for images
+    @Composable
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
-        if (itemType == MediaType.Video || itemType == MediaType.Image) {
-            return item.aspectRatio?.takeIf { it > 0 } ?: (1f)
+        val context = LocalContext.current // Get context in composable scope
+        if (itemType == MediaType.Video) {
+            return item.aspectRatio?.takeIf { it > 0 } ?: 1f
+        }
+        if (itemType == MediaType.Image) {
+            var aspectRatio by remember(item.mid) { mutableStateOf<Float?>(null) }
+            LaunchedEffect(item.mid) {
+                val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
+                aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
+                    bitmap.width.toFloat() / bitmap.height.toFloat()
+                } else {
+                    1f
+                }
+            }
+            return aspectRatio ?: 1f
         }
         // For other types, use square aspect ratio
         return 1f
