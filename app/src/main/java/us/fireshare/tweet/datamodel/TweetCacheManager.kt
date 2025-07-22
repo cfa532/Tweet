@@ -1,11 +1,8 @@
 package us.fireshare.tweet.datamodel
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import java.util.Date
-import java.util.concurrent.TimeUnit
 
 /**
  * TweetCacheManager handles tweet and user caching with expiration management.

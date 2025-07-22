@@ -1,6 +1,7 @@
 package us.fireshare.tweet
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
@@ -9,35 +10,37 @@ import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
 import hprose.client.HproseClient
 import hprose.io.HproseClassManager
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
-import us.fireshare.tweet.datamodel.UserActions
-import us.fireshare.tweet.datamodel.UserContentType
-import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.UserActions
+import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
 import java.util.regex.Pattern
-import android.graphics.BitmapFactory
+import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -184,7 +187,7 @@ object HproseInstance {
     }
 
     // get the recent unread message from a sender.
-    fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
+    suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
         val entry = "message_fetch"
         val params = mapOf(
             "aid" to appId,
@@ -208,7 +211,7 @@ object HproseInstance {
     /**
      * Get a list of unread incoming messages. Only check, do not fetch them.
      * */
-    fun checkNewMessages(): List<ChatMessage>? {
+    suspend fun checkNewMessages(): List<ChatMessage>? {
         if (appUser.isGuest()) return null
         val entry = "message_check"
         val params = mapOf(
@@ -228,7 +231,7 @@ object HproseInstance {
         }
     }
 
-    fun checkUpgrade(): Map<String, String>? {
+    suspend fun checkUpgrade(): Map<String, String>? {
         val entry = "check_upgrade"
         val params = mapOf(
             "aid" to appId,
@@ -245,7 +248,7 @@ object HproseInstance {
         }
     }
 
-    fun getUserId(username: String): MimeiId? {
+    suspend fun getUserId(username: String): MimeiId? {
         val entry = "get_userid"
         val params = mapOf(
             "aid" to appId,
@@ -302,7 +305,7 @@ object HproseInstance {
     /**
      * Given host url, get the node Id
      * */
-    fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
+    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
         val entry = "getvar"
         val params = mapOf("name" to "hostid")
         return try {
@@ -343,7 +346,7 @@ object HproseInstance {
     /**
      * Register a new user or update an existing user account.
      * */
-    fun setUserData(userObj: User): Map<*, *>? {
+    suspend fun setUserData(userObj: User): Map<*, *>? {
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
         val entry = if (user.isGuest()) {
             /**
@@ -372,7 +375,7 @@ object HproseInstance {
         }
     }
 
-    fun setUserAvatar(user: User, avatar: MimeiId) {
+    suspend fun setUserAvatar(user: User, avatar: MimeiId) {
         val entry = "set_user_avatar"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
@@ -390,7 +393,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
      * */
-    fun getFollowings(user: User): List<MimeiId> {
+    suspend fun getFollowings(user: User): List<MimeiId> {
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -412,7 +415,7 @@ object HproseInstance {
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
      * */
-    fun getFans(user: User): List<MimeiId>? {
+    suspend fun getFans(user: User): List<MimeiId>? {
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -651,7 +654,7 @@ object HproseInstance {
      * @param direction to indicate increase or decrease retweet count.
      * @return updated original tweet.
      * */
-    fun updateRetweetCount(
+    suspend fun updateRetweetCount(
         tweet: Tweet,
         retweetId: MimeiId,
         direction: Int = 1
@@ -770,7 +773,7 @@ object HproseInstance {
      * Called when appUser clicks the Follow button.
      * @param followedId is the user that appUser is following or unfollowing.
      * */
-    fun toggleFollowing(
+    suspend fun toggleFollowing(
         followedId: MimeiId,
         followingId: MimeiId = appUser.mid
     ): Boolean? {
@@ -1170,7 +1173,7 @@ object HproseInstance {
     /**
      * Get provider IP for a user using "get_provider" entry
      */
-    fun getProviderIP(userId: MimeiId): String? {
+    suspend fun getProviderIP(userId: MimeiId): String? {
         val entry = "get_provider"
         val params = mapOf(
             "aid" to appId,
@@ -1188,7 +1191,7 @@ object HproseInstance {
     /**
      * Return the current tweet list that is pinned to top.
      * */
-    fun togglePinnedTweet(tweetId: MimeiId): Boolean? {
+    suspend fun togglePinnedTweet(tweetId: MimeiId): Boolean? {
         val entry = "toggle_pinned_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1208,7 +1211,7 @@ object HproseInstance {
      * Return a list of {tweet: Tweet, timestamp: Long} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    fun getPinnedList(user: User): List<Map<String, Any>>? {
+    suspend fun getPinnedList(user: User): List<Map<String, Any>>? {
         val entry = "get_pinned_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -1225,7 +1228,7 @@ object HproseInstance {
         }
     }
 
-    fun logging(msg: String) {
+    suspend fun logging(msg: String) {
         if (appUser.isGuest()) return
         val entry = "logging"
         val params = mapOf(

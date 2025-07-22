@@ -30,15 +30,14 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
-
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
 import kotlin.math.max
-import us.fireshare.tweet.datamodel.TweetCacheManager
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
@@ -132,7 +131,7 @@ class UserViewModel @AssistedInject constructor(
         return pinnedTweets.value.any { it.mid == tweet.mid }
     }
 
-    fun getHostId() {
+    suspend fun getHostId() {
         hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
             HproseInstance.getHostId() ?: ""
         } else user.value.hostIds!!.first()
@@ -197,7 +196,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun refreshFollowingsAndFans() {
+    suspend fun refreshFollowingsAndFans() {
         val fans = HproseInstance.getFans(user.value) ?: emptyList()
         val followings = HproseInstance.getFollowings(user.value)
         
@@ -217,7 +216,7 @@ class UserViewModel @AssistedInject constructor(
      * Fetch followers with pagination support
      * Returns List<MimeiId> (null values are filtered out)
      */
-    fun fetchFollowers(pageNumber: Int): List<MimeiId> {
+    suspend fun fetchFollowers(pageNumber: Int): List<MimeiId> {
         Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {
@@ -264,7 +263,7 @@ class UserViewModel @AssistedInject constructor(
      * Fetch followings with pagination support
      * Returns List<MimeiId> (null values are filtered out)
      */
-    fun fetchFollowings(pageNumber: Int): List<MimeiId> {
+    suspend fun fetchFollowings(pageNumber: Int): List<MimeiId> {
         return try {
             if (pageNumber == 0) {
                 // For page 0, refresh the entire list

@@ -3,11 +3,11 @@ package us.fireshare.tweet.datamodel
 import android.os.Parcelable
 import com.google.gson.annotations.Expose
 import hprose.client.HproseClient
+import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
-import us.fireshare.tweet.HproseInstance
-import kotlinx.parcelize.IgnoredOnParcel
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 
 @Parcelize
 @Serializable

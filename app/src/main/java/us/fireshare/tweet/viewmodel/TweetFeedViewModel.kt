@@ -3,13 +3,10 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,11 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlin.math.max
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import com.google.gson.Gson
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -37,14 +31,12 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.service.UploadTweetWorker
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.service.SnackbarEvent
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
-import us.fireshare.tweet.datamodel.UserActions
+import us.fireshare.tweet.service.UploadTweetWorker
 import javax.inject.Inject
-import us.fireshare.tweet.datamodel.TweetCacheManager
+import kotlin.math.max
 
 @HiltViewModel
 class TweetFeedViewModel @Inject constructor() : ViewModel() {

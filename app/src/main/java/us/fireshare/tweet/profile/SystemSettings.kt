@@ -40,11 +40,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,17 +54,14 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
+import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.widget.VideoManager
-import us.fireshare.tweet.datamodel.Tweet
-import androidx.compose.ui.platform.LocalContext
-import androidx.media3.common.util.UnstableApi
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)

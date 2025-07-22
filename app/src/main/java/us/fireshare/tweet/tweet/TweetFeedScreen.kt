@@ -19,7 +19,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,14 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.delay
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
-import us.fireshare.tweet.ui.theme.rememberDelayedBottomBarTransparency
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import us.fireshare.tweet.tweet.ScrollState
-import us.fireshare.tweet.tweet.ScrollDirection
-import kotlinx.coroutines.delay
 
 data class TabItem(
     val title: String = "Followings",

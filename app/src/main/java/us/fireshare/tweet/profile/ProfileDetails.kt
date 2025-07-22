@@ -26,12 +26,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import us.fireshare.tweet.HproseInstance.appUser
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.viewmodel.UserViewModel
-import timber.log.Timber
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable
 fun ProfileDetail(
@@ -56,7 +56,9 @@ fun ProfileDetail(
     val tweetCount by viewModel.tweetCount.collectAsState()
 
     LaunchedEffect(appUserFollowings) {
-        viewModel.refreshFollowingsAndFans()
+        withContext(IO) {
+            viewModel.refreshFollowingsAndFans()
+        }
     }
 
     // go to list of followings of the user

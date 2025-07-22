@@ -18,8 +18,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.toRoute
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
@@ -27,7 +25,6 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.SimpleAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import java.util.concurrent.TimeUnit
-import us.fireshare.tweet.datamodel.User
 
 // Tweet header when displayed as an item in a list.
 @Composable

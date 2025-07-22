@@ -5,16 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.work.OneTimeWorkRequest
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -27,14 +24,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
-import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.service.UploadCommentWorker
 import us.fireshare.tweet.widget.createExoPlayer
 import java.lang.Integer.max
@@ -321,7 +316,7 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Update retweet account on the original tweet after retweet is deleted.
      * */
-    fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
+    suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
         HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
             _tweetState.value = it
         }

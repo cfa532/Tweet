@@ -11,7 +11,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import androidx.core.graphics.createBitmap
 
 /**
  * ImageCacheManager compresses and caches images by their mid (unique id).

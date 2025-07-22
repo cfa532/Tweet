@@ -70,7 +70,6 @@ import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.service.SnackbarAction
 import us.fireshare.tweet.service.SnackbarController
 import us.fireshare.tweet.service.SnackbarEvent
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
 
 @OptIn(ExperimentalMaterial3Api::class)

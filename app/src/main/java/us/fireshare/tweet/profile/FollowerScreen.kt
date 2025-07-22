@@ -30,8 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
@@ -39,7 +40,6 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.localizedTimeDifference
 import us.fireshare.tweet.viewmodel.UserViewModel
-import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,14 +124,17 @@ fun FollowerItem(
     // Proactively load user data for every user ID
     LaunchedEffect(userId) {
         Timber.tag("FollowerItem").d("Loading user data for userId: $userId")
-        viewModel.refreshUser()
+        withContext(IO) {
+            viewModel.refreshUser()
+        }
     }
 
     // Retry loading if the user data failed to load (user is guest)
     LaunchedEffect(user) {
         if (user.isGuest()) {
-            Timber.tag("FollowerItem").d("Retrying user data load for userId: $userId (user is guest)")
-            viewModel.refreshUser()
+            withContext(IO) {
+                viewModel.refreshUser()
+            }
         }
     }
 
