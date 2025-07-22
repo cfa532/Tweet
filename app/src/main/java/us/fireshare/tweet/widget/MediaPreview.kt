@@ -87,19 +87,12 @@ fun MediaPreviewGrid(
     Timber.d("MediaPreviewGrid - mediaItems.size: ${mediaItems.size}, limitedMediaList.size: ${limitedMediaList.size}")
 
     fun aspectRatioOf(item: MimeiFileType): Float {
-        // For videos, use the stored aspect ratio
-        if (item.type == MediaType.Video && item.aspectRatio != null && item.aspectRatio!! > 0) {
-            return item.aspectRatio!!
+        val itemType = inferMediaTypeFromAttachment(item)
+        if (itemType == MediaType.Video || itemType == MediaType.Image) {
+            return item.aspectRatio?.takeIf { it > 0 } ?: (1f)
         }
-
-        // For images, try to infer aspect ratio from filename or use a reasonable default
-        // Most images are landscape (wider than tall), so default to 4:3
-        if (item.type == MediaType.Image) {
-            return 1.618f  // Default to landscape for images
-        }
-
         // For other types, use square aspect ratio
-        return 1.618f
+        return 1f
     }
 
     // Track which video should autoplay (first video in the grid)
