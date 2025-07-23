@@ -106,7 +106,7 @@ fun MediaPreviewGrid(
             return aspectRatio ?: 1f
         }
         // For other types, use square aspect ratio
-        return 1f
+        return 1.618f
     }
 
     // Track which video should autoplay (first video in the grid)
