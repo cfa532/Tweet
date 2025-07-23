@@ -148,7 +148,6 @@ fun TweetItemBody(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 4.dp)
                 ) {
                     Column {
                         // Text content of the tweet

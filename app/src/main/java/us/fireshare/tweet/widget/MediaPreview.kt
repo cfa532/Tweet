@@ -684,8 +684,8 @@ fun BlobLink(
  */
 fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     // Check if aspectRatio is present (indicates video)
-    if (attachment.aspectRatio != null) {
-        return MediaType.Video
+    if (attachment.type != null && attachment.type != MediaType.Unknown) {
+        return attachment.type
     }
     
     // Check filename extension
