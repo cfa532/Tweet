@@ -59,6 +59,7 @@ fun TweetItemBody(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
+            .padding(start = 0.dp, end = 8.dp)
             .clickable(onClick = {
                 if (tweet.authorId != null && tweet.mid != null)
                     navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
@@ -67,7 +68,6 @@ fun TweetItemBody(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 0.dp, end = 8.dp)
         ) {
             // Left column: Avatar
             Column(
@@ -77,7 +77,7 @@ fun TweetItemBody(
                     onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     },
-                    modifier = Modifier.width(40.dp)
+                    modifier = Modifier.width(44.dp)
                 ) {
                     author?.let { SimpleAvatar(user = it, size = 32) }
                 }
@@ -158,7 +158,6 @@ fun TweetItemBody(
                             SelectableText(
                                 text = it,
                                 maxLines = 10,
-                                modifier = Modifier.padding(bottom = 4.dp)
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     HproseInstance.getUserId(username)?.let {
@@ -174,7 +173,8 @@ fun TweetItemBody(
                         if (!tweet.attachments.isNullOrEmpty()) {
                             Surface(
                                 modifier = Modifier.fillMaxWidth()
-                                    .heightIn(min = 32.dp, max = 400.dp),
+                                    .padding(top = 4.dp)
+                                    .heightIn(min = 20.dp, max = 400.dp),
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {

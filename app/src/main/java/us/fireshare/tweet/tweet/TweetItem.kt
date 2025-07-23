@@ -164,11 +164,10 @@ fun TweetItem(
                 // retweet with comments. Either text or media files.
                 val navController = LocalNavController.current
                 Surface(
-                    modifier = Modifier.padding(top = 8.dp)
+//                    modifier = Modifier.padding(top = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier
-                            .padding(start = 8.dp)
                             .clickable(onClick = {
                                 navController.navigate(
                                     NavTweet.TweetDetail(
@@ -276,7 +275,7 @@ fun TweetItem(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 16.dp, end = 8.dp),
+                                .padding(start = 40.dp, end = 8.dp),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             // State hoist
