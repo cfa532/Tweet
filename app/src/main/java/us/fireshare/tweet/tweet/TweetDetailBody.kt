@@ -193,8 +193,8 @@ fun TweetDetailBody(
                                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                         parentEntry, key = tweet.originalTweetId
                                     ) { factory -> factory.create(originalTweet!!) },
-                                    true,
-                                    parentEntry
+                                    parentEntry = parentEntry,
+                                    isQuoted = true
                                 )
                             }
                         } else {

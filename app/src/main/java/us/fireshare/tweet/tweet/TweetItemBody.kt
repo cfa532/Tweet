@@ -7,17 +7,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -27,9 +32,14 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.tweet.TweetDropdownMenu
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
+import java.util.concurrent.TimeUnit
+import androidx.compose.ui.res.stringResource
+import us.fireshare.tweet.R
 
 @Composable
 fun TweetItemBody(
@@ -40,6 +50,7 @@ fun TweetItemBody(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
+    val author by remember { derivedStateOf { tweet.author } }
 
     // fold text content up to 9 lines. Open it upon user click.
     Surface(
@@ -53,59 +64,137 @@ fun TweetItemBody(
                     navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             })
     ) {
-        Column(
+        Row(
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
         ) {
-            // Tweet Header. Icon, name, timestamp, more actions
-            TweetItemHeader(viewModel, parentEntry, parentTweet)
-
-            Surface(
-                shape = MaterialTheme.shapes.small, // Inner border
-                modifier = Modifier
-                    .offset(y = (-20).dp)
-                    .padding(start = 40.dp, bottom = 4.dp, end = 4.dp)
+            // Left column: Avatar
+            Column(
+                modifier = Modifier.padding(top = 4.dp)
             ) {
-                Column {
-                    // Text content of the tweet
-                    tweet.content?.let {
-                        SelectableText(text = it, maxLines = 10) { username ->
-                            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                HproseInstance.getUserId(username)?.let {
-                                    withContext(Dispatchers.Main) {
-                                        navController.navigate(NavTweet.UserProfile(it))
+                IconButton(
+                    onClick = {
+                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                    },
+                    modifier = Modifier.width(40.dp)
+                ) {
+                    author?.let { SimpleAvatar(user = it, size = 32) }
+                }
+            }
+
+            @Composable
+            fun localizedTimeDifference(timestamp: Long): String {
+                val currentTime = System.currentTimeMillis()
+                val diffInMillis = currentTime - timestamp
+
+                val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
+                val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
+                val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
+                val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
+                val weeks = days / 7
+                val months = days / 30
+                val years = days / 365
+
+                return when {
+                    seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
+                    minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
+                    hours < 24 -> stringResource(id = R.string.hours_ago, hours)
+                    days < 7 -> stringResource(id = R.string.days_ago, days)
+                    weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
+                    months < 12 -> stringResource(id = R.string.months_ago, months + 1)
+                    else -> stringResource(id = R.string.years_ago, years)
+                }
+            }
+
+            // Right column: User info, content, and actions
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
+                // Top row: User info and dropdown menu
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // User info text
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = author?.name ?: "No One",
+                            modifier = Modifier.padding(start = 2.dp),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = "@${author?.username}",
+                            modifier = Modifier.padding(horizontal = 0.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(text = " • ", fontSize = 12.sp)
+                        Text(
+                            text = localizedTimeDifference(tweet.timestamp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
+                    // Dropdown menu
+                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
+                }
+
+                // Tweet content
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp)
+                ) {
+                    Column {
+                        // Text content of the tweet
+                        tweet.content?.let {
+                            SelectableText(
+                                text = it,
+                                maxLines = 10,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            ) { username ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    HproseInstance.getUserId(username)?.let {
+                                        withContext(Dispatchers.Main) {
+                                            navController.navigate(NavTweet.UserProfile(it))
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    // there are attached media files
-                    if (! tweet.attachments.isNullOrEmpty()) {
-                        Surface (
-                            modifier = Modifier.fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .heightIn(min = 32.dp, max = 400.dp),
-                            tonalElevation = 4.dp,
-                            shape = RoundedCornerShape(size = 8.dp)
-                        ) {
-                            MediaPreviewGrid(tweet.attachments!!, viewModel)
+
+                        // Media files
+                        if (!tweet.attachments.isNullOrEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth()
+                                    .heightIn(min = 32.dp, max = 400.dp),
+                                tonalElevation = 4.dp,
+                                shape = RoundedCornerShape(size = 8.dp)
+                            ) {
+                                MediaPreviewGrid(tweet.attachments!!, viewModel)
+                            }
                         }
-                    }
-                    /**
-                     * If the tweet being displayed is quoted by other tweet, do not show buttons
-                     * */
-                    if (!isQuoted) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceAround
-                        ) {
-                            LikeButton(viewModel)
-                            BookmarkButton(viewModel)
-                            CommentButton(viewModel)
-                            RetweetButton(viewModel)
-                            Spacer(modifier = Modifier.width(40.dp))
-                            ShareButton(viewModel)
-//                            ShareScreenshotButton(viewModel)
+
+                        // Action buttons (only if not quoted)
+                        if (!isQuoted) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceAround
+                            ) {
+                                LikeButton(viewModel)
+                                BookmarkButton(viewModel)
+                                CommentButton(viewModel)
+                                RetweetButton(viewModel)
+                                Spacer(modifier = Modifier.width(40.dp))
+                                ShareButton(viewModel)
+                            }
                         }
                     }
                 }
