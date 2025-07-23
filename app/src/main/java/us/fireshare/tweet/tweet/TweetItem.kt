@@ -375,10 +375,12 @@ fun TweetItem(
  */
 @Composable
 fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
-    val refreshIntervalMillis = 3000L // 3 seconds
-
+    val initialRefreshIntervalMillis = 3000L // 3 seconds for first time
+    val subsequentRefreshIntervalMillis = 300000L // 5 minutes for subsequent refreshes
+    
     // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
     val scope = rememberCoroutineScope()
+    var isFirstTimeVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
@@ -387,7 +389,14 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
             
             // Launch a coroutine to handle the refresh after the delay
             scope.launch(Dispatchers.IO) {
-                delay(refreshIntervalMillis)
+                if (isFirstTimeVisible) {
+                    // First time visible - refresh after 3 seconds
+                    delay(initialRefreshIntervalMillis)
+                    isFirstTimeVisible = false
+                } else {
+                    // Subsequent times - refresh after 5 minutes
+                    delay(subsequentRefreshIntervalMillis)
+                }
                 viewModel.refreshTweetAndOriginal()
             }
         }
