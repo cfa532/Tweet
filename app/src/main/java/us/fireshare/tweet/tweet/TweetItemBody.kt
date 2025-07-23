@@ -44,6 +44,7 @@ import us.fireshare.tweet.R
 @Composable
 fun TweetItemBody(
     viewModel: TweetViewModel,
+    modifier: Modifier = Modifier,
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
@@ -56,9 +57,7 @@ fun TweetItemBody(
     Surface(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
-        tonalElevation = 0.dp,
-        modifier = Modifier
-            .padding(top = 8.dp)
+        modifier = modifier
             .clickable(onClick = {
                 if (tweet.authorId != null && tweet.mid != null)
                     navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))

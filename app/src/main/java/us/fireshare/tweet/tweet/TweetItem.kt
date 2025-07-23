@@ -135,6 +135,7 @@ fun TweetItem(
 
                         TweetItemBody(
                             originalTweetViewModel,
+                            modifier = Modifier.padding(top = 8.dp),
                             parentTweet = tweet,
                             parentEntry = parentEntry
                         )
@@ -149,10 +150,9 @@ fun TweetItem(
                                 fontSize = MaterialTheme.typography.labelSmall.fontSize,
                                 color = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier
-                                    .padding(start = 60.dp)
+                                    .padding(start = 24.dp)
                                     .offset(
-                                        y = (-4).dp,
-                                        x = (-48).dp
+                                        y = (0).dp,
                                     ) // Adjust the offset value as needed
                                     .zIndex(1f) // Ensure it appears above the tweet area
                             )
