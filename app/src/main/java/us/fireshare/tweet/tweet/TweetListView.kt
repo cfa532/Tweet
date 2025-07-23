@@ -223,6 +223,54 @@ fun TweetListView(
         }
     }
 
+    // Preload next page when user is approaching the bottom
+    val isNearBottom by remember(tweets) {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val totalItems = layoutInfo.totalItemsCount
+            
+            // Check if we're near the bottom (within 5 items of the end) but not at the bottom
+            val isNearBottom = lastVisibleItem != null && 
+                              lastVisibleItem.index >= totalItems - 5 && 
+                              lastVisibleItem.index < totalItems - 2
+            
+            isNearBottom
+        }
+    }
+
+    // Preload next page when approaching bottom
+    LaunchedEffect(isNearBottom, serverDepleted) {
+        if (isNearBottom && !serverDepleted && tweets.size >= 4) {
+            Timber.tag("TweetListView").d("Near bottom detected, preloading next page...")
+            
+            coroutineScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val nextPage = lastLoadedPage + 1
+                        Timber.tag("TweetListView").d("Preloading page: $nextPage")
+                        
+                        // Preload the next page and cache it
+                        val preloadedTweets = fetchTweets(nextPage)
+                        val validTweetsCount = preloadedTweets.count { it != null }
+                        
+                        if (validTweetsCount > 0) {
+                            Timber.tag("TweetListView").d("Preloaded $validTweetsCount valid tweets from page $nextPage")
+                        } else if (preloadedTweets.size < TW_CONST.PAGE_SIZE) {
+                            // Server is depleted, mark it
+                            serverDepleted = true
+                            Timber.tag("TweetListView").d("Server depleted during preload at page $nextPage")
+                        } else {
+                            Timber.tag("TweetListView").d("Preloaded page $nextPage but no valid tweets found")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Error during preload")
+                }
+            }
+        }
+    }
+
     // Track scroll position changes and save them
     LaunchedEffect(listState) {
         snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
