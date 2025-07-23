@@ -34,7 +34,7 @@ fun FollowingsTweet(
             viewModel.fetchTweets(pageNumber)
         },
         scrollBehavior = scrollBehavior,
-        contentPadding = PaddingValues(bottom = 60.dp),
+        contentPadding = PaddingValues(bottom = 40.dp),
         showPrivateTweets = false,
         parentEntry = parentEntry,
         onScrollStateChange = onScrollStateChange,

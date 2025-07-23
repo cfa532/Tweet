@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,10 +25,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,6 +51,9 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.tweet.TweetDropdownMenu
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun TweetItem(
@@ -163,11 +169,10 @@ fun TweetItem(
             } else {
                 // retweet with comments. Either text or media files.
                 val navController = LocalNavController.current
-                Surface(
-//                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Column(
+                Surface {
+                    Row(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .clickable(onClick = {
                                 navController.navigate(
                                     NavTweet.TweetDetail(
@@ -177,114 +182,172 @@ fun TweetItem(
                                 )
                             })
                     ) {
-                        // Tweet header: Icon, name, timestamp, more actions
-                        TweetItemHeader(viewModel, parentEntry)
-
-                        tweet.content?.let {
-                            SelectableText(
-                                modifier = Modifier
-                                    .offset(y = (-20).dp)
-                                    .padding(start = 40.dp),
-                                text = it,
-                                maxLines = 10
-                            ) { username ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    withContext(Dispatchers.Main) {
-                                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                                    }
-                                }
-                            }
-                        }
-                        if (!tweet.attachments.isNullOrEmpty()) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 40.dp, end = 8.dp, top = 4.dp)
-                                    .heightIn(min = 32.dp, max = 400.dp), // Set a specific height for the grid
-                                tonalElevation = 4.dp
+                        // Left column: Avatar
+                        Column(
+//                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                                },
+                                modifier = Modifier.width(44.dp)
                             ) {
-                                MediaPreviewGrid(tweet.attachments!!, viewModel)
+                                tweet.author?.let { SimpleAvatar(user = it, size = 32) }
                             }
                         }
 
-                        // Load and display original tweet
-                        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-                        var isLoadingOriginal by remember { mutableStateOf(true) }
-                        val currentTweet by viewModel.tweetState.collectAsState()
-                        
-                        LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
-                            withContext(IO) {
-                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                    originalTweet = if (isFromFeed) {
-                                        viewModel.loadOriginalTweetForFeed()
-                                    } else {
-                                        viewModel.loadOriginalTweet()
-                                    }
-                                    isLoadingOriginal = false
-                                }
-                            }
-                        }
-                        
-                        if (isLoadingOriginal) {
-                            // Show loading state for quoted tweet with spinner
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                tonalElevation = 8.dp,
-                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                        // Right column: User info, content, and actions
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Top row: User info and dropdown menu
+                            Row(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = androidx.compose.ui.Alignment.Center
+                                // User info text
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp
+                                    Text(
+                                        text = tweet.author?.name ?: "No One",
+                                        modifier = Modifier.padding(start = 2.dp),
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                    Text(
+                                        text = "@${tweet.author?.username}",
+                                        modifier = Modifier.padding(horizontal = 0.dp),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    Text(text = " • ", fontSize = 12.sp)
+                                    Text(
+                                        text = localizedTimeDifference(tweet.timestamp),
+                                        style = MaterialTheme.typography.labelMedium
                                     )
                                 }
+
+                                // Dropdown menu
+                                TweetDropdownMenu(tweet, parentEntry, null)
                             }
-                        } else if (originalTweet != null) {
+
+                            // Tweet content
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                tonalElevation = 8.dp,
+                                shape = MaterialTheme.shapes.small,
                                 modifier = Modifier
-                                    .offset(y = (-12).dp)
-                                    .padding(start = 40.dp)
+                                    .offset(y = (-20).dp)
+                                    .padding(start = 4.dp)
+                                    .fillMaxWidth()
                             ) {
-                                // quoted tweet
-                                TweetItemBody(
-                                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                        parentEntry, key = tweet.originalTweetId
-                                    ) { factory ->
-                                        factory.create(originalTweet!!)
-                                    },
-                                    isQuoted = true,
-                                    parentEntry = parentEntry
-                                )
+                                Column {
+                                    // Text content of the tweet
+                                    tweet.content?.let {
+                                        SelectableText(
+                                            text = it,
+                                            maxLines = 10,
+                                        ) { username ->
+                                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                                withContext(Dispatchers.Main) {
+                                                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Media files
+                                    if (!tweet.attachments.isNullOrEmpty()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .padding(top = 4.dp)
+                                                .heightIn(min = 20.dp, max = 400.dp),
+                                            tonalElevation = 4.dp,
+                                            shape = RoundedCornerShape(size = 8.dp)
+                                        ) {
+                                            MediaPreviewGrid(tweet.attachments!!, viewModel)
+                                        }
+                                    }
+                                }
                             }
-                        } else {
-                            // Original tweet not available - this quoted tweet should be removed from the list
-                            LaunchedEffect(Unit) {
-                                onTweetUnavailable?.invoke(tweet.mid)
+
+                            // Load and display original tweet
+                            var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+                            var isLoadingOriginal by remember { mutableStateOf(true) }
+                            val currentTweet by viewModel.tweetState.collectAsState()
+                            
+                            LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
+                                withContext(IO) {
+                                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                                        originalTweet = if (isFromFeed) {
+                                            viewModel.loadOriginalTweetForFeed()
+                                        } else {
+                                            viewModel.loadOriginalTweet()
+                                        }
+                                        isLoadingOriginal = false
+                                    }
+                                }
                             }
-                            // Return empty content to effectively hide this item
-                            Box(modifier = Modifier.size(0.dp))
-                        }
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 40.dp, end = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceAround
-                        ) {
-                            // State hoist
-                            LikeButton(viewModel)
-                            BookmarkButton(viewModel)
-                            CommentButton(viewModel)
-                            RetweetButton(viewModel)
-                            Spacer(modifier = Modifier.width(40.dp))
-                            ShareButton(viewModel)
+                            
+                            if (isLoadingOriginal) {
+                                // Show loading state for quoted tweet with spinner
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    tonalElevation = 8.dp,
+                                    modifier = Modifier.padding(start = 4.dp, top = 8.dp, end = 8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = androidx.compose.ui.Alignment.Center
+                                    ) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                            } else if (originalTweet != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    tonalElevation = 8.dp,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    // quoted tweet
+                                    TweetItemBody(
+                                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                            parentEntry, key = tweet.originalTweetId
+                                        ) { factory ->
+                                            factory.create(originalTweet!!)
+                                        },
+                                        isQuoted = true,
+                                        parentEntry = parentEntry
+                                    )
+                                }
+                            } else {
+                                // Original tweet not available - this quoted tweet should be removed from the list
+                                LaunchedEffect(Unit) {
+                                    onTweetUnavailable?.invoke(tweet.mid)
+                                }
+                                // Return empty content to effectively hide this item
+                                Box(modifier = Modifier.size(0.dp))
+                            }
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 0.dp),
+                                horizontalArrangement = Arrangement.SpaceAround
+                            ) {
+                                // State hoist
+                                LikeButton(viewModel)
+                                BookmarkButton(viewModel)
+                                CommentButton(viewModel)
+                                RetweetButton(viewModel)
+                                Spacer(modifier = Modifier.width(40.dp))
+                                ShareButton(viewModel)
+                            }
                         }
                     }
                 }
