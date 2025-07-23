@@ -151,8 +151,8 @@ fun TweetItem(
                                 modifier = Modifier
                                     .padding(start = 60.dp)
                                     .offset(
-                                        y = (-0).dp,
-                                        x = (-8).dp
+                                        y = (-4).dp,
+                                        x = (-48).dp
                                     ) // Adjust the offset value as needed
                                     .zIndex(1f) // Ensure it appears above the tweet area
                             )
@@ -190,7 +190,8 @@ fun TweetItem(
                         tweet.content?.let {
                             SelectableText(
                                 modifier = Modifier
-                                    .padding(start = 16.dp),
+                                    .offset(y = (-20).dp)
+                                    .padding(start = 40.dp),
                                 text = it,
                                 maxLines = 10
                             ) { username ->
@@ -205,7 +206,7 @@ fun TweetItem(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                                    .padding(start = 40.dp, end = 8.dp, top = 4.dp)
                                     .heightIn(min = 32.dp, max = 400.dp), // Set a specific height for the grid
                                 tonalElevation = 4.dp
                             ) {
@@ -255,7 +256,9 @@ fun TweetItem(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 8.dp,
-                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 0.dp)
+                                modifier = Modifier
+                                    .offset(y = (-12).dp)
+                                    .padding(start = 40.dp)
                             ) {
                                 // quoted tweet
                                 TweetItemBody(

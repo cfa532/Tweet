@@ -71,7 +71,7 @@ fun TweetListView(
     fetchTweets: suspend (Int) -> List<Tweet?>, // Changed to suspend function
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = 30.dp),
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
