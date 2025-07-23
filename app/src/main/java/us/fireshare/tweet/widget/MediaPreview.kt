@@ -567,6 +567,7 @@ fun MediaItemView(
     }
 
     Box(
+        modifier = modifier.background(Color.Gray.copy(alpha = 0.1f)),
         contentAlignment = Alignment.Center
     ) {
         when (attachment.type) {
