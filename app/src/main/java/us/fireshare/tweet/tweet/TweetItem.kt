@@ -102,15 +102,23 @@ fun TweetItem(
                     
                     val currentTweet by viewModel.tweetState.collectAsState()
                     
-                    LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
+                    LaunchedEffect(tweet.originalTweetId, isVisible) {
                         withContext(IO) {
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                originalTweet = if (isFromFeed) {
-                                    viewModel.loadOriginalTweetForFeed()
-                                } else {
-                                    viewModel.loadOriginalTweet()
+                                Timber.tag("TweetItem").d("Loading original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
+                                try {
+                                    originalTweet = if (isFromFeed) {
+                                        viewModel.loadOriginalTweetForFeed()
+                                    } else {
+                                        viewModel.loadOriginalTweet()
+                                    }
+                                    Timber.tag("TweetItem").d("Original tweet loaded: ${originalTweet != null}")
+                                } catch (e: Exception) {
+                                    Timber.tag("TweetItem").e(e, "Failed to load original tweet")
+                                    originalTweet = null
+                                } finally {
+                                    isLoadingOriginal = false
                                 }
-                                isLoadingOriginal = false
                             }
                         }
                     }
@@ -276,7 +284,7 @@ fun TweetItem(
                             var isLoadingOriginal by remember { mutableStateOf(true) }
                             val currentTweet by viewModel.tweetState.collectAsState()
                             
-                            LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
+                            LaunchedEffect(tweet.originalTweetId, isVisible) {
                                 withContext(IO) {
                                     if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
                                         originalTweet = if (isFromFeed) {

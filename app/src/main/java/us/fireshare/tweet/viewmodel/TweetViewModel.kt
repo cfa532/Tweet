@@ -115,11 +115,15 @@ class TweetViewModel @AssistedInject constructor(
                 _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
             } else {
                 // Quoted tweet - refresh the quoting tweet itself (the one with content/attachments)
-                refreshTweet()
+                HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
+                    _tweetState.value = fetchedTweet
+                }
             }
         } else {
             // This is an original tweet - refresh it directly
-            refreshTweet()
+            HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
+                _tweetState.value = fetchedTweet
+            }
         }
     }
 
@@ -143,8 +147,8 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             } else {
-                // Quoted tweet - use fetchTweet without caching (for non-feed contexts)
-                HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = false)
+                // Quoted tweet - use fetchTweet with caching
+                HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = true)
             }
         } else {
             null
