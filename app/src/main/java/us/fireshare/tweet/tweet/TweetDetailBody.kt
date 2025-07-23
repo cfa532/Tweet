@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -291,18 +292,21 @@ fun TweetDropdownMenu(
         expanded = false
     }
     
-    Box {
+    Box(
+        modifier = Modifier.padding(end = 0.dp)
+    ) {
         IconButton(
             modifier = Modifier
-                .width(32.dp)
-                .alpha(0.8f)
-                .rotate(-90f)
-                .padding(end = 12.dp),
+                .width(48.dp)
+                .alpha(0.7f)
+                .offset(x = 16.dp)
+                .rotate(-90f),
             onClick = { expanded = !expanded }) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "More",
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
             )
         }
         DropdownMenu(

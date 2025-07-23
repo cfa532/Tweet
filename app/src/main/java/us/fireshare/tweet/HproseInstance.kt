@@ -832,7 +832,6 @@ object HproseInstance {
             val retweet = uploadTweet(
                 Tweet(
                     mid = TW_CONST.GUEST_ID,    // placeholder will be replaced in backend.
-                    content = "",
                     authorId = appUser.mid,
                     originalTweetId = tweet.mid,
                     originalAuthorId = tweet.authorId

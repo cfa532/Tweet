@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,29 +72,22 @@ fun TweetFeedScreen(
     }
 
     // Calculate the transparency based on scrolling state with proper thresholds
-    var bottomBarTransparency by remember { mutableStateOf(0.98f) }
-    var hasScrolledDown = false
-    
+    var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
+
     // Track scroll state and update bottom bar transparency with thresholds
     LaunchedEffect(scrollState) {
-        // Define thresholds to filter out small gestures
-        val SCROLL_OFFSET_THRESHOLD = 50 // Minimum scroll offset change
-        val ITEM_INDEX_THRESHOLD = 2     // Minimum item index change
-        
         when (scrollState.direction) {
             ScrollDirection.UP -> {
                 // Scroll UP (content moves down): restore header and bottom bar
                 // Only restore if we've scrolled up significantly
                 if (scrollState.isScrolling) {
                     bottomBarTransparency = 0.98f
-                    hasScrolledDown = false
                 }
             }
             ScrollDirection.DOWN -> {
                 // Scroll DOWN (content moves up): reduce bottom bar opacity
                 // Only reduce if we've scrolled down significantly
                 if (scrollState.isScrolling) {
-                    hasScrolledDown = true
                     delay(100) // Small delay for smooth transition
                     if (scrollState.direction == ScrollDirection.DOWN) {
                         bottomBarTransparency = 0.2f

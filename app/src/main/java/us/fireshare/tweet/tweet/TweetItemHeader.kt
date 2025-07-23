@@ -1,9 +1,11 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,11 +51,14 @@ fun TweetItemHeader(
              * Navigate to the user's profile when avatar is tapped.
              * Simplified logic to always navigate to avoid potential issues.
              * */
-            IconButton(onClick = {
-                // Always navigate to the user's profile when avatar is tapped
-                navController.navigate(NavTweet.UserProfile(tweet.authorId))
-            }) {
-                author?.let { SimpleAvatar(user = it, size = 36) }
+            IconButton(
+                onClick = {
+                    // Always navigate to the user's profile when avatar is tapped
+                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                },
+                modifier = Modifier.width(40.dp)
+            ) {
+                author?.let { SimpleAvatar(user = it, size = 32) }
             }
             Text(text = author?.name ?: "No One",
                 modifier = Modifier.padding(start = 2.dp),
@@ -66,7 +71,7 @@ fun TweetItemHeader(
                 style = MaterialTheme.typography.labelMedium)
         }
         /**
-         * The 3 dots at the right end
+         * The 3 dots at the right end - aligned with tweet body content
          * */
         TweetDropdownMenu(tweet, parentEntry, parentTweet)
     }
