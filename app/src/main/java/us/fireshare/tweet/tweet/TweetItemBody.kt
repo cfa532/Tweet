@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,11 +67,11 @@ fun TweetItemBody(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 4.dp, end = 4.dp, top = 0.dp, bottom = 0.dp)
+                .padding(start = 0.dp, end = 8.dp)
         ) {
             // Left column: Avatar
             Column(
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(top = 0.dp)
             ) {
                 IconButton(
                     onClick = {
@@ -108,14 +109,15 @@ fun TweetItemBody(
 
             // Right column: User info, content, and actions
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 // Top row: User info and dropdown menu
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     // User info text
                     Row(
@@ -146,6 +148,8 @@ fun TweetItemBody(
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier
+                        .offset(y = (-20).dp)
+                        .padding(start = 4.dp)
                         .fillMaxWidth()
                 ) {
                     Column {
@@ -183,7 +187,7 @@ fun TweetItemBody(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 0.dp),
                                 horizontalArrangement = Arrangement.SpaceAround
                             ) {
                                 LikeButton(viewModel)

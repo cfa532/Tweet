@@ -85,15 +85,11 @@ fun TweetItem(
             .onGloballyPositioned { layoutCoordinates ->
                 isVisible = isElementVisible(layoutCoordinates, 30)
             }
-            .padding(bottom = 1.dp),
-        tonalElevation = 0.dp
     ) {
         if (tweet.originalTweetId != null) {
             if (tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
                 // this is a retweet of another tweet.
-                Surface(
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
+                Surface {
                     // Load original tweet dynamically
                     var originalTweet by remember { mutableStateOf<Tweet?>(null) }
                     var isLoadingOriginal by remember { mutableStateOf(true) }
@@ -127,21 +123,14 @@ fun TweetItem(
                             )
                         }
                     } else if (originalTweet != null) {
-                        // The tweet area
+                        // The tweet area with 'Forwarded by' label above
                         val originalTweetViewModel =
                             hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
                                 parentEntry, key = tweet.originalTweetId
                             ) { factory -> factory.create(originalTweet!!) }
 
-                        TweetItemBody(
-                            originalTweetViewModel,
-                            modifier = Modifier.padding(top = 8.dp),
-                            parentTweet = tweet,
-                            parentEntry = parentEntry
-                        )
-
-                        // Label: Forward by user, on top of original tweet
-                        Box {
+                        Column(modifier = Modifier.padding(top = 0.dp)) {
+                            // Label: Forward by user, above the quoted tweet
                             val forwardBy = if (tweet.authorId == appUser.mid)
                                 stringResource(R.string.forward_by)
                             else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
@@ -150,11 +139,16 @@ fun TweetItem(
                                 fontSize = MaterialTheme.typography.labelSmall.fontSize,
                                 color = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier
-                                    .padding(start = 24.dp)
-                                    .offset(
-                                        y = (0).dp,
-                                    ) // Adjust the offset value as needed
-                                    .zIndex(1f) // Ensure it appears above the tweet area
+                                    .offset(y = 12.dp)
+                                    .zIndex(1f)
+                                    .padding(start = 24.dp),
+
+                            )
+                            // The quoted/original tweet card
+                            TweetItemBody(
+                                originalTweetViewModel,
+                                parentEntry = parentEntry,
+                                parentTweet = tweet
                             )
                         }
                     } else {
@@ -217,7 +211,6 @@ fun TweetItem(
                         // Load and display original tweet
                         var originalTweet by remember { mutableStateOf<Tweet?>(null) }
                         var isLoadingOriginal by remember { mutableStateOf(true) }
-                        
                         val currentTweet by viewModel.tweetState.collectAsState()
                         
                         LaunchedEffect(tweet.originalTweetId, isVisible, currentTweet) {
