@@ -121,6 +121,7 @@ fun MediaPreviewGrid(
             .clip(RoundedCornerShape(8.dp))
             .fillMaxWidth()
             .wrapContentWidth(Alignment.CenterHorizontally)
+            .heightIn(max = 500.dp) // Add height constraint to the main container
     ) {
         when (limitedMediaList.size) {
             1 -> {
