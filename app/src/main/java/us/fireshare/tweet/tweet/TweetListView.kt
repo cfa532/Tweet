@@ -1,6 +1,7 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,7 +72,7 @@ fun TweetListView(
     fetchTweets: suspend (Int) -> List<Tweet?>, // Changed to suspend function
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    contentPadding: PaddingValues = PaddingValues(bottom = 30.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
@@ -297,7 +298,7 @@ fun TweetListView(
                 .fillMaxSize()
                 .let { if (scrollBehavior != null) it.nestedScroll(scrollBehavior.nestedScrollConnection) else it },
             state = listState,
-            contentPadding = contentPadding
+            contentPadding = contentPadding,
         ) {
             items(
                 items = tweets,
