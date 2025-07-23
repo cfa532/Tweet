@@ -59,6 +59,7 @@
     <string name="no_chat">No chat sessions found. Click the ✉️ at top right corner on user profile page to start a chat.</string>
     <string name="login_error">Wrong username or password</string>
     <string name="comment_failed">Comment failed</string>
+    <string name="comment_uploaded">Comment posted successfully</string>
     <string name="confirm_pwd">Please confirm password</string>
     <string name="use_current_pswd">Keep current password</string>
     <string name="user_bookmarks">Bookmarks</string>

@@ -33,6 +33,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
@@ -41,22 +42,15 @@ import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
-import us.fireshare.tweet.service.SnackbarAction
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.service.SnackbarEvent
+
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
 suspend fun guestWarning(context: Context, navController: NavController? = null) {
-    SnackbarController.sendEvent(
-        event = SnackbarEvent(
-            message = getString(context, R.string.guest_reminder),
-            action = SnackbarAction(
-                name = getString(context, R.string.go),
-                action = { navController?.navigate(NavTweet.Login) }
-            )
-        )
-    )
+    Toast.makeText(context, context.getString(R.string.guest_reminder), Toast.LENGTH_LONG).show()
+    // Navigate to login after a short delay
+    delay(1000)
+    navController?.navigate(NavTweet.Login)
 }
 
 @Composable

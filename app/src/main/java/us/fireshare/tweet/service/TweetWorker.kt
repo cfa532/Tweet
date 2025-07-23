@@ -21,6 +21,8 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
@@ -64,6 +66,7 @@ class UploadCommentWorker @AssistedInject constructor(
             }
             if (attachmentUris.size != attachments.size) {
                 Timber.tag("UploadCommentWorker").e("Attachments upload failure")
+                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Attachments upload failure"))
                 return Result.failure()
             }
             val comment = Tweet(
@@ -74,7 +77,8 @@ class UploadCommentWorker @AssistedInject constructor(
                 timestamp = System.currentTimeMillis()
             )
 
-            HproseInstance.uploadComment(parentTweet, comment).let { updatedTweet: Tweet ->
+            val updatedTweet = HproseInstance.uploadComment(parentTweet, comment)
+            if (updatedTweet != null) {
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 // retweet is a new tweet with the comment as its content.
@@ -88,9 +92,13 @@ class UploadCommentWorker @AssistedInject constructor(
                     }
                 }
                 return Result.success()
+            } else {
+                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed"))
+                return Result.failure()
             }
         } catch (e: Exception) {
             Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
+            TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed: ${e.message}"))
             Result.failure()
         }
     }
@@ -149,6 +157,7 @@ class UploadTweetWorker @AssistedInject constructor(
                             Timber.tag("UploadTweetWorker").d("Added attachment to list: ${result.mid}")
                         } else {
                             Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair - null result")
+                            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
                             return Result.failure()
                         }
                     }
@@ -156,6 +165,7 @@ class UploadTweetWorker @AssistedInject constructor(
 
                 if (attachmentUris.size != attachments.size) {
                     Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                    TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachments upload failure"))
                     return Result.failure()
                 }
 
@@ -171,12 +181,14 @@ class UploadTweetWorker @AssistedInject constructor(
                     Timber.tag("UploadTweetWorker").d(tweet.toString())
                     return Result.success()
                 }
+                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))
                 Result.failure()
             } finally {
                 wakeLock.release()
             }
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
+            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: ${e.message}"))
             return Result.failure()
         }
     }

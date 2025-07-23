@@ -30,8 +30,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.SharedViewModel
-import us.fireshare.tweet.service.SnackbarAction
-import us.fireshare.tweet.service.SnackbarEvent
+
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 
@@ -89,15 +88,11 @@ fun ProfileTopBarButton(
                                 }
                             }
                             else {
-                                val event = SnackbarEvent(
-                                    message = context.getString(R.string.login_follow),
-                                    action = SnackbarAction(
-                                        name = context.getString(R.string.go),
-                                        action = { navController.navigate(NavTweet.Login) }
-                                    )
-                                )
+                                Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
+                                // Navigate to login after a short delay
                                 viewModel.viewModelScope.launch {
-                                    viewModel.showSnackbar(event)
+                                    kotlinx.coroutines.delay(1000)
+                                    navController.navigate(NavTweet.Login)
                                 }
                             }
                         }

@@ -18,10 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,7 +47,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NetworkCheckJobService
 import us.fireshare.tweet.service.ObserveAsEvents
-import us.fireshare.tweet.service.SnackbarController
+
 import us.fireshare.tweet.ui.theme.TweetTheme
 import java.util.concurrent.TimeUnit
 
@@ -85,32 +82,7 @@ class TweetActivity : ComponentActivity() {
 
             setContent {
                 TweetTheme {
-                    // Global snackbar host
-                    val snackbarHostState = remember { SnackbarHostState() }
-                    ObserveAsEvents(
-                        flow = SnackbarController.events,
-                        snackbarHostState
-                    ) { event ->
-                        activityViewModel.viewModelScope.launch {
-                            snackbarHostState.currentSnackbarData?.dismiss()    // dismiss old message
-                            // show new snackbar
-                            val result = snackbarHostState.showSnackbar(
-                                message = event.message,
-                                actionLabel = event.action?.name,
-                                duration = SnackbarDuration.Short
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                event.action?.action?.invoke()
-                            }
-                        }
-                    }
-
                     Scaffold(
-                        snackbarHost = {
-                            CustomSnackbarHost(
-                                hostState = snackbarHostState
-                            )
-                        },
                         modifier = Modifier.fillMaxWidth()
                     ) { innerPadding ->
                         TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
@@ -120,21 +92,7 @@ class TweetActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    fun CustomSnackbarHost(hostState: SnackbarHostState) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-        ) {
-            SnackbarHost(
-                hostState = hostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 10.dp)
-            )
-        }
-    }
+
 
     private fun scheduleNetworkCheckJob() {
         val componentName = ComponentName(this, NetworkCheckJobService::class.java)

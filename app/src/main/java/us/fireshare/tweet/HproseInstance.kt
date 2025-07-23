@@ -1037,7 +1037,7 @@ object HproseInstance {
      * The mid of "comment" is updated here, used to be null.
      * @Return the updated parent tweet.
      * */
-    suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet {
+    suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet? {
         val entry = "add_comment"
         val params = mapOf(
             "aid" to appId,
@@ -1073,11 +1073,11 @@ object HproseInstance {
             } else {
                 val errorMessage = response?.get("message") as? String ?: "Unknown error"
                 Timber.tag("uploadComment").e("Failed to upload comment: $errorMessage")
-                tweet
+                null
             }
         } catch (e: Exception) {
             Timber.tag("uploadComment()").e(e)
-            tweet
+            null
         }
     }
 
@@ -1559,7 +1559,7 @@ object HproseInstance {
             if (options.outWidth > 0 && options.outHeight > 0) {
                 options.outWidth.toFloat() / options.outHeight.toFloat()
             } else null
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

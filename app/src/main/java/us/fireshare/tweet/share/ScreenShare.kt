@@ -53,8 +53,8 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.service.SnackbarEvent
+import android.widget.Toast
+
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import kotlin.random.Random
@@ -165,11 +165,7 @@ fun ShareBottomSheet(
             val clip = ClipData.newPlainText("Shared Text", shareText.value)
             clipboardManager.setPrimaryClip(clip)
             scope.launch {
-                SnackbarController.sendEvent(
-                    event = SnackbarEvent(
-                        message = getString(context, R.string.clipboard_copy)
-                    )
-                )
+                Toast.makeText(context, context.getString(R.string.clipboard_copy), Toast.LENGTH_SHORT).show()
                 onDismiss()
             }
         },

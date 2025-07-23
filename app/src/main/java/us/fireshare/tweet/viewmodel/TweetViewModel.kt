@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import java.lang.ref.WeakReference
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
@@ -17,13 +19,16 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -226,13 +231,20 @@ class TweetViewModel @AssistedInject constructor(
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
 
-        // Notify the user that comment upload has started
-        Toast.makeText(
-            context,
-            context.getString(R.string.upload_comment),
-            Toast.LENGTH_SHORT
-        ).show()
-        // No need to observe work status; UI will update via notification system
+        // Observe work status to show toast messages
+        workManager.getWorkInfoByIdLiveData(uploadRequest.id).observeForever { workInfo ->
+            when (workInfo?.state) {
+                WorkInfo.State.SUCCEEDED -> {
+                    Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
+                }
+                WorkInfo.State.FAILED -> {
+                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
+                }
+                else -> {
+                    // Other states (RUNNING, ENQUEUED, etc.) - no toast needed
+                }
+            }
+        }
     }
 
     suspend fun shareTweet(context: Context) {
@@ -326,10 +338,22 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
+    private var notificationContextRef: WeakReference<Context>? = null
+
+    /**
+     * Set the context for showing toast messages in notifications
+     */
+    fun setNotificationContext(context: Context) {
+        notificationContextRef = WeakReference(context)
+    }
+
     /**
      * Listen to tweet notifications and update the tweet detail accordingly
      */
-    fun startListeningToNotifications() {
+    fun startListeningToNotifications(context: Context? = null) {
+        if (context != null) {
+            notificationContextRef = WeakReference(context)
+        }
         viewModelScope.launch {
             try {
                 TweetNotificationCenter.events.collect { event ->
@@ -337,6 +361,14 @@ class TweetViewModel @AssistedInject constructor(
                         is TweetEvent.CommentUploaded -> {
                             // Only handle if this is the parent tweet for the comment
                             if (event.parentTweet.mid == tweetState.value.mid) {
+                                // Show success toast if it's the current user's comment
+                                val context = notificationContextRef?.get()
+                                if (event.comment.authorId == appUser.mid && context != null) {
+                                    withContext(Main) {
+                                        Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                
                                 // Update the tweet state with new comment count
                                 _tweetState.value = event.parentTweet
                                 
@@ -347,6 +379,17 @@ class TweetViewModel @AssistedInject constructor(
                                         .sortedByDescending { it.timestamp }
                                 }
                             }
+                        }
+
+                        is TweetEvent.CommentUploadFailed -> {
+                            // Show failure toast
+                            val context = notificationContextRef?.get()
+                            if (context != null) {
+                                withContext(Main) {
+                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            Timber.tag("TweetViewModel").e("Comment upload failed: ${event.error}")
                         }
                         is TweetEvent.CommentDeleted -> {
                             // Only handle if this is the parent tweet for the comment

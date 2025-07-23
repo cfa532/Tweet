@@ -3,10 +3,12 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
+import java.lang.ref.WeakReference
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,7 +56,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
         
         // Start listening to notifications immediately when ViewModel is created
-        startListeningToNotifications()
+        startListeningToNotifications() // Will be updated with context later
     }
 
     /**
@@ -372,7 +374,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     /**
      * Use WorkManager to update tweet. When the upload succeeds, a message will be sent back.
-     * Show a snackbar to inform user of the result.
+     * Toast messages are shown when notifications are received.
      * */
     fun uploadTweet(
         context: Context,
@@ -392,19 +394,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
 
-        // Notify the user that tweet upload has started
-        Toast.makeText(
-            context,
-            context.getString(R.string.tweet_uploaded),
-            Toast.LENGTH_SHORT
-        ).show()
         // No need to observe work status; UI will update via notification system
+    }
+
+    private var notificationContextRef: WeakReference<Context>? = null
+
+    /**
+     * Set the context for showing toast messages in notifications
+     */
+    fun setNotificationContext(context: Context) {
+        notificationContextRef = WeakReference(context)
     }
 
     /**
      * Listen to tweet notifications and update the feed accordingly
      */
-    fun startListeningToNotifications() {
+    fun startListeningToNotifications(context: Context? = null) {
+        if (context != null) {
+            notificationContextRef = WeakReference(context)
+        }
         Timber.tag("TweetFeedViewModel").d("Starting to listen to notifications")
         applicationScope.launch {
             try {
@@ -421,6 +429,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 .d("Received TweetUploaded notification for tweet: ${event.tweet.mid}")
                             Timber.tag("TweetFeedViewModel")
                                 .d("Current tweets count: ${_tweets.value.size}")
+                            
+                            // Show success toast if it's the current user's tweet
+                            val context = notificationContextRef?.get()
+                            if (tweetWithAuthor.authorId == appUser.mid && context != null) {
+                                withContext(Main) {
+                                    Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
+                                }
+                            }
                             
                             // Update on main thread to ensure UI updates
                             withContext(Main) {
@@ -448,6 +464,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             }
                         }
 
+                        is TweetEvent.TweetUploadFailed -> {
+                            // Show failure toast
+                            val context = notificationContextRef?.get()
+                            if (context != null) {
+                                withContext(Main) {
+                                    Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            Timber.tag("TweetFeedViewModel").e("Tweet upload failed: ${event.error}")
+                        }
+
                         is TweetEvent.TweetDeleted -> {
                             // Tweet is already removed optimistically, just log
                             Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
@@ -464,6 +491,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                     }
                                 }
                             }
+                        }
+
+                        is TweetEvent.CommentUploadFailed -> {
+                            // Show failure toast
+                            val context = notificationContextRef?.get()
+                            if (context != null) {
+                                withContext(Main) {
+                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            Timber.tag("TweetFeedViewModel").e("Comment upload failed: ${event.error}")
                         }
 
                         is TweetEvent.CommentDeleted -> {

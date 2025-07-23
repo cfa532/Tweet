@@ -35,8 +35,8 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.service.SnackbarEvent
+import android.widget.Toast
+
 import kotlin.math.max
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
@@ -685,9 +685,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun showSnackbar(event: SnackbarEvent) {
-        SnackbarController.sendEvent(event)
-    }
+
 
     suspend fun login(context: Context, callback: () -> Unit) {
         isLoading.value = true
@@ -743,12 +741,12 @@ class UserViewModel @AssistedInject constructor(
              * Register a new user. Check username and password first.
              * */
             if (username.value.isNullOrEmpty()) {
-                showSnackbar(SnackbarEvent(message = context.getString(R.string.username_required)))
+                Toast.makeText(context, context.getString(R.string.username_required), Toast.LENGTH_SHORT).show()
                 isLoading.value = false
                 return
             }
             if (password.value.isEmpty()) {
-                showSnackbar(SnackbarEvent(message = context.getString(R.string.password_required)))
+                Toast.makeText(context, context.getString(R.string.password_required), Toast.LENGTH_SHORT).show()
                 isLoading.value = false
                 return
             }
@@ -757,7 +755,7 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
             } ?: run {
-                showSnackbar(SnackbarEvent(message = context.getString(R.string.node_not_found)))
+                Toast.makeText(context, context.getString(R.string.node_not_found), Toast.LENGTH_SHORT).show()
                 isLoading.value = false
                 return
             }
@@ -791,16 +789,13 @@ class UserViewModel @AssistedInject constructor(
                     )
                     _user.value = appUser
 
-                    val event = SnackbarEvent(
-                        message = context.getString(R.string.profile_update_ok)
-                    )
-                    showSnackbar(event)
+                                    Toast.makeText(context, context.getString(R.string.profile_update_ok), Toast.LENGTH_SHORT).show()
                 }
             } else {
-                showSnackbar(SnackbarEvent(message = ret["reason"].toString()))
+                Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
             }
         } ?: run {
-            showSnackbar(SnackbarEvent(message = context.getString(R.string.registration_failed)))
+            Toast.makeText(context, context.getString(R.string.registration_failed), Toast.LENGTH_SHORT).show()
         }
         isLoading.value = false
     }

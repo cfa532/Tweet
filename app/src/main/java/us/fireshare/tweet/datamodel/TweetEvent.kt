@@ -11,8 +11,10 @@ import timber.log.Timber
  */
 sealed class TweetEvent {
     data class TweetUploaded(val tweet: Tweet) : TweetEvent()
+    data class TweetUploadFailed(val error: String) : TweetEvent()
     data class TweetDeleted(val tweetId: String, val authorId: String) : TweetEvent()
     data class CommentUploaded(val comment: Tweet, val parentTweet: Tweet) : TweetEvent()
+    data class CommentUploadFailed(val error: String) : TweetEvent()
     data class CommentDeleted(val commentId: String, val parentTweetId: String) : TweetEvent()
     data class TweetUpdated(val tweet: Tweet) : TweetEvent()
     data class TweetLiked(val tweet: Tweet, val isLiked: Boolean) : TweetEvent()

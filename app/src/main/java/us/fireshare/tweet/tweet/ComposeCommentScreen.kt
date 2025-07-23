@@ -28,11 +28,13 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -67,9 +69,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.profile.UserAvatar
-import us.fireshare.tweet.service.SnackbarAction
-import us.fireshare.tweet.service.SnackbarController
-import us.fireshare.tweet.service.SnackbarEvent
+
 import us.fireshare.tweet.widget.UploadFilePreview
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +78,7 @@ fun ComposeCommentScreen(
     popBack: () -> Unit,
 ) {
     var tweetContent by remember { mutableStateOf("") }
+    var showExitConfirmation by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -88,7 +89,7 @@ fun ComposeCommentScreen(
     
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
-        tweetViewModel.startListeningToNotifications()
+        tweetViewModel.startListeningToNotifications(context)
     }
 
     // Create a launcher for the file picker
@@ -149,16 +150,10 @@ fun ComposeCommentScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
-                            val event = SnackbarEvent(
-                                message = "Are you sure to quit?",
-                                action = SnackbarAction(name = "Quit",
-                                    action = { popBack() })
-                            )
-                            tweetViewModel.viewModelScope.launch {
-                                SnackbarController.sendEvent(event)
-                            }
-                        } else
+                            showExitConfirmation = true
+                        } else {
                             popBack()
+                        }
                     }) {
                         Icon(
                             imageVector = Icons.Filled.Close,
@@ -344,6 +339,32 @@ fun ComposeCommentScreen(
                     }
                 }
             }
+        }
+        
+        // Exit confirmation dialog
+        if (showExitConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showExitConfirmation = false },
+                title = { Text("Discard Comment?") },
+                text = { Text("You have unsaved content. Are you sure you want to leave?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showExitConfirmation = false
+                            popBack()
+                        }
+                    ) {
+                        Text("Discard")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showExitConfirmation = false }
+                    ) {
+                        Text("Keep Editing")
+                    }
+                }
+            )
         }
     }
 }

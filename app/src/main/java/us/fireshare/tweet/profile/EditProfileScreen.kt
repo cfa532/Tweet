@@ -56,7 +56,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.service.SnackbarEvent
+import android.widget.Toast
+
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 /**
@@ -206,19 +207,13 @@ fun EditProfileScreen(
                 onClick = {
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
                         if (password.isNotEmpty() && password != confirm.value) {
-                            val event = SnackbarEvent(
-                                message = context.getString(R.string.confirm_pwd)
-                            )
+                            Toast.makeText(context, context.getString(R.string.confirm_pwd), Toast.LENGTH_SHORT).show()
                             viewModel.isLoading.value = false
-                            viewModel.showSnackbar(event)
                             return@launch
                         }
                         viewModel.register(context) {
-                            val event = SnackbarEvent(
-                                message = context.getString(R.string.registration_ok)
-                            )
                             viewModel.viewModelScope.launch(Dispatchers.Main) {
-                                viewModel.showSnackbar(event)
+                                Toast.makeText(context, context.getString(R.string.registration_ok), Toast.LENGTH_LONG).show()
                                 navController.popBackStack()
                             }
                         }
