@@ -299,7 +299,7 @@ fun TweetDropdownMenu(
             modifier = Modifier
                 .width(48.dp)
                 .alpha(0.7f)
-                .offset(x = 16.dp)
+                .offset(x = 16.dp, y = (-8).dp)
                 .rotate(-90f),
             onClick = { expanded = !expanded }) {
             Icon(

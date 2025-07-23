@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.IconButton
@@ -60,15 +61,20 @@ fun TweetItemHeader(
             ) {
                 author?.let { SimpleAvatar(user = it, size = 32) }
             }
-            Text(text = author?.name ?: "No One",
-                modifier = Modifier.padding(start = 2.dp),
-                style = MaterialTheme.typography.labelLarge)
-            Text(text = "@${author?.username}",
-                modifier = Modifier.padding(horizontal = 0.dp),
-                style = MaterialTheme.typography.labelMedium)
-            Text( text = " • ", fontSize = 12.sp)
-            Text(text = localizedTimeDifference(tweet.timestamp),
-                style = MaterialTheme.typography.labelMedium)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.offset(y = (-8).dp)
+            ) {
+                Text(text = author?.name ?: "No One",
+                    modifier = Modifier.padding(start = 2.dp),
+                    style = MaterialTheme.typography.labelLarge)
+                Text(text = "@${author?.username}",
+                    modifier = Modifier.padding(horizontal = 0.dp),
+                    style = MaterialTheme.typography.labelMedium)
+                Text( text = " • ", fontSize = 12.sp)
+                Text(text = localizedTimeDifference(tweet.timestamp),
+                    style = MaterialTheme.typography.labelMedium)
+            }
         }
         /**
          * The 3 dots at the right end - aligned with tweet body content

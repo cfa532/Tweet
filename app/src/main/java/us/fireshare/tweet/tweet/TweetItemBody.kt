@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,7 +63,8 @@ fun TweetItemBody(
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 32.dp, top = 2.dp, bottom = 4.dp, end = 4.dp)
+                    .offset(y = (-20).dp)
+                    .padding(start = 40.dp, bottom = 4.dp, end = 4.dp)
             ) {
                 Column {
                     // Text content of the tweet
