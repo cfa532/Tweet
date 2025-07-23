@@ -112,7 +112,7 @@ fun TweetListView(
                 val tweetsWithNulls = fetchTweets(pageToLoad)
                 
                 // Only increment lastLoadedPage if we got a full page of results
-                if (tweetsWithNulls.size == TW_CONST.PAGE_SIZE) {
+                if (tweetsWithNulls.size >= TW_CONST.PAGE_SIZE) {
                     lastLoadedPage = pageToLoad
                 } else {
                     // Server is depleted (returned fewer tweets than expected)

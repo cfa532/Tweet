@@ -385,3 +385,27 @@ fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
         }
     }
 }
+
+@Composable
+fun localizedTimeDifference(timestamp: Long): String {
+    val currentTime = System.currentTimeMillis()
+    val diffInMillis = currentTime - timestamp
+
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
+    val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
+    val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
+    val weeks = days / 7
+    val months = days / 30
+    val years = days / 365
+
+    return when {
+        seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
+        minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
+        hours < 24 -> stringResource(id = R.string.hours_ago, hours)
+        days < 7 -> stringResource(id = R.string.days_ago, days)
+        weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
+        months < 12 -> stringResource(id = R.string.months_ago, months+1)
+        else -> stringResource(id = R.string.years_ago, years)
+    }
+}
