@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -63,62 +64,6 @@ fun TweetDetailScreen(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
-
-    // State for header collapse
-    var headerOffsetHeightPx by remember { mutableStateOf(0f) }
-    var headerOffsetHeightDp by remember { mutableStateOf(0.dp) }
-
-    // Nested scroll connection for coordinating scroll between tweet and comments
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                val newOffset = (headerOffsetHeightPx + delta).coerceIn(0f, 200f) // Max collapse of 200dp
-                val consumed = newOffset - headerOffsetHeightPx
-                headerOffsetHeightPx = newOffset
-                headerOffsetHeightDp = with(density) { newOffset.toDp() }
-                return Offset(0f, consumed)
-            }
-        }
-    }
-
-    // Initial load
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            viewModel.refreshTweetAndOriginal()
-            viewModel.loadComments(tweet)
-            Timber.tag("TweetDetailScreen").d("$tweet")
-        }
-    }
-    
-    // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
-    LaunchedEffect(Unit) {
-        // Initial refresh after 3 seconds
-        delay(3000L)
-        withContext(Dispatchers.IO) {
-            viewModel.refreshTweetAndOriginal()
-            viewModel.loadComments(tweet)
-            Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
-        }
-        
-        // Subsequent refreshes every 5 minutes
-        while (true) {
-            delay(5 * 60 * 1000) // refresh every 5 minutes
-            withContext(Dispatchers.IO) {
-                viewModel.refreshTweetAndOriginal()
-                viewModel.loadComments(tweet)
-                Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
-            }
-        }
-    }
-    
-    // Start listening to tweet and comment notifications
-    LaunchedEffect(Unit) {
-        viewModel.startListeningToNotifications()
-    }
     var gridColumns by remember { mutableIntStateOf(
         tweet.attachments?.let{
             if (it.size>4) 2 else 1
@@ -128,6 +73,38 @@ fun TweetDetailScreen(
     fun Offset.toIntOffset(): IntOffset {
         return IntOffset(x.toInt(), y.toInt())
     }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    // Initial load
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            viewModel.refreshTweetAndOriginal()
+            viewModel.loadComments(tweet)
+            Timber.tag("TweetDetailScreen").d(" 24tweet")
+        }
+    }
+    // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
+    LaunchedEffect(Unit) {
+        delay(3000L)
+        withContext(Dispatchers.IO) {
+            viewModel.refreshTweetAndOriginal()
+            viewModel.loadComments(tweet)
+            Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
+        }
+        while (true) {
+            delay(5 * 60 * 1000)
+            withContext(Dispatchers.IO) {
+                viewModel.refreshTweetAndOriginal()
+                viewModel.loadComments(tweet)
+                Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.startListeningToNotifications()
+    }
+
     Scaffold(
         topBar = { TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
@@ -174,20 +151,13 @@ fun TweetDetailScreen(
             }
         },
         floatingActionButtonPosition = FabPosition.End
-
     ) { innerPadding ->
-        Column(
+        androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .nestedScroll(nestedScrollConnection)
         ) {
-            // Tweet content that collapses when scrolling
-            Column(
-                modifier = Modifier
-                    .offset(y = -headerOffsetHeightDp)
-                    .animateContentSize()
-            ) {
+            item {
                 TweetDetailBody(viewModel, parentEntry, gridColumns)
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),
@@ -195,17 +165,14 @@ fun TweetDetailScreen(
                     color = MaterialTheme.colorScheme.outline
                 )
             }
-            
-            // Comments list that takes remaining space
-            CommentListView(
-                comments = comments,
-                getComments = { pageNumber ->
-                    coroutineScope.launch {
-                        viewModel.loadComments(tweet, pageNumber)
-                    }
-                },
-                parentEntry = parentEntry
-            )
+            items(comments.size) { index ->
+                val comment = comments[index]
+                CommentItem(
+                    comment = comment,
+                    parentTweetViewModel = null,
+                    parentEntry = parentEntry
+                )
+            }
         }
     }
 }
