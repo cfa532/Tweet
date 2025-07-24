@@ -200,6 +200,33 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * @param subjectUserId to add/remove it to/from the following list
+     * @return Boolean? - true if now following, false if now unfollowing, null if operation failed
+     * */
+    suspend fun toggleFollowingWithResult(
+        subjectUserId: MimeiId,
+        userId: MimeiId = appUser.mid,
+        updateTweetFeed: (Boolean) -> Unit
+    ): Boolean? {
+        // toggle the Following status on the given UserId
+        return HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
+            _followings.update { list ->
+                if (isFollowing)
+                    (listOf(subjectUserId) + list).toSet().toList()
+                else
+                    list.filterNot { it == subjectUserId }
+            }
+            _user.value = user.value.copy(followingCount = followings.value.size)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                TweetCacheManager.saveUser(appUser)
+            }
+            // callback to update tweet feed. Load or remove tweets of the others.
+            updateTweetFeed(isFollowing)
+            isFollowing
+        }
+    }
+
     suspend fun refreshFollowingsAndFans() {
         val fans = HproseInstance.getFans(user.value) ?: emptyList()
         val followings = HproseInstance.getFollowings(user.value)

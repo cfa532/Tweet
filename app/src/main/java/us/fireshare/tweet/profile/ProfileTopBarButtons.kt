@@ -16,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -25,6 +26,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
@@ -45,12 +47,13 @@ fun ProfileTopBarButton(
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
-    val buttonText = remember { mutableStateOf("Follow") }
+    var buttonText by remember { mutableStateOf("Follow") }
+    var isUpdating by remember { mutableStateOf(false) }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     val context = LocalContext.current
     LaunchedEffect(followings) {
-        buttonText.value = when {
+        buttonText = when {
             user.mid == appUser.mid -> context.getString(R.string.edit)
             followings.contains(user.mid) -> context.getString(R.string.unfollow)
             else -> context.getString(R.string.follow)
@@ -63,7 +66,7 @@ fun ProfileTopBarButton(
             return
 
         Text(
-            text = buttonText.value,
+            text = buttonText,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.tertiary,
             modifier = Modifier
@@ -72,32 +75,87 @@ fun ProfileTopBarButton(
                     color = Color.DarkGray,
                     shape = RoundedCornerShape(12.dp)
                 )
-                .clickable(onClick = {
-                    when (buttonText.value) {
-                        context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
-                        else -> {
-                            if (! appUser.isGuest()) {
-                                Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
-                                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    appUserViewModel.toggleFollowing(user.mid) {
-                                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                            viewModel.toggleFollower(user.mid, it, appUser.mid)
-                                            tweetFeedViewModel.updateFollowingsTweets(user.mid, it)
+                .clickable(
+                    enabled = !isUpdating,
+                    onClick = {
+                        when (buttonText) {
+                            context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
+                            else -> {
+                                if (!appUser.isGuest()) {
+                                    // Optimistic update - immediately change the button state
+                                    val currentIsFollowing = followings.contains(user.mid)
+                                    val newButtonText = if (currentIsFollowing) {
+                                        context.getString(R.string.follow)
+                                    } else {
+                                        context.getString(R.string.unfollow)
+                                    }
+                                    buttonText = newButtonText
+                                    isUpdating = true
+
+                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        try {
+                                            // Attempt the actual toggle operation
+                                            val result = appUserViewModel.toggleFollowingWithResult(user.mid) { isFollowingResult ->
+                                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                                    viewModel.toggleFollower(user.mid, isFollowingResult, appUser.mid)
+                                                    tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
+                                                }
+                                            }
+
+                                            if (result == null) {
+                                                // Operation failed, revert the optimistic update
+                                                buttonText = if (currentIsFollowing) {
+                                                    context.getString(R.string.unfollow)
+                                                } else {
+                                                    context.getString(R.string.follow)
+                                                }
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.follow_operation_failed),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            } else {
+                                                // Operation succeeded, show success message
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.update_following),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            // Exception occurred, revert the optimistic update
+                                            buttonText = if (currentIsFollowing) {
+                                                context.getString(R.string.unfollow)
+                                            } else {
+                                                context.getString(R.string.follow)
+                                            }
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.follow_operation_failed),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        } finally {
+                                            isUpdating = false
                                         }
                                     }
-                                }
-                            }
-                            else {
-                                Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
-                                // Navigate to login after a short delay
-                                viewModel.viewModelScope.launch {
-                                    kotlinx.coroutines.delay(1000)
-                                    navController.navigate(NavTweet.Login)
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
+                                    // Navigate to login after a short delay
+                                    viewModel.viewModelScope.launch {
+                                        kotlinx.coroutines.delay(1000)
+                                        navController.navigate(NavTweet.Login)
+                                    }
                                 }
                             }
                         }
                     }
-                })
+                )
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         )
     }

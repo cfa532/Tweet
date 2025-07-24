@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -28,6 +29,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ToggleFollowingButton(
@@ -39,34 +41,81 @@ fun ToggleFollowingButton(
     val context = LocalContext.current
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
-    val followState = remember { mutableStateOf(isFollowing) }
+    var followState by remember { mutableStateOf(isFollowing) }
+    var isUpdating by remember { mutableStateOf(false) }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
+    // Update local state when followings change
     LaunchedEffect(followings) {
-        followState.value = isFollowing
+        followState = isFollowing
     }
+
     Text(
-        text = if (followState.value) stringResource(R.string.unfollow) else stringResource(R.string.follow),
+        text = if (followState) stringResource(R.string.unfollow) else stringResource(R.string.follow),
         color = MaterialTheme.colorScheme.primary,
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier
-            .clickable(onClick = {
-                if (appUser.isGuest()) {
-                    appUserViewModel.viewModelScope.launch {
-                        guestWarning(context, navController)
+            .clickable(
+                enabled = !isUpdating,
+                onClick = {
+                    if (appUser.isGuest()) {
+                        appUserViewModel.viewModelScope.launch {
+                            guestWarning(context, navController)
+                        }
+                        return@clickable
                     }
-                    return@clickable
-                }
-                Toast.makeText(context, context.getString(R.string.update_following), Toast.LENGTH_SHORT).show()
-                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                    appUserViewModel.toggleFollowing(userId, appUser.mid) {
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            viewModel.toggleFollower(userId, it, appUser.mid)
-                            tweetFeedViewModel.updateFollowingsTweets(userId, it)
+
+                    // Optimistic update - immediately change the button state
+                    val newFollowState = !followState
+                    followState = newFollowState
+                    isUpdating = true
+
+                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            // Attempt the actual toggle operation
+                            val result = appUserViewModel.toggleFollowingWithResult(userId, appUser.mid) { isFollowingResult ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    viewModel.toggleFollower(userId, isFollowingResult, appUser.mid)
+                                    tweetFeedViewModel.updateFollowingsTweets(userId, isFollowingResult)
+                                }
+                            }
+
+                            if (result == null) {
+                                // Operation failed, revert the optimistic update
+                                followState = !newFollowState
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(
+                                        context, 
+                                        context.getString(R.string.follow_operation_failed), 
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
+                                // Operation succeeded, show success message
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(
+                                        context, 
+                                        context.getString(R.string.update_following), 
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // Exception occurred, revert the optimistic update
+                            followState = !newFollowState
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context, 
+                                    context.getString(R.string.follow_operation_failed), 
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } finally {
+                            isUpdating = false
                         }
                     }
                 }
-            })
+            )
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
