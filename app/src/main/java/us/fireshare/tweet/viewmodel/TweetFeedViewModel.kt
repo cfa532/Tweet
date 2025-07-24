@@ -398,6 +398,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private var notificationContextRef: WeakReference<Context>? = null
+    private var isListeningToNotifications = false
 
     /**
      * Set the context for showing toast messages in notifications
@@ -413,7 +414,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (context != null) {
             notificationContextRef = WeakReference(context)
         }
-        Timber.tag("TweetFeedViewModel").d("Starting to listen to notifications")
+        
+        // Prevent multiple listeners
+        if (isListeningToNotifications) {
+            Timber.tag("TweetFeedViewModel").d("Already listening to notifications, skipping")
+            return
+        }
+        
+        isListeningToNotifications = true
+        Timber.tag("TweetFeedViewModel").d("TweetFeedViewModel instance starting to listen to notifications")
         applicationScope.launch {
             try {
                 Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
@@ -426,13 +435,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
                             Timber.tag("TweetFeedViewModel")
-                                .d("Received TweetUploaded notification for tweet: ${event.tweet.mid}")
+                                .d("TweetFeedViewModel received TweetUploaded notification for tweet: ${event.tweet.mid}")
                             Timber.tag("TweetFeedViewModel")
                                 .d("Current tweets count: ${_tweets.value.size}")
                             
                             // Show success toast if it's the current user's tweet
                             val context = notificationContextRef?.get()
                             if (tweetWithAuthor.authorId == appUser.mid && context != null) {
+                                Timber.tag("TweetFeedViewModel").d("Showing tweet upload success toast for tweet: ${event.tweet.mid}")
                                 withContext(Main) {
                                     Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
                                 }

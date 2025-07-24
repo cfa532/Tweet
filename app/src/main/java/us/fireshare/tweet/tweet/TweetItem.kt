@@ -206,7 +206,9 @@ fun TweetItem(
 
                         // Right column: User info, content, and actions
                         Column(
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .fillMaxWidth()
                         ) {
                             // Top row: User info and dropdown menu
                             Row(
@@ -320,7 +322,6 @@ fun TweetItem(
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     tonalElevation = 8.dp,
-                                    modifier = Modifier.padding(end = 4.dp)
                                 ) {
                                     // quoted tweet
                                     TweetItemBody(
@@ -363,43 +364,6 @@ fun TweetItem(
         } else {
             // original tweet by user.
             TweetItemBody(viewModel, parentEntry = parentEntry)
-        }
-    }
-}
-
-/**
- * This function handles the logic for refreshing tweets based on visibility and time intervals.
- *
- * @param isVisible Indicates whether the composable is currently visible.
- * @param viewModel The ViewModel responsible for refreshing tweets.
- */
-@Composable
-fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
-    val refreshIntervalMillis = 300000L // 5 minutes for all refreshes
-    
-    // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
-    val scope = rememberCoroutineScope()
-    var lastRefreshTime by remember { mutableStateOf(0L) }
-
-    LaunchedEffect(isVisible) {
-        if (isVisible) {
-            // Start listening to notifications for this TweetViewModel
-            viewModel.startListeningToNotifications()
-            
-            // Only refresh if enough time has passed since last refresh
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastRefreshTime > refreshIntervalMillis) {
-                // Launch a coroutine to handle the refresh after a delay
-                scope.launch(Dispatchers.IO) {
-                    delay(1000L) // Small delay to prevent immediate refresh
-                    try {
-                        viewModel.refreshTweetAndOriginal()
-                        lastRefreshTime = System.currentTimeMillis()
-                    } catch (e: Exception) {
-                        Timber.tag("TweetRefreshHandler").e(e, "Error refreshing tweet")
-                    }
-                }
-            }
         }
     }
 }
