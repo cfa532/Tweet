@@ -159,7 +159,17 @@ fun TweetDetailBody(
                         
                         LaunchedEffect(tweet.originalTweetId, currentTweet) {
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                originalTweet = viewModel.loadOriginalTweet()
+                                // Store IDs in local variables to avoid smart cast issues
+                                val originalTweetId = tweet.originalTweetId ?: ""
+                                val originalAuthorId = tweet.originalAuthorId ?: ""
+                                
+                                // Force refresh of original tweet by using fetchTweet directly
+                                // This ensures we get the latest version from cache or network
+                                originalTweet = HproseInstance.fetchTweet(
+                                    originalTweetId,
+                                    originalAuthorId,
+                                    shouldCache = true
+                                )
                                 isLoadingOriginal = false
                             }
                         }

@@ -454,9 +454,41 @@ object HproseInstance {
 
         return try {
             val response =
-                user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            response?.map { tweetJson ->
+            // Check success status first
+            val success = response?.get("success") as? Boolean
+            if (success != true) {
+                val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
+                Timber.tag("getTweetFeed").e("Tweet feed loading failed: $errorMessage")
+                Timber.tag("getTweetFeed").e("Response: $response")
+                
+                // Post notification for tweet loading failure
+                TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed(errorMessage))
+                
+                return emptyList()
+            }
+
+            // Extract tweets and originalTweets from the new response format
+            val tweetsData = response?.get("tweets") as? List<Map<String, Any>?>
+            val originalTweetsData = response?.get("originalTweets") as? List<Map<String, Any>?>
+
+            // Cache original tweets first
+            originalTweetsData?.forEach { originalTweetJson ->
+                if (originalTweetJson != null) {
+                    try {
+                        val originalTweet = Tweet.from(originalTweetJson)
+                        originalTweet.author = getUser(originalTweet.authorId)
+                        TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = true)
+                        Timber.tag("getTweetFeed").d("Cached original tweet: ${originalTweet.mid}")
+                    } catch (e: Exception) {
+                        Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
+                    }
+                }
+            }
+
+            // Process main tweets
+            tweetsData?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
                     null
@@ -465,8 +497,6 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetJson)
                         tweet.author = getUser(tweet.authorId)
-
-                        // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
 
                         // Skip private tweets in feed
                         if (tweet.isPrivate) {
@@ -483,6 +513,10 @@ object HproseInstance {
             } ?: emptyList()
         } catch (e: Exception) {
             Timber.tag("getTweetFeed").e("Error fetching tweet feed: $e")
+            
+            // Post notification for network/exception errors
+            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${e.message}"))
+            
             emptyList()
         }
     }
@@ -509,9 +543,40 @@ object HproseInstance {
 
             Timber.tag("getTweetsByUser")
                 .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
-            val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            val response = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            val result = response?.map { tweetJson ->
+            // Check success status first
+            val success = response?.get("success") as? Boolean
+            if (success != true) {
+                val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
+                Timber.tag("getTweetsByUser").e("Tweets loading failed for user ${user.mid}: $errorMessage")
+                Timber.tag("getTweetsByUser").e("Response: $response")
+                
+                // Post notification for tweet loading failure
+                TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed(errorMessage))
+                
+                return emptyList()
+            }
+
+            // Extract tweets and originalTweets from the new response format
+            val tweetsData = response.get("tweets") as? List<Map<String, Any>?>
+            val originalTweetsData = response.get("originalTweets") as? List<Map<String, Any>?>
+
+            // Cache original tweets first (same as getTweetFeed)
+            originalTweetsData?.forEach { originalTweetJson ->
+                if (originalTweetJson != null) {
+                    try {
+                        val originalTweet = Tweet.from(originalTweetJson)
+                        originalTweet.author = getUser(originalTweet.authorId)
+                        TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = false) // Memory cache only
+                        Timber.tag("getTweetsByUser").d("Cached original tweet: ${originalTweet.mid}")
+                    } catch (e: Exception) {
+                        Timber.tag("getTweetsByUser").e("Error caching original tweet: $e")
+                    }
+                }
+            }
+
+            val result = tweetsData?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
                     null
@@ -521,7 +586,8 @@ object HproseInstance {
                         val tweet = Tweet.from(tweetJson)
                         tweet.author = user
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
-                        // Do NOT cache tweets from profile screens
+                        // Keep tweets only in memory cache (not database cache)
+                        TweetCacheManager.saveTweet(tweet, appUser.mid, shouldCache = false)
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getTweetsByUser").e("Error decoding tweet: $e")
@@ -531,11 +597,15 @@ object HproseInstance {
             } ?: emptyList()
 
             Timber.tag("getTweetsByUser")
-                .d("Received ${response?.size ?: 0} tweets (${result.filterNotNull().size} valid) for user: ${user.mid}")
+                .d("Received ${tweetsData?.size ?: 0} tweets (${result.filterNotNull().size} valid) and ${originalTweetsData?.size ?: 0} original tweets for user: ${user.mid}")
 
             return result
         } catch (e: Exception) {
             Timber.tag("getTweetsByUser").e(e, "Error fetching tweets for user: ${user.mid}")
+            
+            // Post notification for network/exception errors
+            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${e.message}"))
+            
             throw e
         }
     }

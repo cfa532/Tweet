@@ -120,12 +120,17 @@ class TweetViewModel @AssistedInject constructor(
                     // by updating the tweet state, which will cause the UI to reload the original tweet
                     _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
                 } else {
-                    // Quoted tweet - refresh the quoting tweet itself (the one with content/attachments)
+                    // Quoted tweet - refresh both the quoting tweet and the original tweet
                     HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
                         // Only update if the fetched tweet has valid content
                         if (fetchedTweet.content != null || !fetchedTweet.attachments.isNullOrEmpty()) {
                             _tweetState.value = fetchedTweet
                         }
+                    }
+                    
+                    // Also refresh the original tweet that's displayed as a quote
+                    HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = true)?.let { originalTweet ->
+                        Timber.tag("TweetViewModel").d("Refreshed original tweet for quoted tweet: ${originalTweet.mid}")
                     }
                 }
             } else {

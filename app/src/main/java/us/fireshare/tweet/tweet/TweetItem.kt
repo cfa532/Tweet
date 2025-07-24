@@ -41,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -107,12 +108,22 @@ fun TweetItem(
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
                                 Timber.tag("TweetItem").d("Loading original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
                                 try {
-                                    originalTweet = if (isFromFeed) {
-                                        viewModel.loadOriginalTweetForFeed()
+                                    // Store IDs in local variables to avoid smart cast issues
+                                    val originalTweetId = tweet.originalTweetId ?: ""
+                                    val originalAuthorId = tweet.originalAuthorId ?: ""
+                                    
+                                    // Use fetchTweet to get the original tweet from cache or network
+                                    Timber.tag("TweetItem").d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
+                                    originalTweet = HproseInstance.fetchTweet(
+                                        originalTweetId,
+                                        originalAuthorId,
+                                        shouldCache = true
+                                    )
+                                    if (originalTweet != null) {
+                                        Timber.tag("TweetItem").d("Original tweet loaded successfully: ${originalTweet!!.mid}")
                                     } else {
-                                        viewModel.loadOriginalTweet()
+                                        Timber.tag("TweetItem").w("Original tweet not found: $originalTweetId")
                                     }
-                                    Timber.tag("TweetItem").d("Original tweet loaded: ${originalTweet != null}")
                                 } catch (e: Exception) {
                                     Timber.tag("TweetItem").e(e, "Failed to load original tweet")
                                     originalTweet = null
@@ -289,10 +300,21 @@ fun TweetItem(
                             LaunchedEffect(tweet.originalTweetId, isVisible) {
                                 withContext(IO) {
                                     if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                        originalTweet = if (isFromFeed) {
-                                            viewModel.loadOriginalTweetForFeed()
+                                        // Store IDs in local variables to avoid smart cast issues
+                                        val originalTweetId = tweet.originalTweetId ?: ""
+                                        val originalAuthorId = tweet.originalAuthorId ?: ""
+                                        
+                                        // Use fetchTweet to get the original tweet from cache or network
+                                        Timber.tag("TweetItem").d("Fetching quoted original tweet: $originalTweetId from author: $originalAuthorId")
+                                        originalTweet = HproseInstance.fetchTweet(
+                                            originalTweetId,
+                                            originalAuthorId,
+                                            shouldCache = true
+                                        )
+                                        if (originalTweet != null) {
+                                            Timber.tag("TweetItem").d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
                                         } else {
-                                            viewModel.loadOriginalTweet()
+                                            Timber.tag("TweetItem").w("Quoted original tweet not found: $originalTweetId")
                                         }
                                         isLoadingOriginal = false
                                     }

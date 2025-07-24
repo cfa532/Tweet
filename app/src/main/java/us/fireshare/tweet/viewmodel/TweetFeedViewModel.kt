@@ -593,6 +593,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 }
                             }
                         }
+
+                        is TweetEvent.TweetLoadingFailed -> {
+                            // Log the loading failure for future use
+                            Timber.tag("TweetFeedViewModel").e("Tweet loading failed: ${event.error}")
+                            // TODO: Handle tweet loading failure (e.g., show error message, retry, etc.)
+                        }
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
