@@ -44,9 +44,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
@@ -172,6 +174,27 @@ private fun ProfileContentWithTweetListView(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     
+    // State to track if we've reached the end of tweets
+    var hasReachedEnd by remember { mutableStateOf(false) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var lastLoadedPage by remember { mutableStateOf(-1) }
+    
+    // Initialize pagination state when user changes
+    LaunchedEffect(user.mid) {
+        hasReachedEnd = false
+        isLoadingMore = false
+        lastLoadedPage = -1
+        Timber.tag("ProfileScreen").d("Reset pagination state for user: ${user.mid}")
+    }
+    
+    // Initialize lastLoadedPage when tweets are first loaded
+    LaunchedEffect(tweets.size) {
+        if (tweets.isNotEmpty() && lastLoadedPage == -1) {
+            lastLoadedPage = 0
+            Timber.tag("ProfileScreen").d("Initialized lastLoadedPage to 0, tweets count: ${tweets.size}")
+        }
+    }
+    
     // Monitor scroll state changes
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }.collect { isScrolling ->
@@ -222,9 +245,7 @@ private fun ProfileContentWithTweetListView(
                 }
             }
             items(pinnedTweets, key = { it.timestamp }) { tweet ->
-                if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
-                    TweetItem(tweet, parentEntry)
-                }
+                TweetItem(tweet, parentEntry)
             }
             item {
                 HorizontalDivider(
@@ -237,14 +258,12 @@ private fun ProfileContentWithTweetListView(
         
         // Regular tweets section - directly as items, not nested LazyColumn
         items(tweets, key = { it.mid }) { tweet ->
-            if (!tweet.isPrivate || appUser.mid == tweet.authorId) {
-                TweetItem(tweet, parentEntry)
-            }
+            TweetItem(tweet, parentEntry)
         }
         
         // Loading indicator for pagination
         item {
-            if (tweets.isNotEmpty()) {
+            if (tweets.isNotEmpty() && isLoadingMore && !hasReachedEnd) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -270,11 +289,36 @@ private fun ProfileContentWithTweetListView(
                 lastItem.index >= totalItems - 3 // Load more when 3 items from end
             } ?: false
         }.collect { shouldLoadMore ->
-            if (shouldLoadMore) {
+            if (shouldLoadMore && !hasReachedEnd && !isLoadingMore) {
+                isLoadingMore = true
+                val nextPage = lastLoadedPage + 1
+                
                 // Load more tweets
                 coroutineScope.launch {
                     withContext(Dispatchers.IO) {
-                        viewModel.fetchTweets((tweets.size / 20) + 1) // Assuming 20 tweets per page
+                        try {
+                            val currentTweetCount = tweets.size
+                            val tweetsWithNulls = viewModel.fetchTweets(nextPage)
+                            
+                            // Check if we actually got new tweets after the fetch
+                            val newTweetCount = tweets.size
+                            val tweetsAdded = newTweetCount - currentTweetCount
+                            
+                            Timber.tag("ProfileScreen").d("Page $nextPage: received ${tweetsWithNulls.size} tweets from server, added $tweetsAdded new tweets to UI")
+                            
+                            // Check if we've reached the end (received fewer tweets than page size OR no new tweets added)
+                            if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE || tweetsAdded == 0) {
+                                hasReachedEnd = true
+                                Timber.tag("ProfileScreen").d("Reached end of tweets at page $nextPage: server returned ${tweetsWithNulls.size} tweets, added $tweetsAdded new tweets")
+                            } else {
+                                lastLoadedPage = nextPage
+                                Timber.tag("ProfileScreen").d("Successfully loaded page $nextPage, lastLoadedPage updated to $lastLoadedPage")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ProfileScreen").e(e, "Error loading more tweets")
+                        } finally {
+                            isLoadingMore = false
+                        }
                     }
                 }
             }

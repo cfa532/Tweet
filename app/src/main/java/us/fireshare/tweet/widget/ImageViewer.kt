@@ -62,6 +62,8 @@ fun ImageViewer(
     // Try to load cached image on first composition
     LaunchedEffect(mid) {
         cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+        // For full-size images, we still want to show cached image as placeholder if available
+        // For non-full-size images, we can load and cache if not already cached
         if (cachedBitmap == null && !isFullSize && !isLoading) {
             isLoading = true
             // Download, compress, and cache the image
@@ -91,8 +93,8 @@ fun ImageViewer(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
-        if (!isFullSize && cachedBitmap != null) {
-            // Show cached/compressed image as placeholder
+        if (cachedBitmap != null) {
+            // Show cached image as placeholder for both full-size and preview images
             Image(
                 bitmap = cachedBitmap!!.asImageBitmap(),
                 contentDescription = null,

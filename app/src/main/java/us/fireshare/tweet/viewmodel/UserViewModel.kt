@@ -106,7 +106,7 @@ class UserViewModel @AssistedInject constructor(
 
             // Load additional pages if needed to get at least 5 viewable tweets
             var pageNumber = 1
-            while (tweets.value.count { !it.isPrivate || it.authorId == appUser.mid } < 5 && pageNumber < 3) {
+            while (tweets.value.size < 5 && pageNumber < 10) {
                 getTweets(pageNumber)
                 pageNumber++
             }
