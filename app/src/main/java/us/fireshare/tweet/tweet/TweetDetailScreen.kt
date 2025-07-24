@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -35,6 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -60,7 +65,27 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
+    // State for header collapse
+    var headerOffsetHeightPx by remember { mutableStateOf(0f) }
+    var headerOffsetHeightDp by remember { mutableStateOf(0.dp) }
+
+    // Nested scroll connection for coordinating scroll between tweet and comments
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                val newOffset = (headerOffsetHeightPx + delta).coerceIn(0f, 200f) // Max collapse of 200dp
+                val consumed = newOffset - headerOffsetHeightPx
+                headerOffsetHeightPx = newOffset
+                headerOffsetHeightDp = with(density) { newOffset.toDp() }
+                return Offset(0f, consumed)
+            }
+        }
+    }
+
+    // Initial load
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             viewModel.refreshTweetAndOriginal()
@@ -68,12 +93,24 @@ fun TweetDetailScreen(
             Timber.tag("TweetDetailScreen").d("$tweet")
         }
     }
+    
+    // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
     LaunchedEffect(Unit) {
+        // Initial refresh after 3 seconds
+        delay(3000L)
+        withContext(Dispatchers.IO) {
+            viewModel.refreshTweetAndOriginal()
+            viewModel.loadComments(tweet)
+            Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
+        }
+        
+        // Subsequent refreshes every 5 minutes
         while (true) {
-            delay(3 * 60 * 1000) // refresh every 3 minutes
+            delay(5 * 60 * 1000) // refresh every 5 minutes
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweetAndOriginal()
                 viewModel.loadComments(tweet)
+                Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
             }
         }
     }
@@ -143,13 +180,23 @@ fun TweetDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .nestedScroll(nestedScrollConnection)
         ) {
-            TweetDetailBody(viewModel, parentEntry, gridColumns)
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 1.dp),
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline
-            )
+            // Tweet content that collapses when scrolling
+            Column(
+                modifier = Modifier
+                    .offset(y = -headerOffsetHeightDp)
+                    .animateContentSize()
+            ) {
+                TweetDetailBody(viewModel, parentEntry, gridColumns)
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 1.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            
+            // Comments list that takes remaining space
             CommentListView(
                 comments = comments,
                 getComments = { pageNumber ->

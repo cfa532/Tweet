@@ -481,6 +481,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.CommentUploaded -> {
+                            // Show success toast if it's the current user's comment
+                            val context = notificationContextRef?.get()
+                            if (event.comment.authorId == appUser.mid && context != null) {
+                                withContext(Main) {
+                                    Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            
                             // Update comment count for parent tweet
                             withContext(Main) {
                                 _tweets.value = _tweets.value.map { tweet ->

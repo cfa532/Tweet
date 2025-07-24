@@ -111,7 +111,10 @@ fun TweetFeedScreen(
         selectedTabIndex = pagerState.currentPage
     }
     
-    // Notification listening is now handled in ViewModel's init block
+    // Set notification context and start listening to notifications
+    LaunchedEffect(Unit) {
+        viewModel.setNotificationContext(context)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(

@@ -69,6 +69,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 import us.fireshare.tweet.widget.UploadFilePreview
 
@@ -87,9 +88,13 @@ fun ComposeCommentScreen(
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
     
+    // Get TweetFeedViewModel to set notification context for Toast messages
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         tweetViewModel.startListeningToNotifications(context)
+        tweetFeedViewModel.setNotificationContext(context)
     }
 
     // Create a launcher for the file picker
@@ -162,11 +167,12 @@ fun ComposeCommentScreen(
                     }
                 },
                 actions = {
-                    val isLoading = remember { mutableStateOf(false) }
-                    IconButton(enabled = !isLoading.value,
+                    var isLoading by remember { mutableStateOf(false) }
+                    
+                    IconButton(enabled = !isLoading,
                         onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
-                            isLoading.value = true
+                            isLoading = true
                             tweetViewModel.uploadComment(
                                 context,
                                 tweetContent.trim(),

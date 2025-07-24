@@ -82,7 +82,7 @@ fun TweetItem(
         factory.create(tweet)
     }
     var isVisible by remember { mutableStateOf(false) }
-    TweetRefreshHandler(isVisible, viewModel)
+    // TweetRefreshHandler removed - refresh is now handled at the screen level
 
     Surface(
         modifier = Modifier
@@ -375,29 +375,30 @@ fun TweetItem(
  */
 @Composable
 fun TweetRefreshHandler(isVisible: Boolean, viewModel: TweetViewModel) {
-    val initialRefreshIntervalMillis = 3000L // 3 seconds for first time
-    val subsequentRefreshIntervalMillis = 300000L // 5 minutes for subsequent refreshes
+    val refreshIntervalMillis = 300000L // 5 minutes for all refreshes
     
     // Use rememberCoroutineScope to get a scope tied to the composable's lifecycle.
     val scope = rememberCoroutineScope()
-    var isFirstTimeVisible by remember { mutableStateOf(true) }
+    var lastRefreshTime by remember { mutableStateOf(0L) }
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
             // Start listening to notifications for this TweetViewModel
             viewModel.startListeningToNotifications()
             
-            // Launch a coroutine to handle the refresh after the delay
-            scope.launch(Dispatchers.IO) {
-                if (isFirstTimeVisible) {
-                    // First time visible - refresh after 3 seconds
-                    delay(initialRefreshIntervalMillis)
-                    isFirstTimeVisible = false
-                } else {
-                    // Subsequent times - refresh after 5 minutes
-                    delay(subsequentRefreshIntervalMillis)
+            // Only refresh if enough time has passed since last refresh
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastRefreshTime > refreshIntervalMillis) {
+                // Launch a coroutine to handle the refresh after a delay
+                scope.launch(Dispatchers.IO) {
+                    delay(1000L) // Small delay to prevent immediate refresh
+                    try {
+                        viewModel.refreshTweetAndOriginal()
+                        lastRefreshTime = System.currentTimeMillis()
+                    } catch (e: Exception) {
+                        Timber.tag("TweetRefreshHandler").e(e, "Error refreshing tweet")
+                    }
                 }
-                viewModel.refreshTweetAndOriginal()
             }
         }
     }

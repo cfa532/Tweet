@@ -111,24 +111,35 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun refreshTweetAndOriginal() {
         val currentTweet = tweetState.value
         
-        if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
-            // Check if this is a pure retweet (no content/attachments) or a quoted tweet (has content/attachments)
-            if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
-                // Pure retweet - refresh the original tweet that the user actually sees
-                // Since we don't store the original tweet in the ViewModel, we trigger a reload
-                // by updating the tweet state, which will cause the UI to reload the original tweet
-                _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
+        try {
+            if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
+                // Check if this is a pure retweet (no content/attachments) or a quoted tweet (has content/attachments)
+                if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
+                    // Pure retweet - refresh the original tweet that the user actually sees
+                    // Since we don't store the original tweet in the ViewModel, we trigger a reload
+                    // by updating the tweet state, which will cause the UI to reload the original tweet
+                    _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
+                } else {
+                    // Quoted tweet - refresh the quoting tweet itself (the one with content/attachments)
+                    HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
+                        // Only update if the fetched tweet has valid content
+                        if (fetchedTweet.content != null || !fetchedTweet.attachments.isNullOrEmpty()) {
+                            _tweetState.value = fetchedTweet
+                        }
+                    }
+                }
             } else {
-                // Quoted tweet - refresh the quoting tweet itself (the one with content/attachments)
+                // This is an original tweet - refresh it directly
                 HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
-                    _tweetState.value = fetchedTweet
+                    // Only update if the fetched tweet has valid content
+                    if (fetchedTweet.content != null || !fetchedTweet.attachments.isNullOrEmpty()) {
+                        _tweetState.value = fetchedTweet
+                    }
                 }
             }
-        } else {
-            // This is an original tweet - refresh it directly
-            HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
-                _tweetState.value = fetchedTweet
-            }
+        } catch (e: Exception) {
+            // Log error but don't update state to prevent content from disappearing
+            Timber.tag("TweetViewModel").e(e, "Error refreshing tweet ${currentTweet.mid}")
         }
     }
 
@@ -231,20 +242,7 @@ class TweetViewModel @AssistedInject constructor(
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
 
-        // Observe work status to show toast messages
-        workManager.getWorkInfoByIdLiveData(uploadRequest.id).observeForever { workInfo ->
-            when (workInfo?.state) {
-                WorkInfo.State.SUCCEEDED -> {
-                    Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
-                }
-                WorkInfo.State.FAILED -> {
-                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
-                }
-                else -> {
-                    // Other states (RUNNING, ENQUEUED, etc.) - no toast needed
-                }
-            }
-        }
+        // No need to observe work status - UI will update via notification system
     }
 
     suspend fun shareTweet(context: Context) {
@@ -339,6 +337,11 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     private var notificationContextRef: WeakReference<Context>? = null
+    private val shownToastComments = mutableSetOf<String>() // Track which comments have shown toast
+    
+    companion object {
+        // No longer needed - Toast handling moved to TweetFeedViewModel
+    }
 
     /**
      * Set the context for showing toast messages in notifications
@@ -356,18 +359,13 @@ class TweetViewModel @AssistedInject constructor(
         }
         viewModelScope.launch {
             try {
+                Timber.tag("TweetViewModel").d("Starting notification listener for tweet ${tweetState.value.mid}")
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
                         is TweetEvent.CommentUploaded -> {
                             // Only handle if this is the parent tweet for the comment
                             if (event.parentTweet.mid == tweetState.value.mid) {
-                                // Show success toast if it's the current user's comment
-                                val context = notificationContextRef?.get()
-                                if (event.comment.authorId == appUser.mid && context != null) {
-                                    withContext(Main) {
-                                        Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+                                Timber.tag("TweetViewModel").d("CommentUploaded event received for tweet ${tweetState.value.mid}, comment ${event.comment.mid}, author ${event.comment.authorId}, current user ${appUser.mid}")
                                 
                                 // Update the tweet state with new comment count
                                 _tweetState.value = event.parentTweet

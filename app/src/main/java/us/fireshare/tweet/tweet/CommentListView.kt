@@ -52,19 +52,20 @@
   * @param parentEntry Optional NavBackStackEntry for navigation context
   */
  @Composable
- @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
- fun CommentListView(
-     comments: List<Tweet>,
-     getComments: (Int) -> Unit,
-     modifier: Modifier = Modifier,
-     scrollBehavior: TopAppBarScrollBehavior? = null,
-     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
-     parentEntry: NavBackStackEntry? = null,
- ) {
-     // Internal state management
-     var isRefreshingAtTop by remember { mutableStateOf(false) }
-     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-     var currentPage by remember { mutableIntStateOf(0) }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+fun CommentListView(
+    comments: List<Tweet>,
+    getComments: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
+    parentEntry: NavBackStackEntry? = null,
+) {
+    // Internal state management
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    var isInitialLoading by remember { mutableStateOf(true) }
 
      // Remember scroll position across recompositions and configuration changes
      val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -107,6 +108,13 @@
              }
      }
 
+     // Track initial loading completion
+     LaunchedEffect(comments) {
+         if (comments.isNotEmpty() && isInitialLoading) {
+             isInitialLoading = false
+         }
+     }
+
      // Infinite scroll
      LaunchedEffect(isAtBottom) {
          if (isAtBottom && !isRefreshingAtBottom) {
@@ -137,35 +145,50 @@
              state = listState,
              contentPadding = contentPadding
          ) {
-             items(
-                 items = comments,
-                 key = { it.mid }
-             ) { comment ->
-                 parentEntry?.let { CommentItem(comment, null, it) }
-             }
-             if (isRefreshingAtTop) {
+             // Show initial loading spinner
+             if (isInitialLoading) {
                  item {
                      CircularProgressIndicator(
                          modifier = Modifier
                              .fillMaxWidth()
-                             .padding(top = 60.dp)
+                             .padding(32.dp)
                              .wrapContentWidth(Alignment.CenterHorizontally)
                              .size(48.dp),
                          color = MaterialTheme.colorScheme.primary,
                          strokeWidth = 4.dp
                      )
                  }
-             }
-             if (isRefreshingAtBottom) {
-                 item {
-                     CircularProgressIndicator(
-                         modifier = Modifier
-                             .fillMaxWidth()
-                             .padding(16.dp)
-                             .wrapContentWidth(Alignment.CenterHorizontally),
-                         color = MaterialTheme.colorScheme.primary,
-                         strokeWidth = 4.dp
-                     )
+             } else {
+                 items(
+                     items = comments,
+                     key = { it.mid }
+                 ) { comment ->
+                     parentEntry?.let { CommentItem(comment, null, it) }
+                 }
+                 if (isRefreshingAtTop) {
+                     item {
+                         CircularProgressIndicator(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(top = 60.dp)
+                                 .wrapContentWidth(Alignment.CenterHorizontally)
+                                 .size(48.dp),
+                             color = MaterialTheme.colorScheme.primary,
+                             strokeWidth = 4.dp
+                         )
+                     }
+                 }
+                 if (isRefreshingAtBottom) {
+                     item {
+                         CircularProgressIndicator(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(16.dp)
+                                 .wrapContentWidth(Alignment.CenterHorizontally),
+                             color = MaterialTheme.colorScheme.primary,
+                             strokeWidth = 4.dp
+                         )
+                     }
                  }
              }
          }

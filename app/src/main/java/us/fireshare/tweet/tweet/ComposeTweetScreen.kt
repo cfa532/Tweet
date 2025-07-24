@@ -179,9 +179,18 @@ fun ComposeTweetScreen(
                     }
                 },
                 actions = {
+                    var isLoading by remember { mutableStateOf(false) }
+                    
+                    // Listen for upload completion to reset loading state
+                    LaunchedEffect(Unit) {
+                        tweetFeedViewModel.startListeningToNotifications(context)
+                    }
+                    
                     IconButton(
+                        enabled = !isLoading,
                         onClick = {
                             if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                                isLoading = true
                                 tweetFeedViewModel.uploadTweet(
                                     context,
                                     tweetContent.trim(),

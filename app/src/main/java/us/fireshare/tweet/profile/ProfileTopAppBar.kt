@@ -120,7 +120,22 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             IconButton(onClick = {
                 val currentTime = SystemClock.elapsedRealtime()
                 if (currentTime - lastClickTime > debounceTime) {
-                    navController.popBackStack()
+                    // Navigate back to tweet feed to prevent navigation issues
+                    try {
+                        // First try to pop back stack
+                        if (!navController.popBackStack()) {
+                            // If popBackStack returns false, navigate to tweet feed
+                            navController.navigate(NavTweet.TweetFeed) {
+                                // Clear the back stack to prevent multiple back navigation
+                                popUpTo(NavTweet.TweetFeed) { inclusive = true }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Fallback: navigate to tweet feed
+                        navController.navigate(NavTweet.TweetFeed) {
+                            popUpTo(NavTweet.TweetFeed) { inclusive = true }
+                        }
+                    }
                     lastClickTime = currentTime
                 }
             }) {
