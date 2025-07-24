@@ -23,7 +23,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +36,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -53,14 +51,12 @@ import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.profile.SimpleAvatar
-import us.fireshare.tweet.tweet.TweetDropdownMenu
 import java.util.concurrent.TimeUnit
 
 @Composable
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
-    isFromFeed: Boolean = false, // indicates if this is from the feed context
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
 ) {
     // Check if tweet or author is null and remove the item if so
@@ -148,11 +144,22 @@ fun TweetItem(
                             )
                         }
                     } else if (originalTweet != null) {
-                        // The tweet area with 'Forwarded by' label above
-                        val originalTweetViewModel =
-                            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                parentEntry, key = tweet.originalTweetId
-                            ) { factory -> factory.create(originalTweet!!) }
+                        // Store in local variable to avoid smart cast issues
+                        val originalTweetNonNull = originalTweet!!
+                        
+                        // Privacy check at rendering stage
+                        if (originalTweetNonNull.isPrivate && originalTweetNonNull.authorId != appUser.mid) {
+                            // Original tweet is private and not owned by current user - hide this item
+                            LaunchedEffect(Unit) {
+                                onTweetUnavailable?.invoke(tweet.mid)
+                            }
+                            Box(modifier = Modifier.size(0.dp))
+                        } else {
+                            // The tweet area with 'Forwarded by' label above
+                            val originalTweetViewModel =
+                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                                    parentEntry, key = tweet.originalTweetId
+                                ) { factory -> factory.create(originalTweetNonNull) }
 
                         Column(modifier = Modifier.padding(top = 0.dp)) {
                             // Label: Forward by user, above the quoted tweet
@@ -175,6 +182,7 @@ fun TweetItem(
                                 parentEntry = parentEntry,
                                 parentTweet = tweet
                             )
+                        }
                         }
                     } else {
                         // Original tweet not available - this retweet should be removed from the list
@@ -280,7 +288,8 @@ fun TweetItem(
                                     // Media files
                                     if (!tweet.attachments.isNullOrEmpty()) {
                                         Surface(
-                                            modifier = Modifier.fillMaxWidth()
+                                            modifier = Modifier
+                                                .fillMaxWidth()
                                                 .padding(top = 4.dp)
                                                 .heightIn(min = 20.dp, max = 400.dp),
                                             tonalElevation = 4.dp,
@@ -295,26 +304,21 @@ fun TweetItem(
                             // Load and display original tweet
                             var originalTweet by remember { mutableStateOf<Tweet?>(null) }
                             var isLoadingOriginal by remember { mutableStateOf(true) }
-                            val currentTweet by viewModel.tweetState.collectAsState()
-                            
-                            LaunchedEffect(tweet.originalTweetId, isVisible) {
+
+                            LaunchedEffect(tweet.originalTweetId) {
                                 withContext(IO) {
-                                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                        // Store IDs in local variables to avoid smart cast issues
-                                        val originalTweetId = tweet.originalTweetId ?: ""
-                                        val originalAuthorId = tweet.originalAuthorId ?: ""
-                                        
+                                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
                                         // Use fetchTweet to get the original tweet from cache or network
-                                        Timber.tag("TweetItem").d("Fetching quoted original tweet: $originalTweetId from author: $originalAuthorId")
+                                        Timber.tag("TweetItem").d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
                                         originalTweet = HproseInstance.fetchTweet(
-                                            originalTweetId,
-                                            originalAuthorId,
+                                            tweet.originalTweetId!!,
+                                            tweet.originalAuthorId!!,
                                             shouldCache = true
                                         )
                                         if (originalTweet != null) {
                                             Timber.tag("TweetItem").d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
                                         } else {
-                                            Timber.tag("TweetItem").w("Quoted original tweet not found: $originalTweetId")
+                                            Timber.tag("TweetItem").w("Quoted original tweet not found: ${tweet.originalTweetId}")
                                         }
                                         isLoadingOriginal = false
                                     }

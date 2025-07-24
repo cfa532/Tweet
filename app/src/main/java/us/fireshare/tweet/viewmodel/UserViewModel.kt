@@ -99,6 +99,8 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun initLoad() {
         try {
+            Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
+            
             // Load first page (page 0) which includes pinned tweets
             getTweets(0)
 
@@ -108,6 +110,8 @@ class UserViewModel @AssistedInject constructor(
                 getTweets(pageNumber)
                 pageNumber++
             }
+            
+            Timber.tag("initLoad").d("Initial load completed. Pinned tweets: ${pinnedTweets.value.size}, Regular tweets: ${tweets.value.size}")
         } catch (e: Exception) {
             Timber.tag("initLoad").e(e, "Error during initial load for user: ${user.value.mid}")
         } finally {
@@ -507,9 +511,11 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            // When pageNumber is 0, load pinned tweets first
+            // When pageNumber is 0, load pinned tweets first and wait for completion
             if (pageNumber == 0) {
                 loadPinnedTweets()
+                // Ensure pinned tweets are loaded before proceeding
+                Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
             }
 
             // Fetch tweets of the author and update _tweets
@@ -527,7 +533,7 @@ class UserViewModel @AssistedInject constructor(
                     tweet.isPrivate && tweet.authorId != appUser.mid 
                 }
                 
-                // Filter out pinned tweets from regular tweets list
+                // Get current pinned tweet IDs after ensuring they're loaded
                 val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
                 val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
                     pinnedTweetIds.contains(tweet.mid)
@@ -536,7 +542,7 @@ class UserViewModel @AssistedInject constructor(
                 _tweets.value = tweetsWithoutPinned
                 _tweetCount.value = tweetsWithoutPinned.size
                 
-                Timber.tag("getTweets").d("Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list")
+                Timber.tag("getTweets").d("Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list. Pinned IDs: $pinnedTweetIds")
             } else {
                 // For load more (page > 0), append to the list
                 _tweets.update { currentTweets ->
@@ -571,7 +577,7 @@ class UserViewModel @AssistedInject constructor(
             Timber.tag("loadPinnedTweets").d("Loading pinned tweets for user: ${user.value.mid}")
             
             // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
-            val pinnedTweetsResponse = HproseInstance.getPinnedList(user.value)
+            val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(user.value)
             
             Timber.tag("loadPinnedTweets").d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
             
@@ -630,9 +636,40 @@ class UserViewModel @AssistedInject constructor(
                     .sortedByDescending { (_, pinnedTimestamp) -> pinnedTimestamp }
                     .map { (tweet, _) -> tweet } // Extract just the tweets, keeping their original timestamps
                 
-                _pinnedTweets.value = sortedPinnedTweets
+                // Load original tweets for quoted tweets and filter out those that fail to load
+                val validPinnedTweets = mutableListOf<Tweet>()
                 
-                Timber.tag("loadPinnedTweets").d("Updated pinned tweets list with ${_pinnedTweets.value.size} tweets")
+                for (tweet in sortedPinnedTweets) {
+                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                        // This is a quoted tweet, try to load the original tweet
+                        try {
+                            Timber.tag("loadPinnedTweets").d("Loading original tweet for pinned quoted tweet: ${tweet.originalTweetId}")
+                            val originalTweet = HproseInstance.fetchTweet(
+                                tweet.originalTweetId!!,
+                                tweet.originalAuthorId!!,
+                                shouldCache = false  // Memory cache only for profile screens
+                            )
+                            
+                            if (originalTweet != null) {
+                                Timber.tag("loadPinnedTweets").d("Successfully loaded original tweet for pinned tweet: ${tweet.mid}")
+                                validPinnedTweets.add(tweet)
+                            } else {
+                                Timber.tag("loadPinnedTweets").w("Failed to load original tweet for pinned tweet: ${tweet.mid}, removing from list")
+                                // Don't add to validPinnedTweets - this removes it from the list
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("loadPinnedTweets").e(e, "Error loading original tweet for pinned tweet: ${tweet.mid}, removing from list")
+                            // Don't add to validPinnedTweets - this removes it from the list
+                        }
+                    } else {
+                        // This is not a quoted tweet, add it directly
+                        validPinnedTweets.add(tweet)
+                    }
+                }
+                
+                _pinnedTweets.value = validPinnedTweets
+                
+                Timber.tag("loadPinnedTweets").d("Updated pinned tweets list with ${_pinnedTweets.value.size} valid tweets: ${validPinnedTweets.map { it.mid }}")
             } else {
                 // Clear pinned tweets if none found
                 _pinnedTweets.value = emptyList()
@@ -641,6 +678,7 @@ class UserViewModel @AssistedInject constructor(
             
         } catch (e: Exception) {
             Timber.tag("loadPinnedTweets").e(e, "Error loading pinned tweets for user: ${user.value.mid}")
+            // Don't clear pinned tweets on error, keep existing state
         }
     }
 

@@ -625,12 +625,8 @@ object HproseInstance {
             val author = getUser(authorId)
             val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
             if (cachedTweet != null) {
-                return if (cachedTweet.isPrivate && cachedTweet.authorId != appUser.mid)
-                    null
-                else {
-                    cachedTweet.author = author
-                    cachedTweet
-                }
+                cachedTweet.author = author
+                return cachedTweet
             }
 
             val entry = "get_tweet"
@@ -1280,7 +1276,7 @@ object HproseInstance {
      * Return a list of {tweet: Tweet, timestamp: Long} for each pinned Tweet. The timestamp is when
      * the tweet is pinned.
      * */
-    suspend fun getPinnedList(user: User): List<Map<String, Any>>? {
+    suspend fun getPinnedTweetsWithTimestamp(user: User): List<Map<String, Any>>? {
         val entry = "get_pinned_tweets"
         val params = mapOf(
             "aid" to appId,

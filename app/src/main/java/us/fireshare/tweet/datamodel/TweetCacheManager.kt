@@ -30,7 +30,7 @@ object TweetCacheManager {
      * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
     fun saveTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
-        if (tweet == null || !shouldCache) {
+        if (tweet == null) {
             Timber.w("Should not cache: $tweet")
             return
         }
@@ -44,11 +44,15 @@ object TweetCacheManager {
                     timestamp = Date()
                 )
 
-                // Update memory cache
+                // Always update memory cache
                 memoryCache[tweet.mid] = cachedTweet
+                Timber.d("Cached tweet in memory: ${tweet.mid}")
 
-                // Update database cache
-                HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
+                // Only update database cache if shouldCache is true
+                if (shouldCache) {
+                    HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
+                    Timber.d("Cached tweet in database: ${tweet.mid}")
+                }
             }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")

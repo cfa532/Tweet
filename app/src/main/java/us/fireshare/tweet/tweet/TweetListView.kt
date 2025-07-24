@@ -1,7 +1,6 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -356,8 +355,7 @@ fun TweetListView(
                     parentEntry?.let { 
                         TweetItem(
                             tweet = tweet, 
-                            parentEntry = it, 
-                            isFromFeed = true,
+                            parentEntry = it,
                             onTweetUnavailable = onTweetUnavailable
                         ) 
                     }
