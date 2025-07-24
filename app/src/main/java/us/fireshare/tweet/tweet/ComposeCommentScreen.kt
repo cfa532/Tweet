@@ -45,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
@@ -168,20 +170,32 @@ fun ComposeCommentScreen(
                 },
                 actions = {
                     var isLoading by remember { mutableStateOf(false) }
+                    val coroutineScope = rememberCoroutineScope()
                     
                     IconButton(enabled = !isLoading,
                         onClick = {
                         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
                             isLoading = true
-                            tweetViewModel.uploadComment(
-                                context,
-                                tweetContent.trim(),
-                                selectedAttachments,
-                            )
-                            // clear and return to previous screen
+                            // Store content before clearing
+                            val contentToUpload = tweetContent.trim()
+                            val attachmentsToUpload = selectedAttachments.toList()
+                            
+                            // Clear UI immediately for better UX
                             selectedAttachments.clear()
                             tweetContent = ""
-                            popBack()
+                            
+                            // Upload comment
+                            tweetViewModel.uploadComment(
+                                context,
+                                contentToUpload,
+                                attachmentsToUpload,
+                            )
+                            
+                            // Navigate back after a short delay to ensure upload is initiated
+                            coroutineScope.launch {
+                                delay(100) // Small delay to ensure upload is started
+                                popBack()
+                            }
                         } })
                     {
                         Icon(

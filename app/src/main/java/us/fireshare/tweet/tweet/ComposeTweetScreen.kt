@@ -54,6 +54,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -180,6 +182,7 @@ fun ComposeTweetScreen(
                 },
                 actions = {
                     var isLoading by remember { mutableStateOf(false) }
+                    val coroutineScope = rememberCoroutineScope()
                     
                     // Listen for upload completion to reset loading state
                     LaunchedEffect(Unit) {
@@ -191,15 +194,31 @@ fun ComposeTweetScreen(
                         onClick = {
                             if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
                                 isLoading = true
+                                
+                                // Store content before clearing
+                                val contentToUpload = tweetContent.trim()
+                                val attachmentsToUpload = selectedAttachments.toList()
+                                val isPrivateUpload = isPrivate
+                                
+                                // Clear UI immediately for better UX
+                                selectedAttachments.clear()
+                                tweetContent = ""
+                                
+                                // Upload tweet
                                 tweetFeedViewModel.uploadTweet(
                                     context,
-                                    tweetContent.trim(),
-                                    selectedAttachments,
-                                    isPrivate
+                                    contentToUpload,
+                                    attachmentsToUpload,
+                                    isPrivateUpload
                                 )
+                                
+                                // Navigate back after a short delay to ensure upload is initiated
                                 val currentTime = SystemClock.elapsedRealtime()
                                 if (currentTime - lastClickTime > debounceTime) {
-                                    navController.popBackStack()
+                                    coroutineScope.launch {
+                                        delay(100) // Small delay to ensure upload is started
+                                        navController.popBackStack()
+                                    }
                                     lastClickTime = currentTime
                                 }
                             }
