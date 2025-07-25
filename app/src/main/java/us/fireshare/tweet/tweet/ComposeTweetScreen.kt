@@ -407,7 +407,7 @@ fun ComposeTweetScreen(
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 ) {
-                    items(selectedAttachments.chunked(2)) { rowItems ->
+                    items(selectedAttachments.chunked(4)) { rowItems ->
                         LazyRow(
                             modifier = Modifier
                                 .fillMaxWidth()

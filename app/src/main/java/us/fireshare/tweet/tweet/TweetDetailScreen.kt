@@ -104,7 +104,6 @@ fun TweetDetailScreen(
     // Initial load
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            viewModel.refreshTweetAndOriginal()
             viewModel.loadComments(tweet)
             Timber.tag("TweetDetailScreen").d(" 24tweet")
         }
@@ -114,14 +113,12 @@ fun TweetDetailScreen(
         delay(3000L)
         withContext(Dispatchers.IO) {
             viewModel.refreshTweetAndOriginal()
-            viewModel.loadComments(tweet)
             Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
         }
         while (true) {
             delay(5 * 60 * 1000)
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweetAndOriginal()
-                viewModel.loadComments(tweet)
                 Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
             }
         }
@@ -155,7 +152,6 @@ fun TweetDetailScreen(
         bottomBar = {
             Column {
                 ReplyEditorBox(
-//                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     isExpanded = isReplyBoxExpanded,
                     onExpandedChange = { isExpanded ->
                         isReplyBoxExpanded = isExpanded

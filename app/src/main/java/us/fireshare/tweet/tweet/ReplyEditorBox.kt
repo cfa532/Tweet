@@ -95,6 +95,9 @@ fun ReplyEditorBox(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
+    // Confirmation dialog state
+    var showExitConfirmation by remember { mutableStateOf(false) }
+    
     // Attachment handling
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -137,6 +140,36 @@ fun ReplyEditorBox(
             takeAShot()
         } else {
             Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // Function to check if there's unsaved content
+    fun hasUnsavedContent(): Boolean {
+        return textValue.text.isNotBlank() || selectedAttachments.isNotEmpty()
+    }
+    
+    // Function to handle close attempt
+    fun handleCloseAttempt() {
+        if (hasUnsavedContent()) {
+            showExitConfirmation = true
+        } else {
+            onExpandedChange(false)
+        }
+    }
+    
+    // Function to clear content and close
+    fun clearAndClose() {
+        textValue = TextFieldValue("")
+        selectedAttachments.clear()
+        onExpandedChange(false)
+        showExitConfirmation = false
+    }
+    
+    // Auto-focus when expanded
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) {
+            delay(100) // Small delay to ensure the UI is ready
+            focusRequester.requestFocus()
         }
     }
     
@@ -219,11 +252,7 @@ fun ReplyEditorBox(
                     )
                     
                     IconButton(
-                        onClick = { 
-                            onExpandedChange(false)
-                            textValue = TextFieldValue("")
-                            selectedAttachments.clear()
-                        }
+                        onClick = { handleCloseAttempt() }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -268,7 +297,8 @@ fun ReplyEditorBox(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusRequester)
+                                .focusRequester(focusRequester),
+                            maxLines = 8
                         )
                         
                         // Show placeholder when text is empty
@@ -386,5 +416,28 @@ fun ReplyEditorBox(
                 }
             }
         }
+    }
+    
+    // Exit confirmation dialog
+    if (showExitConfirmation) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Discard Reply?") },
+            text = { Text("You have unsaved content. Are you sure you want to leave?") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { clearAndClose() }
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showExitConfirmation = false }
+                ) {
+                    Text("Keep Editing")
+                }
+            }
+        )
     }
 } 
