@@ -152,7 +152,8 @@ fun TweetDetailScreen(
     
     // Track initial loading completion
     LaunchedEffect(comments) {
-        if (comments.isNotEmpty() && isInitialLoading) {
+        if (isInitialLoading) {
+            // Set loading to false when we receive any response (empty or not)
             isInitialLoading = false
         }
     }
