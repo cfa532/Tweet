@@ -97,9 +97,9 @@ fun BottomNavigationBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp) // Reduced height from default 80dp
+            .height(72.dp) // Reduced height from default 80dp
             .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 8.dp, vertical = 4.dp) // Reduced padding
+            .padding(horizontal = 8.dp, vertical = 8.dp) // Reduced padding
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
