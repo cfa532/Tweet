@@ -54,6 +54,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.tweet.ReplyEditorBox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +128,18 @@ fun TweetDetailScreen(
                 }
             },
         )},
-        bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 0)},
+        bottomBar = { 
+            Column {
+                ReplyEditorBox(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    onReplySubmit = { replyText ->
+                        // TODO: Handle reply submission
+                        // viewModel.submitReply(replyText)
+                    }
+                )
+                BottomNavigationBar(navController = navController, selectedIndex = 0)
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },

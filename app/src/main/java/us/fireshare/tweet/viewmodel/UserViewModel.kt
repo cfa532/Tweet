@@ -265,7 +265,7 @@ class UserViewModel @AssistedInject constructor(
                 _followers.value = allFollowers
                 
                 // Return the first batch of users, filtering out nulls
-                val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE).filterNotNull()
+                val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE)
                 Timber.tag("fetchFollowers").d("Returning first batch: ${firstBatch.size} user IDs")
                 firstBatch
             } else {

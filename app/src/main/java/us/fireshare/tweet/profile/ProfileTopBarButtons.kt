@@ -79,8 +79,8 @@ fun ProfileTopBarButton(
                     enabled = !isUpdating,
                     onClick = {
                         when (buttonText) {
-                            context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
-                            else -> {
+                        context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
+                        else -> {
                                 if (!appUser.isGuest()) {
                                     // Optimistic update - immediately change the button state
                                     val currentIsFollowing = followings.contains(user.mid)
@@ -92,15 +92,15 @@ fun ProfileTopBarButton(
                                     buttonText = newButtonText
                                     isUpdating = true
 
-                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                         try {
                                             // Attempt the actual toggle operation
                                             val result = appUserViewModel.toggleFollowingWithResult(user.mid) { isFollowingResult ->
-                                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        viewModel.viewModelScope.launch(Dispatchers.IO) {
                                                     viewModel.toggleFollower(user.mid, isFollowingResult, appUser.mid)
                                                     tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
-                                                }
-                                            }
+                                        }
+                                    }
 
                                             if (result == null) {
                                                 // Operation failed, revert the optimistic update
@@ -145,15 +145,15 @@ fun ProfileTopBarButton(
                                         }
                                     }
                                 } else {
-                                    Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
-                                    // Navigate to login after a short delay
-                                    viewModel.viewModelScope.launch {
-                                        kotlinx.coroutines.delay(1000)
-                                        navController.navigate(NavTweet.Login)
-                                    }
+                                Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
+                                // Navigate to login after a short delay
+                                viewModel.viewModelScope.launch {
+                                    kotlinx.coroutines.delay(1000)
+                                    navController.navigate(NavTweet.Login)
                                 }
                             }
                         }
+                    }
                     }
                 )
                 .padding(horizontal = 20.dp, vertical = 8.dp)

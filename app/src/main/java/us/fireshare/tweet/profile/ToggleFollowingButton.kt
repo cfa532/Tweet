@@ -58,27 +58,27 @@ fun ToggleFollowingButton(
             .clickable(
                 enabled = !isUpdating,
                 onClick = {
-                    if (appUser.isGuest()) {
-                        appUserViewModel.viewModelScope.launch {
-                            guestWarning(context, navController)
-                        }
-                        return@clickable
+                if (appUser.isGuest()) {
+                    appUserViewModel.viewModelScope.launch {
+                        guestWarning(context, navController)
                     }
+                    return@clickable
+                }
 
                     // Optimistic update - immediately change the button state
                     val newFollowState = !followState
                     followState = newFollowState
                     isUpdating = true
 
-                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         try {
                             // Attempt the actual toggle operation
                             val result = appUserViewModel.toggleFollowingWithResult(userId, appUser.mid) { isFollowingResult ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     viewModel.toggleFollower(userId, isFollowingResult, appUser.mid)
                                     tweetFeedViewModel.updateFollowingsTweets(userId, isFollowingResult)
-                                }
-                            }
+                        }
+                    }
 
                             if (result == null) {
                                 // Operation failed, revert the optimistic update
@@ -89,7 +89,7 @@ fun ToggleFollowingButton(
                                         context.getString(R.string.follow_operation_failed), 
                                         Toast.LENGTH_SHORT
                                     ).show()
-                                }
+                }
                             } else {
                                 // Operation succeeded, show success message
                                 withContext(Dispatchers.Main) {
