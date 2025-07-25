@@ -320,7 +320,7 @@ fun TweetDetailScreen(
                     ) { comment ->
                         CommentItem(
                             comment = comment,
-                            parentTweetViewModel = null,
+                            parentTweetViewModel = viewModel,
                             parentEntry = parentEntry
                         )
                     }

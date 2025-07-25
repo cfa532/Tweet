@@ -164,6 +164,55 @@ class TweetViewModel @AssistedInject constructor(
             // Callback is kept for backward compatibility but UI updates are handled by notifications
         }
     }
+    
+    /**
+     * Delete a comment with optimistic updates for better UX
+     */
+    suspend fun deleteComment(commentId: MimeiId, comment: Tweet) {
+        try {
+            // Optimistically remove the comment from the UI immediately
+            optimisticallyRemoveComment(commentId)
+            
+            // Make the backend call
+            delComment(commentId)
+        } catch (e: Exception) {
+            // If backend call fails, revert the optimistic update
+            Timber.tag("TweetViewModel").e(e, "Error deleting comment: ${e.message}")
+            revertCommentRemoval(comment)
+            throw e // Re-throw to let UI handle the error if needed
+        }
+    }
+    
+    /**
+     * Optimistically remove a comment from the UI immediately
+     */
+    fun optimisticallyRemoveComment(commentId: MimeiId) {
+        _comments.update { currentComments ->
+            currentComments.filterNot { it.mid == commentId }
+        }
+        
+        // Update comment count
+        _tweetState.value = tweetState.value.copy(
+            commentCount = max(0, tweetState.value.commentCount - 1)
+        )
+    }
+    
+    /**
+     * Revert optimistic comment removal (add comment back to UI)
+     */
+    fun revertCommentRemoval(comment: Tweet) {
+        _comments.update { currentComments ->
+            (currentComments + comment)
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+        }
+        
+        // Restore comment count
+        _tweetState.value = tweetState.value.copy(
+            commentCount = tweetState.value.commentCount + 1
+        )
+    }
+
     // add new Comment object to its parent Tweet. The code runs on Main thread.
     fun uploadComment(
         context: Context,

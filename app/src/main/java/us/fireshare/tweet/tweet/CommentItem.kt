@@ -58,6 +58,8 @@ import us.fireshare.tweet.profile.SimpleAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
+import kotlin.math.max
+import kotlin.math.min
 
 @Composable
 fun CommentItem(
@@ -202,11 +204,14 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                         // Dismiss popup immediately for better UX
                         expanded = false
                         
-                        parentTweetViewModel?.viewModelScope?.launch(Dispatchers.IO) {
-                            try {
-                                parentTweetViewModel.delComment(comment.mid)
-                            } catch (e: Exception) {
-                                Timber.tag("CommentDropdownMenu").e(e, "Error deleting comment: ${e.message}")
+                        // Delete comment with optimistic updates
+                        parentTweetViewModel?.let { viewModel ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    viewModel.deleteComment(comment.mid, comment)
+                                } catch (e: Exception) {
+                                    Timber.tag("CommentDropdownMenu").e(e, "Error deleting comment: ${e.message}")
+                                }
                             }
                         }
                     },
