@@ -14,6 +14,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,9 +143,10 @@ fun ReplyEditorBox(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .background(
                 color = if (isExpanded) 
-                    MaterialTheme.colorScheme.surface 
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                 else 
                     Color.Transparent
             )
@@ -202,7 +204,7 @@ fun ReplyEditorBox(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-//                    .padding(8.dp)
+                    .padding(8.dp)
             ) {
                 // Header with close button
                 Row(
@@ -242,10 +244,10 @@ fun ReplyEditorBox(
                     SimpleAvatar(
                         user = appUser,
                         size = 40,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                     
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     
                     // Text field with placeholder overlay
                     Box(
@@ -334,7 +336,7 @@ fun ReplyEditorBox(
                                 imageVector = Icons.Default.PhotoCamera,
                                 contentDescription = "Take photo/video",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                         
@@ -347,7 +349,7 @@ fun ReplyEditorBox(
                                 painter = painterResource(R.drawable.ic_photo_plus),
                                 contentDescription = "Add attachment",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }

@@ -155,7 +155,7 @@ fun TweetDetailScreen(
         bottomBar = {
             Column {
                 ReplyEditorBox(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+//                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     isExpanded = isReplyBoxExpanded,
                     onExpandedChange = { isExpanded ->
                         isReplyBoxExpanded = isExpanded
