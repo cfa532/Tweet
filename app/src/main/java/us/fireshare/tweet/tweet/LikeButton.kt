@@ -54,7 +54,10 @@ suspend fun guestWarning(context: Context, navController: NavController? = null)
 }
 
 @Composable
-fun CommentButton(viewModel: TweetViewModel) {
+fun CommentButton(
+    viewModel: TweetViewModel,
+    onExpandReply: (() -> Unit)? = null
+) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember {
         derivedStateOf { tweet.commentCount }
@@ -70,9 +73,15 @@ fun CommentButton(viewModel: TweetViewModel) {
             }
             return@IconButton
         }
-        // save the current tweetViewModel in sharedViewModel
-        sharedViewModel.tweetViewModel = viewModel
-        navController.navigate(ComposeComment(tweet.mid))
+        
+        // If onExpandReply callback is provided, use it (for TweetDetailScreen)
+        if (onExpandReply != null) {
+            onExpandReply()
+        } else {
+            // Otherwise, navigate to separate compose screen (for other screens)
+            sharedViewModel.tweetViewModel = viewModel
+            navController.navigate(ComposeComment(tweet.mid))
+        }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(

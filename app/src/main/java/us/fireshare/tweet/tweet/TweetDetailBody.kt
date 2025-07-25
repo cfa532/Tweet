@@ -74,7 +74,8 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    gridColumns: Int,
+    gridColumns: Int = 1,
+    onExpandReply: (() -> Unit)? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -222,7 +223,7 @@ fun TweetDetailBody(
                         // State hoist
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        CommentButton(viewModel)
+                        CommentButton(viewModel, onExpandReply = onExpandReply)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareScreenshotButton(viewModel)

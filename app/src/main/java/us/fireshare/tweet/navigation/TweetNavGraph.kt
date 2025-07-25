@@ -115,7 +115,7 @@ fun TweetNavGraph(
                             Tweet(mid = args.tweetId, authorId = args.authorId)
                         )
                     }
-                TweetDetailScreen(viewModel, parentEntry)
+                TweetDetailScreen(args.authorId, args.tweetId, parentEntry)
             }
             composable<NavTweet.ComposeTweet> {
                 ComposeTweetScreen(navController)
@@ -268,7 +268,7 @@ fun TweetNavGraph(
                     ) { factory ->
                         factory.create(Tweet(authorId = authorId, mid = tweetId))
                     }
-                TweetDetailScreen(viewModel, parentEntry)
+                TweetDetailScreen(authorId, tweetId, parentEntry)
             }
         }
     }

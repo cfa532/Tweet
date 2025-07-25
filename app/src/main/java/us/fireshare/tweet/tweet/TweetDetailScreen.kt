@@ -55,22 +55,46 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.tweet.ReplyEditorBox
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import us.fireshare.tweet.datamodel.Tweet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweetDetailScreen(
-    viewModel: TweetViewModel,
+    authorId: String,
+    tweetId: String,
     parentEntry: NavBackStackEntry
 ) {
-    val navController = LocalNavController.current
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry, key = tweetId
+    ) { factory ->
+        factory.create(Tweet(mid = tweetId, authorId = authorId))
+    }
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
-    var gridColumns by remember { mutableIntStateOf(
-        tweet.attachments?.let{
-            if (it.size>4) 2 else 1
-        } ?: 1
-    ) }    // # of columns to display in the grid
-    var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }   // position of float action button
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+    
+    // ReplyEditorBox state management
+    var isReplyBoxExpanded by remember { mutableStateOf(false) }
+    
+    // Grid columns state for media layout
+    var gridColumns by remember { mutableStateOf(1) }
+    var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }
+    
+    // Set context for notifications
+    LaunchedEffect(Unit) {
+        viewModel.setNotificationContext(context)
+    }
+    
+    // Load comments when tweet is available
+    LaunchedEffect(tweet.mid) {
+        if (tweet.mid != null) {
+            viewModel.loadComments(tweet)
+        }
+    }
+
     fun Offset.toIntOffset(): IntOffset {
         return IntOffset(x.toInt(), y.toInt())
     }
@@ -128,16 +152,24 @@ fun TweetDetailScreen(
                 }
             },
         )},
-        bottomBar = { 
+        bottomBar = {
             Column {
                 ReplyEditorBox(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                    onReplySubmit = { replyText ->
-                        // TODO: Handle reply submission
-                        // viewModel.submitReply(replyText)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    isExpanded = isReplyBoxExpanded,
+                    onExpandedChange = { isExpanded ->
+                        isReplyBoxExpanded = isExpanded
+                    },
+                    onReplySubmit = { replyText, attachments ->
+                        if (replyText.isNotBlank() || attachments.isNotEmpty()) {
+                            viewModel.uploadComment(context, replyText, attachments)
+                        }
                     }
                 )
-                BottomNavigationBar(navController = navController, selectedIndex = 0)
+                BottomNavigationBar(
+                    navController = navController,
+                    selectedIndex = 0 // Home tab
+                )
             }
         },
         floatingActionButton = {
@@ -170,7 +202,12 @@ fun TweetDetailScreen(
                 .padding(innerPadding)
         ) {
             item {
-                TweetDetailBody(viewModel, parentEntry, gridColumns)
+                TweetDetailBody(
+                    viewModel = viewModel, 
+                    parentEntry = parentEntry, 
+                    gridColumns = gridColumns,
+                    onExpandReply = { isReplyBoxExpanded = true }
+                )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 1.dp),
                     thickness = 0.5.dp,
