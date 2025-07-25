@@ -142,9 +142,15 @@ fun ReplyEditorBox(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .background(
+                color = if (isExpanded) 
+                    MaterialTheme.colorScheme.surface 
+                else 
+                    Color.Transparent
+            )
             .shadow(
-                elevation = 4.dp,
-                ambientColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                elevation = if (isExpanded) 12.dp else 4.dp,
+                ambientColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 spotColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.05f)
             )
     ) {
@@ -154,7 +160,7 @@ fun ReplyEditorBox(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onExpandedChange(true) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // User avatar
@@ -196,7 +202,7 @@ fun ReplyEditorBox(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+//                    .padding(8.dp)
             ) {
                 // Header with close button
                 Row(
@@ -281,7 +287,7 @@ fun ReplyEditorBox(
                             .fillMaxWidth()
                             .padding(top = 8.dp)
                     ) {
-                        items(selectedAttachments.chunked(2)) { rowItems ->
+                        items(selectedAttachments.chunked(4)) { rowItems ->
                             LazyRow(
                                 modifier = Modifier
                                     .fillMaxWidth()

@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -35,7 +37,7 @@ import us.fireshare.tweet.R
 fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
     val view = LocalView.current
     val viewWidth = with(LocalDensity.current) { view.width.toDp() }.value.toInt()
-    val canvasSize = viewWidth / 2 - 20
+    val canvasSize = viewWidth / 4 - 20
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     val contentResolver = LocalContext.current.contentResolver
     var isChecked by remember { mutableStateOf(true) }
@@ -74,18 +76,25 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
             }
         }
     }
-    Box(modifier = Modifier.size(canvasSize.dp)) {
+    Box(modifier = Modifier
+        .size(canvasSize.dp)
+        .clip(RoundedCornerShape(8.dp))
+    ) {
         imageBitmap?.let {
             Image(
                 bitmap = it,
                 contentDescription = "Attached File",
-                modifier = Modifier.size(canvasSize.dp)
+                modifier = Modifier
+                    .size(canvasSize.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
         } ?: run {
             Icon(
                 painter = painterResource(id = R.drawable.ic_photo_plus),
                 contentDescription = "Attached File",
-                modifier = Modifier.size(canvasSize.dp)
+                modifier = Modifier
+                    .size(canvasSize.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
         }
         Checkbox(
