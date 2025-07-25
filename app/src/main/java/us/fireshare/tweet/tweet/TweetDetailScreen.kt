@@ -1,19 +1,30 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
@@ -28,17 +39,19 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -59,7 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import us.fireshare.tweet.datamodel.Tweet
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TweetDetailScreen(
     authorId: String,
@@ -83,31 +96,93 @@ fun TweetDetailScreen(
     var gridColumns by remember { mutableStateOf(1) }
     var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }
     
+    // Comment pagination and loading states (merged from CommentListView)
+    var isRefreshingAtTop by remember { mutableStateOf(false) }
+    var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableIntStateOf(0) }
+    var isInitialLoading by remember { mutableStateOf(true) }
+    
+    // Remember scroll position across recompositions and configuration changes
+    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
+        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+    )
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Pull-to-refresh state
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshingAtTop,
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshingAtTop = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage = 0 // Reset to page 0 for refresh
+                        viewModel.loadComments(tweet, 0)
+                    }
+                } finally {
+                    isRefreshingAtTop = false
+                }
+            }
+        }
+    )
+    
+    // Detect when at bottom for infinite scroll
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
+        }
+    }
+    
     // Set context for notifications
     LaunchedEffect(Unit) {
         viewModel.setNotificationContext(context)
     }
     
-    // Load comments when tweet is available
+    // Track scroll position changes and save them
+    LaunchedEffect(listState) {
+        snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+            .collect { position ->
+                savedScrollPosition.value = position
+            }
+    }
+    
+    // Track initial loading completion
+    LaunchedEffect(comments) {
+        if (comments.isNotEmpty() && isInitialLoading) {
+            isInitialLoading = false
+        }
+    }
+    
+    // Initial comment load when tweet is available
     LaunchedEffect(tweet.mid) {
-        if (tweet.mid != null) {
-            viewModel.loadComments(tweet)
+        if (tweet.mid != null && isInitialLoading) {
+            withContext(Dispatchers.IO) {
+                viewModel.loadComments(tweet, 0)
+            }
         }
     }
-
-    fun Offset.toIntOffset(): IntOffset {
-        return IntOffset(x.toInt(), y.toInt())
-    }
-
-    val coroutineScope = rememberCoroutineScope()
-
-    // Initial load
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            viewModel.loadComments(tweet)
-            Timber.tag("TweetDetailScreen").d(" 24tweet")
+    
+    // Infinite scroll for comments
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
+            coroutineScope.launch {
+                isRefreshingAtBottom = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        currentPage += 1 // Increment page for load more
+                        viewModel.loadComments(tweet, currentPage)
+                    }
+                } finally {
+                    isRefreshingAtBottom = false
+                }
+            }
         }
     }
+    
     // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
     LaunchedEffect(Unit) {
         delay(3000L)
@@ -123,8 +198,13 @@ fun TweetDetailScreen(
             }
         }
     }
+    
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
+    }
+
+    fun Offset.toIntOffset(): IntOffset {
+        return IntOffset(x.toInt(), y.toInt())
     }
 
     Scaffold(
@@ -192,32 +272,98 @@ fun TweetDetailScreen(
         },
         floatingActionButtonPosition = FabPosition.End
     ) { innerPadding ->
-        androidx.compose.foundation.lazy.LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
+                .pullRefresh(pullRefreshState)
         ) {
-            item {
-                TweetDetailBody(
-                    viewModel = viewModel, 
-                    parentEntry = parentEntry, 
-                    gridColumns = gridColumns,
-                    onExpandReply = { isReplyBoxExpanded = true }
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 1.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outline
-                )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(bottom = 60.dp)
+            ) {
+                // Tweet detail at the top
+                item {
+                    TweetDetailBody(
+                        viewModel = viewModel, 
+                        parentEntry = parentEntry, 
+                        gridColumns = gridColumns,
+                        onExpandReply = { isReplyBoxExpanded = true }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 1.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                
+                // Show initial loading spinner for comments
+                if (isInitialLoading) {
+                    item {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                                .size(48.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
+                } else {
+                    // Show comments when loading is complete
+                    items(
+                        items = comments,
+                        key = { it.mid }
+                    ) { comment ->
+                        CommentItem(
+                            comment = comment,
+                            parentTweetViewModel = null,
+                            parentEntry = parentEntry
+                        )
+                    }
+                    
+                    // Show top refresh spinner
+                    if (isRefreshingAtTop) {
+                        item {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 60.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                                    .size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                        }
+                    }
+                    
+                    // Show bottom pagination spinner
+                    if (isRefreshingAtBottom) {
+                        item {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                        }
+                    }
+                }
             }
-            items(comments.size) { index ->
-                val comment = comments[index]
-                CommentItem(
-                    comment = comment,
-                    parentTweetViewModel = null,
-                    parentEntry = parentEntry
-                )
-            }
+            
+            // Pull-to-refresh indicator
+            PullRefreshIndicator(
+                refreshing = isRefreshingAtTop,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
