@@ -77,14 +77,14 @@ fun ReplyEditorBox(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { isExpanded = true }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // User avatar
                 SimpleAvatar(
                     user = appUser,
                     size = 32,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(28.dp)
                 )
                 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -97,7 +97,7 @@ fun ReplyEditorBox(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             shape = RoundedCornerShape(20.dp)
                         )
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 4.dp, vertical = 8.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.post_your_reply),
@@ -119,7 +119,7 @@ fun ReplyEditorBox(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(4.dp)
             ) {
                 // Header with close button
                 Row(
@@ -169,7 +169,7 @@ fun ReplyEditorBox(
                         .weight(1f)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {

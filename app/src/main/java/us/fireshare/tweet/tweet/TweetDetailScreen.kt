@@ -131,7 +131,7 @@ fun TweetDetailScreen(
         bottomBar = { 
             Column {
                 ReplyEditorBox(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                     onReplySubmit = { replyText ->
                         // TODO: Handle reply submission
                         // viewModel.submitReply(replyText)
