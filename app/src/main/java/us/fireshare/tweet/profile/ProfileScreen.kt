@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -155,7 +156,7 @@ fun ProfileScreen(
 
 /**
  * Custom composable that combines profile details, pinned tweets, and regular tweets
- * in a single LazyColumn for unified scrolling behavior.
+ * using the proper TweetListView component for pagination.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -170,65 +171,14 @@ private fun ProfileContentWithTweetListView(
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     val user by viewModel.user.collectAsState()
     
-    // Track scroll state for the unified list
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    
-    // State to track if we've reached the end of tweets
-    var hasReachedEnd by remember { mutableStateOf(false) }
-    var isLoadingMore by remember { mutableStateOf(false) }
-    var lastLoadedPage by remember { mutableStateOf(-1) }
-    
-    // Initialize pagination state when user changes
-    LaunchedEffect(user.mid) {
-        hasReachedEnd = false
-        isLoadingMore = false
-        lastLoadedPage = -1
-        Timber.tag("ProfileScreen").d("Reset pagination state for user: ${user.mid}")
-    }
-    
-    // Initialize lastLoadedPage when tweets are first loaded
-    LaunchedEffect(tweets.size) {
-        if (tweets.isNotEmpty() && lastLoadedPage == -1) {
-            lastLoadedPage = 0
-            Timber.tag("ProfileScreen").d("Initialized lastLoadedPage to 0, tweets count: ${tweets.size}")
-        }
-    }
-    
-    // Monitor scroll state changes
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }.collect { isScrolling ->
-            val firstVisibleItem = listState.firstVisibleItemIndex
-            val scrollOffset = listState.firstVisibleItemScrollOffset
-            
-            // Determine scroll direction based on previous state
-            val direction = when {
-                isScrolling -> {
-                    // You can add more sophisticated direction detection here if needed
-                    ScrollDirection.DOWN // Simplified for now
-                }
-                else -> ScrollDirection.NONE
-            }
-            
-            onScrollStateChange(ScrollState(isScrolling, direction))
-        }
-    }
-    
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(bottom = 60.dp)
-    ) {
-        // Profile details section
-        item {
+    // Create header content with profile details and pinned tweets
+    val headerContent: @Composable () -> Unit = {
+        Column {
+            // Profile details section
             ProfileDetail(viewModel, navController)
-        }
-        
-        // Pinned tweets section
-        if (pinnedTweets.isNotEmpty()) {
-            item {
+            
+            // Pinned tweets section (if any)
+            if (pinnedTweets.isNotEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     tonalElevation = 100.dp,
@@ -243,11 +193,11 @@ private fun ProfileContentWithTweetListView(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-            }
-            items(pinnedTweets, key = { it.timestamp }) { tweet ->
-                TweetItem(tweet, parentEntry)
-            }
-            item {
+                
+                pinnedTweets.forEach { tweet ->
+                    TweetItem(tweet, parentEntry)
+                }
+                
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 2.dp),
                     thickness = 2.dp,
@@ -255,73 +205,24 @@ private fun ProfileContentWithTweetListView(
                 )
             }
         }
-        
-        // Regular tweets section - directly as items, not nested LazyColumn
-        items(tweets, key = { it.mid }) { tweet ->
-            TweetItem(tweet, parentEntry)
-        }
-        
-        // Loading indicator for pagination
-        item {
-            if (tweets.isNotEmpty() && isLoadingMore && !hasReachedEnd) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
     }
     
-    // Handle pagination when reaching the end
-    LaunchedEffect(listState) {
-        snapshotFlow { 
-            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            val totalItems = listState.layoutInfo.totalItemsCount
-            
-            lastVisibleItem?.let { lastItem ->
-                lastItem.index >= totalItems - 3 // Load more when 3 items from end
-            } ?: false
-        }.collect { shouldLoadMore ->
-            if (shouldLoadMore && !hasReachedEnd && !isLoadingMore) {
-                isLoadingMore = true
-                val nextPage = lastLoadedPage + 1
-                
-                // Load more tweets
-                coroutineScope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val currentTweetCount = tweets.size
-                            val tweetsWithNulls = viewModel.fetchTweets(nextPage)
-                            
-                            // Check if we actually got new tweets after the fetch
-                            val newTweetCount = tweets.size
-                            val tweetsAdded = newTweetCount - currentTweetCount
-                            
-                            Timber.tag("ProfileScreen").d("Page $nextPage: received ${tweetsWithNulls.size} tweets from server, added $tweetsAdded new tweets to UI")
-                            
-                            // Check if we've reached the end (received fewer tweets than page size OR no new tweets added)
-                            if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE || tweetsAdded == 0) {
-                                hasReachedEnd = true
-                                Timber.tag("ProfileScreen").d("Reached end of tweets at page $nextPage: server returned ${tweetsWithNulls.size} tweets, added $tweetsAdded new tweets")
-                            } else {
-                                lastLoadedPage = nextPage
-                                Timber.tag("ProfileScreen").d("Successfully loaded page $nextPage, lastLoadedPage updated to $lastLoadedPage")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("ProfileScreen").e(e, "Error loading more tweets")
-                        } finally {
-                            isLoadingMore = false
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Use TweetListView with header content for unified scrolling
+    us.fireshare.tweet.tweet.TweetListView(
+        tweets = tweets,
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
+        },
+        modifier = Modifier.fillMaxSize(),
+        scrollBehavior = scrollBehavior,
+        contentPadding = PaddingValues(bottom = 60.dp),
+        showPrivateTweets = true, // Show private tweets in profile
+        parentEntry = parentEntry,
+        onScrollStateChange = onScrollStateChange,
+        currentUserId = user.mid,
+        onTweetUnavailable = { tweetId ->
+            viewModel.removeTweetFromAllLists(tweetId)
+        },
+        headerContent = headerContent
+    )
 }
