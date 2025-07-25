@@ -60,6 +60,7 @@
     <string name="login_error">Wrong username or password</string>
     <string name="comment_failed">Comment failed</string>
     <string name="comment_uploaded">Comment posted successfully</string>
+    <string name="comment_delete_failed">Comment deletion failed. Please try again.</string>
     <string name="confirm_pwd">Please confirm password</string>
     <string name="use_current_pswd">Keep current password</string>
     <string name="user_bookmarks">Bookmarks</string>

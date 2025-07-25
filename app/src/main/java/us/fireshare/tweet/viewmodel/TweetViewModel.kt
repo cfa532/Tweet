@@ -374,7 +374,7 @@ class TweetViewModel @AssistedInject constructor(
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_LONG).show()
                                 }
                             }
                             Timber.tag("TweetViewModel").e("Comment upload failed: ${event.error}")

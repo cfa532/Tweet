@@ -479,7 +479,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_LONG).show()
                                 }
                             }
                             Timber.tag("TweetFeedViewModel").e("Tweet upload failed: ${event.error}")
@@ -516,7 +516,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_LONG).show()
                                 }
                             }
                             Timber.tag("TweetFeedViewModel").e("Comment upload failed: ${event.error}")

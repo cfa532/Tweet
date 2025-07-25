@@ -60,6 +60,8 @@ import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 import kotlin.math.max
 import kotlin.math.min
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun CommentItem(
@@ -170,6 +172,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     // Use comment.mid as key to ensure state is reset when comment changes
     var expanded by remember(comment.mid) { mutableStateOf(false) }
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState() ?: remember { mutableStateOf(null) }
+    val context = LocalContext.current
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
     LaunchedEffect(comment.mid) {
@@ -211,6 +214,14 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                                     viewModel.deleteComment(comment.mid, comment)
                                 } catch (e: Exception) {
                                     Timber.tag("CommentDropdownMenu").e(e, "Error deleting comment: ${e.message}")
+                                    // Show toast message on main thread
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(
+                                            context, 
+                                            context.getString(R.string.comment_delete_failed), 
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
                                 }
                             }
                         }
