@@ -22,6 +22,11 @@ object VideoManager {
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
     
+    // Sequential playback management
+    private val videoPlaylist = mutableListOf<MimeiId>()
+    private var currentPlaylistIndex = -1
+    private var isSequentialPlaybackEnabled = false
+    
     /**
      * Get or create an ExoPlayer instance for a video
      * @param context Android context
@@ -247,6 +252,85 @@ object VideoManager {
     fun getCacheStats(): String {
         return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}"
     }
+    
+    /**
+     * Set up sequential playback for a list of videos
+     * @param videoMids List of video MIDs to play in sequence
+     */
+    fun setupSequentialPlayback(videoMids: List<MimeiId>) {
+        videoPlaylist.clear()
+        videoPlaylist.addAll(videoMids)
+        currentPlaylistIndex = if (videoMids.isNotEmpty()) 0 else -1
+        isSequentialPlaybackEnabled = videoMids.isNotEmpty()
+        
+        Timber.d("VideoManager - Sequential playback setup: ${videoMids.size} videos")
+        Timber.d("VideoManager - Playlist: $videoMids")
+        
+        // Start playing the first video if available
+        if (currentPlaylistIndex >= 0) {
+            val firstVideo = videoPlaylist[currentPlaylistIndex]
+            videoPlayers[firstVideo]?.let { player ->
+                player.playWhenReady = true
+                Timber.d("VideoManager - Started sequential playback with video: $firstVideo")
+            }
+        }
+    }
+    
+    /**
+     * Stop sequential playback
+     */
+    fun stopSequentialPlayback() {
+        isSequentialPlaybackEnabled = false
+        currentPlaylistIndex = -1
+        videoPlaylist.clear()
+        pauseAllVideos()
+        Timber.d("VideoManager - Sequential playback stopped")
+    }
+    
+    /**
+     * Handle video completion for sequential playback
+     * @param completedVideoMid The video that just finished
+     */
+    fun onVideoCompleted(completedVideoMid: MimeiId) {
+        if (!isSequentialPlaybackEnabled || videoPlaylist.isEmpty()) {
+            return
+        }
+        
+        // Find the completed video in the playlist
+        val completedIndex = videoPlaylist.indexOf(completedVideoMid)
+        if (completedIndex == -1 || completedIndex != currentPlaylistIndex) {
+            return
+        }
+        
+        // Move to next video
+        currentPlaylistIndex++
+        if (currentPlaylistIndex < videoPlaylist.size) {
+            val nextVideo = videoPlaylist[currentPlaylistIndex]
+            videoPlayers[nextVideo]?.let { player ->
+                player.playWhenReady = true
+                Timber.d("VideoManager - Sequential playback: moving to next video: $nextVideo")
+            }
+        } else {
+            // Playlist completed
+            Timber.d("VideoManager - Sequential playback completed")
+            stopSequentialPlayback()
+        }
+    }
+    
+    /**
+     * Check if sequential playback is enabled
+     */
+    fun isSequentialPlaybackEnabled(): Boolean = isSequentialPlaybackEnabled
+    
+    /**
+     * Get current playlist index
+     */
+    fun getCurrentPlaylistIndex(): Int = currentPlaylistIndex
+    
+    /**
+     * Get current playlist
+     */
+    fun getCurrentPlaylist(): List<MimeiId> = videoPlaylist.toList()
     
     /**
      * Clean up unused video players (optional - for memory management)

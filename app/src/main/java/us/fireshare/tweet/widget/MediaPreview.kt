@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -109,11 +111,36 @@ fun MediaPreviewGrid(
         return 1.618f
     }
 
-    // Track which video should autoplay (first video in the grid)
+    // Track which video should autoplay (only the first video in the grid)
     val firstVideoIndex = remember {
         limitedMediaList.indexOfFirst { 
             inferMediaTypeFromAttachment(it) == MediaType.Video
         }.takeIf { it >= 0 } ?: -1
+    }
+    
+    // Set up sequential playback for multiple videos
+    val videoMids = remember {
+        limitedMediaList.mapIndexedNotNull { index, item ->
+            if (inferMediaTypeFromAttachment(item) == MediaType.Video) item.mid else null
+        }
+    }
+    
+    LaunchedEffect(videoMids) {
+        if (videoMids.size > 1) {
+            Timber.d("MediaPreviewGrid - Setting up sequential playback for ${videoMids.size} videos")
+            VideoManager.setupSequentialPlayback(videoMids)
+        } else if (videoMids.size == 1) {
+            // Single video - no sequential playback needed
+            VideoManager.stopSequentialPlayback()
+        }
+    }
+    
+    // Clean up sequential playback when component is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            Timber.d("MediaPreviewGrid - Disposing, stopping sequential playback")
+            VideoManager.stopSequentialPlayback()
+        }
     }
 
     Box(
@@ -136,6 +163,7 @@ fun MediaPreviewGrid(
                         .fillMaxWidth()
                         .aspectRatio(aspectRatio)
                         .heightIn(max = 500.dp) // Add height constraint to prevent overflow
+                        .clipToBounds()
                         .clickable {
                             val params = MediaViewerParams(
                                 mediaItems.map {
@@ -175,10 +203,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = idx,
                                     autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
@@ -200,10 +231,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = idx,
                                     autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
@@ -226,10 +260,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = 0,
                                     autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
@@ -240,10 +277,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .weight(2f)
                                     .fillMaxHeight()
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = 1,
                                     autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
@@ -256,10 +296,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .weight(2f)
                                     .fillMaxHeight()
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = 0,
                                     autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
@@ -270,10 +313,13 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
+                                    .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .heightIn(max = 250.dp), // Limit height to prevent overflow
                                     index = 1,
                                     autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
@@ -309,10 +355,13 @@ fun MediaPreviewGrid(
                             modifier = Modifier
                                 .weight(goldenRatio)
                                 .fillMaxHeight()
+                                .clipToBounds()
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .heightIn(max = 250.dp), // Limit height to prevent overflow
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
@@ -329,10 +378,13 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f)
+                                        .clipToBounds()
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .heightIn(max = 250.dp), // Limit height to prevent overflow
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
@@ -355,10 +407,13 @@ fun MediaPreviewGrid(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(goldenRatio)
+                                .clipToBounds()
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .heightIn(max = 250.dp), // Limit height to prevent overflow
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
@@ -377,10 +432,13 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
+                                        .clipToBounds()
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .heightIn(max = 250.dp), // Limit height to prevent overflow
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
@@ -403,10 +461,13 @@ fun MediaPreviewGrid(
                             modifier = Modifier
                                 .weight(goldenRatio)
                                 .fillMaxHeight()
+                                .clipToBounds()
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .heightIn(max = 250.dp), // Limit height to prevent overflow
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
@@ -423,10 +484,13 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f)
+                                        .clipToBounds()
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .heightIn(max = 250.dp), // Limit height to prevent overflow
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
@@ -449,10 +513,13 @@ fun MediaPreviewGrid(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(goldenRatio)
+                                .clipToBounds()
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .heightIn(max = 250.dp), // Limit height to prevent overflow
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
@@ -471,10 +538,13 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
+                                        .clipToBounds()
                                 ) {
                                     MediaItemView(
                                         limitedMediaList,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .heightIn(max = 250.dp), // Limit height to prevent overflow
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
@@ -502,6 +572,8 @@ fun MediaPreviewGrid(
                             limitedMediaList,
                             modifier = Modifier
                                 .aspectRatio(1f)
+                                .clipToBounds()
+                                .heightIn(max = 250.dp) // Limit height to prevent overflow
                                 .clickable {
                                     val params = MediaViewerParams(
                                         mediaItems.map {
@@ -570,17 +642,21 @@ fun MediaItemView(
     }
 
     Box(
-        modifier = modifier.background(Color.Gray.copy(alpha = 0.1f)),
+        modifier = modifier
+            .background(Color.Gray.copy(alpha = 0.1f))
+            .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
         when (attachment.type) {
             MediaType.Image -> {
                 // Use a Box with clickable modifier to handle image clicks
                 Box(
-                    modifier = modifier.clickable { 
-                        Timber.d("MediaPreview - Image clicked at index: $index")
-                        goto(index) 
-                    }
+                    modifier = modifier
+                        .clipToBounds()
+                        .clickable { 
+                            Timber.d("MediaPreview - Image clicked at index: $index")
+                            goto(index) 
+                        }
                 ) {
                     ImageViewer(
                         attachment.url, 

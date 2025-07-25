@@ -147,6 +147,20 @@ fun VideoPreview(
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
+    
+    // Add listener for video completion to handle sequential playback
+    LaunchedEffect(exoPlayer) {
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                    Timber.d("VideoPreview - Video completed: $videoMid")
+                    videoMid?.let { mid ->
+                        VideoManager.onVideoCompleted(mid)
+                    }
+                }
+            }
+        })
+    }
 
     // When previewing a single video, limit its height to show more content.
 //    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
