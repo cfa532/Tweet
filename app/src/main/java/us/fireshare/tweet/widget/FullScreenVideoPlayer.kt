@@ -39,6 +39,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 
 @OptIn(UnstableApi::class)
@@ -59,12 +60,25 @@ fun FullScreenVideoPlayer(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
-    // Get the existing player from VideoManager
+    // Create a dedicated fullscreen player instance
     val exoPlayer = remember(videoMid) {
-        Timber.d("FullScreenVideoPlayer - Getting ExoPlayer from VideoManager for video: $videoMid")
-        val player = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
-        Timber.d("FullScreenVideoPlayer - Player obtained: ${player != null}")
-        Timber.d("FullScreenVideoPlayer - Player state: ${player.playbackState}, isPlaying: ${player.isPlaying}")
+        Timber.d("FullScreenVideoPlayer - Creating dedicated fullscreen player for video: $videoMid")
+        
+        // Get current position from existing player if available
+        val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
+        val currentPosition = existingPlayer?.currentPosition ?: 0L
+        Timber.d("FullScreenVideoPlayer - Current position from existing player: ${currentPosition}ms")
+        
+        // Create new player for fullscreen
+        val player = createExoPlayer(context, videoUrl, MediaType.Video)
+        
+        // Seek to current position
+        if (currentPosition > 0) {
+            player.seekTo(currentPosition)
+            Timber.d("FullScreenVideoPlayer - Seeking to position: ${currentPosition}ms")
+        }
+        
+        Timber.d("FullScreenVideoPlayer - Fullscreen player created: ${player != null}")
         player
     }
 
@@ -72,15 +86,14 @@ fun FullScreenVideoPlayer(
     LaunchedEffect(exoPlayer) {
         Timber.d("FullScreenVideoPlayer - Starting autoplay for video: $videoMid, autoPlay: $autoPlay")
         Timber.d("FullScreenVideoPlayer - Video URL: $videoUrl")
-        // Mark video as active in VideoManager
-        VideoManager.markVideoActive(videoMid)
+        
         if (autoPlay) {
-            // Ensure immediate playback start
-            exoPlayer.playWhenReady = true
-            // Force play immediately
-            exoPlayer.play()
-            // Set volume to ensure audio is heard
+            // Set volume and prepare for playback
             exoPlayer.volume = 1f
+            exoPlayer.playWhenReady = true
+            
+            // Start playback immediately
+            exoPlayer.play()
             Timber.d("FullScreenVideoPlayer - Auto-playback started for video: $videoMid")
         } else {
             exoPlayer.playWhenReady = false
@@ -135,11 +148,12 @@ fun FullScreenVideoPlayer(
             }
         }
         onDispose {
-            // Mute video and restore system bars on exit
-            exoPlayer.volume = 0f
-            Timber.d("FullScreenVideoPlayer - Muted video on exit")
-            // Mark video as inactive in VideoManager
-            VideoManager.markVideoInactive(videoMid)
+            // Clean up the dedicated fullscreen player
+            Timber.d("FullScreenVideoPlayer - Cleaning up fullscreen player for video: $videoMid")
+            exoPlayer.stop()
+            exoPlayer.release()
+            
+            // Restore system bars on exit
             if (enableImmersiveMode && activity != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     activity.window.insetsController?.show(WindowInsets.Type.systemBars())
