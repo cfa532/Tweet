@@ -306,22 +306,29 @@ fun TweetItem(
                             var isLoadingOriginal by remember { mutableStateOf(true) }
 
                             LaunchedEffect(tweet.originalTweetId) {
-                                withContext(IO) {
-                                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                        // Use fetchTweet to get the original tweet from cache or network
-                                        Timber.tag("TweetItem").d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
-                                        originalTweet = HproseInstance.fetchTweet(
-                                            tweet.originalTweetId!!,
-                                            tweet.originalAuthorId!!,
-                                            shouldCache = true
-                                        )
-                                        if (originalTweet != null) {
-                                            Timber.tag("TweetItem").d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
-                                        } else {
-                                            Timber.tag("TweetItem").w("Quoted original tweet not found: ${tweet.originalTweetId}")
+                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                    try {
+                                        withContext(IO) {
+                                            // Use fetchTweet to get the original tweet from cache or network
+                                            Timber.tag("TweetItem").d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
+                                            originalTweet = HproseInstance.fetchTweet(
+                                                tweet.originalTweetId!!,
+                                                tweet.originalAuthorId!!,
+                                                shouldCache = true
+                                            )
+                                            if (originalTweet != null) {
+                                                Timber.tag("TweetItem").d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
+                                            } else {
+                                                Timber.tag("TweetItem").w("Quoted original tweet not found: ${tweet.originalTweetId}")
+                                            }
                                         }
+                                    } catch (e: Exception) {
+                                        Timber.tag("TweetItem").e(e, "Error loading original tweet: ${tweet.originalTweetId}")
+                                    } finally {
                                         isLoadingOriginal = false
                                     }
+                                } else {
+                                    isLoadingOriginal = false
                                 }
                             }
                             

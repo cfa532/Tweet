@@ -189,6 +189,8 @@ object VideoManager {
         
         videoPlayers.remove(videoMid)?.let { player ->
             try {
+                // Stop playback before releasing
+                player.stop()
                 player.release()
                 activeVideos.remove(videoMid)
                 Timber.d("VideoManager - Released video: $videoMid")
@@ -211,6 +213,8 @@ object VideoManager {
         
         videoPlayers.values.forEach { player ->
             try {
+                // Stop playback before releasing
+                player.stop()
                 player.release()
             } catch (e: Exception) {
                 Timber.e("VideoManager - Error releasing player: $e")
@@ -350,6 +354,34 @@ object VideoManager {
         }
         if (unusedVideos.isNotEmpty()) {
             Timber.d("VideoManager - Cleaned up ${unusedVideos.size} unused videos")
+        }
+    }
+    
+    /**
+     * Limit the number of cached videos to prevent memory issues
+     * Note: This method must be called on the main thread
+     */
+    fun limitCachedVideos(maxCached: Int = 8) {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - limitCachedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.limitCachedVideos() must be called on the main thread")
+        }
+        
+        if (videoPlayers.size <= maxCached) {
+            return
+        }
+        
+        // Keep active videos, remove oldest inactive ones
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        val videosToRemove = inactiveVideos.take(videoPlayers.size - maxCached)
+        
+        videosToRemove.forEach { videoMid ->
+            releaseVideo(videoMid)
+        }
+        
+        if (videosToRemove.isNotEmpty()) {
+            Timber.d("VideoManager - Limited cached videos to $maxCached, removed ${videosToRemove.size} videos")
         }
     }
 } 

@@ -103,32 +103,53 @@ fun TweetListView(
             lastLoadedPage = -1 // Reset last loaded page
             serverDepleted = false // Reset server depleted flag for new user
             
-            // Initialize with enough data (at least 4 tweets)
+            // Initialize with enough data (at least 4 tweets) - with timeout protection
             var enoughTweets = false
             var localServerDepleted = false
             var pageToLoad = 0
+            val startTime = System.currentTimeMillis()
+            val maxInitializationTime = 10000L // 10 seconds timeout
             
-            while (!enoughTweets && !localServerDepleted) {
-                val tweetsWithNulls = fetchTweets(pageToLoad)
+            while (!enoughTweets && !localServerDepleted && 
+                   (System.currentTimeMillis() - startTime) < maxInitializationTime) {
                 
-                // Only increment lastLoadedPage if we got a full page of results
-                if (tweetsWithNulls.size >= TW_CONST.PAGE_SIZE) {
-                    lastLoadedPage = pageToLoad
-                } else {
-                    // Server is depleted (returned fewer tweets than expected)
+                try {
+                    val tweetsWithNulls = fetchTweets(pageToLoad)
+                    
+                    // Only increment lastLoadedPage if we got a full page of results
+                    if (tweetsWithNulls.size >= TW_CONST.PAGE_SIZE) {
+                        lastLoadedPage = pageToLoad
+                    } else {
+                        // Server is depleted (returned fewer tweets than expected)
+                        localServerDepleted = true
+                        serverDepleted = true // Update the shared flag
+                        lastLoadedPage = pageToLoad // This is the last page we can load
+                        Timber.tag("TweetListView").d("Server depleted at page $pageToLoad, returned ${tweetsWithNulls.size} tweets")
+                    }
+                    
+                    // Check if we have enough tweets
+                    enoughTweets = tweets.size >= MINMIMUM_TWEET_COUNT
+                    
+                    // Move to next page for next iteration
+                    pageToLoad++
+                    
+                    Timber.tag("TweetListView").d("Page $pageToLoad: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
+                    
+                    // Add small delay to prevent overwhelming the main thread
+                    if (pageToLoad > 0) {
+                        delay(100)
+                    }
+                    
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Error during initialization at page $pageToLoad")
                     localServerDepleted = true
-                    serverDepleted = true // Update the shared flag
-                    lastLoadedPage = pageToLoad // This is the last page we can load
-                    Timber.tag("TweetListView").d("Server depleted at page $pageToLoad, returned ${tweetsWithNulls.size} tweets")
+                    serverDepleted = true
+                    break
                 }
-                
-                // Check if we have enough tweets
-                enoughTweets = tweets.size >= MINMIMUM_TWEET_COUNT
-                
-                // Move to next page for next iteration
-                pageToLoad++
-                
-                Timber.tag("TweetListView").d("Page $pageToLoad: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
+            }
+            
+            if ((System.currentTimeMillis() - startTime) >= maxInitializationTime) {
+                Timber.tag("TweetListView").w("Initialization timed out after ${maxInitializationTime}ms")
             }
             
             Timber.tag("TweetListView").d("Initialization completed: total tweets: ${tweets.size}, server depleted: $localServerDepleted, lastLoadedPage: $lastLoadedPage")

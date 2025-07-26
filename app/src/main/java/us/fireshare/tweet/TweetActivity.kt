@@ -48,6 +48,7 @@ import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NetworkCheckJobService
 import us.fireshare.tweet.service.ObserveAsEvents
 
+import us.fireshare.tweet.performance.PerformanceOptimizer
 import us.fireshare.tweet.ui.theme.TweetTheme
 import java.util.concurrent.TimeUnit
 
@@ -66,6 +67,10 @@ class TweetActivity : ComponentActivity() {
                 !activityViewModel.isAppReady.value
             }
         }
+        
+        // Start performance monitoring
+        PerformanceOptimizer.startMonitoring(this)
+        
         initJob = CoroutineScope(IO).async {
             HproseInstance.init(this@TweetActivity)
         }
@@ -90,6 +95,12 @@ class TweetActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop performance monitoring
+        PerformanceOptimizer.stopMonitoring()
     }
 
 
