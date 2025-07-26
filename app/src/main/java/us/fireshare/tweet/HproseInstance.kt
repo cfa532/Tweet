@@ -44,6 +44,8 @@ import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import us.fireshare.tweet.datamodel.BlacklistedMid
+import us.fireshare.tweet.datamodel.BlacklistedMidDao
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -55,6 +57,65 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
+    lateinit var blacklistedMidDao: BlacklistedMidDao
+
+    /**
+     * Helper function to get the root cause of an exception
+     * Useful for unwrapping UndeclaredThrowableException and other wrapper exceptions
+     */
+    private fun getRootCause(throwable: Throwable): Throwable {
+        var cause = throwable
+        while (cause.cause != null && cause.cause != cause) {
+            cause = cause.cause!!
+        }
+        return cause
+    }
+
+    /**
+     * Helper function to determine if an exception indicates a resource not found error
+     * This helps identify when to add a resource to the blacklist
+     */
+    private fun isResourceNotFoundError(throwable: Throwable): Boolean {
+        val message = throwable.message?.lowercase() ?: ""
+        val className = throwable.javaClass.simpleName.lowercase()
+        
+        // Check for common "not found" indicators
+        return message.contains("not found") ||
+               message.contains("404") ||
+               message.contains("user not found") ||
+               message.contains("tweet not found") ||
+               message.contains("resource not found") ||
+               message.contains("does not exist") ||
+               className.contains("notfound") ||
+               className.contains("filenotfound")
+    }
+
+    /**
+     * Helper function to check if a mid should be blocked (has been unavailable for 3+ days)
+     */
+    private suspend fun shouldBlockMid(mid: String): Boolean {
+        val entry = blacklistedMidDao.get(mid)
+        if (entry == null) return false
+        
+        val now = System.currentTimeMillis()
+        val threeDaysMillis = 3 * 24 * 60 * 60 * 1000L
+        return now - entry.firstDetected >= threeDaysMillis
+    }
+
+    /**
+     * Helper function to add or update a mid in the blacklist
+     */
+    private suspend fun addToBlacklist(mid: String) {
+        val now = System.currentTimeMillis()
+        val existing = blacklistedMidDao.get(mid)
+        if (existing == null) {
+            blacklistedMidDao.insert(BlacklistedMid(mid, now, now))
+            Timber.tag("Blacklist").d("Added $mid to blacklist")
+        } else {
+            blacklistedMidDao.insert(existing.copy(lastChecked = now))
+            Timber.tag("Blacklist").d("Updated $mid in blacklist")
+        }
+    }
 
     suspend fun init(context: Context) {
         HproseClassManager.register(Tweet::class.java, "Tweet")
@@ -64,6 +125,7 @@ object HproseInstance {
         chatDatabase = ChatDatabase.getInstance(context)
         val tweetCache = TweetCacheDatabase.getInstance(context)
         dao = tweetCache.tweetDao()
+        blacklistedMidDao = tweetCache.blacklistedMidDao()
 
         appUser = User(
             mid = TW_CONST.GUEST_ID,
@@ -515,10 +577,15 @@ object HproseInstance {
                 }
             } ?: emptyList()
         } catch (e: Exception) {
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
             Timber.tag("getTweetFeed").e("Error fetching tweet feed: $e")
+            Timber.tag("getTweetFeed").e("Root cause: $rootCause")
+            Timber.tag("getTweetFeed").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("getTweetFeed").e("Stack trace: ${e.stackTraceToString()}")
             
             // Post notification for network/exception errors
-            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${e.message}"))
+            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${rootCause.message ?: e.message}"))
             
             emptyList()
         }
@@ -604,7 +671,14 @@ object HproseInstance {
 
             return result
         } catch (e: Exception) {
-            Timber.tag("getTweetsByUser").e(e, "Error fetching tweets for user: ${user.mid}")
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("getTweetsByUser").e("Error fetching tweets for user: ${user.mid}")
+            Timber.tag("getTweetsByUser").e("Exception: $e")
+            Timber.tag("getTweetsByUser").e("Root cause: $rootCause")
+            Timber.tag("getTweetsByUser").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("getTweetsByUser").e("Root cause type: ${rootCause.javaClass.simpleName}")
+            Timber.tag("getTweetsByUser").e("Stack trace: ${e.stackTraceToString()}")
             
             // Post notification for network/exception errors
             TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${e.message}"))
@@ -623,6 +697,12 @@ object HproseInstance {
         authorId: MimeiId,
         shouldCache: Boolean = true
     ): Tweet? {
+        // Check if tweet should be blocked (unavailable for 3+ days)
+        if (shouldBlockMid(tweetId)) {
+            Timber.tag("fetchTweet").d("Tweet $tweetId has been unavailable for 3+ days, returning null")
+            return null
+        }
+
         return try {
             // Check cache first using TweetCacheManager
             val author = getUser(authorId)
@@ -651,7 +731,17 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("fetchTweet").e("$tweetId $authorId $e")
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("fetchTweet").e("Error fetching tweet: $tweetId, author: $authorId")
+            Timber.tag("fetchTweet").e("Exception: $e")
+            Timber.tag("fetchTweet").e("Root cause: $rootCause")
+            
+            // Add tweet to blacklist if it's a "not found" type error
+            if (isResourceNotFoundError(rootCause)) {
+                addToBlacklist(tweetId)
+            }
+            
             null
         }
     }
@@ -672,14 +762,20 @@ object HproseInstance {
         tweetId: MimeiId?,
         authorId: MimeiId?
     ): Tweet? {
-        return try {
-            // Check for null parameters
-            if (tweetId == null || authorId == null) {
-                Timber.tag("refreshTweet")
-                    .w("Null parameters: tweetId=$tweetId, authorId=$authorId")
-                return null
-            }
+        // Check for null parameters
+        if (tweetId == null || authorId == null) {
+            Timber.tag("refreshTweet")
+                .w("Null parameters: tweetId=$tweetId, authorId=$authorId")
+            return null
+        }
 
+        // Check if tweet should be blocked (unavailable for 3+ days)
+        if (shouldBlockMid(tweetId)) {
+            Timber.tag("refreshTweet").d("Tweet $tweetId has been unavailable for 3+ days, returning null")
+            return null
+        }
+
+        return try {
             val author = getUser(authorId) ?: return null
             val entry = "refresh_tweet"
             val params = mapOf(
@@ -696,7 +792,17 @@ object HproseInstance {
                 tweet
             }
         } catch (e: Exception) {
-            Timber.tag("refreshTweet").e("$tweetId $authorId $e")
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("refreshTweet").e("Error refreshing tweet: $tweetId, author: $authorId")
+            Timber.tag("refreshTweet").e("Exception: $e")
+            Timber.tag("refreshTweet").e("Root cause: $rootCause")
+            
+            // Add tweet to blacklist if it's a "not found" type error
+            if (isResourceNotFoundError(rootCause)) {
+                addToBlacklist(tweetId)
+            }
+            
             null
         }
     }
@@ -1175,6 +1281,12 @@ object HproseInstance {
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
     suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
+        // Step 0: Check if user should be blocked (unavailable for 3+ days)
+        if (shouldBlockMid(userId)) {
+            Timber.tag("getUser").d("User $userId has been unavailable for 3+ days, returning null")
+            return null
+        }
+
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null) {
@@ -1232,7 +1344,20 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("updateUserFromServer").e("$e ${user.mid}")
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("updateUserFromServer").e("Error updating user from server: ${user.mid}")
+            Timber.tag("updateUserFromServer").e("Exception: $e")
+            Timber.tag("updateUserFromServer").e("Root cause: $rootCause")
+            Timber.tag("updateUserFromServer").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("updateUserFromServer").e("Root cause type: ${rootCause.javaClass.simpleName}")
+            Timber.tag("updateUserFromServer").e("Stack trace: ${e.stackTraceToString()}")
+            
+            // Add user to blacklist if it's a "not found" type error
+            if (isResourceNotFoundError(rootCause)) {
+                addToBlacklist(user.mid)
+            }
+            
             // it is possible user's node has changed its IP. Try to fetch user data from another node.
             initAppEntry()
         }
@@ -1251,7 +1376,13 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("$e $userId")
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("getProviderIP").e("Error getting provider IP for user: $userId")
+            Timber.tag("getProviderIP").e("Exception: $e")
+            Timber.tag("getProviderIP").e("Root cause: $rootCause")
+            Timber.tag("getProviderIP").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("getProviderIP").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
@@ -1270,7 +1401,13 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<Boolean>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("togglePinnedTweet").e(e)
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId")
+            Timber.tag("togglePinnedTweet").e("Exception: $e")
+            Timber.tag("togglePinnedTweet").e("Root cause: $rootCause")
+            Timber.tag("togglePinnedTweet").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("togglePinnedTweet").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
@@ -1291,7 +1428,13 @@ object HproseInstance {
             val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
             response
         } catch (e: Exception) {
-            Timber.tag("getPinnedList").e(e)
+            // Get the root cause of the exception
+            val rootCause = getRootCause(e)
+            Timber.tag("getPinnedList").e("Error getting pinned tweets for user: ${user.mid}")
+            Timber.tag("getPinnedList").e("Exception: $e")
+            Timber.tag("getPinnedList").e("Root cause: $rootCause")
+            Timber.tag("getPinnedList").e("Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("getPinnedList").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
