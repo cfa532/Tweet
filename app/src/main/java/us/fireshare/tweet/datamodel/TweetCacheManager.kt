@@ -3,6 +3,8 @@ package us.fireshare.tweet.datamodel
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * TweetCacheManager handles tweet and user caching with expiration management.
@@ -359,8 +361,8 @@ object TweetCacheManager {
     /**
      * Get cache statistics
      */
-    fun getCacheStats(): CacheStats {
-        return try {
+    suspend fun getCacheStats(): CacheStats = withContext(Dispatchers.IO) {
+        return@withContext try {
             synchronized(cacheLock) {
                 val dbTweets = HproseInstance.dao.getCachedTweets(0, Int.MAX_VALUE)
                 

@@ -42,6 +42,8 @@ import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -699,19 +701,19 @@ object HproseInstance {
         }
     }
 
-    fun loadCachedTweets(
+    suspend fun loadCachedTweets(
         startRank: Int,  // earlier in time, therefore smaller timestamp
         count: Int,
-    ): List<Tweet> {
-        try {
-            return dao.getCachedTweets(startRank, count).map {
+    ): List<Tweet> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            dao.getCachedTweets(startRank, count).map {
                 // cached tweet is full object.
                 it.originalTweet
             }
         } catch (e: Exception) {
             Timber.tag("loadCachedTweets").e("$e")
+            emptyList()
         }
-        return emptyList()
     }
 
     /**
@@ -1617,8 +1619,8 @@ object HproseInstance {
         return null
     }
 
-    fun getImageAspectRatio(context: Context, uri: Uri): Float? {
-        return try {
+    suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? = withContext(Dispatchers.IO) {
+        return@withContext try {
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, options)

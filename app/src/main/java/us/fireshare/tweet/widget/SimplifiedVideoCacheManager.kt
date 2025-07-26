@@ -257,9 +257,9 @@ object SimplifiedVideoCacheManager {
     /**
      * Get video aspect ratio from URI
      */
-    fun getVideoAspectRatio(context: Context, uri: Uri): Float? {
+    suspend fun getVideoAspectRatio(context: Context, uri: Uri): Float? = withContext(IO) {
         val retriever = MediaMetadataRetriever()
-        return try {
+        return@withContext try {
             retriever.setDataSource(context, uri)
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloat()
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloat()
