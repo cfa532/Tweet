@@ -38,7 +38,8 @@ import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager.getVideoAspectRatio
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
@@ -1509,7 +1510,7 @@ object HproseInstance {
                 val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
 
                 @OptIn(UnstableApi::class)
-                val aspectRatio = getVideoAspectRatio(context, uri)
+                val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
 
                 Timber.tag("uploadVideoToNetDisk").d("Video uploaded successfully: $cid")
                 MimeiFileType(
@@ -1605,7 +1606,7 @@ object HproseInstance {
             // Calculate aspect ratio for image or video
             val aspectRatio = when (mediaType) {
                 us.fireshare.tweet.datamodel.MediaType.Image -> getImageAspectRatio(context, uri)
-                us.fireshare.tweet.datamodel.MediaType.Video -> getVideoAspectRatio(context, uri)
+                us.fireshare.tweet.datamodel.MediaType.Video -> SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
                 else -> null
             }
             

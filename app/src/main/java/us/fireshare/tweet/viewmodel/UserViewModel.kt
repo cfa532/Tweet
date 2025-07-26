@@ -853,8 +853,7 @@ class UserViewModel @AssistedInject constructor(
                         username = updatedUser.username, hostIds = updatedUser.hostIds,
                     )
                     _user.value = appUser
-
-                                    Toast.makeText(context, context.getString(R.string.profile_update_ok), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.profile_update_ok), Toast.LENGTH_SHORT).show()
                 }
             } else {
                 Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
