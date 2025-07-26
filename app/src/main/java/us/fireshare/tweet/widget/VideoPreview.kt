@@ -152,7 +152,7 @@ fun VideoPreview(
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Timber.e("VideoPreview - Player error for video: $videoMid", error)
+                Timber.e(error, "VideoPreview - Player error for video: $videoMid")
                 Timber.e("VideoPreview - Error cause: ${error.cause}")
                 Timber.e("VideoPreview - Error code: ${error.errorCode}")
                 

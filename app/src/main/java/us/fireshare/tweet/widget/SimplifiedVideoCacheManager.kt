@@ -260,17 +260,52 @@ object SimplifiedVideoCacheManager {
     suspend fun getVideoAspectRatio(context: Context, uri: Uri): Float? = withContext(IO) {
         val retriever = MediaMetadataRetriever()
         return@withContext try {
-            retriever.setDataSource(context, uri)
+            Timber.d("SimplifiedVideoCacheManager - Extracting aspect ratio from URI: $uri")
+            
+            // Try to access the data source
+            when {
+                uri.scheme == "http" || uri.scheme == "https" -> {
+                    // For HTTP/HTTPS URLs, download the data first to a temporary file
+                    Timber.d("SimplifiedVideoCacheManager - Downloading video data for aspect ratio extraction")
+                    val connection = java.net.URL(uri.toString()).openConnection() as java.net.HttpURLConnection
+                    connection.connectTimeout = 10000 // 10 seconds
+                    connection.readTimeout = 30000 // 30 seconds
+                    connection.requestMethod = "GET"
+                    
+                    val tempFile = java.io.File.createTempFile("aspect_ratio_", ".tmp", context.cacheDir)
+                    tempFile.deleteOnExit()
+                    
+                    connection.inputStream.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    connection.disconnect()
+                    
+                    Timber.d("SimplifiedVideoCacheManager - Downloaded video to temp file: ${tempFile.absolutePath}")
+                    retriever.setDataSource(tempFile.absolutePath)
+                }
+                else -> {
+                    // For local files, use the context method
+                    retriever.setDataSource(context, uri)
+                }
+            }
+            
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloat()
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloat()
 
+            Timber.d("SimplifiedVideoCacheManager - Extracted width: $width, height: $height")
+
             if (width != null && height != null && height != 0f) {
-                width / height
+                val aspectRatio = width / height
+                Timber.d("SimplifiedVideoCacheManager - Calculated aspect ratio: $aspectRatio")
+                aspectRatio
             } else {
+                Timber.w("SimplifiedVideoCacheManager - Invalid width/height: width=$width, height=$height")
                 null
             }
         } catch (e: Exception) {
-            Timber.tag("e").e("$e $uri")
+            Timber.e("SimplifiedVideoCacheManager - Error extracting aspect ratio from $uri: $e")
             null
         } finally {
             retriever.release()

@@ -67,7 +67,9 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 
+@OptIn(UnstableApi::class)
 @Composable
 fun MediaPreviewGrid(
     mediaItems: List<MimeiFileType>,
@@ -85,17 +87,51 @@ fun MediaPreviewGrid(
     Timber.d("MediaPreviewGrid - mediaItems.size: ${mediaItems.size}, limitedMediaList.size: ${limitedMediaList.size}")
 
     // Helper: get aspect ratio for an item, using Compose state for images
+    @OptIn(UnstableApi::class)
     @Composable
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
         val context = LocalContext.current // Get context in composable scope
         if (itemType == MediaType.Video) {
-            return item.aspectRatio?.takeIf { it > 0 } ?: 1f
+            // For videos, try to get aspect ratio from stored value first
+            val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }
+            if (storedAspectRatio != null) {
+                return storedAspectRatio
+            }
+            
+            // If stored aspect ratio is not available, extract it from the video URL
+            var extractedAspectRatio by remember(item.mid) { mutableStateOf<Float?>(null) }
+            LaunchedEffect(item.mid) {
+                try {
+                    val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                    val uri = mediaUrl.toUri()
+                    Timber.d("MediaPreview - Attempting to extract aspect ratio for video ${item.mid} from URL: $mediaUrl")
+                    val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
+                    Timber.d("MediaPreview - Raw extracted aspect ratio for video ${item.mid}: $aspectRatio")
+                    
+                    if (aspectRatio != null && aspectRatio > 0) {
+                        // Enforce minimum aspect ratio of 0.8
+                        extractedAspectRatio = if (aspectRatio < 0.8f) {
+                            Timber.d("MediaPreview - Aspect ratio $aspectRatio is too small, clamping to 0.8 for video ${item.mid}")
+                            0.8f
+                        } else {
+                            aspectRatio
+                        }
+                        Timber.d("MediaPreview - Using extracted aspect ratio for video ${item.mid}: $extractedAspectRatio")
+                    } else {
+                        extractedAspectRatio = 4f / 3f // Default to 4:3 if extraction fails
+                        Timber.d("MediaPreview - Extraction failed, using default 4:3 for video ${item.mid}")
+                    }
+                } catch (e: Exception) {
+                    Timber.e("MediaPreview - Failed to extract aspect ratio for video ${item.mid}: $e")
+                    extractedAspectRatio = 4f / 3f // Default to 4:3 on error
+                }
+            }
+            return extractedAspectRatio ?: (4f / 3f)
         }
         if (itemType == MediaType.Image) {
             var aspectRatio by remember(item.mid) { mutableStateOf(item.aspectRatio) }
             LaunchedEffect(item.mid) {
-                // Images are already cached locally, no need for lazy loading
                 // Get aspect ratio from cached image directly
                 val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
                 aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
