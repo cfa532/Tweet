@@ -148,7 +148,7 @@ fun VideoPreview(
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
     
-    // Add listener for video completion to handle sequential playback
+    // Add listener for video completion and error handling
     LaunchedEffect(exoPlayer) {
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -158,6 +158,16 @@ fun VideoPreview(
                         VideoManager.onVideoCompleted(mid)
                     }
                 }
+            }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Timber.e("VideoPreview - Player error for video: $videoMid", error)
+                Timber.e("VideoPreview - Error cause: ${error.cause}")
+                Timber.e("VideoPreview - Error code: ${error.errorCode}")
+                
+                // Let the SimplifiedVideoCacheManager handle the fallback logic
+                // It will mark the video as failed only after all attempts are exhausted
+                // We just log the error here and let the fallback mechanism work
             }
         })
     }

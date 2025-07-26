@@ -43,9 +43,17 @@ object VideoManager {
         return videoPlayers.getOrPut(videoMid) {
             Timber.d("VideoManager - Creating new ExoPlayer for video: $videoMid")
             Timber.d("VideoManager - Video URL for new player: $videoUrl")
-            val player = createExoPlayer(context, videoUrl, MediaType.Video)
-            Timber.d("VideoManager - New player created successfully: ${player != null}")
-            player
+            
+            try {
+                val player = createExoPlayer(context, videoUrl, MediaType.Video)
+                Timber.d("VideoManager - New player created successfully: ${player != null}")
+                player
+            } catch (e: Exception) {
+                Timber.e("VideoManager - Error creating ExoPlayer for video: $videoMid", e)
+                // If creation fails, remove from map and rethrow
+                videoPlayers.remove(videoMid)
+                throw e
+            }
         }.also { player ->
             // Reset player state when reusing an existing player
             if (isReusing) {
@@ -382,6 +390,50 @@ object VideoManager {
         
         if (videosToRemove.isNotEmpty()) {
             Timber.d("VideoManager - Limited cached videos to $maxCached, removed ${videosToRemove.size} videos")
+        }
+    }
+    
+    /**
+     * Mark a video as failed and release its player to prevent memory leaks
+     * @param videoMid Video's unique identifier
+     * Note: This method must be called on the main thread
+     */
+    fun markVideoAsFailed(videoMid: MimeiId) {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - markVideoAsFailed() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.markVideoAsFailed() must be called on the main thread")
+        }
+        
+        Timber.w("VideoManager - Marking video as failed: $videoMid")
+        releaseVideo(videoMid)
+    }
+    
+    /**
+     * Clean up failed or problematic video players
+     * Note: This method must be called on the main thread
+     */
+    fun cleanupFailedVideos() {
+        // Ensure we're on the main thread
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            Timber.e("VideoManager - cleanupFailedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            throw IllegalStateException("VideoManager.cleanupFailedVideos() must be called on the main thread")
+        }
+        
+        val videosToRemove = videoPlayers.keys.filter { videoMid ->
+            val player = videoPlayers[videoMid]
+            // Remove players that are in error state or have been idle for too long
+            player?.playbackState == androidx.media3.common.Player.STATE_IDLE ||
+            player?.hasNextMediaItem() == false && player.playbackState == androidx.media3.common.Player.STATE_ENDED
+        }
+        
+        videosToRemove.forEach { videoMid ->
+            Timber.d("VideoManager - Cleaning up failed video: $videoMid")
+            releaseVideo(videoMid)
+        }
+        
+        if (videosToRemove.isNotEmpty()) {
+            Timber.d("VideoManager - Cleaned up ${videosToRemove.size} failed videos")
         }
     }
 } 

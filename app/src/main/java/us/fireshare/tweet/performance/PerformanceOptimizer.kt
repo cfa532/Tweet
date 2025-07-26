@@ -50,6 +50,9 @@ object PerformanceOptimizer {
         isMonitoring = true
         Timber.tag(TAG).d("Starting performance monitoring")
         
+        // Start video memory leak monitoring
+        VideoMemoryLeakFix.startMonitoring()
+        
         performanceScope.launch {
             while (isMonitoring) {
                 checkMemoryUsage(context)
@@ -66,6 +69,7 @@ object PerformanceOptimizer {
         isMonitoring = false
         performanceScope.cancel()
         LazyLoadingManager.stop()
+        VideoMemoryLeakFix.stopMonitoring()
         Timber.tag(TAG).d("Stopped performance monitoring")
     }
     
@@ -103,6 +107,7 @@ object PerformanceOptimizer {
             mainHandler.post {
                 try {
                     VideoManager.cleanupUnusedVideos()
+                    VideoManager.cleanupFailedVideos()
                     VideoManager.limitCachedVideos(maxCached = 8)
                 } catch (e: Exception) {
                     Timber.tag(TAG).e(e, "Error cleaning up videos")
@@ -179,6 +184,9 @@ object PerformanceOptimizer {
                 
                 // Release all video players
                 VideoManager.releaseAllVideos()
+                
+                // Force cleanup failed videos
+                VideoMemoryLeakFix.forceCleanup()
                 
                 // Reset counters
                 memoryWarningCount = 0

@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.performance.VideoMemoryLeakFix
 import java.io.File
 
 /**
@@ -49,7 +50,7 @@ object SimplifiedVideoCacheManager {
             val databaseProvider = StandaloneDatabaseProvider(context)
             videoCache = SimpleCache(cacheDir, evictor, databaseProvider)
         }
-        return videoCache!!
+        return videoCache ?: throw IllegalStateException("Video cache was not initialized")
     }
 
     /**
@@ -80,15 +81,21 @@ object SimplifiedVideoCacheManager {
         val exoPlayer = ExoPlayer.Builder(context)
             .build()
 
+        // Start timeout tracking for this video
+        VideoMemoryLeakFix.startVideoTimeout(ipfsId)
+
         // Add listener for video events with fallback mechanism
         exoPlayer.addListener(object : Player.Listener {
             private var hasTriedPlaylist = false
             private var hasTriedOriginal = false
+            private var maxRetries = 2 // Limit retries to prevent infinite loops
             
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_READY -> {
                         Timber.d("Video player ready for URL: $url (IPFS ID: $ipfsId)")
+                        // Clear timeout when video loads successfully
+                        VideoMemoryLeakFix.clearVideoTimeout(ipfsId)
                     }
                     Player.STATE_BUFFERING -> {
                         Timber.d("Video player buffering for URL: $url")
@@ -109,25 +116,53 @@ object SimplifiedVideoCacheManager {
                 Timber.e("SimplifiedVideoCacheManager - Has tried playlist: $hasTriedPlaylist")
                 Timber.e("SimplifiedVideoCacheManager - Has tried original: $hasTriedOriginal")
                 
+                // Check if we've exceeded max retries
+                val totalAttempts = (if (hasTriedPlaylist) 1 else 0) + (if (hasTriedOriginal) 1 else 0)
+                if (totalAttempts >= maxRetries) {
+                    Timber.e("SimplifiedVideoCacheManager - Max retries exceeded for URL: $url")
+                    Timber.e("SimplifiedVideoCacheManager - Video playback failed after trying HLS and original URL")
+                    // Stop trying to prevent memory leaks
+                    exoPlayer.stop()
+                    
+                    // Mark video as failed after all attempts are exhausted
+                    val ipfsId = url.getMimeiKeyFromUrl()
+                    VideoMemoryLeakFix.markVideoAsFailed(ipfsId)
+                    return
+                }
+                
                 if (!hasTriedPlaylist) {
                     hasTriedPlaylist = true
                     Timber.d("SimplifiedVideoCacheManager - Trying fallback to playlist URL: $playlistUrl")
                     
-                    // If master.m3u8 fails, try playlist.m3u8
-                    val fallbackMediaItem = MediaItem.Builder()
-                        .setUri(playlistUrl)
-                        .setCustomCacheKey(ipfsId)
-                        .build()
-                    
-                    val fallbackMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
-                        .createMediaSource(fallbackMediaItem)
-                    
-                    exoPlayer.setMediaSource(fallbackMediaSource)
-                    exoPlayer.prepare()
+                    try {
+                        // If master.m3u8 fails, try playlist.m3u8
+                        val fallbackMediaItem = MediaItem.Builder()
+                            .setUri(playlistUrl)
+                            .setCustomCacheKey(ipfsId)
+                            .build()
+                        
+                        val fallbackMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
+                            .createMediaSource(fallbackMediaItem)
+                        
+                        exoPlayer.setMediaSource(fallbackMediaSource)
+                        exoPlayer.prepare()
+                        Timber.d("SimplifiedVideoCacheManager - Successfully set fallback media source for: $playlistUrl")
+                    } catch (e: Exception) {
+                        Timber.e("SimplifiedVideoCacheManager - Error setting fallback media source", e)
+                        // If fallback fails, try original URL immediately
+                        hasTriedOriginal = true
+                        tryOriginalUrl()
+                    }
                 } else if (!hasTriedOriginal) {
                     hasTriedOriginal = true
-                    Timber.d("SimplifiedVideoCacheManager - Trying original URL as last resort: $url")
-                    
+                    tryOriginalUrl()
+                }
+            }
+            
+            private fun tryOriginalUrl() {
+                Timber.d("SimplifiedVideoCacheManager - Trying original URL as last resort: $url")
+                
+                try {
                     // If both HLS attempts fail, try the original URL (progressive video)
                     val originalMediaItem = MediaItem.Builder()
                         .setUri(url)
@@ -139,9 +174,11 @@ object SimplifiedVideoCacheManager {
                     
                     exoPlayer.setMediaSource(originalMediaSource)
                     exoPlayer.prepare()
-                } else {
-                    Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
-                    Timber.e("SimplifiedVideoCacheManager - Video playback failed after trying HLS and original URL")
+                    Timber.d("SimplifiedVideoCacheManager - Successfully set original media source for: $url")
+                } catch (e: Exception) {
+                    Timber.e("SimplifiedVideoCacheManager - Error setting original media source", e)
+                    // If all attempts fail, stop the player to prevent memory leaks
+                    exoPlayer.stop()
                 }
             }
         })
