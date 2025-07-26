@@ -63,7 +63,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.share.ShareScreenshotButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
@@ -103,7 +103,7 @@ fun TweetDetailBody(
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
-                        SimpleAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 40)
+                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 40)
                     }
                     Text(
                         text = author?.name ?: "No One",

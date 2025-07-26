@@ -50,7 +50,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -219,7 +219,7 @@ fun TweetItem(
                                 },
                                 modifier = Modifier.width(44.dp)
                             ) {
-                                tweet.author?.let { SimpleAvatar(user = it, size = 32) }
+                                tweet.author?.let { UserAvatar(user = it, size = 32) }
                             }
                         }
 

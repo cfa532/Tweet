@@ -49,7 +49,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,7 +73,7 @@ fun SearchScreen(
                 ),
                 title = {
                     Column {
-                        SimpleAvatar(user = appUser, size = 36)
+                        UserAvatar(user = appUser, size = 36)
                     }
                 },
                 navigationIcon = {
@@ -161,7 +161,7 @@ fun UserSearchResult(user: User, navController: NavController) {
             // Navigate to user profile
             navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-            SimpleAvatar(user = user, size = 32)
+                                    UserAvatar(user = user, size = 32)
         }
         Column {
             Text(

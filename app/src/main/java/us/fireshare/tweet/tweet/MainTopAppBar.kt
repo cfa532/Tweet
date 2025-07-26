@@ -22,7 +22,7 @@ import androidx.navigation.NavHostController
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +61,7 @@ fun MainTopAppBar(
                     navController.navigate(NavTweet.UserProfile(appUser.mid))
                 }
             }) {
-                SimpleAvatar(user = appUser, size = 32)
+                UserAvatar(user = appUser, size = 32)
             }
         },
         actions = {

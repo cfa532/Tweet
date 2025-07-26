@@ -107,7 +107,7 @@ object SimplifiedVideoCacheManager {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Timber.e("Video player error for URL: $url", error)
+                Timber.e(error, "Video player error for URL: $url")
                 Timber.e("SimplifiedVideoCacheManager - Error cause: ${error.cause}")
                 Timber.e("SimplifiedVideoCacheManager - Error code: ${error.errorCode}")
                 Timber.e("SimplifiedVideoCacheManager - Has tried playlist: $hasTriedPlaylist")

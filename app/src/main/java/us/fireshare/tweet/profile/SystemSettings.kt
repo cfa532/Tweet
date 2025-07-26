@@ -60,6 +60,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.widget.VideoManager
 
@@ -165,6 +166,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text("User Cache: ${userCacheStats.totalUsers} total, ${userCacheStats.validUsers} valid")
                     Text("Video Cache: $videoCacheStats")
                     Text("Video Players: $videoManagerStats")
+                    Text("Image Cache: ${ImageCacheManager.getMemoryCacheStats()}")
                 }
             }
 
@@ -195,6 +197,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         withContext(Dispatchers.Main) {
                             VideoManager.releaseAllVideos()
                         }
+                        
+                        // Clear image cache
+                        ImageCacheManager.clearAllCachedImages(context)
 
                         @Suppress("UnsafeOptInUsageError")
                         isCachedCleared = true

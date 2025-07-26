@@ -152,7 +152,7 @@ fun FollowingItem(
                 navController.navigate(NavTweet.UserProfile(user.mid))
             }
         }) {
-            SimpleAvatar(user = user, size = 40)
+                            UserAvatar(user = user, size = 40)
         }
         Column {
             Row(

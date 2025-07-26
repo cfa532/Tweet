@@ -93,11 +93,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             onDismiss = { showDialog = false })
                     }
                     UserAvatar(
-                        modifier = Modifier.clickable {
-                            showDialog = true
-                        },
-                        user,
-                        size = (80 - (scrollFraction * 20)).toInt()
+                        user = user,
+                        size = (80 - (scrollFraction * 20)).toInt(),
+                        onClick = { showDialog = true }
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)
                     ) {

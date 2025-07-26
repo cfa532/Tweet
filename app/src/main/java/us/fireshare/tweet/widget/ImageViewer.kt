@@ -1,15 +1,14 @@
 package us.fireshare.tweet.widget
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,30 +18,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import timber.log.Timber
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
-
 /**
- * Image viewer that loads images directly without caching
- * @param imageUrl: Image URL in the format of http://ip/ipfs/mimeiId or http://ip/mm/mimeiId
- * @param isFullSize: If true, shows full-size image
- * @param imageSize: Preview size in KB (default 200KB)
- * @param placeholderUrl: Optional placeholder image URL to show while main image loads
- * @param enableLongPress: Whether to enable long press gesture for context menu
- * */
+ * ImageViewer displays images with caching support
+ * @param imageUrl URL of the image to display
+ * @param modifier Modifier for the image container
+ * @param isFullSize Whether to display the image in full size
+ * @param imageSize Size hint for the image (used for caching)
+ * @param placeholderUrl Optional placeholder image URL
+ * @param enableLongPress Whether to enable long press menu
+ */
 @Composable
 fun ImageViewer(
     imageUrl: String,
@@ -58,27 +50,31 @@ fun ImageViewer(
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf(false) }
 
-    // Try to load cached image on first composition
-    LaunchedEffect(mid) {
-        cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-        // For full-size images, we still want to show cached image as placeholder if available
-        // For non-full-size images, we can load and cache if not already cached
-        if (cachedBitmap == null && !isFullSize && !isLoading) {
+    // Load image using ImageCacheManager
+    LaunchedEffect(mid, imageUrl) {
+        try {
             isLoading = true
-            // Download, compress, and cache the image
-            val request = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .allowHardware(false)
-                .build()
-            val result = context.imageLoader.execute(request)
-            if (result is SuccessResult) {
-                val bmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                if (bmp != null) {
-                    ImageCacheManager.cacheImage(context, mid, bmp)
-                    cachedBitmap = bmp
+            loadError = false
+            
+            // Try to load from cache first
+            cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+            
+            // If not cached and not full size, download and cache
+            if (cachedBitmap == null && !isFullSize) {
+                Timber.d("ImageViewer - Loading image from URL: $imageUrl")
+                cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                
+                if (cachedBitmap == null) {
+                    loadError = true
+                    Timber.e("ImageViewer - Failed to load image: $imageUrl")
                 }
             }
+        } catch (e: Exception) {
+            loadError = true
+            Timber.e("ImageViewer - Error loading image: $e")
+        } finally {
             isLoading = false
         }
     }
@@ -94,66 +90,61 @@ fun ImageViewer(
         contentAlignment = Alignment.Center
     ) {
         if (cachedBitmap != null) {
-            // Show cached image as placeholder for both full-size and preview images
+            // Show cached image
             Image(
                 bitmap = cachedBitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = adjustedModifier
-            )
-        }
-        // Always try to load the original image (for full size or as replacement)
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = if (enableLongPress) {
-                adjustedModifier.pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = { offset ->
-                            showMenu = true
-                            menuPosition = offset
-                        }
-                    )
+                modifier = if (enableLongPress) {
+                    adjustedModifier
+                        .clickable { showMenu = true }
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                } else {
+                    adjustedModifier
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 }
-            } else {
-                adjustedModifier
+            )
+        } else if (loadError) {
+            // Show error state
+            Box(
+                modifier = adjustedModifier
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Failed to load image")
             }
-        )
-        if (showMenu) {
-            // Calculate DropdownMenu position
-            var parentSize by remember { mutableStateOf(IntSize.Zero) }
-            val density = LocalDensity.current
+        } else if (isLoading) {
+            // Show loading state
+            Box(
+                modifier = adjustedModifier
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Loading...")
+            }
+        }
 
+        // Long press menu
+        if (enableLongPress && showMenu) {
             DropdownMenu(
                 expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        parentSize = coordinates.size
-                    }
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                offset = DpOffset(
-                    with(density) { menuPosition.x.toDp() },
-                    with(density) { menuPosition.y.toDp() }
-                )
+                onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(
-                    text = {
-                        Text(
-                            "Download",
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
+                    text = { Text("Save Image") },
                     onClick = {
+                        // TODO: Implement save functionality
                         showMenu = false
-                        // Download functionality can be implemented here if needed
-                    },
-                    modifier = Modifier.heightIn(max = 30.dp)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Share Image") },
+                    onClick = {
+                        // TODO: Implement share functionality
+                        showMenu = false
+                    }
                 )
             }
         }
@@ -163,7 +154,7 @@ fun ImageViewer(
 /**
  * Enhanced image viewer for full-screen mode that shows cached preview as placeholder
  * @param imageUrl: Full-size image URL
- * @param previewUrl: Preview image URL (should be cached by Coil)
+ * @param previewUrl: Preview image URL (should be cached by ImageCacheManager)
  * @param modifier: Modifier for the image
  * @param enableLongPress: Whether to enable long press gesture
  */
@@ -176,63 +167,90 @@ fun FullScreenImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    var menuPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val imageMid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
+    val previewMid = remember(previewUrl) { previewUrl.getMimeiKeyFromUrl() }
+    var cachedBitmap by remember(imageMid) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf(false) }
+
+    // Load image using ImageCacheManager
+    LaunchedEffect(imageMid, imageUrl) {
+        try {
+            isLoading = true
+            loadError = false
+            
+            // Try to load from cache first
+            cachedBitmap = ImageCacheManager.getCachedImage(context, imageMid)
+            
+            // If not cached, download and cache
+            if (cachedBitmap == null) {
+                Timber.d("FullScreenImageViewer - Loading full-size image from URL: $imageUrl")
+                cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, imageMid)
+                
+                if (cachedBitmap == null) {
+                    loadError = true
+                    Timber.e("FullScreenImageViewer - Failed to load full-size image: $imageUrl")
+                }
+            }
+        } catch (e: Exception) {
+            loadError = true
+            Timber.e("FullScreenImageViewer - Error loading full-size image: $e")
+        } finally {
+            isLoading = false
+        }
+    }
 
     Box(modifier = modifier) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(imageUrl)
-                .crossfade(true)
-                .placeholderMemoryCacheKey(previewUrl) // Use cached preview as placeholder
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = if (enableLongPress) {
-                Modifier.fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onLongPress = { offset ->
-                                showMenu = true
-                                menuPosition = offset
-                            }
-                        )
-                    }
-            } else {
-                Modifier.fillMaxSize()
+        if (cachedBitmap != null) {
+            // Show cached image
+            Image(
+                bitmap = cachedBitmap!!.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = if (enableLongPress) {
+                    Modifier.fillMaxSize()
+                        .clickable { showMenu = true }
+                } else {
+                    Modifier.fillMaxSize()
+                }
+            )
+        } else if (loadError) {
+            // Show error state
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Failed to load image")
             }
-        )
-        
-        if (showMenu) {
-            // Calculate DropdownMenu position
-            var parentSize by remember { mutableStateOf(IntSize.Zero) }
-            val density = LocalDensity.current
+        } else if (isLoading) {
+            // Show loading state
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Loading...")
+            }
+        }
 
+        // Long press menu
+        if (enableLongPress && showMenu) {
             DropdownMenu(
                 expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        parentSize = coordinates.size
-                    }
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                offset = DpOffset(
-                    with(density) { menuPosition.x.toDp() },
-                    with(density) { menuPosition.y.toDp() }
-                )
+                onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(
-                    text = {
-                        Text(
-                            "Download",
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
+                    text = { Text("Download") },
                     onClick = {
+                        // TODO: Implement download functionality
                         showMenu = false
-                        // Download functionality can be implemented here if needed
-                    },
-                    modifier = Modifier.heightIn(max = 30.dp)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Share Image") },
+                    onClick = {
+                        // TODO: Implement share functionality
+                        showMenu = false
+                    }
                 )
             }
         }

@@ -74,7 +74,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.widget.UploadFilePreview
 import us.fireshare.tweet.tweet.createImageFile
 import java.io.File
@@ -199,10 +199,9 @@ fun ReplyEditorBox(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // User avatar
-                SimpleAvatar(
+                UserAvatar(
                     user = appUser,
-                    size = 32,
-                    modifier = Modifier.size(32.dp)
+                    size = 32
                 )
                 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -270,10 +269,9 @@ fun ReplyEditorBox(
                     verticalAlignment = Alignment.Top
                 ) {
                     // User avatar
-                    SimpleAvatar(
+                    UserAvatar(
                         user = appUser,
-                        size = 40,
-                        modifier = Modifier.size(32.dp)
+                        size = 40
                     )
                     
                     Spacer(modifier = Modifier.width(8.dp))

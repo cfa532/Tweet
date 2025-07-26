@@ -33,7 +33,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.profile.SimpleAvatar
+import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.tweet.TweetDropdownMenu
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
@@ -79,7 +79,7 @@ fun TweetItemBody(
                     },
                     modifier = Modifier.width(44.dp)
                 ) {
-                    author?.let { SimpleAvatar(user = it, size = 32) }
+                    author?.let { UserAvatar(user = it, size = 32) }
                 }
             }
 

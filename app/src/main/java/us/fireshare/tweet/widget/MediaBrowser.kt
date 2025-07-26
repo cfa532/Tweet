@@ -362,7 +362,7 @@ fun MediaBrowser(
                     
                     FullScreenImageViewer(
                         imageUrl = mediaItem.url,
-                        previewUrl = previewUrl, // Use the same URL as placeholder (Coil will use cached version)
+                        previewUrl = previewUrl, // Use the same URL as placeholder (ImageCacheManager will use cached version)
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), 0) }
                             .draggable(

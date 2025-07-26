@@ -126,7 +126,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
-    implementation(libs.coil.compose)
+    // Coil removed - using custom ImageCacheManager instead
     implementation(libs.androidx.media3.media3.exoplayer)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.ui)
