@@ -108,7 +108,7 @@ fun MediaBrowser(
     val tweetAttachments by viewModel.attachments.collectAsState()
     val mediaItems = tweetAttachments?.map {
         val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
-        val inferredType = it.type ?: inferMediaTypeFromAttachment(it)
+        val inferredType = inferMediaTypeFromAttachment(it)
         if (it.type == null) {
             Timber.d("MediaBrowser - Inferred type for ${it.fileName ?: it.mid}: $inferredType")
         }
@@ -273,7 +273,7 @@ fun MediaBrowser(
                             navController.popBackStack()
                         },
                         enableImmersiveMode = false, // MediaBrowser already handles immersive mode
-                        autoPlay = isCurrentPage, // Only autoplay if it's the current page
+                        autoPlay = true, // Always auto-start video in full screen
                         onHorizontalSwipe = { direction ->
                             Timber.d("MediaBrowser - Horizontal swipe detected: $direction")
                             animationScope.launch {

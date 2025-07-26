@@ -46,7 +46,6 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    var menuPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -98,12 +97,8 @@ fun ImageViewer(
                 modifier = if (enableLongPress) {
                     adjustedModifier
                         .clickable { showMenu = true }
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(8.dp))
                 } else {
                     adjustedModifier
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(8.dp))
                 }
             )
         } else if (loadError) {
@@ -129,7 +124,7 @@ fun ImageViewer(
         // Long press menu
         if (enableLongPress && showMenu) {
             DropdownMenu(
-                expanded = showMenu,
+                expanded = true,
                 onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(

@@ -52,7 +52,6 @@ fun VideoPreview(
     videoMid: MimeiId? = null
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
     
@@ -136,14 +135,6 @@ fun VideoPreview(
         }
     }
 
-    var videoRatio by remember { mutableFloatStateOf(aspectRatio ?: (16f / 9f)) }
-    LaunchedEffect(url.getMimeiKeyFromUrl()) {
-        if (aspectRatio == null) {
-            // Default to 16:9 aspect ratio if not provided
-            videoRatio = 16f / 9f
-        }
-    }
-
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
@@ -177,12 +168,12 @@ fun VideoPreview(
     Box(
         modifier = modifier
             .clipToBounds()
-            .heightIn(max = 500.dp) // Add height constraint to prevent overflow
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
             .clickable {
-                Timber.d("VideoPreview - Video tapped at index: $index, calling callback")
+                Timber.d("VideoPreview - Video tapped at index: $index, navigating to full screen")
+                // Auto-start video in full screen
                 callback(index)
             }
     ) {

@@ -75,8 +75,13 @@ fun FullScreenVideoPlayer(
         // Mark video as active in VideoManager
         VideoManager.markVideoActive(videoMid)
         if (autoPlay) {
+            // Ensure immediate playback start
             exoPlayer.playWhenReady = true
+            // Force play immediately
             exoPlayer.play()
+            // Set volume to ensure audio is heard
+            exoPlayer.volume = 1f
+            Timber.d("FullScreenVideoPlayer - Auto-playback started for video: $videoMid")
         } else {
             exoPlayer.playWhenReady = false
         }
@@ -98,6 +103,12 @@ fun FullScreenVideoPlayer(
                     else -> "UNKNOWN"
                 }
                 Timber.d("FullScreenVideoPlayer - Playback state changed to: $stateName")
+                
+                // Auto-start playback when ready
+                if (autoPlay && playbackState == androidx.media3.common.Player.STATE_READY) {
+                    Timber.d("FullScreenVideoPlayer - Player ready, starting playback")
+                    exoPlayer.play()
+                }
             }
         })
     }
