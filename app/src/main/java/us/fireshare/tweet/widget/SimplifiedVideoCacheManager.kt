@@ -18,7 +18,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
-import us.fireshare.tweet.performance.VideoMemoryLeakFix
+
 import java.io.File
 
 /**
@@ -81,8 +81,7 @@ object SimplifiedVideoCacheManager {
         val exoPlayer = ExoPlayer.Builder(context)
             .build()
 
-        // Start timeout tracking for this video
-        VideoMemoryLeakFix.startVideoTimeout(ipfsId)
+
 
         // Add listener for video events with fallback mechanism
         exoPlayer.addListener(object : Player.Listener {
@@ -94,8 +93,6 @@ object SimplifiedVideoCacheManager {
                 when (playbackState) {
                     Player.STATE_READY -> {
                         Timber.d("Video player ready for URL: $url (IPFS ID: $ipfsId)")
-                        // Clear timeout when video loads successfully
-                        VideoMemoryLeakFix.clearVideoTimeout(ipfsId)
                     }
                     Player.STATE_BUFFERING -> {
                         Timber.d("Video player buffering for URL: $url")
@@ -124,9 +121,7 @@ object SimplifiedVideoCacheManager {
                     // Stop trying to prevent memory leaks
                     exoPlayer.stop()
                     
-                    // Mark video as failed after all attempts are exhausted
-                    val ipfsId = url.getMimeiKeyFromUrl()
-                    VideoMemoryLeakFix.markVideoAsFailed(ipfsId)
+
                     return
                 }
                 

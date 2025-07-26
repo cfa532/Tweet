@@ -98,17 +98,13 @@ fun MediaPreviewGrid(
         if (itemType == MediaType.Image) {
             var aspectRatio by remember(item.mid) { mutableStateOf(item.aspectRatio) }
             LaunchedEffect(item.mid) {
-                // Use LazyLoadingManager for optimized image loading
-                us.fireshare.tweet.performance.LazyLoadingManager.queueLoad(
-                    item.mid,
-                    us.fireshare.tweet.performance.LazyLoadingManager.Priority.HIGH
-                ) {
-                    val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
-                    aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
-                        bitmap.width.toFloat() / bitmap.height.toFloat()
-                    } else {
-                        1f
-                    }
+                // Images are already cached locally, no need for lazy loading
+                // Get aspect ratio from cached image directly
+                val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
+                aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
+                    bitmap.width.toFloat() / bitmap.height.toFloat()
+                } else {
+                    1f
                 }
             }
             return aspectRatio ?: 1f
