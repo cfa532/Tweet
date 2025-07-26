@@ -92,7 +92,7 @@ class UserViewModel @AssistedInject constructor(
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
-    private var initState = MutableStateFlow(true)      // initial load state
+    var initState = MutableStateFlow(true)      // initial load state
 
     /**
      * Initial load of tweets of an user. Execute only once.

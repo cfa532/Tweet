@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -56,7 +60,7 @@ import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.viewmodel.UserViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun ProfileScreen(
     navController: NavHostController,
@@ -72,6 +76,7 @@ fun ProfileScreen(
             factory.create(userId)
         }
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
+    val initState by viewModel.initState.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -113,6 +118,7 @@ fun ProfileScreen(
                     navController = navController,
                     parentEntry = parentEntry,
                     scrollBehavior = scrollBehavior,
+                    initState = initState,
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState
                         
@@ -159,12 +165,13 @@ fun ProfileScreen(
  * using the proper TweetListView component for pagination.
  */
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 private fun ProfileContentWithTweetListView(
     viewModel: UserViewModel,
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    initState: Boolean,
     onScrollStateChange: (ScrollState) -> Unit
 ) {
     val tweets by viewModel.tweets.collectAsState()
@@ -207,22 +214,47 @@ private fun ProfileContentWithTweetListView(
         }
     }
     
-    // Use TweetListView with header content for unified scrolling
-    us.fireshare.tweet.tweet.TweetListView(
-        tweets = tweets,
-        fetchTweets = { pageNumber ->
-            viewModel.fetchTweets(pageNumber)
-        },
-        modifier = Modifier.fillMaxSize(),
-        scrollBehavior = scrollBehavior,
-        contentPadding = PaddingValues(bottom = 60.dp),
-        showPrivateTweets = true, // Show private tweets in profile
-        parentEntry = parentEntry,
-        onScrollStateChange = onScrollStateChange,
-        currentUserId = user.mid,
-        onTweetUnavailable = { tweetId ->
-            viewModel.removeTweetFromAllLists(tweetId)
-        },
-        headerContent = headerContent
+    // Create pull refresh state for initial loading
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = initState,
+        onRefresh = { /* No-op for initial load */ }
     )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pullRefresh(pullRefreshState)
+    ) {
+        // Use TweetListView with header content for unified scrolling
+        us.fireshare.tweet.tweet.TweetListView(
+            tweets = tweets,
+            fetchTweets = { pageNumber ->
+                viewModel.fetchTweets(pageNumber)
+            },
+            modifier = Modifier.fillMaxSize(),
+            scrollBehavior = scrollBehavior,
+            contentPadding = PaddingValues(bottom = 60.dp),
+            showPrivateTweets = true, // Show private tweets in profile
+            parentEntry = parentEntry,
+            onScrollStateChange = onScrollStateChange,
+            currentUserId = user.mid,
+            onTweetUnavailable = { tweetId ->
+                viewModel.removeTweetFromAllLists(tweetId)
+            },
+            headerContent = headerContent
+        )
+        
+        // Show pull-to-refresh style indicator during initial load
+        if (initState) {
+            PullRefreshIndicator(
+                refreshing = true,
+                state = pullRefreshState,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp),
+                backgroundColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
 }
