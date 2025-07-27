@@ -535,8 +535,8 @@ object HproseInstance {
             }
 
             // Extract tweets and originalTweets from the new response format
-            val tweetsData = response?.get("tweets") as? List<Map<String, Any>?>
-            val originalTweetsData = response?.get("originalTweets") as? List<Map<String, Any>?>
+            val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+            val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
             // Cache original tweets first
             originalTweetsData?.forEach { originalTweetJson ->
@@ -629,8 +629,8 @@ object HproseInstance {
             }
 
             // Extract tweets and originalTweets from the new response format
-            val tweetsData = response.get("tweets") as? List<Map<String, Any>?>
-            val originalTweetsData = response.get("originalTweets") as? List<Map<String, Any>?>
+            val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+            val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
             // Cache original tweets first (same as getTweetFeed)
             originalTweetsData?.forEach { originalTweetJson ->

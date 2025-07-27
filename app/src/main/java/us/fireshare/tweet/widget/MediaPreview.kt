@@ -104,19 +104,19 @@ fun MediaPreviewGrid(
                     val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                     val uri = mediaUrl.toUri()
                     val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
-                    
-                    if (aspectRatio != null && aspectRatio > 0) {
+
+                    extractedAspectRatio = if (aspectRatio != null && aspectRatio > 0) {
                         // Enforce minimum aspect ratio of 0.8
-                        extractedAspectRatio = if (aspectRatio < 0.8f) {
+                        if (aspectRatio < 0.8f) {
                             0.8f
                         } else {
                             aspectRatio
                         }
                     } else {
-                        extractedAspectRatio = 4f / 3f // Default to 4:3 if extraction fails
+                        4f / 3f // Default to 4:3 if extraction fails
                     }
                 } catch (e: Exception) {
-                    Timber.e("MediaPreview - Failed to extract aspect ratio for video ${item.mid}: $e")
+                    Timber.tag("MediaPreviewGrid").e("Failed to extract aspect ratio for video ${item.mid}: $e")
                     extractedAspectRatio = 4f / 3f // Default to 4:3 on error
                 }
             }
@@ -373,7 +373,6 @@ fun MediaPreviewGrid(
                 val remainder = 1f - goldenRatio
 
                 if (allPortrait) {
-                    Timber.d("MediaPreviewGrid - 3 items: allPortrait branch (golden ratio)")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -425,7 +424,6 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (allLandscape) {
-                    Timber.d("MediaPreviewGrid - 3 items: allLandscape branch (golden ratio)")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -479,7 +477,6 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else if (isPortrait0) {
-                    Timber.d("MediaPreviewGrid - 3 items: mixed, first portrait (golden ratio)")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -530,7 +527,6 @@ fun MediaPreviewGrid(
                         }
                     }
                 } else {
-                    Timber.d("MediaPreviewGrid - 3 items: mixed, first landscape (golden ratio)")
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -641,20 +637,15 @@ fun MediaItemView(
         val inferredType = inferMediaTypeFromAttachment(it)
         val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
         val extractedMid = mediaUrl.getMimeiKeyFromUrl()
-        Timber.d("MediaPreview - MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl, extractedMid=$extractedMid")
         MediaItem(mediaUrl, inferredType)
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
-    // Add logging for debugging
-    Timber.d("MediaItemView - index: $index, type: ${attachment.type}, url: ${attachment.url}")
     /**
      * Action to take when any media item is clicked.
      * All media types open in MediaBrowser for browsing with swipe navigation.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
-        Timber.d("MediaPreview - goto called for index: $idx, tweet.mid: ${tweet.mid}, tweet.authorId: ${tweet.authorId}")
-        Timber.d("MediaPreview - attachments size: ${attachments.size}")
         // Navigate to MediaBrowser for all media types to enable swipe navigation
         try {
             navController.navigate(
@@ -662,9 +653,8 @@ fun MediaItemView(
                     attachments, idx, tweet.mid, tweet.authorId
                 ))
             )
-            Timber.d("MediaPreview - Navigation successful")
         } catch (e: Exception) {
-            Timber.e("MediaPreview - Navigation failed: ${e.message}")
+            Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
         }
     }
 
@@ -681,7 +671,6 @@ fun MediaItemView(
                     modifier = modifier
                         .clipToBounds()
                         .clickable { 
-                            Timber.d("MediaPreview - Image clicked at index: $index")
                             goto(index) 
                         }
                 ) {
@@ -852,11 +841,6 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     val masterUrl = "${baseUrl}master.m3u8"
     val playlistUrl = "${baseUrl}playlist.m3u8"
     
-    Timber.d("createExoPlayer - Original URL: $url")
-    Timber.d("createExoPlayer - Base URL: $baseUrl")
-    Timber.d("createExoPlayer - Master URL: $masterUrl")
-    Timber.d("createExoPlayer - Playlist URL: $playlistUrl")
-    
     // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
     
@@ -869,15 +853,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 private var hasTriedOriginal = false
                 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.e("createExoPlayer - Player error: ${error.message}")
-                    Timber.e("createExoPlayer - Error cause: ${error.cause}")
-                    Timber.e("createExoPlayer - Error code: ${error.errorCode}")
-                    Timber.e("createExoPlayer - Has tried playlist: $hasTriedPlaylist")
-                    Timber.e("createExoPlayer - Has tried original: $hasTriedOriginal")
+                    Timber.tag("createExoPlayer").e("Player error: ${error.message}")
                     
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
-                        Timber.d("createExoPlayer - Trying fallback to playlist URL: $playlistUrl")
                         
                         // If master.m3u8 fails, try playlist.m3u8
                         val fallbackMediaSource = mediaSourceFactory.createMediaSource(
@@ -887,7 +866,6 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         prepare()
                     } else if (!hasTriedOriginal) {
                         hasTriedOriginal = true
-                        Timber.d("createExoPlayer - Trying original URL as last resort: $url")
                         
                         // If both HLS attempts fail, try the original URL (progressive video)
                         val originalMediaSource = mediaSourceFactory.createMediaSource(
@@ -897,7 +875,6 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         prepare()
                     } else {
                         Timber.e("createExoPlayer - All fallback attempts failed for URL: $url")
-                        Timber.e("createExoPlayer - Video playback failed after trying HLS and original URL")
                     }
                 }
                 
@@ -909,15 +886,12 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         androidx.media3.common.Player.STATE_ENDED -> "ENDED"
                         else -> "UNKNOWN"
                     }
-                    Timber.d("createExoPlayer - Playback state changed to: $stateName")
                 }
                 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Timber.d("createExoPlayer - Is playing changed to: $isPlaying")
                 }
                 
                 override fun onIsLoadingChanged(isLoading: Boolean) {
-                    Timber.d("createExoPlayer - Is loading changed to: $isLoading")
                 }
             })
         }
@@ -927,10 +901,7 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     player.setMediaSource(mediaSource)
     
     // Prepare the player immediately after setting up the listener
-    Timber.d("createExoPlayer - Preparing ExoPlayer after creation")
     player.prepare()
-    
-    Timber.d("createExoPlayer - ExoPlayer created successfully")
     return player
 }
 
