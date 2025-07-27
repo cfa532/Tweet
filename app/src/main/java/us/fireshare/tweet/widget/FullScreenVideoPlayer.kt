@@ -54,7 +54,6 @@ fun FullScreenVideoPlayer(
     autoPlay: Boolean = true,
     onHorizontalSwipe: ((direction: Int) -> Unit)? = null // -1 for left, 1 for right
 ) {
-    Timber.d("FullScreenVideoPlayer - Composable called with videoMid: $videoMid, videoUrl: $videoUrl")
     val context = LocalContext.current
     val activity = context as? Activity
     var isMuted by remember { mutableStateOf(false) } // Always unmute in full screen
@@ -64,12 +63,9 @@ fun FullScreenVideoPlayer(
 
     // Create a dedicated fullscreen player instance
     val exoPlayer = remember(videoMid) {
-        Timber.d("FullScreenVideoPlayer - Creating dedicated fullscreen player for video: $videoMid")
-        
         // Get current position from existing player if available
         val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
         val currentPosition = existingPlayer?.currentPosition ?: 0L
-        Timber.d("FullScreenVideoPlayer - Current position from existing player: ${currentPosition}ms")
         
         // Create new player for fullscreen
         val player = createExoPlayer(context, videoUrl, MediaType.Video)
@@ -77,18 +73,13 @@ fun FullScreenVideoPlayer(
         // Seek to current position
         if (currentPosition > 0) {
             player.seekTo(currentPosition)
-            Timber.d("FullScreenVideoPlayer - Seeking to position: ${currentPosition}ms")
         }
         
-        Timber.d("FullScreenVideoPlayer - Fullscreen player created: ${player != null}")
         player
     }
 
     // Autoplay when entering full screen
     LaunchedEffect(exoPlayer) {
-        Timber.d("FullScreenVideoPlayer - Starting autoplay for video: $videoMid, autoPlay: $autoPlay")
-        Timber.d("FullScreenVideoPlayer - Video URL: $videoUrl")
-        
         if (autoPlay) {
             // Set volume and prepare for playback
             exoPlayer.volume = 1f
@@ -96,7 +87,6 @@ fun FullScreenVideoPlayer(
             
             // Start playback immediately
             exoPlayer.play()
-            Timber.d("FullScreenVideoPlayer - Auto-playback started for video: $videoMid")
         } else {
             exoPlayer.playWhenReady = false
         }
@@ -110,18 +100,8 @@ fun FullScreenVideoPlayer(
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
-                val stateName = when (playbackState) {
-                    androidx.media3.common.Player.STATE_IDLE -> "IDLE"
-                    androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
-                    androidx.media3.common.Player.STATE_READY -> "READY"
-                    androidx.media3.common.Player.STATE_ENDED -> "ENDED"
-                    else -> "UNKNOWN"
-                }
-                Timber.d("FullScreenVideoPlayer - Playback state changed to: $stateName")
-                
                 // Auto-start playback when ready
                 if (autoPlay && playbackState == androidx.media3.common.Player.STATE_READY) {
-                    Timber.d("FullScreenVideoPlayer - Player ready, starting playback")
                     exoPlayer.play()
                 }
             }
@@ -132,7 +112,6 @@ fun FullScreenVideoPlayer(
     DisposableEffect(Unit) {
         // Unmute video and hide system bars on enter
         exoPlayer.volume = 1f
-        Timber.d("FullScreenVideoPlayer - Unmuted video and set volume to 1.0")
         if (enableImmersiveMode && activity != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity.window.insetsController?.let { controller ->
@@ -151,7 +130,6 @@ fun FullScreenVideoPlayer(
         }
         onDispose {
             // Clean up the dedicated fullscreen player
-            Timber.d("FullScreenVideoPlayer - Cleaning up fullscreen player for video: $videoMid")
             exoPlayer.stop()
             exoPlayer.release()
             
@@ -214,7 +192,6 @@ fun FullScreenVideoPlayer(
                     onDragEnd = {
                         isDragging = false
                         if (dragOffset > 200f) {
-                            Timber.d("FullScreenVideoPlayer - Swipe down detected, closing player")
                             onClose()
                         } else {
                             dragOffset = 0f
@@ -235,7 +212,6 @@ fun FullScreenVideoPlayer(
         // Video Player with enhanced visual effects
         AndroidView(
             factory = {
-                Timber.d("FullScreenVideoPlayer - Creating PlayerView")
                 PlayerView(context).apply {
                     player = exoPlayer
                     useController = true // Always enable controller, we'll control visibility manually
@@ -246,7 +222,6 @@ fun FullScreenVideoPlayer(
                     setBackgroundColor(android.graphics.Color.rgb(28, 28, 30))
                     // Show buffering indicator
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                    Timber.d("FullScreenVideoPlayer - PlayerView created with player: ${player != null}")
                 }
             },
             update = { playerView ->
@@ -271,7 +246,6 @@ fun FullScreenVideoPlayer(
         if (showControls) {
             IconButton(
                 onClick = {
-                    Timber.d("FullScreenVideoPlayer - Close button tapped")
                     onClose()
                 },
                 modifier = Modifier

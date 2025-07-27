@@ -83,8 +83,6 @@ fun MediaPreviewGrid(
         else -> 4
     }
     val limitedMediaList = mediaItems.take(maxItems)
-    // Debug logging for mediaItems and limitedMediaList sizes
-    Timber.d("MediaPreviewGrid - mediaItems.size: ${mediaItems.size}, limitedMediaList.size: ${limitedMediaList.size}")
 
     // Helper: get aspect ratio for an item, using Compose state for images
     @OptIn(UnstableApi::class)
@@ -105,22 +103,17 @@ fun MediaPreviewGrid(
                 try {
                     val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                     val uri = mediaUrl.toUri()
-                    Timber.d("MediaPreview - Attempting to extract aspect ratio for video ${item.mid} from URL: $mediaUrl")
                     val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
-                    Timber.d("MediaPreview - Raw extracted aspect ratio for video ${item.mid}: $aspectRatio")
                     
                     if (aspectRatio != null && aspectRatio > 0) {
                         // Enforce minimum aspect ratio of 0.8
                         extractedAspectRatio = if (aspectRatio < 0.8f) {
-                            Timber.d("MediaPreview - Aspect ratio $aspectRatio is too small, clamping to 0.8 for video ${item.mid}")
                             0.8f
                         } else {
                             aspectRatio
                         }
-                        Timber.d("MediaPreview - Using extracted aspect ratio for video ${item.mid}: $extractedAspectRatio")
                     } else {
                         extractedAspectRatio = 4f / 3f // Default to 4:3 if extraction fails
-                        Timber.d("MediaPreview - Extraction failed, using default 4:3 for video ${item.mid}")
                     }
                 } catch (e: Exception) {
                     Timber.e("MediaPreview - Failed to extract aspect ratio for video ${item.mid}: $e")
@@ -164,7 +157,6 @@ fun MediaPreviewGrid(
     
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
-            Timber.d("MediaPreviewGrid - Setting up sequential playback for ${videoMids.size} videos")
             VideoManager.setupSequentialPlayback(videoMids)
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
@@ -177,7 +169,6 @@ fun MediaPreviewGrid(
             mediaItem?.let { item ->
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                 if (!VideoManager.isVideoPreloaded(videoMid)) {
-                    Timber.d("MediaPreviewGrid - Preloading video: $videoMid")
                     VideoManager.preloadVideo(context, videoMid, mediaUrl)
                 }
             }
@@ -187,7 +178,6 @@ fun MediaPreviewGrid(
     // Clean up sequential playback when component is disposed
     DisposableEffect(Unit) {
         onDispose {
-            Timber.d("MediaPreviewGrid - Disposing, stopping sequential playback")
             VideoManager.stopSequentialPlayback()
         }
     }

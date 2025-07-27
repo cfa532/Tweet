@@ -44,7 +44,6 @@ object ImageCacheManager {
             if (evicted && !oldValue.isRecycled) {
                 try {
                     oldValue.recycle()
-                    Timber.d("ImageCacheManager - Recycled bitmap for key: $key")
                 } catch (e: Exception) {
                     Timber.e("ImageCacheManager - Error recycling bitmap: $e")
                 }
@@ -99,8 +98,6 @@ object ImageCacheManager {
             // Check if already cached first
             getCachedImage(context, mid)?.let { return@withContext it }
             
-            Timber.d("ImageCacheManager - Downloading image from: $imageUrl")
-            
             val url = URL(imageUrl)
             val connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = CONNECTION_TIMEOUT
@@ -115,7 +112,6 @@ object ImageCacheManager {
                 if (bitmap != null && !bitmap.isRecycled) {
                     // Cache the downloaded image
                     cacheImage(context, mid, bitmap)
-                    Timber.d("ImageCacheManager - Successfully downloaded and cached image: $mid")
                     return@withContext bitmap
                 } else {
                     Timber.e("ImageCacheManager - Failed to decode image from URL: $imageUrl")
@@ -188,7 +184,6 @@ object ImageCacheManager {
                     FileOutputStream(file).use { out ->
                         out.write(byteArray)
                     }
-                    Timber.d("ImageCacheManager - Cached image: $mid (${byteArray.size / 1024}KB)")
                 } catch (e: IOException) {
                     Timber.e("ImageCacheManager - Error saving image to disk: $e")
                 }
@@ -246,7 +241,6 @@ object ImageCacheManager {
     fun clearMemoryCache() {
         try {
             memoryCache.evictAll()
-            Timber.d("ImageCacheManager - Memory cache cleared")
         } catch (e: Exception) {
             Timber.e("ImageCacheManager - Error clearing memory cache: $e")
         }
@@ -262,7 +256,7 @@ object ImageCacheManager {
             if (dir.exists()) {
                 dir.deleteRecursively()
             }
-            Timber.d("ImageCacheManager - All cached images cleared")
+
         } catch (e: Exception) {
             Timber.e("ImageCacheManager - Error clearing all cached images: $e")
         }

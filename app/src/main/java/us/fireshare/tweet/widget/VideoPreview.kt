@@ -68,10 +68,8 @@ fun VideoPreview(
     
     val exoPlayer = remember(url, videoMid) { 
         if (videoMid != null) {
-            Timber.d("VideoPreview - Getting ExoPlayer from VideoManager for video: $videoMid")
             VideoManager.getVideoPlayer(context, videoMid, url)
         } else {
-            Timber.d("VideoPreview - Creating NEW ExoPlayer for URL: $url (no videoMid)")
             createExoPlayer(context, url, MediaType.Video)
         }
     }
@@ -79,7 +77,6 @@ fun VideoPreview(
     // Preload video if not already cached
     LaunchedEffect(videoMid, url) {
         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-            Timber.d("VideoPreview - Preloading video: $videoMid")
             VideoManager.preloadVideo(context, videoMid, url)
         }
     }
@@ -121,7 +118,6 @@ fun VideoPreview(
 
     LaunchedEffect(isVideoVisible) {
         if (isVideoVisible) {
-            Timber.d("VideoPreview - Video became visible, autoPlay: $autoPlay")
             // Mark video as active in VideoManager
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
@@ -129,30 +125,24 @@ fun VideoPreview(
             
             // If player is already ready, start immediately
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
-                Timber.d("VideoPreview - Player already ready, starting immediately")
                 exoPlayer.playWhenReady = autoPlay
                 return@LaunchedEffect
             }
             
             // Ensure player is in a good state before playing
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
-                Timber.d("VideoPreview - Player in IDLE state, preparing again")
                 exoPlayer.prepare()
             }
             
             // Set playWhenReady after ensuring player is ready
-            Timber.d("VideoPreview - Setting playWhenReady to: $autoPlay")
             exoPlayer.playWhenReady = autoPlay
         } else {
-            Timber.d("VideoPreview - Video no longer visible, pausing playback")
             // Only pause if this is the only active instance of this video
             // Don't pause if the video is being used in full screen
             videoMid?.let { mid ->
                 val activeCount = VideoManager.getVideoActiveCount(mid)
                 if (activeCount <= 1) {
                     exoPlayer.playWhenReady = false
-                } else {
-                    Timber.d("VideoPreview - Not pausing video $mid as it's still active in other views (count: $activeCount)")
                 }
             } ?: run {
                 // If no videoMid, this is a standalone player, so pause it
@@ -173,18 +163,15 @@ fun VideoPreview(
                     androidx.media3.common.Player.STATE_READY -> {
                         isLoading = false
                         hasError = false
-                        Timber.d("VideoPreview - Video ready: $videoMid")
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> {
                         // Only show loading if not already cached/preloaded
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
                             isLoading = true
                         }
-                        Timber.d("VideoPreview - Video buffering: $videoMid")
                     }
                     androidx.media3.common.Player.STATE_ENDED -> {
                         isLoading = false
-                        Timber.d("VideoPreview - Video completed: $videoMid")
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)
                         }
@@ -194,7 +181,6 @@ fun VideoPreview(
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
                             isLoading = true
                         }
-                        Timber.d("VideoPreview - Video idle: $videoMid")
                     }
                 }
             }
@@ -223,7 +209,6 @@ fun VideoPreview(
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
             .clickable {
-                Timber.d("VideoPreview - Video tapped at index: $index, navigating to full screen")
                 // Auto-start video in full screen
                 callback(index)
             }

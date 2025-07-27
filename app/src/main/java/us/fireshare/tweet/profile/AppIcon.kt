@@ -81,7 +81,6 @@ fun UserAvatar(
                 
                 // If not cached, download and cache
                 if (cachedBitmap == null && !avatarUrl.isNullOrEmpty()) {
-                    Timber.d("UserAvatar - Loading avatar from URL: $avatarUrl")
                     cachedBitmap = ImageCacheManager.loadImage(context, avatarUrl!!, mid)
                     
                     if (cachedBitmap == null) {

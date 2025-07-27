@@ -338,7 +338,6 @@ enum class MediaType {
  * Extension function for merging tweets into an array
  */
 fun MutableList<Tweet>.mergeTweets(newTweets: List<Tweet>) {
-    Timber.d("[TweetListView] Merging ${newTweets.size} tweets")
     // Create a dictionary to track unique tweets by their mid
     val uniqueTweets = mutableMapOf<String, Tweet>()
     
@@ -355,7 +354,6 @@ fun MutableList<Tweet>.mergeTweets(newTweets: List<Tweet>) {
     // Convert back to array and sort by timestamp in descending order
     this.clear()
     this.addAll(uniqueTweets.values.sortedByDescending { it.timestamp })
-    Timber.d("[TweetListView] After merge: ${this.size} tweets")
 }
 
 @Serializable

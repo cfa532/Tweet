@@ -272,7 +272,7 @@ fun MediaBrowser(
                         enableImmersiveMode = false, // MediaBrowser already handles immersive mode
                         autoPlay = true, // Always auto-start video in full screen
                         onHorizontalSwipe = { direction ->
-                            Timber.d("MediaBrowser - Horizontal swipe detected: $direction")
+                            Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
                             animationScope.launch {
                                 if (direction > 0) {
                                     // Swipe right, go to next page

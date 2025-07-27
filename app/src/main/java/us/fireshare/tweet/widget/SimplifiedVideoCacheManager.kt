@@ -97,10 +97,7 @@ object SimplifiedVideoCacheManager {
         val masterUrl = "${baseUrl}master.m3u8"
         val playlistUrl = "${baseUrl}playlist.m3u8"
 
-        Timber.d("SimplifiedVideoCacheManager - Original URL: $url")
-        Timber.d("SimplifiedVideoCacheManager - Base URL: $baseUrl")
-        Timber.d("SimplifiedVideoCacheManager - Master URL: $masterUrl")
-        Timber.d("SimplifiedVideoCacheManager - Playlist URL: $playlistUrl")
+
 
         val exoPlayer = ExoPlayer.Builder(context)
             .build()
@@ -111,23 +108,7 @@ object SimplifiedVideoCacheManager {
             private var hasTriedOriginal = false
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                when (playbackState) {
-                    Player.STATE_READY -> {
-                        Timber.d("Video player ready for URL: $url (IPFS ID: $ipfsId)")
-                    }
-
-                    Player.STATE_BUFFERING -> {
-                        Timber.d("Video player buffering for URL: $url")
-                    }
-
-                    Player.STATE_ENDED -> {
-                        Timber.d("Video player ended for URL: $url")
-                    }
-
-                    Player.STATE_IDLE -> {
-                        Timber.d("Video player idle for URL: $url")
-                    }
-                }
+                // State changes handled silently
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -140,7 +121,6 @@ object SimplifiedVideoCacheManager {
 
                 // If offline, try to use cached data only
                 if (!isNetworkAvailable(context)) {
-                    Timber.d("SimplifiedVideoCacheManager - Offline mode detected, trying cached data only")
                     tryCachedDataOnly()
                     return
                 }
@@ -149,7 +129,6 @@ object SimplifiedVideoCacheManager {
                 // No retries, just try each format once
                 if (!hasTriedPlaylist) {
                     hasTriedPlaylist = true
-                    Timber.d("SimplifiedVideoCacheManager - Trying fallback to playlist URL: $playlistUrl")
 
                     try {
                         // If master.m3u8 fails, try playlist.m3u8
@@ -164,7 +143,6 @@ object SimplifiedVideoCacheManager {
 
                         exoPlayer.setMediaSource(fallbackMediaSource)
                         exoPlayer.prepare()
-                        Timber.d("SimplifiedVideoCacheManager - Successfully set fallback media source for: $playlistUrl")
                     } catch (e: Exception) {
                         Timber.e("SimplifiedVideoCacheManager - Error setting fallback media source. ${e.message}")
                         // If fallback fails, try original URL immediately
@@ -177,14 +155,11 @@ object SimplifiedVideoCacheManager {
                 } else {
                     // All fallback attempts failed, stop the player to prevent memory leaks
                     Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
-                    Timber.e("SimplifiedVideoCacheManager - Video playback failed after trying HLS and original URL")
                     exoPlayer.stop()
                 }
             }
 
             private fun tryCachedDataOnly() {
-                Timber.d("SimplifiedVideoCacheManager - Trying cached data only for URL: $url")
-                
                 try {
                     // Create a cache-only data source factory
                     val cacheOnlyDataSourceFactory = CacheDataSource.Factory()
@@ -203,18 +178,14 @@ object SimplifiedVideoCacheManager {
 
                     exoPlayer.setMediaSource(originalMediaSource)
                     exoPlayer.prepare()
-                    Timber.d("SimplifiedVideoCacheManager - Successfully set cached-only media source for: $url")
                 } catch (e: Exception) {
                     Timber.e("SimplifiedVideoCacheManager - Error setting cached-only media source. ${e.message}")
                     // If cached data fails, stop the player
                     exoPlayer.stop()
-                    Timber.e("SimplifiedVideoCacheManager - Cached data not available for URL: $url")
                 }
             }
 
             private fun tryOriginalUrl() {
-                Timber.d("SimplifiedVideoCacheManager - Trying original URL as last resort: $url")
-
                 try {
                     // If both HLS attempts fail, try the original URL (progressive video)
                     val originalMediaItem = MediaItem.Builder()
@@ -227,12 +198,10 @@ object SimplifiedVideoCacheManager {
 
                     exoPlayer.setMediaSource(originalMediaSource)
                     exoPlayer.prepare()
-                    Timber.d("SimplifiedVideoCacheManager - Successfully set original media source for: $url")
                 } catch (e: Exception) {
                     Timber.e("SimplifiedVideoCacheManager - Error setting original media source. ${e.message}")
                     // If all attempts fail, stop the player to prevent memory leaks
                     exoPlayer.stop()
-                    Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
                 }
             }
         })
@@ -245,7 +214,6 @@ object SimplifiedVideoCacheManager {
 
         val initialMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
             .createMediaSource(initialMediaItem)
-            .also { Timber.d("SimplifiedVideoCacheManager - Created MediaSource for HLS URL: $masterUrl") }
 
         return exoPlayer.apply {
             setMediaSource(initialMediaSource)

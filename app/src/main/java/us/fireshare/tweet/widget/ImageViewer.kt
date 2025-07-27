@@ -62,7 +62,6 @@ fun ImageViewer(
             
             // If not cached and not full size, download and cache
             if (cachedBitmap == null && !isFullSize) {
-                Timber.d("ImageViewer - Loading image from URL: $imageUrl")
                 cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
                 
                 if (cachedBitmap == null) {
@@ -179,7 +178,6 @@ fun FullScreenImageViewer(
             
             // If not cached, download and cache
             if (cachedBitmap == null) {
-                Timber.d("FullScreenImageViewer - Loading full-size image from URL: $imageUrl")
                 cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, imageMid)
                 
                 if (cachedBitmap == null) {

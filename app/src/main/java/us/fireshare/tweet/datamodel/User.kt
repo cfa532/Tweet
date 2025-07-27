@@ -259,38 +259,27 @@ data class User(
      * Resolve writable URL from hostIds and reset uploadService if needed
      */
     suspend fun resolveWritableUrl(): String? {
-        Timber.d("[resolveWritableUrl] Starting resolution for user: $mid")
-        Timber.d("[resolveWritableUrl] Current hostIds: $hostIds")
-        Timber.d("[resolveWritableUrl] Current baseUrl: $baseUrl")
-        Timber.d("[resolveWritableUrl] Current writableUrl: $writableUrl")
-
         // If writableUrl is already valid, return it immediately
         if (!writableUrl.isNullOrEmpty()) {
-            Timber.d("[resolveWritableUrl] Using existing writableUrl: $writableUrl")
             return writableUrl
         }
         
         // If writableUrl is null or empty, clear uploadService and resolve
-        Timber.d("[resolveWritableUrl] writableUrl is null/empty, clearing uploadService and resolving...")
         clearUploadService()
 
         suspend fun tryResolve(): String? {
             if (hostIds.isNullOrEmpty()) {
-                Timber.d("[resolveWritableUrl] No hostIds available, keeping existing writableUrl")
                 return writableUrl
             }
 
             val firstHostId = hostIds?.first()
-            Timber.d("[resolveWritableUrl] Attempting to resolve first hostId: $firstHostId")
 
             if (firstHostId.isNullOrEmpty()) {
-                Timber.d("[resolveWritableUrl] First hostId is empty, keeping existing writableUrl")
                 return writableUrl
             }
 
             val hostIP = HproseInstance.getHostIP(firstHostId)
             if (hostIP != null) {
-                Timber.d("[resolveWritableUrl] Successfully resolved hostIP: $hostIP for hostId: $firstHostId")
                 
                 // Extract clean IP and port
                 val (cleanIP, port) = when {
@@ -342,15 +331,12 @@ data class User(
                     "http://$cleanIP:$port"
                 }
 
-                Timber.d("[resolveWritableUrl] Final constructed urlString: $urlString")
                 writableUrl = urlString
-                Timber.d("✅ Resolved writableUrl to: $urlString from first hostId: $firstHostId")
                 return urlString
             } else {
                 Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
             }
 
-            Timber.d("[resolveWritableUrl] Keeping existing writableUrl")
             return writableUrl
         }
 
@@ -360,7 +346,6 @@ data class User(
             return firstAttempt
         }
         // Retry once if first attempt failed
-        Timber.d("[resolveWritableUrl] First attempt failed, retrying once...")
         val retryAttempt = tryResolve()
         return retryAttempt
     }

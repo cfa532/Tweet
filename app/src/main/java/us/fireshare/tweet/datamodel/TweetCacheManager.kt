@@ -48,12 +48,10 @@ object TweetCacheManager {
 
                 // Always update memory cache
                 memoryCache[tweet.mid] = cachedTweet
-                Timber.d("Cached tweet in memory: ${tweet.mid}")
 
                 // Only update database cache if shouldCache is true
                 if (shouldCache) {
                     HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
-                    Timber.d("Cached tweet in database: ${tweet.mid}")
                 }
             }
         } catch (e: Exception) {
@@ -71,7 +69,6 @@ object TweetCacheManager {
             synchronized(cacheLock) {
                 // Check memory cache first
                 memoryCache[tweetId]?.let { cachedTweet ->
-                    Timber.d("Tweet found in memory cache: $tweetId")
                     return cachedTweet.originalTweet
                 }
 
@@ -80,7 +77,6 @@ object TweetCacheManager {
                 dbCachedTweet?.let { cachedTweet ->
                     // Add to memory cache for faster access
                     memoryCache[tweetId] = cachedTweet
-                    Timber.d("Tweet found in database cache: $tweetId")
                     return cachedTweet.originalTweet
                 }
 
@@ -111,8 +107,6 @@ object TweetCacheManager {
 
                 // Remove from database cache
                 HproseInstance.dao.deleteCachedTweet(tweetId)
-
-                Timber.d("Tweet removed from cache: $tweetId")
             }
         } catch (e: Exception) {
             Timber.e("Error removing cached tweet: $e")
@@ -130,8 +124,6 @@ object TweetCacheManager {
 
                 // Clear database cache
                 HproseInstance.dao.clearAllCachedTweets()
-
-                Timber.d("All cached tweets cleared")
             }
         } catch (e: Exception) {
             Timber.e("Error clearing cached tweets: $e")
@@ -158,7 +150,7 @@ object TweetCacheManager {
                     memoryCache.remove(key)
                 }
 
-                Timber.d("Cleanup completed. Removed ${expiredKeys.size} expired tweets from memory cache")
+
             }
         } catch (e: Exception) {
             Timber.e("Error cleaning up expired tweets: $e")
@@ -204,7 +196,6 @@ object TweetCacheManager {
                     // Remove expired user from both memory and database cache
                     // If memory copy is expired, database copy must also be expired
                     removeCachedUserInternal(userId)
-                    Timber.d("Expired user removed from cache (memory + database): $userId")
                 }
             }
 
@@ -218,17 +209,14 @@ object TweetCacheManager {
                         userMemoryCache[userId] = user
                         userCacheTimestamps[userId] = System.currentTimeMillis()
                     }
-                    Timber.d("User found in database cache: $userId")
                     return user
                 } else {
                     // Remove expired user from database cache
                     removeCachedUserInternal(userId)
-                    Timber.d("Expired user removed from database cache: $userId")
                 }
             }
 
             // User not found in cache or was expired and removed
-            Timber.d("User not found in cache: $userId")
             null
         } catch (e: Exception) {
             Timber.e("Error retrieving cached user: $e")
@@ -277,11 +265,6 @@ object TweetCacheManager {
 
             expiredUserIds.forEach { userId ->
                 removeCachedUserInternal(userId)
-                Timber.d("Removed expired user: $userId")
-            }
-
-            if (expiredUserIds.isNotEmpty()) {
-                Timber.d("Cleaned up ${expiredUserIds.size} expired users")
             }
         } catch (e: Exception) {
             Timber.e("Error cleaning up expired users: $e")
@@ -301,8 +284,6 @@ object TweetCacheManager {
 
             // Clear database cache using bulk delete
             HproseInstance.dao.clearAllCachedUsers()
-
-            Timber.d("All cached users cleared (memory + database)")
         } catch (e: Exception) {
             Timber.e("Error clearing cached users: $e")
         }

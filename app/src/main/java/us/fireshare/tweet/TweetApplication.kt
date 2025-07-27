@@ -49,7 +49,6 @@ class TweetApplication : Application(){
 
         // Start video memory monitoring
         VideoManager.startMemoryMonitoring()
-        Timber.d("TweetApplication - Started video memory monitoring")
 
         fun onTerminate() {
             super.onTerminate()
