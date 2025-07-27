@@ -1,6 +1,7 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,6 +34,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +66,8 @@ data class ScrollState(
  * @param showPrivateTweets Whether to show private tweets
  * @param modifier Modifier for the component
  * @param parentEntry Optional NavBackStackEntry for navigation context
+ * @param onIsAtLastTweetChange Callback when isAtLastTweet state changes (for external gesture detection)
+ * @param onTriggerLoadMore Callback to trigger manual loadmore (for external gesture detection)
  */
 @Composable
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
@@ -78,6 +83,8 @@ fun TweetListView(
     currentUserId: MimeiId? = null, // Add current user ID to detect user changes
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // Callback when tweet becomes unavailable
     headerContent: (@Composable () -> Unit)? = null, // Optional header content
+    onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
+    onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
 ) {
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -85,7 +92,10 @@ fun TweetListView(
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
     var lastUserId by remember { mutableStateOf(currentUserId) }
     var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
-    var lastLoadMoreTime by remember { mutableStateOf(0L) } // Track last load more call time for debouncing
+    var pendingLoadMorePage by remember { mutableIntStateOf(-1) } // Track which page is currently being loaded
+    var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
+    var lastExternalRequestTime by remember { mutableLongStateOf(0L) } // Track last external request time for debouncing
+    var spinnerStartTime by remember { mutableLongStateOf(0L) } // Track when spinner started for minimum display time
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -199,6 +209,37 @@ fun TweetListView(
         }
     }
 
+    // Check if we're at the last tweet for gesture detection
+    val isAtLastTweet by remember(listState, tweets) {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val totalItems = layoutInfo.totalItemsCount
+            val result = lastVisibleItem != null && lastVisibleItem.index == totalItems - 1
+            
+            // Debug logging for isAtLastTweet
+            if (result || (lastVisibleItem != null && lastVisibleItem.index >= totalItems - 3)) {
+                Timber.tag("TweetListView").d("isAtLastTweet debug: result=$result, lastVisibleIndex=${lastVisibleItem?.index}, totalItems=$totalItems, serverDepleted=$serverDepleted")
+            }
+            
+            result
+        }
+    }
+
+    // Notify caller when isAtLastTweet changes
+    LaunchedEffect(isAtLastTweet) {
+        onIsAtLastTweetChange?.invoke(isAtLastTweet)
+    }
+
+    // Handle external loadmore triggers
+    LaunchedEffect(Unit) {
+        onTriggerLoadMore?.let { trigger ->
+            // This will be called when the caller wants to trigger loadmore
+            // We'll use a shared flow or state to communicate this
+            externalLoadMoreRequest = true
+        }
+    }
+
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
@@ -244,19 +285,6 @@ fun TweetListView(
         }
     }
 
-    val isAtBottom by remember(tweets) {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val totalItems = layoutInfo.totalItemsCount
-            
-            // Check if we're near the bottom (within 2 items of the end)
-            val isAtBottom = lastVisibleItem != null && lastVisibleItem.index >= totalItems - 2
-            
-            isAtBottom
-        }
-    }
-
     // Preload next page when user is approaching the bottom
     val isNearBottom by remember(tweets) {
         derivedStateOf {
@@ -264,10 +292,10 @@ fun TweetListView(
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
             val totalItems = layoutInfo.totalItemsCount
             
-            // Check if we're near the bottom (within 5 items of the end) but not at the bottom
+            // Check if we're near the bottom (within 5 items of the end) but not at the last tweet
             val isNearBottom = lastVisibleItem != null && 
                               lastVisibleItem.index >= totalItems - 5 && 
-                              lastVisibleItem.index < totalItems - 2
+                              lastVisibleItem.index < totalItems - 1
             
             isNearBottom
         }
@@ -276,16 +304,15 @@ fun TweetListView(
     // Preload next page when approaching bottom
     LaunchedEffect(isNearBottom, serverDepleted) {
         if (isNearBottom && !serverDepleted && tweets.size >= 4) {
-            val currentTime = System.currentTimeMillis()
-            val timeSinceLastLoad = currentTime - lastLoadMoreTime
-            val PRELOAD_DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce for preload (shorter than load more)
+            val nextPage = lastLoadedPage + 1
             
-            if (timeSinceLastLoad < PRELOAD_DEBOUNCE_DELAY_MS) {
-                Timber.tag("TweetListView").d("Preload debounced: ${timeSinceLastLoad}ms since last call (threshold: ${PRELOAD_DEBOUNCE_DELAY_MS}ms)")
+            // Check if we're already loading this page
+            if (pendingLoadMorePage == nextPage) {
+                Timber.tag("TweetListView").d("Preload skipped: page $nextPage is already being loaded")
                 return@LaunchedEffect
             }
             
-            Timber.tag("TweetListView").d("Near bottom detected, preloading next page... (debounce passed)")
+            Timber.tag("TweetListView").d("Near bottom detected, preloading page $nextPage...")
             
             coroutineScope.launch {
                 try {
@@ -322,28 +349,32 @@ fun TweetListView(
             }
     }
 
-    // Infinite scroll - Allow manual loading even when serverDepleted
-    LaunchedEffect(isAtBottom, isRefreshingAtBottom, serverDepleted) {
-        Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
+    // Infinite scroll - Only trigger when last tweet is visible and server not depleted
+    LaunchedEffect(isAtLastTweet, isRefreshingAtBottom, serverDepleted, externalLoadMoreRequest) {
+        Timber.tag("TweetListView").d("isAtLastTweet changed: $isAtLastTweet, isRefreshingAtBottom: $isRefreshingAtBottom, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, externalLoadMoreRequest: $externalLoadMoreRequest, lastLoadedPage: $lastLoadedPage")
         
-        // Allow loading if at bottom, not already refreshing, and debounce check passed
-        if (isAtBottom && !isRefreshingAtBottom && tweets.size >= 4) {
-            val currentTime = System.currentTimeMillis()
-            val timeSinceLastLoad = currentTime - lastLoadMoreTime
-            val DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce
+        // Allow loading if last tweet is visible, not already refreshing, and no pending load for the same page
+        // OR if there's an external loadmore request (even when serverDepleted is true)
+        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.size >= 4 && !serverDepleted) || 
+            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.size >= 4)) {
             
-            if (timeSinceLastLoad < DEBOUNCE_DELAY_MS) {
-                Timber.tag("TweetListView").d("Load more debounced: ${timeSinceLastLoad}ms since last call (threshold: ${DEBOUNCE_DELAY_MS}ms)")
+            val nextPage = lastLoadedPage + 1
+            
+            // Check if we're already loading this page
+            if (pendingLoadMorePage == nextPage) {
+                Timber.tag("TweetListView").d("Load more skipped: page $nextPage is already being loaded")
                 return@LaunchedEffect
             }
             
-            if (serverDepleted) {
-                Timber.tag("TweetListView").d("Server depleted, but user can still try to load more...")
+            if (externalLoadMoreRequest) {
+                Timber.tag("TweetListView").d("External loadmore request detected, triggering loadmore...")
+                externalLoadMoreRequest = false // Reset the request
             }
             
-            Timber.tag("TweetListView").d("Triggering load more... (debounce passed)")
-            lastLoadMoreTime = currentTime // Update the timestamp
+            Timber.tag("TweetListView").d("Triggering load more for page $nextPage...")
+            pendingLoadMorePage = nextPage // Mark this page as being loaded
             isRefreshingAtBottom = true // Set loading state immediately
+            spinnerStartTime = System.currentTimeMillis() // Track when spinner started
             
             coroutineScope.launch {
                 try {
@@ -385,10 +416,23 @@ fun TweetListView(
                         }
                     }
                 } finally {
+                    // Ensure spinner shows for at least 1 second
+                    val elapsedTime = System.currentTimeMillis() - spinnerStartTime
+                    val minDisplayTime = 1000L // 1 second minimum
+                    
+                    if (elapsedTime < minDisplayTime) {
+                        val remainingTime = minDisplayTime - elapsedTime
+                        Timber.tag("TweetListView").d("Spinner shown for ${elapsedTime}ms, waiting ${remainingTime}ms more for minimum display time")
+                        delay(remainingTime)
+                    }
+                    
                     isRefreshingAtBottom = false // Ensure state is reset
-                    Timber.tag("TweetListView").d("Load more completed, isRefreshingAtBottom set to false")
+                    pendingLoadMorePage = -1 // Clear pending page
+                    Timber.tag("TweetListView").d("Load more completed, isRefreshingAtBottom set to false, pendingLoadMorePage cleared")
                 }
             }
+        } else if (isAtLastTweet && serverDepleted) {
+            Timber.tag("TweetListView").d("Last tweet visible with serverDepleted=true - waiting for manual gesture to trigger loadmore")
         }
     }
 
@@ -426,17 +470,71 @@ fun TweetListView(
                     }
                 }
             }
+            
+            // Loading spinner at bottom
             if (isRefreshingAtBottom) {
                 item {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(bottom = 60.dp)
                             .wrapContentWidth(Alignment.CenterHorizontally),
                         color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 4.dp
                     )
                 }
+            }
+        }
+        
+        // Transparent gesture detection overlay when at last tweet and server depleted
+        if (isAtLastTweet && serverDepleted && !isRefreshingAtBottom) {
+            Timber.tag("TweetListView").d("Creating overlay: isAtLastTweet=$isAtLastTweet, serverDepleted=$serverDepleted, isRefreshingAtBottom=$isRefreshingAtBottom")
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(isAtLastTweet, isRefreshingAtBottom) {
+                        Timber.tag("TweetListView").d("Overlay PointerInput setup: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom")
+                        detectDragGestures(
+                            onDragEnd = { 
+                                Timber.tag("TweetListView").d("Overlay onDragEnd called")
+                            },
+                            onDragCancel = { 
+                                Timber.tag("TweetListView").d("Overlay onDragCancel called")
+                            },
+                            onDragStart = { 
+                                Timber.tag("TweetListView").d("Overlay onDragStart called")
+                            },
+                            onDrag = { change, dragAmount ->
+                                Timber.tag("TweetListView").d("Overlay onDrag called with dragAmount=$dragAmount")
+                                change.consume()
+                                
+                                val (x, y) = dragAmount
+                                Timber.tag("TweetListView").d("Overlay gesture debug: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom, tweets.size=${tweets.size}, serverDepleted=$serverDepleted, dragAmount=($x, $y)")
+                                
+                                // Check if it's an upward gesture (negative Y means up)
+                                if (y < -20) { // Lowered threshold from -50 to -20 for more sensitivity
+                                    val currentTime = System.currentTimeMillis()
+                                    val timeSinceLastRequest = currentTime - lastExternalRequestTime
+                                    
+                                    // Debounce: only allow new requests after 500ms
+                                    if (timeSinceLastRequest > 500) {
+                                        Timber.tag("TweetListView").d("Overlay: Upward gesture detected, triggering external loadmore... (timeSinceLastRequest: ${timeSinceLastRequest}ms)")
+                                        externalLoadMoreRequest = true
+                                        lastExternalRequestTime = currentTime
+                                    } else {
+                                        Timber.tag("TweetListView").d("Overlay: Gesture detected but debounced (timeSinceLastRequest: ${timeSinceLastRequest}ms < 500ms)")
+                                    }
+                                } else {
+                                    Timber.tag("TweetListView").d("Overlay: Gesture not upward enough: y=$y (threshold: -20)")
+                                }
+                            }
+                        )
+                    }
+            )
+        } else {
+            // Debug logging when overlay is NOT created
+            if (isAtLastTweet) {
+                Timber.tag("TweetListView").d("Overlay NOT created: isAtLastTweet=$isAtLastTweet, serverDepleted=$serverDepleted, isRefreshingAtBottom=$isRefreshingAtBottom")
             }
         }
         PullRefreshIndicator(
