@@ -31,6 +31,16 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.ImageCacheManager
 
 /**
+ * State object for avatar loading to reduce recomposition
+ */
+data class AvatarLoadState(
+    val bitmap: android.graphics.Bitmap? = null,
+    val avatarUrl: String? = null,
+    val isLoading: Boolean = false,
+    val hasError: Boolean = false
+)
+
+/**
  * AppIcon displays the app logo (singleton painter resource)
  */
 @Composable
@@ -56,43 +66,39 @@ fun AppIcon() {
 fun UserAvatar(
     user: User,
     size: Int = 40,
-    enableLongPress: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val mid = user.avatar ?: ""
-    var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf(false) }
-    var avatarUrl by remember(key1 = user.avatar) {
-        mutableStateOf(getMediaUrl(user.avatar, user.baseUrl))
-    }
+    var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
     
     LaunchedEffect(key1 = user.avatar) {
-        avatarUrl = getMediaUrl(user.avatar, user.baseUrl)
+        val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
+        loadState = loadState.copy(avatarUrl = newAvatarUrl)
         
         if (mid.isNotEmpty()) {
             try {
-                isLoading = true
-                loadError = false
+                loadState = loadState.copy(isLoading = true, hasError = false)
                 
                 // Try to load from cache first
-                cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+                val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
                 
                 // If not cached, download and cache
-                if (cachedBitmap == null && !avatarUrl.isNullOrEmpty()) {
-                    cachedBitmap = ImageCacheManager.loadImage(context, avatarUrl!!, mid)
+                if (cachedBitmap == null && !newAvatarUrl.isNullOrEmpty()) {
+                    val downloadedBitmap = ImageCacheManager.loadImage(context, newAvatarUrl, mid)
                     
-                    if (cachedBitmap == null) {
-                        loadError = true
-                        Timber.e("UserAvatar - Failed to load avatar: $avatarUrl")
+                    if (downloadedBitmap == null) {
+                        loadState = loadState.copy(isLoading = false, hasError = true)
+                        Timber.e("UserAvatar - Failed to load avatar: $newAvatarUrl")
+                    } else {
+                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     }
+                } else {
+                    loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
                 }
             } catch (e: Exception) {
-                loadError = true
+                loadState = loadState.copy(isLoading = false, hasError = true)
                 Timber.e("UserAvatar - Error loading avatar: $e")
-            } finally {
-                isLoading = false
             }
         }
     }
@@ -108,17 +114,17 @@ fun UserAvatar(
             }
         }
 
-    if (cachedBitmap != null) {
+    if (loadState.bitmap != null) {
         // Show cached avatar image
         Image(
-            bitmap = cachedBitmap!!.asImageBitmap(),
+            bitmap = loadState.bitmap!!.asImageBitmap(),
             contentDescription = "User Avatar",
             contentScale = ContentScale.Crop,
             modifier = modifier
         )
-    } else if (!avatarUrl.isNullOrEmpty() && !loadError) {
+    } else if (!loadState.avatarUrl.isNullOrEmpty() && !loadState.hasError) {
         // Show loading state or try to load from URL
-        if (isLoading) {
+        if (loadState.isLoading) {
             Box(
                 modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center

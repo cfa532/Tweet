@@ -98,30 +98,9 @@ fun MediaPreviewGrid(
                 return storedAspectRatio
             }
             
-            // If stored aspect ratio is not available, extract it from the video URL
-            var extractedAspectRatio by remember(item.mid) { mutableStateOf<Float?>(null) }
-            LaunchedEffect(item.mid) {
-                try {
-                    val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-                    val uri = mediaUrl.toUri()
-                    val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
-
-                    extractedAspectRatio = if (aspectRatio != null && aspectRatio > 0) {
-                        // Enforce minimum aspect ratio of 0.8
-                        if (aspectRatio < 0.8f) {
-                            0.8f
-                        } else {
-                            aspectRatio
-                        }
-                    } else {
-                        4f / 3f // Default to 4:3 if extraction fails
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("MediaPreviewGrid").e("Failed to extract aspect ratio for video ${item.mid}: $e")
-                    extractedAspectRatio = 4f / 3f // Default to 4:3 on error
-                }
-            }
-            return extractedAspectRatio ?: (4f / 3f)
+            // If stored aspect ratio is not available, use a stable default
+            // The actual aspect ratio will be calculated when the video is loaded
+            return 4f / 3f // Default to 4:3 to prevent shaking
         }
         if (itemType == MediaType.Image) {
             // Use a stable approach that doesn't cause recomposition issues
@@ -133,7 +112,7 @@ fun MediaPreviewGrid(
             
             // If no stored aspect ratio, use a default square ratio to prevent shaking
             // The actual aspect ratio will be calculated when the image is loaded
-            return 1f
+            return 1.618f
         }
         // For other types, use square aspect ratio
         return 1.618f

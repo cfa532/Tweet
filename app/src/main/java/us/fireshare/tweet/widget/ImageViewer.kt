@@ -27,6 +27,15 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
+ * State object for image loading to reduce recomposition
+ */
+data class ImageLoadState(
+    val bitmap: android.graphics.Bitmap? = null,
+    val isLoading: Boolean = false,
+    val hasError: Boolean = false
+)
+
+/**
  * ImageViewer displays images with caching support
  * @param imageUrl URL of the image to display
  * @param modifier Modifier for the image container
@@ -47,33 +56,32 @@ fun ImageViewer(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
-    var cachedBitmap by remember(mid) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf(false) }
+    var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
     // Load image using ImageCacheManager
     LaunchedEffect(mid, imageUrl) {
         try {
-            isLoading = true
-            loadError = false
+            loadState = loadState.copy(isLoading = true, hasError = false)
             
             // Try to load from cache first
-            cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
             
             // If not cached and not full size, download and cache
             if (cachedBitmap == null && !isFullSize) {
-                cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                val downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
                 
-                if (cachedBitmap == null) {
-                    loadError = true
+                if (downloadedBitmap == null) {
+                    loadState = loadState.copy(isLoading = false, hasError = true)
                     Timber.e("ImageViewer - Failed to load image: $imageUrl")
+                } else {
+                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                 }
+            } else {
+                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
             }
         } catch (e: Exception) {
-            loadError = true
+            loadState = loadState.copy(isLoading = false, hasError = true)
             Timber.e("ImageViewer - Error loading image: $e")
-        } finally {
-            isLoading = false
         }
     }
 
@@ -87,10 +95,10 @@ fun ImageViewer(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
-        if (cachedBitmap != null) {
+        if (loadState.bitmap != null) {
             // Show cached image
             Image(
-                bitmap = cachedBitmap!!.asImageBitmap(),
+                bitmap = loadState.bitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = if (enableLongPress) {
@@ -100,7 +108,7 @@ fun ImageViewer(
                     adjustedModifier
                 }
             )
-        } else if (loadError) {
+        } else if (loadState.hasError) {
             // Show error state
             Box(
                 modifier = adjustedModifier
@@ -109,7 +117,7 @@ fun ImageViewer(
             ) {
                 Text("Failed to load image")
             }
-        } else if (isLoading) {
+        } else if (loadState.isLoading) {
             // Show loading state
             Box(
                 modifier = adjustedModifier
@@ -163,41 +171,40 @@ fun FullScreenImageViewer(
     var showMenu by remember { mutableStateOf(false) }
     val imageMid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     val previewMid = remember(previewUrl) { previewUrl.getMimeiKeyFromUrl() }
-    var cachedBitmap by remember(imageMid) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf(false) }
+    var loadState by remember(imageMid) { mutableStateOf(ImageLoadState()) }
 
     // Load image using ImageCacheManager
     LaunchedEffect(imageMid, imageUrl) {
         try {
-            isLoading = true
-            loadError = false
+            loadState = loadState.copy(isLoading = true, hasError = false)
             
             // Try to load from cache first
-            cachedBitmap = ImageCacheManager.getCachedImage(context, imageMid)
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, imageMid)
             
             // If not cached, download and cache
             if (cachedBitmap == null) {
-                cachedBitmap = ImageCacheManager.loadImage(context, imageUrl, imageMid)
+                val downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, imageMid)
                 
-                if (cachedBitmap == null) {
-                    loadError = true
+                if (downloadedBitmap == null) {
+                    loadState = loadState.copy(isLoading = false, hasError = true)
                     Timber.e("FullScreenImageViewer - Failed to load full-size image: $imageUrl")
+                } else {
+                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                 }
+            } else {
+                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
             }
         } catch (e: Exception) {
-            loadError = true
+            loadState = loadState.copy(isLoading = false, hasError = true)
             Timber.e("FullScreenImageViewer - Error loading full-size image: $e")
-        } finally {
-            isLoading = false
         }
     }
 
     Box(modifier = modifier) {
-        if (cachedBitmap != null) {
+        if (loadState.bitmap != null) {
             // Show cached image
             Image(
-                bitmap = cachedBitmap!!.asImageBitmap(),
+                bitmap = loadState.bitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = if (enableLongPress) {
@@ -207,7 +214,7 @@ fun FullScreenImageViewer(
                     Modifier.fillMaxSize()
                 }
             )
-        } else if (loadError) {
+        } else if (loadState.hasError) {
             // Show error state
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -215,7 +222,7 @@ fun FullScreenImageViewer(
             ) {
                 Text("Failed to load image")
             }
-        } else if (isLoading) {
+        } else if (loadState.isLoading) {
             // Show loading state
             Box(
                 modifier = Modifier.fillMaxSize(),
