@@ -1,19 +1,25 @@
 # TweetListView Component
 
-A self-contained, reusable, iOS-like TweetListView component for displaying lists of tweets in your Android app.
+A self-contained, reusable, iOS-like TweetListView component for displaying lists of tweets in your Android app with advanced infinite scroll, gesture detection, and loading management.
 
 ## Features
 
 - **Self-contained state management** - Handles pagination, scroll, pull-to-refresh, and load more internally
-- **Simplified API** - Single `getTweets(pageNumber)` function for all loading operations
-- **Automatic page management** - Internal `currentPage` state tracks pagination automatically
+- **Simplified API** - Single `fetchTweets(pageNumber)` suspend function for all loading operations
+- **Automatic page management** - Internal `lastLoadedPage` state tracks pagination automatically
 - **Pull-to-refresh functionality** - Swipe down to refresh the tweet list (page 0)
-- **Infinite scrolling** - Automatically load more tweets when reaching the bottom (currentPage+1)
+- **Advanced infinite scrolling** - Automatically load more tweets when reaching the bottom
+- **Manual gesture detection** - Scroll up gesture at the bottom triggers loadmore when server is depleted
+- **Smart debouncing** - Prevents duplicate loadmore requests with page-based deduplication
+- **Minimum spinner display time** - Ensures loading spinner is visible for at least 1 second
+- **Server depletion detection** - Tracks when server has no more data and allows manual confirmation
 - **Scroll position preservation** - Maintain scroll position across configuration changes
-- **Loading states** - Visual indicators for top and bottom loading states
+- **Loading states** - Visual indicators for top and bottom loading states with timeouts
 - **TopAppBar integration** - Seamless integration with Material3 TopAppBar scroll behavior
 - **Customizable** - Flexible parameters for different use cases
 - **Private tweet filtering** - Option to show/hide private tweets
+- **Header content support** - Custom header content (e.g., profile details, pinned tweets)
+- **External gesture detection** - Callbacks for external components to trigger loadmore
 
 ## Components
 
@@ -25,46 +31,85 @@ The main self-contained component with full functionality:
 @Composable
 fun TweetListView(
     tweets: List<Tweet>,
-    getTweets: (Int) -> Unit,
+    fetchTweets: suspend (Int) -> List<Tweet?>, // Changed to suspend function
     modifier: Modifier = Modifier,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
+    onScrollStateChange: ((ScrollState) -> Unit)? = null,
+    currentUserId: MimeiId? = null, // Add current user ID to detect user changes
+    onTweetUnavailable: ((MimeiId) -> Unit)? = null, // Callback when tweet becomes unavailable
+    headerContent: (@Composable () -> Unit)? = null, // Optional header content
+    onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
+    onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
 )
 ```
 
-### 2. SimpleTweetListView
+## Advanced Infinite Scroll Algorithm
 
-A simplified version for basic tweet list display:
+### Core Components
 
-```kotlin
-@Composable
-fun SimpleTweetListView(
-    tweets: List<Tweet>,
-    parentEntry: NavBackStackEntry,
-    modifier: Modifier = Modifier
-)
-```
+1. **Page-based Deduplication** (`pendingLoadMorePage`)
+   - Tracks which page is currently being loaded
+   - Prevents duplicate requests for the same page
+   - More efficient than time-based debouncing
 
-### 3. UserTweetListView
+2. **Server Depletion Detection** (`serverDepleted`)
+   - Tracks when server has no more data
+   - Allows manual confirmation via gestures
+   - Prevents infinite loading loops
 
-Specialized for user profile screens with pinned tweets support:
+3. **Precise Last Tweet Detection** (`isAtLastTweet`)
+   - Uses `derivedStateOf` to check if the very last item is visible
+   - More precise than checking if "near bottom"
+   - Triggers infinite scroll only when exactly at the last tweet
 
-```kotlin
-@Composable
-fun UserTweetListView(
-    tweets: List<Tweet>,
-    pinnedTweets: List<Tweet> = emptyList(),
-    parentEntry: NavBackStackEntry,
-    getTweets: (Int) -> Unit,
-    onScrollPositionChange: ((Pair<Int, Int>) -> Unit)? = null,
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-    showPrivateTweets: Boolean = false,
-    modifier: Modifier = Modifier
-)
-```
+4. **Manual Gesture Detection**
+   - Transparent overlay appears when at last tweet and server depleted
+   - Detects upward scroll gestures using `PointerInput`
+   - 500ms debouncing prevents multiple rapid triggers
+   - 20px threshold for gesture sensitivity
+
+5. **Minimum Spinner Display Time**
+   - Spinner shows for at least 1 second regardless of server response time
+   - Ensures users see the loading feedback
+   - Prevents flickering for fast responses
+
+### Loading States
+
+- **`isRefreshingAtTop`** - Pull-to-refresh state with 10-second timeout
+- **`isRefreshingAtBottom`** - Infinite scroll state with 10-second timeout
+- **`pendingLoadMorePage`** - Page-based deduplication
+- **`externalLoadMoreRequest`** - External gesture trigger
+
+### Algorithm Flow
+
+1. **Initialization**
+   - Load enough tweets (minimum 4) for new users
+   - Reset `lastLoadedPage` and `serverDepleted` flags
+   - 10-second timeout protection
+
+2. **Infinite Scroll Trigger**
+   - When `isAtLastTweet` becomes true
+   - Only if `!serverDepleted` and `!isRefreshingAtBottom`
+   - Uses page-based deduplication
+
+3. **Manual Gesture Trigger**
+   - When at last tweet AND `serverDepleted` is true
+   - Transparent overlay captures upward gestures
+   - 500ms debouncing prevents rapid triggers
+   - Always attempts at least one page load for confirmation
+
+4. **Preload Mechanism**
+   - Silently loads next page when approaching bottom
+   - Uses same deduplication mechanism
+   - Improves perceived performance
+
+5. **Loading Completion**
+   - Updates `lastLoadedPage` only if valid tweets found
+   - Resets `serverDepleted` flag if new data found
+   - Ensures minimum 1-second spinner display
 
 ## Usage Examples
 
@@ -80,12 +125,8 @@ fun MyTweetScreen(
     
     TweetListView(
         tweets = tweets,
-        getTweets = { pageNumber ->
-            if (pageNumber == 0) {
-                viewModel.refresh()
-            } else {
-                viewModel.loadMore()
-            }
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber) // Suspend function
         },
         parentEntry = parentEntry
     )
@@ -113,12 +154,8 @@ fun TweetFeedWithTopBar(
     ) { padding ->
         TweetListView(
             tweets = tweets,
-            getTweets = { pageNumber ->
-                if (pageNumber == 0) {
-                    viewModel.refresh()
-                } else {
-                    viewModel.loadMore()
-                }
+            fetchTweets = { pageNumber ->
+                viewModel.fetchTweets(pageNumber)
             },
             scrollBehavior = scrollBehavior,
             parentEntry = parentEntry,
@@ -128,44 +165,72 @@ fun TweetFeedWithTopBar(
 }
 ```
 
-### User Profile with Pinned Tweets
+### Profile Screen with Header Content
 
 ```kotlin
 @Composable
-fun UserProfileScreen(
+fun ProfileScreen(
     parentEntry: NavBackStackEntry,
     viewModel: UserViewModel
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     
-    UserTweetListView(
-        tweets = tweets,
-        pinnedTweets = pinnedTweets,
-        parentEntry = parentEntry,
-        getTweets = { pageNumber ->
-            if (pageNumber == 0) {
-                viewModel.refreshTweets()
-            } else {
-                viewModel.loadMoreTweets()
+    // Create header content with profile details and pinned tweets
+    val headerContent: @Composable () -> Unit = {
+        Column {
+            ProfileDetail(viewModel, navController)
+            
+            if (pinnedTweets.isNotEmpty()) {
+                // Pinned tweets section
+                pinnedTweets.forEach { tweet ->
+                    TweetItem(tweet, parentEntry)
+                }
             }
+        }
+    }
+    
+    TweetListView(
+        tweets = tweets,
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
         },
-        showPrivateTweets = true // Show private tweets for user's own profile
+        showPrivateTweets = true, // Show private tweets in profile
+        parentEntry = parentEntry,
+        headerContent = headerContent,
+        currentUserId = user.mid,
+        onTweetUnavailable = { tweetId ->
+            viewModel.removeTweetFromAllLists(tweetId)
+        }
     )
 }
 ```
 
-### Simple List (No Advanced Features)
+### External Gesture Detection
 
 ```kotlin
 @Composable
-fun SimpleTweetList(
-    tweets: List<Tweet>,
-    parentEntry: NavBackStackEntry
+fun FollowingsTweet(
+    parentEntry: NavBackStackEntry,
+    viewModel: TweetFeedViewModel
 ) {
-    SimpleTweetListView(
+    val tweets by viewModel.tweets.collectAsState()
+    
+    // State for external gesture detection
+    var isAtLastTweet by remember { mutableStateOf(false) }
+    
+    TweetListView(
         tweets = tweets,
-        parentEntry = parentEntry
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
+        },
+        parentEntry = parentEntry,
+        onIsAtLastTweetChange = { isAtLast ->
+            isAtLastTweet = isAtLast
+        },
+        onTriggerLoadMore = {
+            // External trigger for loadmore
+        }
     )
 }
 ```
@@ -180,24 +245,19 @@ Instead of using the existing `FollowingsTweet` component:
 // Old way
 FollowingsTweet(
     parentEntry = parentEntry,
-    listState = listState,
     scrollBehavior = scrollBehavior,
     viewModel = viewModel
 )
 
-// New way - Self-contained
+// New way - Self-contained with gesture detection
 TweetListView(
     tweets = viewModel.tweets.collectAsState().value,
-    getTweets = { pageNumber ->
-        if (pageNumber == 0) {
-            viewModel.loadNewerTweets()
-        } else {
-            viewModel.loadOlderTweets()
-        }
+    fetchTweets = { pageNumber ->
+        viewModel.fetchTweets(pageNumber)
     },
-    onScrollPositionChange = { viewModel.updateScrollPosition(it) },
     scrollBehavior = scrollBehavior,
-    parentEntry = parentEntry
+    parentEntry = parentEntry,
+    onScrollStateChange = { viewModel.updateScrollPosition(it) }
 )
 ```
 
@@ -218,59 +278,52 @@ LazyColumn(
     // ... loading indicators
 }
 
-// New way - Self-contained
-UserTweetListView(
+// New way - Self-contained with header content
+TweetListView(
     tweets = tweets,
-    pinnedTweets = pinnedTweets,
-    parentEntry = parentEntry,
-    getTweets = { pageNumber ->
-        if (pageNumber == 0) {
-            viewModel.loadNewerTweets()
-        } else {
-            viewModel.loadOlderTweets()
-        }
+    fetchTweets = { pageNumber ->
+        viewModel.fetchTweets(pageNumber)
     },
     scrollBehavior = scrollBehavior,
-    showPrivateTweets = appUser.mid == userId
+    showPrivateTweets = appUser.mid == userId,
+    headerContent = { /* Profile details and pinned tweets */ }
 )
 ```
 
 ## Benefits
 
-1. **Simplified API** - Single function for all loading operations instead of separate callbacks
+1. **Simplified API** - Single suspend function for all loading operations
 2. **Self-contained** - No need to manage loading states or page numbers externally
 3. **Automatic pagination** - Internal page state management eliminates manual tracking
-4. **Consistency** - Unified tweet list behavior across the app
-5. **Reusability** - Single component for multiple use cases
-6. **Maintainability** - Centralized tweet list logic
-7. **iOS-like UX** - Familiar pull-to-refresh and infinite scroll behavior
-8. **Performance** - Optimized with proper state management and lazy loading
-9. **Flexibility** - Configurable for different scenarios
+4. **Advanced gesture detection** - Manual loadmore triggers when server is depleted
+5. **Smart debouncing** - Page-based deduplication prevents redundant requests
+6. **Consistent UX** - Unified tweet list behavior across the app
+7. **Performance optimized** - Preload mechanism and efficient state management
+8. **iOS-like behavior** - Familiar pull-to-refresh and infinite scroll patterns
+9. **Flexible** - Header content support for profile screens
+10. **Robust** - Timeout protection and error handling
 
 ## How the New API Works
 
-The TweetListView now uses a single `getTweets(pageNumber)` function that handles both refresh and load more operations:
+The TweetListView now uses a single `fetchTweets(pageNumber)` suspend function that handles all loading operations:
 
 - **Page 0**: Called when user pulls to refresh (resets the list)
-- **Page 1, 2, 3...**: Called when user scrolls to bottom (loads more content)
+- **Page 1, 2, 3...**: Called when user scrolls to bottom or makes gesture (loads more content)
 
-The component internally manages the `currentPage` state:
-- On pull-to-refresh: `currentPage = 0`
-- On infinite scroll: `currentPage += 1`
+The component internally manages:
+- `lastLoadedPage` - Tracks the last successfully loaded page
+- `serverDepleted` - Indicates when server has no more data
+- `pendingLoadMorePage` - Prevents duplicate requests
+- `isRefreshingAtBottom` - Shows loading spinner
 
 ### Example Implementation
 
 ```kotlin
 TweetListView(
     tweets = tweets,
-    getTweets = { pageNumber ->
-        if (pageNumber == 0) {
-            // Refresh: Load newest tweets
-            viewModel.loadNewerTweets()
-        } else {
-            // Load more: Load older tweets
-            viewModel.loadOlderTweets()
-        }
+    fetchTweets = { pageNumber ->
+        // This is a suspend function that returns List<Tweet?>
+        viewModel.fetchTweets(pageNumber)
     }
 )
 ```
@@ -280,18 +333,21 @@ TweetListView(
 The component works seamlessly with your existing ViewModels:
 
 - `TweetFeedViewModel` for main feed
-- `UserViewModel` for user profiles
+- `UserViewModel` for user profiles (already integrated in ProfileScreen)
 - Any custom ViewModel that provides tweet lists
 
 ## Customization
 
 You can customize the component by:
 
-- Adjusting `contentPadding` for different layouts
+- Adjusting `contentPadding` for different layouts (default: 60dp bottom)
 - Setting `showPrivateTweets` for privacy control
-- Providing custom `onScrollPositionChange` callbacks
+- Providing custom `onScrollStateChange` callbacks
 - Using different `scrollBehavior` configurations
+- Adding `headerContent` for profile screens
 - Modifying the background color and styling
+- Adjusting gesture sensitivity (currently 20px threshold)
+- Changing debounce timing (currently 500ms)
 
 ## Performance Considerations
 
@@ -300,4 +356,7 @@ You can customize the component by:
 - Leverages `derivedStateOf` for scroll position calculations
 - Uses `snapshotFlow` for efficient scroll tracking
 - Implements proper coroutine scoping for async operations
-- Self-managed loading states prevent duplicate requests 
+- Self-managed loading states prevent duplicate requests
+- Page-based deduplication is more efficient than time-based
+- Preload mechanism improves perceived performance
+- Minimum spinner display time prevents UI flickering 

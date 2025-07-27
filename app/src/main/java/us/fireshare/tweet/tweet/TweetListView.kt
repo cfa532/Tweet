@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -96,6 +97,7 @@ fun TweetListView(
     var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
     var lastExternalRequestTime by remember { mutableLongStateOf(0L) } // Track last external request time for debouncing
     var spinnerStartTime by remember { mutableLongStateOf(0L) } // Track when spinner started for minimum display time
+    var wasAtLastTweet by remember { mutableStateOf(false) } // Track if user was previously at last tweet
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -229,6 +231,18 @@ fun TweetListView(
     // Notify caller when isAtLastTweet changes
     LaunchedEffect(isAtLastTweet) {
         onIsAtLastTweetChange?.invoke(isAtLastTweet)
+
+        // Track when user was at last tweet
+        if (isAtLastTweet) {
+            wasAtLastTweet = true
+        } else if (wasAtLastTweet) {
+            // User was at last tweet but now scrolled away - reset serverDepleted
+            wasAtLastTweet = false
+            if (serverDepleted) {
+                Timber.tag("TweetListView").d("User scrolled away from last tweet, resetting serverDepleted to false to allow loadmore attempts")
+                serverDepleted = false
+            }
+        }
     }
 
     // Handle external loadmore triggers
@@ -327,7 +341,8 @@ fun TweetListView(
                         if (validTweetsCount > 0) {
                             Timber.tag("TweetListView").d("Preloaded $validTweetsCount valid tweets from page $nextPage")
                         } else if (preloadedTweets.size < TW_CONST.PAGE_SIZE) {
-                            // Server is depleted, mark it
+                            // Server is depleted, but only set it if we're still near bottom
+                            // This prevents setting serverDepleted when user has scrolled away
                             serverDepleted = true
                             Timber.tag("TweetListView").d("Server depleted during preload at page $nextPage")
                         } else {
@@ -477,7 +492,7 @@ fun TweetListView(
                     CircularProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 60.dp)
+                            .padding(top = 40.dp, bottom = 16.dp)
                             .wrapContentWidth(Alignment.CenterHorizontally),
                         color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 4.dp
@@ -491,42 +506,48 @@ fun TweetListView(
             Timber.tag("TweetListView").d("Creating overlay: isAtLastTweet=$isAtLastTweet, serverDepleted=$serverDepleted, isRefreshingAtBottom=$isRefreshingAtBottom")
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(200.dp) // Only cover bottom 200dp instead of full screen
+                    .align(Alignment.BottomCenter) // Align to bottom
                     .pointerInput(isAtLastTweet, isRefreshingAtBottom) {
                         Timber.tag("TweetListView").d("Overlay PointerInput setup: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom")
+                        
+                        var startY = 0f
+                        var totalDragY = 0f
+                        
                         detectDragGestures(
+                            onDragStart = { offset ->
+                                startY = offset.y
+                                totalDragY = 0f
+                                Timber.tag("TweetListView").d("Overlay onDragStart called at y=$startY")
+                            },
                             onDragEnd = { 
-                                Timber.tag("TweetListView").d("Overlay onDragEnd called")
+                                Timber.tag("TweetListView").d("Overlay onDragEnd called, totalDragY=$totalDragY")
                             },
                             onDragCancel = { 
                                 Timber.tag("TweetListView").d("Overlay onDragCancel called")
                             },
-                            onDragStart = { 
-                                Timber.tag("TweetListView").d("Overlay onDragStart called")
-                            },
                             onDrag = { change, dragAmount ->
-                                Timber.tag("TweetListView").d("Overlay onDrag called with dragAmount=$dragAmount")
-                                change.consume()
-                                
                                 val (x, y) = dragAmount
-                                Timber.tag("TweetListView").d("Overlay gesture debug: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom, tweets.size=${tweets.size}, serverDepleted=$serverDepleted, dragAmount=($x, $y)")
+                                totalDragY += y
                                 
-                                // Check if it's an upward gesture (negative Y means up)
-                                if (y < -20) { // Lowered threshold from -50 to -20 for more sensitivity
+                                // Only consume and process if it's a significant upward gesture
+                                if (totalDragY < -20) { // Lowered threshold for better UX
+                                    change.consume()
+                                    
                                     val currentTime = System.currentTimeMillis()
                                     val timeSinceLastRequest = currentTime - lastExternalRequestTime
                                     
                                     // Debounce: only allow new requests after 500ms
                                     if (timeSinceLastRequest > 500) {
-                                        Timber.tag("TweetListView").d("Overlay: Upward gesture detected, triggering external loadmore... (timeSinceLastRequest: ${timeSinceLastRequest}ms)")
+                                        Timber.tag("TweetListView").d("Overlay: Significant upward gesture detected (totalDragY=$totalDragY), triggering external loadmore... (timeSinceLastRequest: ${timeSinceLastRequest}ms)")
                                         externalLoadMoreRequest = true
                                         lastExternalRequestTime = currentTime
                                     } else {
                                         Timber.tag("TweetListView").d("Overlay: Gesture detected but debounced (timeSinceLastRequest: ${timeSinceLastRequest}ms < 500ms)")
                                     }
-                                } else {
-                                    Timber.tag("TweetListView").d("Overlay: Gesture not upward enough: y=$y (threshold: -20)")
                                 }
+                                // For all other gestures (downward, small, etc.), don't consume - let them pass through to normal scrolling
                             }
                         )
                     }
