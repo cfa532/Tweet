@@ -85,6 +85,7 @@ fun TweetListView(
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
     var lastUserId by remember { mutableStateOf(currentUserId) }
     var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
+    var lastLoadMoreTime by remember { mutableStateOf(0L) } // Track last load more call time for debouncing
     
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -231,6 +232,17 @@ fun TweetListView(
             }
         }
     }
+    
+    // Safety timeout to reset bottom loading state if it gets stuck
+    LaunchedEffect(isRefreshingAtBottom) {
+        if (isRefreshingAtBottom) {
+            delay(10000) // 10 second timeout
+            if (isRefreshingAtBottom) {
+                Timber.tag("TweetListView").w("Bottom loading state stuck for 10 seconds, forcing reset")
+                isRefreshingAtBottom = false
+            }
+        }
+    }
 
     val isAtBottom by remember(tweets) {
         derivedStateOf {
@@ -264,7 +276,16 @@ fun TweetListView(
     // Preload next page when approaching bottom
     LaunchedEffect(isNearBottom, serverDepleted) {
         if (isNearBottom && !serverDepleted && tweets.size >= 4) {
-            Timber.tag("TweetListView").d("Near bottom detected, preloading next page...")
+            val currentTime = System.currentTimeMillis()
+            val timeSinceLastLoad = currentTime - lastLoadMoreTime
+            val PRELOAD_DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce for preload (shorter than load more)
+            
+            if (timeSinceLastLoad < PRELOAD_DEBOUNCE_DELAY_MS) {
+                Timber.tag("TweetListView").d("Preload debounced: ${timeSinceLastLoad}ms since last call (threshold: ${PRELOAD_DEBOUNCE_DELAY_MS}ms)")
+                return@LaunchedEffect
+            }
+            
+            Timber.tag("TweetListView").d("Near bottom detected, preloading next page... (debounce passed)")
             
             coroutineScope.launch {
                 try {
@@ -305,13 +326,23 @@ fun TweetListView(
     LaunchedEffect(isAtBottom, isRefreshingAtBottom, serverDepleted) {
         Timber.tag("TweetListView").d("isAtBottom changed: $isAtBottom, isRefreshingAtBottom: $isRefreshingAtBottom, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, lastLoadedPage: $lastLoadedPage")
         
-        // Allow loading if at bottom, not already refreshing
+        // Allow loading if at bottom, not already refreshing, and debounce check passed
         if (isAtBottom && !isRefreshingAtBottom && tweets.size >= 4) {
+            val currentTime = System.currentTimeMillis()
+            val timeSinceLastLoad = currentTime - lastLoadMoreTime
+            val DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce
+            
+            if (timeSinceLastLoad < DEBOUNCE_DELAY_MS) {
+                Timber.tag("TweetListView").d("Load more debounced: ${timeSinceLastLoad}ms since last call (threshold: ${DEBOUNCE_DELAY_MS}ms)")
+                return@LaunchedEffect
+            }
+            
             if (serverDepleted) {
                 Timber.tag("TweetListView").d("Server depleted, but user can still try to load more...")
             }
             
-            Timber.tag("TweetListView").d("Triggering load more...")
+            Timber.tag("TweetListView").d("Triggering load more... (debounce passed)")
+            lastLoadMoreTime = currentTime // Update the timestamp
             isRefreshingAtBottom = true // Set loading state immediately
             
             coroutineScope.launch {
