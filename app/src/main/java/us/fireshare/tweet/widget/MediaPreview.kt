@@ -68,6 +68,7 @@ import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+import androidx.compose.runtime.derivedStateOf
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -123,17 +124,16 @@ fun MediaPreviewGrid(
             return extractedAspectRatio ?: (4f / 3f)
         }
         if (itemType == MediaType.Image) {
-            var aspectRatio by remember(item.mid) { mutableStateOf(item.aspectRatio) }
-            LaunchedEffect(item.mid) {
-                // Get aspect ratio from cached image directly
-                val bitmap = ImageCacheManager.getCachedImage(context, item.mid)
-                aspectRatio = if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
-                    bitmap.width.toFloat() / bitmap.height.toFloat()
-                } else {
-                    1f
-                }
+            // Use a stable approach that doesn't cause recomposition issues
+            // First try to use the stored aspect ratio, then fallback to default
+            val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }
+            if (storedAspectRatio != null) {
+                return storedAspectRatio
             }
-            return aspectRatio ?: 1f
+            
+            // If no stored aspect ratio, use a default square ratio to prevent shaking
+            // The actual aspect ratio will be calculated when the image is loaded
+            return 1f
         }
         // For other types, use square aspect ratio
         return 1.618f

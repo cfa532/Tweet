@@ -96,7 +96,7 @@ fun ImageViewer(
                 modifier = if (enableLongPress) {
                     adjustedModifier
                         .clickable { showMenu = true }
-                } else {
+                 } else {
                     adjustedModifier
                 }
             )
