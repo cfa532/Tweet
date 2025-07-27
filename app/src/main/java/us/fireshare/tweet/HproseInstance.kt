@@ -91,7 +91,7 @@ object HproseInstance {
     }
 
     /**
-     * Helper function to check if a mid should be blocked (has been unavailable for 3+ days)
+     * Helper function to check if a mid should be blocked (no successful access for 3+ days)
      */
     private suspend fun shouldBlockMid(mid: String): Boolean {
         val entry = blacklistedMidDao.get(mid)
@@ -99,21 +99,43 @@ object HproseInstance {
         
         val now = System.currentTimeMillis()
         val threeDaysMillis = 3 * 24 * 60 * 60 * 1000L
-        return now - entry.firstDetected >= threeDaysMillis
+        return now - entry.lastSuccessfulAccess >= threeDaysMillis
     }
 
     /**
      * Helper function to add or update a mid in the blacklist
+     * Called when a resource fails to load
      */
     private suspend fun addToBlacklist(mid: String) {
         val now = System.currentTimeMillis()
         val existing = blacklistedMidDao.get(mid)
         if (existing == null) {
+            // First time failure - initialize with current time as last successful access
+            // This means we start counting from now
             blacklistedMidDao.insert(BlacklistedMid(mid, now, now))
-            Timber.tag("Blacklist").d("Added $mid to blacklist")
+            Timber.tag("Blacklist").d("Added $mid to blacklist (first failure)")
         } else {
-            blacklistedMidDao.insert(existing.copy(lastChecked = now))
-            Timber.tag("Blacklist").d("Updated $mid in blacklist")
+            // Update failure time but keep the last successful access time
+            blacklistedMidDao.insert(existing.copy(lastFailureTime = now))
+            Timber.tag("Blacklist").d("Updated $mid in blacklist (failure)")
+        }
+    }
+
+    /**
+     * Helper function to update successful access timestamp (revival mechanism)
+     * Called when a resource is successfully accessed
+     */
+    private suspend fun updateSuccessfulAccess(mid: String) {
+        val now = System.currentTimeMillis()
+        val existing = blacklistedMidDao.get(mid)
+        if (existing == null) {
+            // First successful access - add to blacklist with current time
+            blacklistedMidDao.insert(BlacklistedMid(mid, now, 0L))
+            Timber.tag("Blacklist").d("Added $mid to blacklist (first successful access)")
+        } else {
+            // Update last successful access time - this resets the 3-day counter
+            blacklistedMidDao.insert(existing.copy(lastSuccessfulAccess = now))
+            Timber.tag("Blacklist").d("Updated $mid in blacklist (successful access - counter reset)")
         }
     }
 
@@ -721,6 +743,9 @@ object HproseInstance {
             )
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
+                // Successfully fetched tweet - update successful access timestamp
+                updateSuccessfulAccess(tweetId)
+                
                 Tweet.from(tweetData).apply {
                     this.author = author
                     TweetCacheManager.saveTweet(
@@ -787,6 +812,9 @@ object HproseInstance {
                 "hostid" to (author.hostIds?.first() ?: "")
             )
             author.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
+                // Successfully refreshed tweet - update successful access timestamp
+                updateSuccessfulAccess(tweetId)
+                
                 val tweet = Tweet.from(tweetData)
                 tweet.author = author
                 tweet
@@ -1334,12 +1362,15 @@ object HproseInstance {
                     val providerIP = response
                     user.baseUrl = "http://$providerIP"
                     user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
+                        // Successfully fetched user data from provider - update successful access timestamp
+                        updateSuccessfulAccess(user.mid)
                         user.from(userData)
                     }
                 }
 
                 is Map<*, *> -> {
-                    // User data received directly
+                    // User data received directly - update successful access timestamp
+                    updateSuccessfulAccess(user.mid)
                     user.from(response as Map<String, Any>)
                 }
             }

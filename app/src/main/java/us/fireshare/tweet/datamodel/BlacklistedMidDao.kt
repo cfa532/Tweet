@@ -13,7 +13,7 @@ interface BlacklistedMidDao {
     @Query("SELECT * FROM blacklisted_mid")
     suspend fun getAll(): List<BlacklistedMid>
 
-    @Query("SELECT * FROM blacklisted_mid WHERE :now - firstDetected >= :threeDaysMillis")
+    @Query("SELECT * FROM blacklisted_mid WHERE :now - lastSuccessfulAccess >= :threeDaysMillis")
     suspend fun getActiveBlacklist(now: Long, threeDaysMillis: Long = 3 * 24 * 60 * 60 * 1000L): List<BlacklistedMid>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
