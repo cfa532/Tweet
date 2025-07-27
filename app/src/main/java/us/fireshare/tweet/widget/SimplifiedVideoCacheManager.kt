@@ -2,6 +2,8 @@ package us.fireshare.tweet.widget
 
 import android.content.Context
 import android.media.MediaMetadataRetriever
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -41,6 +43,18 @@ object SimplifiedVideoCacheManager {
     private const val VIDEO_CACHE_DIR = "video_cache"
 
     /**
+     * Check if device has network connectivity
+     */
+    private fun isNetworkAvailable(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+        
+        return activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+               activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    /**
      * Get the shared video cache for both progressive and HLS videos
      */
     fun getCache(context: Context): Cache {
@@ -60,10 +74,20 @@ object SimplifiedVideoCacheManager {
     fun createExoPlayer(context: Context, url: String): ExoPlayer {
         val cache = getCache(context)
         val dataSourceFactory = DefaultDataSource.Factory(context)
+        
+        // Configure cache strategy based on network availability
+        val isOnline = isNetworkAvailable(context)
+        val cacheFlags = if (isOnline) {
+            CacheDataSource.FLAG_BLOCK_ON_CACHE
+        } else {
+            // When offline, only use cache, don't try network
+            CacheDataSource.FLAG_BLOCK_ON_CACHE or CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
+        }
+        
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(dataSourceFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .setFlags(cacheFlags)
 
         // Use IPFS ID as cache key for all video types
         val ipfsId = url.getMimeiKeyFromUrl()
@@ -112,6 +136,14 @@ object SimplifiedVideoCacheManager {
                 Timber.e("SimplifiedVideoCacheManager - Error code: ${error.errorCode}")
                 Timber.e("SimplifiedVideoCacheManager - Has tried playlist: $hasTriedPlaylist")
                 Timber.e("SimplifiedVideoCacheManager - Has tried original: $hasTriedOriginal")
+                Timber.e("SimplifiedVideoCacheManager - Network available: ${isNetworkAvailable(context)}")
+
+                // If offline, try to use cached data only
+                if (!isNetworkAvailable(context)) {
+                    Timber.d("SimplifiedVideoCacheManager - Offline mode detected, trying cached data only")
+                    tryCachedDataOnly()
+                    return
+                }
 
                 // HLS fallback sequence: master.m3u8 -> playlist.m3u8 -> original URL
                 // No retries, just try each format once
@@ -147,6 +179,36 @@ object SimplifiedVideoCacheManager {
                     Timber.e("SimplifiedVideoCacheManager - All fallback attempts failed for URL: $url")
                     Timber.e("SimplifiedVideoCacheManager - Video playback failed after trying HLS and original URL")
                     exoPlayer.stop()
+                }
+            }
+
+            private fun tryCachedDataOnly() {
+                Timber.d("SimplifiedVideoCacheManager - Trying cached data only for URL: $url")
+                
+                try {
+                    // Create a cache-only data source factory
+                    val cacheOnlyDataSourceFactory = CacheDataSource.Factory()
+                        .setCache(cache)
+                        .setUpstreamDataSourceFactory(dataSourceFactory)
+                        .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE)
+                    
+                    // Try original URL first (most likely to be cached)
+                    val originalMediaItem = MediaItem.Builder()
+                        .setUri(url)
+                        .setCustomCacheKey(ipfsId)
+                        .build()
+
+                    val originalMediaSource = DefaultMediaSourceFactory(cacheOnlyDataSourceFactory)
+                        .createMediaSource(originalMediaItem)
+
+                    exoPlayer.setMediaSource(originalMediaSource)
+                    exoPlayer.prepare()
+                    Timber.d("SimplifiedVideoCacheManager - Successfully set cached-only media source for: $url")
+                } catch (e: Exception) {
+                    Timber.e("SimplifiedVideoCacheManager - Error setting cached-only media source. ${e.message}")
+                    // If cached data fails, stop the player
+                    exoPlayer.stop()
+                    Timber.e("SimplifiedVideoCacheManager - Cached data not available for URL: $url")
                 }
             }
 
