@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -27,6 +31,10 @@ object VideoManager {
     private var currentPlaylistIndex = -1
     private var isSequentialPlaybackEnabled = false
     
+    // Preload management
+    private val preloadedVideos = mutableSetOf<MimeiId>()
+    private val preloadQueue = mutableListOf<MimeiId>()
+    
     /**
      * Get or create an ExoPlayer instance for a video
      * @param context Android context
@@ -35,6 +43,10 @@ object VideoManager {
      * @return ExoPlayer instance
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
+        // Mark as preloaded if it was in the preload queue
+        preloadedVideos.add(videoMid)
+        preloadQueue.remove(videoMid)
+        
         Timber.d("VideoManager - getVideoPlayer called for videoMid: $videoMid, videoUrl: $videoUrl")
         Timber.d("VideoManager - Existing players: ${videoPlayers.keys}")
         
@@ -70,6 +82,13 @@ object VideoManager {
     private fun resetPlayerState(player: ExoPlayer) {
         try {
             Timber.d("VideoManager - Resetting player state. Current state: ${getPlayerStateName(player.playbackState)}")
+            
+            // Don't stop if player is already ready - just pause
+            if (player.playbackState == androidx.media3.common.Player.STATE_READY) {
+                player.playWhenReady = false
+                Timber.d("VideoManager - Player already ready, just paused")
+                return
+            }
             
             // Stop playback and reset to beginning
             player.stop()
@@ -262,8 +281,56 @@ object VideoManager {
      * Get cache statistics
      */
     fun getCacheStats(): String {
-        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}"
+        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Preloaded: ${preloadedVideos.size}"
     }
+    
+    /**
+     * Preload a video in the background
+     * @param context Android context
+     * @param videoMid Video's unique identifier
+     * @param videoUrl Video URL
+     */
+    fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
+        if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
+            return // Already cached or preloaded
+        }
+        
+        if (!preloadQueue.contains(videoMid)) {
+            preloadQueue.add(videoMid)
+            Timber.d("VideoManager - Added video to preload queue: $videoMid")
+            
+            // Start preloading in background
+            GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    val player = createExoPlayer(context, videoUrl, MediaType.Video)
+                    // Add to cache on main thread
+                    withContext(Dispatchers.Main) {
+                        videoPlayers[videoMid] = player
+                        preloadedVideos.add(videoMid)
+                        preloadQueue.remove(videoMid)
+                        Timber.d("VideoManager - Successfully preloaded video: $videoMid")
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        preloadQueue.remove(videoMid)
+                        Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if a video is preloaded
+     */
+    fun isVideoPreloaded(videoMid: MimeiId): Boolean {
+        return preloadedVideos.contains(videoMid) || videoPlayers.containsKey(videoMid)
+    }
+    
+    /**
+     * Get preload queue size
+     */
+    fun getPreloadQueueSize(): Int = preloadQueue.size
     
     /**
      * Set up sequential playback for a list of videos

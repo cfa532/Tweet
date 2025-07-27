@@ -59,7 +59,9 @@ fun VideoPreview(
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoading by remember { 
+        mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true) 
+    }
     var hasError by remember { mutableStateOf(false) }
     
     val exoPlayer = remember(url, videoMid) { 
@@ -69,6 +71,14 @@ fun VideoPreview(
         } else {
             Timber.d("VideoPreview - Creating NEW ExoPlayer for URL: $url (no videoMid)")
             createExoPlayer(context, url, MediaType.Video)
+        }
+    }
+    
+    // Preload video if not already cached
+    LaunchedEffect(videoMid, url) {
+        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
+            Timber.d("VideoPreview - Preloading video: $videoMid")
+            VideoManager.preloadVideo(context, videoMid, url)
         }
     }
 
@@ -115,6 +125,13 @@ fun VideoPreview(
                 VideoManager.markVideoActive(mid)
             }
             
+            // If player is already ready, start immediately
+            if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
+                Timber.d("VideoPreview - Player already ready, starting immediately")
+                exoPlayer.playWhenReady = autoPlay
+                return@LaunchedEffect
+            }
+            
             // Ensure player is in a good state before playing
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
                 Timber.d("VideoPreview - Player in IDLE state, preparing again")
@@ -157,7 +174,10 @@ fun VideoPreview(
                         Timber.d("VideoPreview - Video ready: $videoMid")
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> {
-                        isLoading = true
+                        // Only show loading if not already cached/preloaded
+                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
+                            isLoading = true
+                        }
                         Timber.d("VideoPreview - Video buffering: $videoMid")
                     }
                     androidx.media3.common.Player.STATE_ENDED -> {
@@ -168,7 +188,10 @@ fun VideoPreview(
                         }
                     }
                     androidx.media3.common.Player.STATE_IDLE -> {
-                        isLoading = true
+                        // Only show loading if not already cached/preloaded
+                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
+                            isLoading = true
+                        }
                         Timber.d("VideoPreview - Video idle: $videoMid")
                     }
                 }

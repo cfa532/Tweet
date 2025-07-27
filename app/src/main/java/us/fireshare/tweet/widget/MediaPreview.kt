@@ -153,6 +153,8 @@ fun MediaPreviewGrid(
         }.takeIf { it >= 0 } ?: -1
     }
     
+    val context = LocalContext.current
+    
     // Set up sequential playback for multiple videos
     val videoMids = remember {
         limitedMediaList.mapIndexedNotNull { index, item ->
@@ -167,6 +169,18 @@ fun MediaPreviewGrid(
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
             VideoManager.stopSequentialPlayback()
+        }
+        
+        // Preload all videos in the grid
+        videoMids.forEach { videoMid ->
+            val mediaItem = limitedMediaList.find { it.mid == videoMid }
+            mediaItem?.let { item ->
+                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                if (!VideoManager.isVideoPreloaded(videoMid)) {
+                    Timber.d("MediaPreviewGrid - Preloading video: $videoMid")
+                    VideoManager.preloadVideo(context, videoMid, mediaUrl)
+                }
+            }
         }
     }
     
