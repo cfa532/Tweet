@@ -188,9 +188,9 @@ fun VideoPreview(
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isLoading = false
                 hasError = true
-                Timber.e(error, "VideoPreview - Player error for video: $videoMid")
-                Timber.e("VideoPreview - Error cause: ${error.cause}")
-                Timber.e("VideoPreview - Error code: ${error.errorCode}")
+                Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
+                Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
+                Timber.tag("VideoPreview").e("Error code: ${error.errorCode}")
                 
                 // Let the SimplifiedVideoCacheManager handle the fallback logic
                 // It will mark the video as failed only after all attempts are exhausted

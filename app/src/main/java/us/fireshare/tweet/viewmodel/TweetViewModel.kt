@@ -90,7 +90,7 @@ class TweetViewModel @AssistedInject constructor(
          * */
         if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.fetchTweet(tweet.mid, tweet.authorId, shouldCache = false)?.let { tweet ->
+                HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
                     _tweetState.value = tweet
                 }
             }
@@ -113,24 +113,24 @@ class TweetViewModel @AssistedInject constructor(
                     _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
                 } else {
                     // Quoted tweet - refresh both the quoting tweet and the original tweet
-                    HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
-                        // Only update if the fetched tweet has valid content
-                        if (fetchedTweet.content != null || !fetchedTweet.attachments.isNullOrEmpty()) {
-                            _tweetState.value = fetchedTweet
+                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshedTweet ->
+                        // Only update if the refreshed tweet has valid content
+                        if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
+                            _tweetState.value = refreshedTweet
                         }
                     }
                     
                     // Also refresh the original tweet that's displayed as a quote
-                    HproseInstance.fetchTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!, shouldCache = true)?.let { originalTweet ->
+                    HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)?.let { originalTweet ->
                         Timber.tag("TweetViewModel").d("Refreshed original tweet for quoted tweet: ${originalTweet.mid}")
                     }
                 }
             } else {
                 // This is an original tweet - refresh it directly
-                HproseInstance.fetchTweet(currentTweet.mid, currentTweet.authorId, shouldCache = true)?.let { fetchedTweet ->
-                    // Only update if the fetched tweet has valid content
-                    if (fetchedTweet.content != null || !fetchedTweet.attachments.isNullOrEmpty()) {
-                        _tweetState.value = fetchedTweet
+                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshedTweet ->
+                    // Only update if the refreshed tweet has valid content
+                    if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
+                        _tweetState.value = refreshedTweet
                     }
                 }
             }

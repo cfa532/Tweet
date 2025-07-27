@@ -164,12 +164,11 @@ fun TweetDetailBody(
                                 val originalTweetId = tweet.originalTweetId ?: ""
                                 val originalAuthorId = tweet.originalAuthorId ?: ""
                                 
-                                // Force refresh of original tweet by using fetchTweet directly
-                                // This ensures we get the latest version from cache or network
-                                originalTweet = HproseInstance.fetchTweet(
+                                // Force refresh of original tweet by using refreshTweet directly
+                                // This ensures we get the latest version from backend
+                                originalTweet = HproseInstance.refreshTweet(
                                     originalTweetId,
-                                    originalAuthorId,
-                                    shouldCache = true
+                                    originalAuthorId
                                 )
                                 isLoadingOriginal = false
                             }

@@ -78,32 +78,23 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
-        Timber.tag("fetchTweets")
-            .d("Loading page $pageNumber with count $pageSize, current tweets: ${_tweets.value.size}")
-
         /**
          * Show cached tweets before loading from net.
          * */
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
-        Timber.tag("fetchTweets").d("Loaded ${cachedTweets.size} cached tweets for page $pageNumber")
 
         if (appUser.isGuest()) {
             // show tweets of administrator only
             val defaultUserId = getAlphaIds().first()
-            Timber.tag("fetchTweets").d("Guest user: defaultUserId = $defaultUserId")
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
                     .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                Timber.tag("fetchTweets")
-                    .d("Guest: Updated tweets from ${currentTweets.size} to ${allTweets.size}")
                 allTweets
             }
             val result = getTweets(defaultUserId, pageNumber)
-            Timber.tag("fetchTweets")
-                .d("Guest: After fetchTweets, _tweets.size = ${_tweets.value.size}")
             return result
         } else {
             // Immediately merge cached tweets if they're not already in the list
@@ -115,12 +106,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     val allTweets = (currentTweets + newCachedTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    Timber.tag("fetchTweets")
-                        .d("Cached: Added ${newCachedTweets.size} new cached tweets, updated from ${currentTweets.size} to ${allTweets.size}")
                     allTweets
                 } else {
-                    Timber.tag("fetchTweets")
-                        .d("Cached: No new cached tweets to add, keeping ${currentTweets.size} tweets")
                     currentTweets
                 }
             }
@@ -137,13 +124,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
 
-            Timber.tag("fetchTweets")
-                .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for page $pageNumber")
-            if (validTweets.isNotEmpty()) {
-                Timber.tag("fetchTweets")
-                    .d("First tweet: ${validTweets.first().mid}, Last tweet: ${validTweets.last().mid}")
-            }
-
             // Always merge new tweets with existing ones, never replace
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -153,12 +133,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     val mergedTweets = (currentTweets + trulyNewTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    Timber.tag("fetchTweets")
-                        .d("Network: Added ${trulyNewTweets.size} new tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
                     mergedTweets
                 } else {
-                    Timber.tag("fetchTweets")
-                        .d("Network: No new tweets to add, keeping ${currentTweets.size} tweets")
                     currentTweets
                 }
             }
@@ -177,9 +153,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 // Filter out null elements and get valid tweets
                 val followingTweets = followingTweetsWithNulls.filterNotNull()
 
-                Timber.tag("fetchTweets")
-                    .d("New ${followingTweetsWithNulls.size} following tweets (${followingTweets.size} valid) for page $pageNumber")
-
                 // Always merge following tweets with existing ones
                 _tweets.update { currentTweets ->
                     val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -190,12 +163,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         val mergedTweets = (currentTweets + trulyNewFollowingTweets)
                             .distinctBy { tweet: Tweet -> tweet.mid }
                             .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                        Timber.tag("fetchTweets")
-                            .d("Following: Added ${trulyNewFollowingTweets.size} new following tweets, updated from ${currentTweets.size} to ${mergedTweets.size}")
                         mergedTweets
                     } else {
-                        Timber.tag("fetchTweets")
-                            .d("Following: No new following tweets to add, keeping ${currentTweets.size} tweets")
                         currentTweets
                     }
                 }
@@ -217,9 +186,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 // Filter out null elements and get valid tweets
                 val validTweets = tweetsWithNulls.filterNotNull()
 
-                Timber.tag("getTweets")
-                    .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: $userId")
-
                 _tweets.update { list ->
                     val beforeFilter = validTweets + list
                     val afterPrivateFilter =
@@ -228,8 +194,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
 
-                    Timber.tag("getTweets")
-                        .d("getTweets update: beforeFilter=${beforeFilter.size}, afterPrivateFilter=${afterPrivateFilter.size}, final=${mergedTweets.size}")
                     mergedTweets
                 }
                 return tweetsWithNulls
@@ -301,8 +265,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val isRetweet = tweetToDelete?.originalTweetId != null
         val originalTweetId = tweetToDelete?.originalTweetId
         
-        Timber.tag("TweetFeedViewModel").d("Optimistic deletion: Removing tweet $tweetId from UI immediately")
-        
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
         
@@ -350,12 +312,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             try {
                 // Delete from local cache first
                 dao.deleteCachedTweet(tweetId)
-                Timber.tag("TweetFeedViewModel").d("Deleted tweet $tweetId from local cache")
-                
+
                 // Delete from backend
                 HproseInstance.deleteTweet(tweetId)
-                Timber.tag("TweetFeedViewModel").d("Successfully deleted tweet $tweetId from backend")
-                
+
                 // Call callback on main thread
                 withContext(Main) {
                     callback()
