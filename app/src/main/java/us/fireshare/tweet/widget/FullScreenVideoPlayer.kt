@@ -240,6 +240,10 @@ fun FullScreenVideoPlayer(
                     controllerShowTimeoutMs = 1000
                     controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    // Set background color to prevent black flash
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    // Show buffering indicator
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                     Timber.d("FullScreenVideoPlayer - PlayerView created with player: ${player != null}")
                 }
             },

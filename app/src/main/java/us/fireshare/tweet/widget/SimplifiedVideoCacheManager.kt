@@ -249,7 +249,10 @@ object SimplifiedVideoCacheManager {
 
         return exoPlayer.apply {
             setMediaSource(initialMediaSource)
+            // Prepare immediately to reduce black screen time
             prepare()
+            // Set initial volume to prevent audio pop
+            volume = 0f
         }
     }
 

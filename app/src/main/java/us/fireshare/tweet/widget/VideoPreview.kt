@@ -1,9 +1,13 @@
 package us.fireshare.tweet.widget
 
 import androidx.annotation.OptIn
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -16,6 +20,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -54,6 +59,8 @@ fun VideoPreview(
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
     
     val exoPlayer = remember(url, videoMid) { 
         if (videoMid != null) {
@@ -143,15 +150,33 @@ fun VideoPreview(
     LaunchedEffect(exoPlayer) {
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                    Timber.d("VideoPreview - Video completed: $videoMid")
-                    videoMid?.let { mid ->
-                        VideoManager.onVideoCompleted(mid)
+                when (playbackState) {
+                    androidx.media3.common.Player.STATE_READY -> {
+                        isLoading = false
+                        hasError = false
+                        Timber.d("VideoPreview - Video ready: $videoMid")
+                    }
+                    androidx.media3.common.Player.STATE_BUFFERING -> {
+                        isLoading = true
+                        Timber.d("VideoPreview - Video buffering: $videoMid")
+                    }
+                    androidx.media3.common.Player.STATE_ENDED -> {
+                        isLoading = false
+                        Timber.d("VideoPreview - Video completed: $videoMid")
+                        videoMid?.let { mid ->
+                            VideoManager.onVideoCompleted(mid)
+                        }
+                    }
+                    androidx.media3.common.Player.STATE_IDLE -> {
+                        isLoading = true
+                        Timber.d("VideoPreview - Video idle: $videoMid")
                     }
                 }
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                isLoading = false
+                hasError = true
                 Timber.e(error, "VideoPreview - Player error for video: $videoMid")
                 Timber.e("VideoPreview - Error cause: ${error.cause}")
                 Timber.e("VideoPreview - Error code: ${error.errorCode}")
@@ -168,6 +193,7 @@ fun VideoPreview(
     Box(
         modifier = modifier
             .clipToBounds()
+            .background(Color.Gray.copy(alpha = 0.1f)) // Light gray background to prevent black flash
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
@@ -183,9 +209,26 @@ fun VideoPreview(
                     player = exoPlayer
                     useController = false // No controls in preview mode
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    // Set background color to prevent black flash
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    // Show buffering indicator
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
             },
             modifier = Modifier.fillMaxWidth()
         )
+        
+        // Show loading indicator when video is loading
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
