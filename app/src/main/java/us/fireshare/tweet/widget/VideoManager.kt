@@ -1,6 +1,8 @@
 package us.fireshare.tweet.widget
 
+import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -35,6 +37,11 @@ object VideoManager {
     private val preloadedVideos = mutableSetOf<MimeiId>()
     private val preloadQueue = mutableListOf<MimeiId>()
     
+    // Memory management
+    private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB
+    private val lastMemoryCheck = mutableMapOf<MimeiId, Long>()
+    private const val MEMORY_CHECK_INTERVAL_MS = 5000L // Check every 5 seconds
+    
     /**
      * Get or create an ExoPlayer instance for a video
      * @param context Android context
@@ -43,6 +50,9 @@ object VideoManager {
      * @return ExoPlayer instance
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
+        // Check memory usage before creating new player
+        checkMemoryAndReleaseVideos()
+        
         // Mark as preloaded if it was in the preload queue
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
@@ -281,7 +291,56 @@ object VideoManager {
      * Get cache statistics
      */
     fun getCacheStats(): String {
-        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Preloaded: ${preloadedVideos.size}"
+        val memoryUsage = getCurrentMemoryUsage()
+        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Preloaded: ${preloadedVideos.size}, Memory: ${memoryUsage / (1024 * 1024)}MB"
+    }
+    
+    /**
+     * Get current memory usage in bytes
+     */
+    private fun getCurrentMemoryUsage(): Long {
+        return try {
+            val runtime = Runtime.getRuntime()
+            runtime.totalMemory() - runtime.freeMemory()
+        } catch (e: Exception) {
+            Timber.e("VideoManager - Error getting memory usage: ${e.message}")
+            0L
+        }
+    }
+    
+    /**
+     * Check if memory usage is above threshold
+     */
+    private fun isMemoryUsageHigh(): Boolean {
+        return getCurrentMemoryUsage() > MEMORY_THRESHOLD_BYTES
+    }
+    
+    /**
+     * Monitor memory usage and release videos if needed
+     */
+    private fun checkMemoryAndReleaseVideos() {
+        if (!isMemoryUsageHigh()) {
+            return
+        }
+        
+        Timber.w("VideoManager - Memory usage high (${getCurrentMemoryUsage() / (1024 * 1024)}MB), releasing inactive videos")
+        
+        // Get inactive videos (not currently being used)
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        
+        if (inactiveVideos.isNotEmpty()) {
+            // Release oldest inactive videos first
+            val videosToRelease = inactiveVideos.take(inactiveVideos.size / 2) // Release half of inactive videos
+            
+            videosToRelease.forEach { videoMid ->
+                releaseVideo(videoMid)
+                Timber.d("VideoManager - Released video due to memory pressure: $videoMid")
+            }
+            
+            Timber.d("VideoManager - Released ${videosToRelease.size} videos due to memory pressure")
+        } else {
+            Timber.w("VideoManager - No inactive videos to release, memory pressure remains high")
+        }
     }
     
     /**
@@ -291,6 +350,9 @@ object VideoManager {
      * @param videoUrl Video URL
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
+        // Check memory usage before preloading
+        checkMemoryAndReleaseVideos()
+        
         if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
             return // Already cached or preloaded
         }
@@ -305,6 +367,8 @@ object VideoManager {
                     val player = createExoPlayer(context, videoUrl, MediaType.Video)
                     // Add to cache on main thread
                     withContext(Dispatchers.Main) {
+                        // Check memory again before adding to cache
+                        checkMemoryAndReleaseVideos()
                         videoPlayers[videoMid] = player
                         preloadedVideos.add(videoMid)
                         preloadQueue.remove(videoMid)
@@ -331,6 +395,40 @@ object VideoManager {
      * Get preload queue size
      */
     fun getPreloadQueueSize(): Int = preloadQueue.size
+    
+    /**
+     * Start periodic memory monitoring
+     * This should be called from the application class
+     */
+    fun startMemoryMonitoring() {
+        GlobalScope.launch(Dispatchers.IO) {
+            while (true) {
+                try {
+                    withContext(Dispatchers.Main) {
+                        checkMemoryAndReleaseVideos()
+                    }
+                    kotlinx.coroutines.delay(30000) // Check every 30 seconds
+                } catch (e: Exception) {
+                    Timber.e("VideoManager - Error in memory monitoring: ${e.message}")
+                    kotlinx.coroutines.delay(60000) // Wait longer on error
+                }
+            }
+        }
+        Timber.d("VideoManager - Started periodic memory monitoring")
+    }
+    
+    /**
+     * Get detailed memory statistics
+     */
+    fun getMemoryStats(): String {
+        val runtime = Runtime.getRuntime()
+        val totalMemory = runtime.totalMemory()
+        val freeMemory = runtime.freeMemory()
+        val usedMemory = totalMemory - freeMemory
+        val maxMemory = runtime.maxMemory()
+        
+        return "Memory: ${usedMemory / (1024 * 1024)}MB used, ${freeMemory / (1024 * 1024)}MB free, ${totalMemory / (1024 * 1024)}MB total, ${maxMemory / (1024 * 1024)}MB max"
+    }
     
     /**
      * Set up sequential playback for a list of videos
@@ -423,11 +521,14 @@ object VideoManager {
             throw IllegalStateException("VideoManager.cleanupUnusedVideos() must be called on the main thread")
         }
         
+        // Check memory usage first
+        checkMemoryAndReleaseVideos()
+        
         val unusedVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
         unusedVideos.forEach { videoMid ->
             releaseVideo(videoMid)
         }
-        if (unusedVideos.isNotEmpty()) {
+        if (unusedVideos.size > 0) {
             Timber.d("VideoManager - Cleaned up ${unusedVideos.size} unused videos")
         }
     }
@@ -442,6 +543,9 @@ object VideoManager {
             Timber.e("VideoManager - limitCachedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
             throw IllegalStateException("VideoManager.limitCachedVideos() must be called on the main thread")
         }
+        
+        // Check memory usage first
+        checkMemoryAndReleaseVideos()
         
         if (videoPlayers.size <= maxCached) {
             return

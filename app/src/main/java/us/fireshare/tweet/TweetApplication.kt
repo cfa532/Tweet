@@ -17,6 +17,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.CleanUpWorker
+import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
@@ -45,6 +46,10 @@ class TweetApplication : Application(){
             ExistingPeriodicWorkPolicy.KEEP,
             cleanUpRequest
         )
+
+        // Start video memory monitoring
+        VideoManager.startMemoryMonitoring()
+        Timber.d("TweetApplication - Started video memory monitoring")
 
         fun onTerminate() {
             super.onTerminate()

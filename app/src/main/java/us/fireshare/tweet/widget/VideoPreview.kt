@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -216,7 +218,7 @@ fun VideoPreview(
     Box(
         modifier = modifier
             .clipToBounds()
-            .background(Color.Gray.copy(alpha = 0.1f)) // Light gray background to prevent black flash
+            .background(MaterialTheme.colorScheme.surfaceVariant) // Material3 surface variant for loading background
             .onGloballyPositioned { layoutCoordinates ->
                 isVideoVisible = isElementVisible(layoutCoordinates)
             }
@@ -232,8 +234,8 @@ fun VideoPreview(
                     player = exoPlayer
                     useController = false // No controls in preview mode
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    // Set background color to prevent black flash
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    // Set background color to light gray (Material3 surface variant equivalent)
+                    setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
                     // Show buffering indicator
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
@@ -244,12 +246,14 @@ fun VideoPreview(
         // Show loading indicator when video is loading
         if (isLoading) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }

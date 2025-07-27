@@ -149,12 +149,14 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
                 var videoCacheStats by remember { mutableStateOf("") }
                 var videoManagerStats by remember { mutableStateOf("") }
+                var videoMemoryStats by remember { mutableStateOf("") }
 
                 LaunchedEffect(Unit) {
                     tweetCacheStats = TweetCacheManager.getCacheStats()
                     userCacheStats = TweetCacheManager.getUserCacheStats()
                     videoCacheStats = SimplifiedVideoCacheManager.getCacheStats(context)
                     videoManagerStats = VideoManager.getCacheStats()
+                    videoMemoryStats = VideoManager.getMemoryStats()
                 }
 
                 Column(
@@ -166,6 +168,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text("User Cache: ${userCacheStats.totalUsers} total, ${userCacheStats.validUsers} valid")
                     Text("Video Cache: $videoCacheStats")
                     Text("Video Players: $videoManagerStats")
+                    Text("Video Memory: $videoMemoryStats")
                     Text("Image Cache: ${ImageCacheManager.getMemoryCacheStats()}")
                 }
             }

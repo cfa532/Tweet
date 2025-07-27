@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -196,7 +198,7 @@ fun FullScreenVideoPlayer(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.surface)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
@@ -240,8 +242,8 @@ fun FullScreenVideoPlayer(
                     controllerShowTimeoutMs = 1000
                     controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    // Set background color to prevent black flash
-                    setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set background color to dark gray (Material3 surface equivalent)
+                    setBackgroundColor(android.graphics.Color.rgb(28, 28, 30))
                     // Show buffering indicator
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                     Timber.d("FullScreenVideoPlayer - PlayerView created with player: ${player != null}")
