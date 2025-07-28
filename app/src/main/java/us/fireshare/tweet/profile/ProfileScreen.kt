@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.key
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -93,6 +95,20 @@ fun ProfileScreen(
     
     // State for full-screen video overlay
     var fullScreenVideo by remember { mutableStateOf<Pair<String, MimeiId>?>(null) }
+    
+    // Callback to show full-screen video
+    val showFullScreenVideo = remember {
+        { videoUrl: String, videoMid: MimeiId ->
+            fullScreenVideo = Pair(videoUrl, videoMid)
+        }
+    }
+    
+    // Show dialog using LaunchedEffect to avoid conditional rendering
+    LaunchedEffect(fullScreenVideo) {
+        fullScreenVideo?.let { (videoUrl, videoMid) ->
+            // This will trigger the dialog to show
+        }
+    }
 
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -126,6 +142,7 @@ fun ProfileScreen(
                     parentEntry = parentEntry,
                     scrollBehavior = scrollBehavior,
                     initState = initState,
+                    userId = userId, // Pass userId directly
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState
                         
@@ -152,9 +169,7 @@ fun ProfileScreen(
                             }
                         }
                     },
-                    onFullScreenVideo = { videoUrl, videoMid ->
-                        fullScreenVideo = Pair(videoUrl, videoMid)
-                    }
+                    onFullScreenVideo = showFullScreenVideo
                 )
             }
         }
@@ -167,15 +182,16 @@ fun ProfileScreen(
             navController,
             0
         )
-        
-        // Show full-screen video overlay if needed
-        fullScreenVideo?.let { (videoUrl, videoMid) ->
-            VideoModalDialog(
-                videoUrl = videoUrl,
-                videoMid = videoMid,
-                onDismiss = { fullScreenVideo = null }
-            )
-        }
+    }
+    
+    // Show full-screen video overlay outside the main content tree
+    if (fullScreenVideo != null) {
+        val (videoUrl, videoMid) = fullScreenVideo!!
+        VideoModalDialog(
+            videoUrl = videoUrl,
+            videoMid = videoMid,
+            onDismiss = { fullScreenVideo = null }
+        )
     }
 }
 
@@ -191,6 +207,7 @@ private fun ProfileContentWithTweetListView(
     parentEntry: NavBackStackEntry,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     initState: Boolean,
+    userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
     onFullScreenVideo: (String, MimeiId) -> Unit
 ) {
@@ -198,38 +215,40 @@ private fun ProfileContentWithTweetListView(
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     val user by viewModel.user.collectAsState()
     
-    // Create header content with profile details and pinned tweets
-    val headerContent: @Composable () -> Unit = {
-        Column {
-            // Profile details section
-            ProfileDetail(viewModel, navController)
-            
-            // Pinned tweets section (if any)
-            if (pinnedTweets.isNotEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    tonalElevation = 100.dp,
-                ) {
-                    Text(
-                        text = stringResource(R.string.pinToTop),
-                        modifier = Modifier.padding(
-                            start = 16.dp,
-                            top = 0.dp,
-                            bottom = 4.dp
-                        ),
-                        style = MaterialTheme.typography.titleMedium
+    // Create header content with profile details and pinned tweets - make it stable
+    val headerContent: @Composable () -> Unit = remember(user, pinnedTweets) {
+        {
+            Column {
+                // Profile details section
+                ProfileDetail(viewModel, navController)
+                
+                // Pinned tweets section (if any)
+                if (pinnedTweets.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        tonalElevation = 100.dp,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pinToTop),
+                            modifier = Modifier.padding(
+                                start = 16.dp,
+                                top = 0.dp,
+                                bottom = 4.dp
+                            ),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    
+                    pinnedTweets.forEach { tweet ->
+                        TweetItem(tweet, parentEntry)
+                    }
+                    
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                        thickness = 2.dp,
+                        color = MaterialTheme.colorScheme.primaryContainer
                     )
                 }
-                
-                pinnedTweets.forEach { tweet ->
-                    TweetItem(tweet, parentEntry)
-                }
-                
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    thickness = 2.dp,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                )
             }
         }
     }
@@ -257,12 +276,13 @@ private fun ProfileContentWithTweetListView(
             showPrivateTweets = true, // Show private tweets in profile
             parentEntry = parentEntry,
             onScrollStateChange = onScrollStateChange,
-            currentUserId = user.mid,
+            currentUserId = userId, // Use userId directly
             onTweetUnavailable = { tweetId ->
                 viewModel.removeTweetFromAllLists(tweetId)
             },
             headerContent = headerContent,
-            onFullScreenVideo = onFullScreenVideo
+            onFullScreenVideo = onFullScreenVideo,
+            restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
         )
         
         // Show pull-to-refresh style indicator during initial load

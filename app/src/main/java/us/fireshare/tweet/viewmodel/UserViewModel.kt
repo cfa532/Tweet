@@ -555,21 +555,27 @@ class UserViewModel @AssistedInject constructor(
                 .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
             if (pageNumber == 0) {
-                // For refresh (page 0), replace the list
-                val filteredTweets = newTweets.filterNot { tweet: Tweet -> 
-                    tweet.isPrivate && tweet.authorId != appUser.mid 
+                // For refresh (page 0), replace the list only if we have no existing tweets
+                // This prevents replacing tweets during TweetListView recreation
+                if (_tweets.value.isEmpty()) {
+                    val filteredTweets = newTweets.filterNot { tweet: Tweet -> 
+                        tweet.isPrivate && tweet.authorId != appUser.mid 
+                    }
+                    
+                    // Get current pinned tweet IDs after ensuring they're loaded
+                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                    val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
+                        pinnedTweetIds.contains(tweet.mid)
+                    }
+                    
+                    _tweets.value = tweetsWithoutPinned
+                    _tweetCount.value = tweetsWithoutPinned.size
+                    
+                    Timber.tag("getTweets").d("Initial load: Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list. Pinned IDs: $pinnedTweetIds")
+                } else {
+                    // We already have tweets, just ensure page 0 tweets are included
+                    Timber.tag("getTweets").d("Page 0 called but tweets already exist (${_tweets.value.size} tweets), preserving existing list")
                 }
-                
-                // Get current pinned tweet IDs after ensuring they're loaded
-                val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
-                    pinnedTweetIds.contains(tweet.mid)
-                }
-                
-                _tweets.value = tweetsWithoutPinned
-                _tweetCount.value = tweetsWithoutPinned.size
-                
-                Timber.tag("getTweets").d("Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list. Pinned IDs: $pinnedTweetIds")
             } else {
                 // For load more (page > 0), append to the list
                 _tweets.update { currentTweets ->

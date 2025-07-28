@@ -89,12 +89,20 @@ fun TweetListView(
     restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
     onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
 ) {
+    // Debug logging for TweetListView recreation
+    Timber.tag("TweetListView").d("TweetListView created/recreated with ${tweets.size} tweets, currentUserId: $currentUserId, restoreScrollPosition: $restoreScrollPosition")
+    
+    // Track tweets list changes
+    LaunchedEffect(tweets) {
+        Timber.tag("TweetListView").d("Tweets list changed: ${tweets.size} tweets")
+    }
+    
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track the last page that was actually loaded
+    var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) } // Use rememberSaveable to persist across recompositions
     var lastUserId by remember { mutableStateOf(currentUserId) }
-    var serverDepleted by remember { mutableStateOf(false) } // Track if server is depleted to prevent infinite loading
+    var serverDepleted by rememberSaveable { mutableStateOf(false) } // Use rememberSaveable to persist across recompositions
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) } // Track which page is currently being loaded
     var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
     var lastExternalRequestTime by remember { mutableLongStateOf(0L) } // Track last external request time for debouncing
@@ -104,8 +112,8 @@ fun TweetListView(
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = savedScrollPosition.value.first,
-        initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
+        initialFirstVisibleItemIndex = if (restoreScrollPosition) savedScrollPosition.value.first else 0,
+        initialFirstVisibleItemScrollOffset = if (restoreScrollPosition) savedScrollPosition.value.second else 0
     )
     val coroutineScope = rememberCoroutineScope()
     val MINMIMUM_TWEET_COUNT = 4
