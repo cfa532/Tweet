@@ -61,11 +61,15 @@ fun FullScreenVideoPlayer(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
+    // Track if video was playing before full screen
+    var wasPlayingBefore by remember { mutableStateOf(false) }
+    
     // Create a dedicated fullscreen player instance
     val exoPlayer = remember(videoMid) {
         // Get current position from existing player if available
         val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
         val currentPosition = existingPlayer?.currentPosition ?: 0L
+        wasPlayingBefore = existingPlayer?.playWhenReady ?: false
         
         // Create new player for fullscreen
         val player = createExoPlayer(context, videoUrl, MediaType.Video)
@@ -80,17 +84,6 @@ fun FullScreenVideoPlayer(
 
     // Autoplay when entering full screen
     LaunchedEffect(exoPlayer) {
-        if (autoPlay) {
-            // Set volume and prepare for playback
-            exoPlayer.volume = 1f
-            exoPlayer.playWhenReady = true
-            
-            // Start playback immediately
-            exoPlayer.play()
-        } else {
-            exoPlayer.playWhenReady = false
-        }
-        
         // Add error listener to catch source errors
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -100,12 +93,30 @@ fun FullScreenVideoPlayer(
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
+                Timber.d("FullScreenVideoPlayer - Playback state changed: $playbackState")
                 // Auto-start playback when ready
                 if (autoPlay && playbackState == androidx.media3.common.Player.STATE_READY) {
+                    Timber.d("FullScreenVideoPlayer - Starting playback (autoPlay: $autoPlay)")
                     exoPlayer.play()
                 }
             }
         })
+        
+        // Small delay to ensure player is ready, then start playback
+        delay(100)
+        
+        // Check if video was playing before and restore that state
+        if (wasPlayingBefore || autoPlay) {
+            // Set volume and prepare for playback
+            exoPlayer.volume = 1f
+            exoPlayer.playWhenReady = true
+            
+            // Start playback immediately
+            Timber.d("FullScreenVideoPlayer - Starting playback immediately (wasPlayingBefore: $wasPlayingBefore, autoPlay: $autoPlay)")
+            exoPlayer.play()
+        } else {
+            exoPlayer.playWhenReady = false
+        }
     }
 
     // Immersive full screen and audio control
@@ -129,9 +140,9 @@ fun FullScreenVideoPlayer(
             }
         }
         onDispose {
-            // Clean up the dedicated fullscreen player
-            exoPlayer.stop()
-            exoPlayer.release()
+            // Don't release the player - let VideoManager handle it
+            // Just pause playback when leaving full screen
+            exoPlayer.playWhenReady = false
             
             // Restore system bars on exit
             if (enableImmersiveMode && activity != null) {
