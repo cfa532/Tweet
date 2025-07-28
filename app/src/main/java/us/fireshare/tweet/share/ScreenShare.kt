@@ -54,6 +54,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import android.widget.Toast
+import androidx.compose.ui.res.stringResource
 
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetViewModel
@@ -90,7 +91,7 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(R.drawable.ic_share),
-                contentDescription = "Share",
+                contentDescription = stringResource(R.string.share),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = MaterialTheme.colorScheme.outline
             )
@@ -119,7 +120,7 @@ fun ShareBottomSheet(
         putExtra(Intent.EXTRA_TEXT, contentToShare)
         type = "text/plain" // Adjust the MIME type based on the content
     }
-    val chooserIntent = Intent.createChooser(shareIntent, "Share via")
+            val chooserIntent = Intent.createChooser(shareIntent, context.getString(R.string.share_via))
 
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -186,7 +187,7 @@ fun ShareBottomSheet(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(text = "Content to Share",
+                Text(text = stringResource(R.string.content_to_share),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.outline
                 )

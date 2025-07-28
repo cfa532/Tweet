@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -54,6 +55,7 @@ import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import kotlin.concurrent.timer
+import us.fireshare.tweet.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,7 +140,7 @@ fun ChatScreen(
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -227,7 +229,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .heightIn(max = 150.dp)
                 .padding(0.dp),
-            placeholder = { Text("Type a message...") },
+                            placeholder = { Text(stringResource(R.string.type_message)) },
             keyboardOptions = KeyboardOptions.Default.copy(
                 imeAction = ImeAction.Default, // Allow Enter key to add a new line
                 keyboardType = KeyboardType.Text
@@ -250,7 +252,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                     }
                 }) {
                     Icon(imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
+                        contentDescription = stringResource(R.string.send),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                 }

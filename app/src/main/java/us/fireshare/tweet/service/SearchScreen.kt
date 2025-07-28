@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -45,6 +46,7 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserId
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
@@ -87,7 +89,7 @@ fun SearchScreen(
                     } ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -113,7 +115,7 @@ fun SearchScreen(
                     value = searchQuery.value,
                     onValueChange = { searchQuery.value = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Search @username or #hashtag",
+                    placeholder = { Text(stringResource(R.string.search_placeholder),
                         modifier = Modifier.alpha(0.5f)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -134,7 +136,7 @@ fun SearchScreen(
                                 }
                             },
                         ) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
                         }
                     }
                 )

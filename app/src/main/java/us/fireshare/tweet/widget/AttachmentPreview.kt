@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -83,7 +84,7 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
         imageBitmap?.let {
             Image(
                 bitmap = it,
-                contentDescription = "Attached File",
+                contentDescription = stringResource(R.string.attached_file),
                 modifier = Modifier
                     .size(canvasSize.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -91,7 +92,7 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
         } ?: run {
             Icon(
                 painter = painterResource(id = R.drawable.ic_photo_plus),
-                contentDescription = "Attached File",
+                contentDescription = stringResource(R.string.attached_file),
                 modifier = Modifier
                     .size(canvasSize.dp)
                     .clip(RoundedCornerShape(8.dp))

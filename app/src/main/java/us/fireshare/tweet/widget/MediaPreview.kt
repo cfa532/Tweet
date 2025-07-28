@@ -70,6 +70,7 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.res.stringResource
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -953,7 +954,7 @@ fun AudioPreview(
         ) {
             Icon(
                 painter = painterResource(R.drawable.btn_play),
-                contentDescription = "Play",
+                contentDescription = stringResource(R.string.play),
                 modifier = Modifier.size(12.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))

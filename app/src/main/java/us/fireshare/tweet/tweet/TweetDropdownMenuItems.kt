@@ -94,7 +94,7 @@ fun TweetDropdownMenuItems(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.delete),
                         tint = MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
@@ -120,7 +120,7 @@ fun TweetDropdownMenuItems(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.Favorite,
-                        contentDescription = "Pin to top",
+                        contentDescription = stringResource(R.string.pin_to_top),
                         tint = MaterialTheme.colorScheme.surfaceTint
                     )
                     Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text

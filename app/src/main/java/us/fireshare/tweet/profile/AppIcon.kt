@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import timber.log.Timber
@@ -47,7 +48,7 @@ data class AvatarLoadState(
 fun AppIcon() {
     Image(
         painter = painterResource(R.drawable.ic_app_logo),
-        contentDescription = "App Icon",
+                        contentDescription = stringResource(R.string.app_icon),
         modifier = Modifier
             .size(36.dp)
             .clip(CircleShape),
@@ -118,7 +119,7 @@ fun UserAvatar(
         // Show cached avatar image
         Image(
             bitmap = loadState.bitmap!!.asImageBitmap(),
-            contentDescription = "User Avatar",
+                            contentDescription = stringResource(R.string.user_avatar),
             contentScale = ContentScale.Crop,
             modifier = modifier
         )

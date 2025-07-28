@@ -226,7 +226,7 @@ fun ReplyEditorBox(
                 // Expand icon
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Expand",
+                    contentDescription = stringResource(R.string.expand),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp)
                 )
@@ -255,7 +255,7 @@ fun ReplyEditorBox(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.close),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -362,7 +362,7 @@ fun ReplyEditorBox(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PhotoCamera,
-                                contentDescription = "Take photo/video",
+                                contentDescription = stringResource(R.string.take_photo_video),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -375,7 +375,7 @@ fun ReplyEditorBox(
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_photo_plus),
-                                contentDescription = "Add attachment",
+                                contentDescription = stringResource(R.string.add_attachment),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -401,7 +401,7 @@ fun ReplyEditorBox(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
+                            contentDescription = stringResource(R.string.send),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -420,20 +420,20 @@ fun ReplyEditorBox(
     if (showExitConfirmation) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showExitConfirmation = false },
-            title = { Text("Discard Reply?") },
-            text = { Text("You have unsaved content. Are you sure you want to leave?") },
+            title = { Text(stringResource(R.string.discard_reply)) },
+            text = { Text(stringResource(R.string.unsaved_content_warning)) },
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = { clearAndClose() }
                 ) {
-                    Text("Discard")
+                                            Text(stringResource(R.string.discard))
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(
                     onClick = { showExitConfirmation = false }
                 ) {
-                    Text("Keep Editing")
+                                            Text(stringResource(R.string.keep_editing))
                 }
             }
         )

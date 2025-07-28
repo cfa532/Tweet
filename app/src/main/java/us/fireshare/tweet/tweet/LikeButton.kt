@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -86,7 +87,7 @@ fun CommentButton(
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_notice),
-                contentDescription = "comments",
+                contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
@@ -135,7 +136,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
-                contentDescription = "forward",
+                contentDescription = stringResource(R.string.forward),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
@@ -174,7 +175,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
-                contentDescription = "Like",
+                contentDescription = stringResource(R.string.like),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
@@ -214,7 +215,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
-                contentDescription = "Like",
+                contentDescription = stringResource(R.string.like),
                 modifier = Modifier.size(ButtonDefaults.IconSize)
                     .padding(bottom = 1.dp),
                 tint = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
@@ -249,7 +250,7 @@ fun ShareButton(viewModel: TweetViewModel) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
                 imageVector = Icons.Default.Share,
-                contentDescription = "Share",
+                contentDescription = stringResource(R.string.share),
                 modifier = Modifier.size(ButtonDefaults.IconSize)
                     .padding(1.dp),
                 tint = MaterialTheme.colorScheme.outline

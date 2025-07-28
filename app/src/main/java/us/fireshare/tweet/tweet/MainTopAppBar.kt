@@ -18,8 +18,10 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon
 import us.fireshare.tweet.profile.UserAvatar
@@ -68,7 +70,7 @@ fun MainTopAppBar(
             IconButton(onClick = { navController.navigate(NavTweet.Settings) }) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.settings),
                     tint = MaterialTheme.colorScheme.surfaceTint
                 )
             }

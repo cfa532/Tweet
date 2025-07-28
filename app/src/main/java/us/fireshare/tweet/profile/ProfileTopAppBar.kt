@@ -139,7 +139,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.back),
                 )
             }
         },
@@ -154,7 +154,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     }) {
                         Icon(
                             imageVector = Icons.Default.MailOutline,
-                            contentDescription = "Message"
+                            contentDescription = stringResource(R.string.message)
                         )
                     }
                 }
@@ -162,7 +162,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More"
+                            contentDescription = stringResource(R.string.more)
                         )
                     }
                     DropdownMenu(
@@ -256,7 +256,7 @@ fun ImageModalDialog(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close), tint = Color.White)
             }
         }
     }

@@ -22,8 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import timber.log.Timber
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
@@ -115,7 +117,7 @@ fun ImageViewer(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Failed to load image")
+                Text(stringResource(R.string.failed_to_load_image))
             }
         } else if (loadState.isLoading) {
             // Show loading state
@@ -124,7 +126,7 @@ fun ImageViewer(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Loading...")
+                Text(stringResource(R.string.loading))
             }
         }
 
@@ -135,14 +137,14 @@ fun ImageViewer(
                 onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("Save Image") },
+                    text = { Text(stringResource(R.string.save_image)) },
                     onClick = {
                         // TODO: Implement save functionality
                         showMenu = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Share Image") },
+                    text = { Text(stringResource(R.string.share_image)) },
                     onClick = {
                         // TODO: Implement share functionality
                         showMenu = false
@@ -220,7 +222,7 @@ fun FullScreenImageViewer(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Failed to load image")
+                Text(stringResource(R.string.failed_to_load_image))
             }
         } else if (loadState.isLoading) {
             // Show loading state
@@ -228,7 +230,7 @@ fun FullScreenImageViewer(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Loading...")
+                Text(stringResource(R.string.loading))
             }
         }
 
@@ -239,14 +241,14 @@ fun FullScreenImageViewer(
                 onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("Download") },
+                    text = { Text(stringResource(R.string.download)) },
                     onClick = {
                         // TODO: Implement download functionality
                         showMenu = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Share Image") },
+                    text = { Text(stringResource(R.string.share_image)) },
                     onClick = {
                         // TODO: Implement share functionality
                         showMenu = false

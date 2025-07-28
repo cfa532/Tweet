@@ -92,7 +92,7 @@ fun ChatListScreen(viewModel: ChatListViewModel)
                     } ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -162,7 +162,7 @@ fun ChatSession(
                         .offset(x = (6).dp, y = (-4).dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Email, contentDescription = "Mail",
+                        imageVector = Icons.Default.Email, contentDescription = stringResource(R.string.mail),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }

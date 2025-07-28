@@ -26,7 +26,7 @@ fun SplashScreen() {
         // Your splash screen content here, e.g., an icon and app name
         Icon(
             painter = painterResource(id = R.drawable.ic_app_logo),
-            contentDescription = "App Icon",
+                            contentDescription = stringResource(R.string.app_icon),
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(128.dp)
         )

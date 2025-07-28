@@ -94,7 +94,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -118,9 +118,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Cache Information")
+                Text(stringResource(R.string.cache_information))
                 Button(onClick = { showCacheInfo = !showCacheInfo }) {
-                    Text(if (showCacheInfo) "Hide" else "Show")
+                    Text(if (showCacheInfo) stringResource(R.string.hide) else stringResource(R.string.show))
                 }
             }
             
@@ -164,12 +164,12 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .fillMaxWidth()
                 ) {
-                    Text("Tweet Cache: ${tweetCacheStats.memoryCacheSize} in memory, ${tweetCacheStats.databaseCacheSize} in database")
-                    Text("User Cache: ${userCacheStats.totalUsers} total, ${userCacheStats.validUsers} valid")
-                    Text("Video Cache: $videoCacheStats")
-                    Text("Video Players: $videoManagerStats")
-                    Text("Video Memory: $videoMemoryStats")
-                    Text("Image Cache: ${ImageCacheManager.getMemoryCacheStats()}")
+                    Text(stringResource(R.string.tweet_cache_stats, tweetCacheStats.memoryCacheSize, tweetCacheStats.databaseCacheSize))
+                    Text(stringResource(R.string.user_cache_stats, userCacheStats.totalUsers, userCacheStats.validUsers))
+                    Text(stringResource(R.string.video_cache_stats, videoCacheStats))
+                    Text(stringResource(R.string.video_players_stats, videoManagerStats))
+                    Text(stringResource(R.string.video_memory_stats, videoMemoryStats))
+                    Text(stringResource(R.string.image_cache_stats, ImageCacheManager.getMemoryCacheStats()))
                 }
             }
 
@@ -180,7 +180,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Clear all cached data")
+                Text(stringResource(R.string.clear_all_cached_data))
                 Button(
                     onClick = {
                         appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -210,7 +210,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     },
                     enabled = !isCachedCleared
                 ) {
-                    Text(if (isCachedCleared) "Cleared!" else "Clear")
+                    Text(if (isCachedCleared) stringResource(R.string.cleared) else stringResource(R.string.clear))
                 }
 
                 // Show success message and reset button
@@ -225,7 +225,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         onClick = { isCachedCleared = false },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        Text("Clear Again")
+                        Text(stringResource(R.string.clear_again))
                     }
                 }
             }
@@ -242,7 +242,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 OutlinedTextField(
                     value = cloudPort ?: "",
                     onValueChange = { cloudPort = it },
-                    label = { Text("Cloud Port") },
+                    label = { Text(stringResource(R.string.cloud_port)) },
                     modifier = Modifier
                         .width(width = 160.dp)
                         .focusRequester(focusRequester),

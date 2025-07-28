@@ -16,8 +16,11 @@ import androidx.core.content.FileProvider
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
+import us.fireshare.tweet.R
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.set
 
 /**
  * @param activity The activity from which the screenshot is captured.
@@ -32,7 +35,8 @@ fun captureScreenshotWithQRCode(activity: Activity, qrText: String, callback: (B
             val qrCodeBitmap = generateQRCode(qrText, qrCodeSize)
 
             // Create a new bitmap with the same dimensions as the screenshot
-            val combinedBitmap = Bitmap.createBitmap(screenshot.width, screenshot.height, screenshot.config!!)
+            val combinedBitmap =
+                createBitmap(screenshot.width, screenshot.height, screenshot.config!!)
             val canvas = Canvas(combinedBitmap)
 
             // Draw the screenshot onto the canvas
@@ -56,7 +60,7 @@ fun captureScreenshotWithQRCode(activity: Activity, qrText: String, callback: (B
 fun captureScreenshot(activity: Activity, callback: (Bitmap?) -> Unit) {
     val window: Window = activity.window
     val view: View = window.decorView.rootView
-    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(view.width, view.height)
     val location = IntArray(2)
     view.getLocationInWindow(location)
     try {
@@ -99,17 +103,21 @@ fun shareImage(context: Context, file: File) {
         putExtra(Intent.EXTRA_STREAM, uri)
         type = "image/png"
     }
-    context.startActivity(Intent.createChooser(shareIntent, "Share Image"))
+            context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.share_image)))
 }
 
 fun generateQRCode(text: String, size: Int): Bitmap {
     val bitMatrix: BitMatrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
     val width = bitMatrix.width
     val height = bitMatrix.height
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+    val bitmap = createBitmap(width, height, Bitmap.Config.RGB_565)
     for (x in 0 until width) {
         for (y in 0 until height) {
-            bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+            bitmap[x, y] = if (bitMatrix.get(
+                    x,
+                    y
+                )
+            ) android.graphics.Color.BLACK else android.graphics.Color.WHITE
         }
     }
     return bitmap
@@ -119,7 +127,7 @@ fun getScreenshotFromView(view: View): Bitmap? {
     if (view.width == 0 || view.height == 0) {
         return null
     }
-    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(view.width, view.height)
     val canvas = Canvas(bitmap)
     view.draw(canvas)
     return bitmap

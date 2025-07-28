@@ -118,7 +118,7 @@ fun EditProfileScreen(
             IconButton(onClick = { navController.popBackStack() }) {
                 Icon(
                     imageVector = Icons.Default.Clear,
-                    contentDescription = "Cancel"
+                    contentDescription = stringResource(R.string.cancel)
                 )
             }
             // AppUser avatar
@@ -195,7 +195,7 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = hostId,
                     onValueChange = { viewModel.onNodeIdChange(it) },
-                    label = { Text("Host ID") },
+                    label = { Text(stringResource(R.string.host_id)) },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
@@ -279,7 +279,7 @@ fun AppUserAvatar(
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_photo_plus),
-                    contentDescription = "Change avatar",
+                    contentDescription = stringResource(R.string.change_avatar),
                     tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(32.dp)
                 )

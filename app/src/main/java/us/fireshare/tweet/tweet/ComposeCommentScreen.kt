@@ -57,6 +57,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -164,7 +165,7 @@ fun ComposeCommentScreen(
                     }) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 },
@@ -200,7 +201,7 @@ fun ComposeCommentScreen(
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
+                            contentDescription = stringResource(R.string.send),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.rotate(180f)
 
@@ -319,7 +320,7 @@ fun ComposeCommentScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
-                            contentDescription = "Open camera",
+                            contentDescription = stringResource(R.string.open_camera),
                             tint = MaterialTheme.colorScheme.surfaceTint,
                         )
                     }
@@ -330,7 +331,7 @@ fun ComposeCommentScreen(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_photo_plus),
-                            contentDescription = "upload file",
+                            contentDescription = stringResource(R.string.upload_file),
                             tint = MaterialTheme.colorScheme.surfaceTint,
                         )
                     }
@@ -365,8 +366,8 @@ fun ComposeCommentScreen(
         if (showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = { showExitConfirmation = false },
-                title = { Text("Discard Comment?") },
-                text = { Text("You have unsaved content. Are you sure you want to leave?") },
+                            title = { Text(stringResource(R.string.discard_comment)) },
+            text = { Text(stringResource(R.string.unsaved_content_warning)) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -374,14 +375,14 @@ fun ComposeCommentScreen(
                             popBack()
                         }
                     ) {
-                        Text("Discard")
+                        Text(stringResource(R.string.discard))
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { showExitConfirmation = false }
                     ) {
-                        Text("Keep Editing")
+                        Text(stringResource(R.string.keep_editing))
                     }
                 }
             )

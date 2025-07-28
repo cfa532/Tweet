@@ -86,7 +86,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         ) {
             Icon(imageVector = Icons.Default.Close,
                 tint = MaterialTheme.colorScheme.primary,
-                contentDescription = "Cancel")
+                contentDescription = stringResource(R.string.cancel))
         }
 
         Text(text = "Login", fontSize = 32.sp, color = Color.Black)

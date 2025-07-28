@@ -69,6 +69,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.tweet.ReplyEditorBox
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import us.fireshare.tweet.datamodel.Tweet
 
@@ -225,7 +226,7 @@ fun TweetDetailScreen(
                 {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.back),
                     )
                 }
             },
@@ -266,7 +267,7 @@ fun TweetDetailScreen(
             ) {
                 Icon(
                     painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(R.drawable.ic_grid_layout),
-                    contentDescription = "Switch layout",
+                    contentDescription = stringResource(R.string.switch_layout),
                     modifier = Modifier.size(20.dp)
                 )
             }
