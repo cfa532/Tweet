@@ -639,18 +639,21 @@ fun MediaItemView(
     val navController = LocalNavController.current
     /**
      * Action to take when any media item is clicked.
-     * All media types open in MediaBrowser for browsing with swipe navigation.
+     * Audio files navigate to tweet detail page, others open in MediaBrowser for browsing with swipe navigation.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
         val attachment = attachments[idx]
         
-        // If we have a full-screen video callback and this is a video, use the callback
-        if (onFullScreenVideo != null && attachment.type == MediaType.Video) {
+        // Audio files should navigate to tweet detail page
+        if (attachment.type == MediaType.Audio) {
+            navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+        } else if (onFullScreenVideo != null && attachment.type == MediaType.Video) {
+            // If we have a full-screen video callback and this is a video, use the callback
             val videoUrl = attachment.url
             val videoMid = attachment.url.getMimeiKeyFromUrl()
             onFullScreenVideo(videoUrl, videoMid)
         } else {
-            // Navigate to MediaBrowser for all media types to enable swipe navigation
+            // Navigate to MediaBrowser for all other media types to enable swipe navigation
             try {
                 navController.navigate(
                     NavTweet.MediaViewer(MediaViewerParams(
@@ -704,7 +707,15 @@ fun MediaItemView(
                 } else {
                     modifier
                 }
-                AudioPreview(mediaItems, index, backgroundModifier, tweet)
+                Box(
+                    modifier = backgroundModifier
+                        .clipToBounds()
+                        .clickable { 
+                            goto(index) 
+                        }
+                ) {
+                    AudioPreview(mediaItems, index, Modifier.fillMaxSize(), tweet)
+                }
             }
             else -> {       // add link to download other file type
                 BlobLink(mediaItems[index], attachment.url, modifier)
@@ -790,6 +801,16 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     
     // Check filename extension
     val fileName = attachment.fileName?.lowercase() ?: ""
+    
+    // Special case for .3gp files - check if they have aspect ratio (video) or not (audio)
+    if (fileName.endsWith(".3gp")) {
+        return if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
+            MediaType.Video
+        } else {
+            MediaType.Audio
+        }
+    }
+    
     return when {
         fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || 
         fileName.endsWith(".png") || fileName.endsWith(".gif") || 
@@ -797,11 +818,14 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
         
         fileName.endsWith(".mp4") || fileName.endsWith(".mov") || 
         fileName.endsWith(".avi") || fileName.endsWith(".mkv") || 
-        fileName.endsWith(".webm") || fileName.endsWith(".m3u8") -> MediaType.Video
+        fileName.endsWith(".webm") || fileName.endsWith(".m3u8") ||
+        fileName.endsWith(".m4v") || fileName.endsWith(".3gpp") -> MediaType.Video
         
         fileName.endsWith(".mp3") || fileName.endsWith(".wav") || 
         fileName.endsWith(".aac") || fileName.endsWith(".ogg") || 
-        fileName.endsWith(".flac") -> MediaType.Audio
+        fileName.endsWith(".flac") || fileName.endsWith(".m4a") ||
+        fileName.endsWith(".wma") || fileName.endsWith(".opus") ||
+        fileName.endsWith(".amr") -> MediaType.Audio
         
         fileName.endsWith(".pdf") -> MediaType.PDF
         fileName.endsWith(".doc") || fileName.endsWith(".docx") -> MediaType.Word
@@ -920,15 +944,11 @@ fun AudioPreview(
     modifier: Modifier = Modifier,
     tweet: Tweet,
 ) {
-    val navController = LocalNavController.current
     Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 2.dp)
-                .clickable {
-                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
-                },
+                .padding(start = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
