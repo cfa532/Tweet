@@ -325,8 +325,7 @@ fun VideoModalDialog(
             FullScreenVideoPlayer(
                 videoUrl = videoUrl,
                 videoMid = videoMid,
-                onClose = onDismiss,
-                autoPlay = true
+                onClose = onDismiss
             )
         }
     }

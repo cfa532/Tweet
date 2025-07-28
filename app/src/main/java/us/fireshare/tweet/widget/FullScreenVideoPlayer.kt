@@ -50,13 +50,13 @@ fun FullScreenVideoPlayer(
     videoMid: MimeiId,
     videoUrl: String,
     onClose: () -> Unit,
+    autoPlay: Boolean = true, // Auto-start playback when entering full screen
     enableImmersiveMode: Boolean = true,
-    autoPlay: Boolean = true,
+    autoReplay: Boolean = true, // Auto-replay when video ends
     onHorizontalSwipe: ((direction: Int) -> Unit)? = null // -1 for left, 1 for right
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var isMuted by remember { mutableStateOf(false) } // Always unmute in full screen
     var showControls by remember { mutableStateOf(true) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
@@ -64,26 +64,24 @@ fun FullScreenVideoPlayer(
     // Track if video was playing before full screen
     var wasPlayingBefore by remember { mutableStateOf(false) }
     
-    // Create a dedicated fullscreen player instance
+    // Track original mute state to restore when exiting full screen
+    var originalMuteState by remember { mutableStateOf(false) }
+    
+    // Reuse the existing video player from VideoManager instead of creating a new one
     val exoPlayer = remember(videoMid) {
-        // Get current position from existing player if available
+        // Get the existing player from VideoManager
         val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
-        val currentPosition = existingPlayer?.currentPosition ?: 0L
-        wasPlayingBefore = existingPlayer?.playWhenReady ?: false
+        val currentPosition = existingPlayer.currentPosition
+        wasPlayingBefore = existingPlayer.playWhenReady
         
-        // Create new player for fullscreen
-        val player = createExoPlayer(context, videoUrl, MediaType.Video)
+        // Store the original mute state (volume == 0f means muted)
+        originalMuteState = existingPlayer.volume == 0f
         
-        // Seek to current position
-        if (currentPosition > 0) {
-            player.seekTo(currentPosition)
-        }
-        
-        player
+        existingPlayer
     }
 
-    // Autoplay when entering full screen
-    LaunchedEffect(exoPlayer) {
+    // Autoplay when entering full screen - use LaunchedEffect(Unit) to ensure it only runs once
+    LaunchedEffect(Unit) {
         // Add error listener to catch source errors
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -94,28 +92,80 @@ fun FullScreenVideoPlayer(
             
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Timber.d("FullScreenVideoPlayer - Playback state changed: $playbackState")
-                // Auto-start playback when ready
-                if (autoPlay && playbackState == androidx.media3.common.Player.STATE_READY) {
-                    Timber.d("FullScreenVideoPlayer - Starting playback (autoPlay: $autoPlay)")
+                
+                when (playbackState) {
+                    androidx.media3.common.Player.STATE_READY -> {
+                        // Auto-start playback when ready
+                        if (autoPlay) {
+                            Timber.d("FullScreenVideoPlayer - Starting playback (autoPlay: $autoPlay)")
+                            exoPlayer.play()
+                        }
+                    }
+                    androidx.media3.common.Player.STATE_ENDED -> {
+                        // Handle video completion - auto-replay if enabled
+                        if (autoReplay) {
+                            Timber.d("FullScreenVideoPlayer - Video ended, auto-replaying")
+                            exoPlayer.seekTo(0)
+                            exoPlayer.playWhenReady = true
+                            exoPlayer.play()
+                        } else {
+                            // Notify VideoManager about completion for sequential playback
+                            VideoManager.onVideoCompleted(videoMid)
+                        }
+                    }
+                }
+            }
+            
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                Timber.d("FullScreenVideoPlayer - Is playing changed: $isPlaying")
+                if (autoPlay && !isPlaying) {
+                    Timber.d("FullScreenVideoPlayer - Player was paused, restarting...")
+                    exoPlayer.playWhenReady = true
                     exoPlayer.play()
                 }
             }
         })
         
-        // Small delay to ensure player is ready, then start playback
-        delay(100)
+        // Set volume to 1f (unmuted) for full screen
+        exoPlayer.volume = 1f
         
-        // Check if video was playing before and restore that state
-        if (wasPlayingBefore || autoPlay) {
-            // Set volume and prepare for playback
-            exoPlayer.volume = 1f
+        // Add a longer delay to ensure any external interference has settled
+        delay(200)
+        
+        // Force auto-play regardless of previous state - override VideoManager's reset
+        if (autoPlay) {
+            Timber.d("FullScreenVideoPlayer - Forcing auto-play (autoPlay: $autoPlay)")
             exoPlayer.playWhenReady = true
+            exoPlayer.play()
             
-            // Start playback immediately
-            Timber.d("FullScreenVideoPlayer - Starting playback immediately (wasPlayingBefore: $wasPlayingBefore, autoPlay: $autoPlay)")
+            // Add another delay and check if we need to restart
+            delay(100)
+            if (!exoPlayer.isPlaying) {
+                Timber.d("FullScreenVideoPlayer - Player was paused, restarting...")
+                exoPlayer.playWhenReady = true
+                exoPlayer.play()
+            }
+        } else if (wasPlayingBefore) {
+            // If auto-play is disabled but video was playing before, restore that state
+            Timber.d("FullScreenVideoPlayer - Restoring previous play state (wasPlayingBefore: $wasPlayingBefore)")
+            exoPlayer.playWhenReady = true
             exoPlayer.play()
         } else {
             exoPlayer.playWhenReady = false
+        }
+    }
+    
+    // Add a periodic check to ensure the player stays playing if autoPlay is enabled
+    LaunchedEffect(autoPlay) {
+        if (autoPlay) {
+            while (true) {
+                delay(500) // Check every 500ms
+                if (!exoPlayer.isPlaying && exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
+                    Timber.d("FullScreenVideoPlayer - Periodic check: Player not playing, restarting...")
+                    exoPlayer.playWhenReady = true
+                    exoPlayer.play()
+                }
+            }
         }
     }
 
@@ -143,6 +193,10 @@ fun FullScreenVideoPlayer(
             // Don't release the player - let VideoManager handle it
             // Just pause playback when leaving full screen
             exoPlayer.playWhenReady = false
+            
+            // Restore the original mute state when exiting full screen
+            exoPlayer.volume = if (originalMuteState) 0f else 1f
+            Timber.d("FullScreenVideoPlayer - Restored original mute state: $originalMuteState")
             
             // Restore system bars on exit
             if (enableImmersiveMode && activity != null) {

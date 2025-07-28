@@ -270,7 +270,6 @@ fun MediaBrowser(
                             navController.popBackStack()
                         },
                         enableImmersiveMode = false, // MediaBrowser already handles immersive mode
-                        autoPlay = true, // Always auto-start video in full screen
                         onHorizontalSwipe = { direction ->
                             Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
                             animationScope.launch {
