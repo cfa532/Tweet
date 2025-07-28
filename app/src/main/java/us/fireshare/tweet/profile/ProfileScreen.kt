@@ -42,6 +42,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -59,6 +61,8 @@ import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.FullScreenVideoPlayer
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -86,6 +90,9 @@ fun ProfileScreen(
     
     // Calculate the transparency based on scrolling state
     var bottomBarTransparency by remember { mutableStateOf(0.98f) }
+    
+    // State for full-screen video overlay
+    var fullScreenVideo by remember { mutableStateOf<Pair<String, MimeiId>?>(null) }
 
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -144,6 +151,9 @@ fun ProfileScreen(
                                 // Only restore when user starts scrolling up
                             }
                         }
+                    },
+                    onFullScreenVideo = { videoUrl, videoMid ->
+                        fullScreenVideo = Pair(videoUrl, videoMid)
                     }
                 )
             }
@@ -157,6 +167,15 @@ fun ProfileScreen(
             navController,
             0
         )
+        
+        // Show full-screen video overlay if needed
+        fullScreenVideo?.let { (videoUrl, videoMid) ->
+            VideoModalDialog(
+                videoUrl = videoUrl,
+                videoMid = videoMid,
+                onDismiss = { fullScreenVideo = null }
+            )
+        }
     }
 }
 
@@ -172,7 +191,8 @@ private fun ProfileContentWithTweetListView(
     parentEntry: NavBackStackEntry,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     initState: Boolean,
-    onScrollStateChange: (ScrollState) -> Unit
+    onScrollStateChange: (ScrollState) -> Unit,
+    onFullScreenVideo: (String, MimeiId) -> Unit
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -241,7 +261,8 @@ private fun ProfileContentWithTweetListView(
             onTweetUnavailable = { tweetId ->
                 viewModel.removeTweetFromAllLists(tweetId)
             },
-            headerContent = headerContent
+            headerContent = headerContent,
+            onFullScreenVideo = onFullScreenVideo
         )
         
         // Show pull-to-refresh style indicator during initial load
@@ -254,6 +275,38 @@ private fun ProfileContentWithTweetListView(
                     .padding(top = 40.dp),
                 backgroundColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+/**
+ * Display full-screen video in a Modal Dialog.
+ */
+@Composable
+fun VideoModalDialog(
+    videoUrl: String,
+    videoMid: MimeiId,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            FullScreenVideoPlayer(
+                videoUrl = videoUrl,
+                videoMid = videoMid,
+                onClose = onDismiss,
+                autoPlay = true
             )
         }
     }

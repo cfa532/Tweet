@@ -58,6 +58,7 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
+    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // callback for full-screen video
 ) {
     // Check if tweet or author is null and remove the item if so
     LaunchedEffect(tweet, tweet.author) {
@@ -295,7 +296,7 @@ fun TweetItem(
                                             tonalElevation = 4.dp,
                                             shape = RoundedCornerShape(size = 8.dp)
                                         ) {
-                                            MediaPreviewGrid(tweet.attachments!!, viewModel)
+                                            MediaPreviewGrid(tweet.attachments!!, viewModel, onFullScreenVideo)
                                         }
                                     }
                                 }
