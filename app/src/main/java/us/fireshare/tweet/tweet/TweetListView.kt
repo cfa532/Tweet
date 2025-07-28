@@ -501,63 +501,9 @@ fun TweetListView(
             }
         }
         
-        // Transparent gesture detection overlay when at last tweet and server depleted
-        if (isAtLastTweet && serverDepleted && !isRefreshingAtBottom) {
-            Timber.tag("TweetListView").d("Creating overlay: isAtLastTweet=$isAtLastTweet, serverDepleted=$serverDepleted, isRefreshingAtBottom=$isRefreshingAtBottom")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp) // Only cover bottom 200dp instead of full screen
-                    .align(Alignment.BottomCenter) // Align to bottom
-                    .pointerInput(isAtLastTweet, isRefreshingAtBottom) {
-                        Timber.tag("TweetListView").d("Overlay PointerInput setup: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom")
-                        
-                        var startY = 0f
-                        var totalDragY = 0f
-                        
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                startY = offset.y
-                                totalDragY = 0f
-                                Timber.tag("TweetListView").d("Overlay onDragStart called at y=$startY")
-                            },
-                            onDragEnd = { 
-                                Timber.tag("TweetListView").d("Overlay onDragEnd called, totalDragY=$totalDragY")
-                            },
-                            onDragCancel = { 
-                                Timber.tag("TweetListView").d("Overlay onDragCancel called")
-                            },
-                            onDrag = { change, dragAmount ->
-                                val (x, y) = dragAmount
-                                totalDragY += y
-                                
-                                // Only consume and process if it's a significant upward gesture
-                                if (totalDragY < -20) { // Lowered threshold for better UX
-                                    change.consume()
-                                    
-                                    val currentTime = System.currentTimeMillis()
-                                    val timeSinceLastRequest = currentTime - lastExternalRequestTime
-                                    
-                                    // Debounce: only allow new requests after 500ms
-                                    if (timeSinceLastRequest > 500) {
-                                        Timber.tag("TweetListView").d("Overlay: Significant upward gesture detected (totalDragY=$totalDragY), triggering external loadmore... (timeSinceLastRequest: ${timeSinceLastRequest}ms)")
-                                        externalLoadMoreRequest = true
-                                        lastExternalRequestTime = currentTime
-                                    } else {
-                                        Timber.tag("TweetListView").d("Overlay: Gesture detected but debounced (timeSinceLastRequest: ${timeSinceLastRequest}ms < 500ms)")
-                                    }
-                                }
-                                // For all other gestures (downward, small, etc.), don't consume - let them pass through to normal scrolling
-                            }
-                        )
-                    }
-            )
-        } else {
-            // Debug logging when overlay is NOT created
-            if (isAtLastTweet) {
-                Timber.tag("TweetListView").d("Overlay NOT created: isAtLastTweet=$isAtLastTweet, serverDepleted=$serverDepleted, isRefreshingAtBottom=$isRefreshingAtBottom")
-            }
-        }
+        // Remove the problematic overlay that blocks touch events
+        // Users can still trigger loadmore by scrolling away and back to reset serverDepleted
+        
         PullRefreshIndicator(
             refreshing = isRefreshingAtTop,
             state = pullRefreshState,
