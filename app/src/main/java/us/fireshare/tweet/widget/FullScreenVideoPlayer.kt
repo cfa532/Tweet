@@ -165,7 +165,7 @@ fun FullScreenVideoPlayer(
     val dragProgress = (animatedDragOffset / maxDragDistance).coerceIn(0f, 1f)
     
     // Translation effect - content moves down with finger
-    val translationY = animatedDragOffset * 0.5f
+    val translationY = animatedDragOffset * 1.5f // Increased from 0.5f to make it move faster with finger
     
     // Scale effect - content gets slightly smaller as it's dragged
     val scale = 1f - (dragProgress * 0.1f)
