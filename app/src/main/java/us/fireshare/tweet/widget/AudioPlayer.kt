@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.clipToBounds
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -141,9 +142,13 @@ fun AudioPlayer(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     controllerShowTimeoutMs = -1    // show controls all the time.
                     controllerAutoShow = true
+                    // Force hardware acceleration and proper clipping for Media3 1.7.1
+                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }
             },
-            modifier = Modifier.aspectRatio(aspectRatio)
+            modifier = Modifier
+                .aspectRatio(aspectRatio)
+                .clipToBounds() // Ensure content is clipped to bounds
         )
     }
 }

@@ -20,6 +20,7 @@ object FullScreenVideoManager {
     private var fullScreenPlayer: ExoPlayer? = null
     private var currentVideoMid: MimeiId? = null
     private var currentVideoUrl: String? = null
+    private var autoReplayListener: Player.Listener? = null
     
     /**
      * Get the dedicated full screen video player
@@ -53,6 +54,39 @@ object FullScreenVideoManager {
                 // For data blobs, try HLS first, then fallback to original URL
                 val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
                 val masterUrl = "${baseUrl}master.m3u8"
+                val playlistUrl = "${baseUrl}playlist.m3u8"
+                
+                // Add comprehensive listener for debugging and fallback
+                player.addListener(object : Player.Listener {
+                    private var hasTriedPlaylist = false
+                    private var hasTriedOriginal = false
+                    
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        Timber.tag("FullScreenVideoManager").e("Player error: ${error.message}")
+                        
+                        if (!hasTriedPlaylist) {
+                            hasTriedPlaylist = true
+                            
+                            // If master.m3u8 fails, try playlist.m3u8
+                            val fallbackMediaSource = mediaSourceFactory.createMediaSource(
+                                androidx.media3.common.MediaItem.fromUri(playlistUrl)
+                            )
+                            player.setMediaSource(fallbackMediaSource)
+                            player.prepare()
+                        } else if (!hasTriedOriginal) {
+                            hasTriedOriginal = true
+                            
+                            // If both HLS attempts fail, try the original URL (progressive video)
+                            val originalMediaSource = mediaSourceFactory.createMediaSource(
+                                androidx.media3.common.MediaItem.fromUri(videoUrl)
+                            )
+                            player.setMediaSource(originalMediaSource)
+                            player.prepare()
+                        } else {
+                            Timber.e("FullScreenVideoManager - All fallback attempts failed for URL: $videoUrl")
+                        }
+                    }
+                })
                 
                 // Start with master.m3u8 (try HLS first)
                 val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
@@ -76,8 +110,13 @@ object FullScreenVideoManager {
     fun startPlayback(autoReplay: Boolean = true) {
         val player = fullScreenPlayer ?: return
         
+        // Remove existing auto-replay listener if any
+        autoReplayListener?.let { listener ->
+            player.removeListener(listener)
+        }
+        
         // Set up auto-replay listener
-        val autoReplayListener = object : Player.Listener {
+        autoReplayListener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_ENDED -> {
@@ -92,7 +131,7 @@ object FullScreenVideoManager {
             }
         }
         
-        player.addListener(autoReplayListener)
+        player.addListener(autoReplayListener!!)
         
         // Start playback
         player.playWhenReady = true
@@ -160,6 +199,12 @@ object FullScreenVideoManager {
     fun release() {
         fullScreenPlayer?.let { player ->
             try {
+                // Remove auto-replay listener
+                autoReplayListener?.let { listener ->
+                    player.removeListener(listener)
+                }
+                autoReplayListener = null
+                
                 player.stop()
                 player.release()
                 Timber.d("FullScreenVideoManager - Released full screen player")

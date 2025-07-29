@@ -222,9 +222,13 @@ fun VideoPreview(
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
                     // Show buffering indicator
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    // Force hardware acceleration and proper clipping for Media3 1.7.1
+                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .clipToBounds() // Ensure content is clipped to bounds
         )
         
         // Show loading indicator when video is loading

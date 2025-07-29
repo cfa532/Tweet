@@ -56,6 +56,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.clipToBounds
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -314,11 +315,14 @@ fun MediaBrowser(
 //                                })
                                 controllerShowTimeoutMs = 2000
                                 controllerAutoShow = true
+                                // Force hardware acceleration and proper clipping for Media3 1.7.1
+                                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                                 hideController()    // hide control buttons
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clipToBounds() // Ensure content is clipped to bounds
                             .offset { IntOffset(0, offsetY.roundToInt()) }
                             .draggable(
                                 // horizontal drag to swipe video

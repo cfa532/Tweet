@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.clipToBounds
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -194,6 +195,8 @@ fun FullScreenVideoPlayer(
                     setBackgroundColor(android.graphics.Color.rgb(28, 28, 30))
                     // Show buffering indicator
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    // Force hardware acceleration and proper clipping for Media3 1.7.1
+                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }
             },
             update = { playerView ->
@@ -206,6 +209,7 @@ fun FullScreenVideoPlayer(
             },
             modifier = Modifier
                 .fillMaxSize()
+                .clipToBounds() // Ensure content is clipped to bounds
                 .graphicsLayer(
                     translationY = translationY,
                     scaleX = scale,
