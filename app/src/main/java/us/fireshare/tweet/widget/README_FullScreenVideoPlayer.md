@@ -6,28 +6,6 @@ The `FullScreenVideoPlayer` component provides an immersive full-screen video vi
 
 ## Memory Leak Prevention (Latest Updates)
 
-### Issues Fixed
-
-1. **Player Listener Memory Leaks**
-   - **Problem**: Player listeners were added but never removed, causing memory leaks
-   - **Solution**: Created a single `playerListener` using `remember` and properly managed it with `DisposableEffect`
-   - **Impact**: Prevents accumulation of listener objects in memory
-
-2. **Infinite Coroutine Loops**
-   - **Problem**: Periodic playback checks used `while (true)` without proper cancellation
-   - **Solution**: Changed to `while (isActive)` to ensure automatic cancellation when composable is disposed
-   - **Impact**: Prevents background coroutines from running indefinitely
-
-3. **VideoManager Memory Monitoring**
-   - **Problem**: Memory monitoring job was never cancelled, potentially running forever
-   - **Solution**: Added `memoryMonitoringJob` variable and `stopMemoryMonitoring()` method
-   - **Impact**: Proper cleanup of background monitoring tasks
-
-4. **Application Lifecycle Management**
-   - **Problem**: VideoManager resources weren't properly cleaned up on application termination
-   - **Solution**: Added proper cleanup in `TweetApplication.onTerminate()`
-   - **Impact**: Prevents memory leaks during application shutdown
-
 ### Implementation Details
 
 #### Player Listener Management
