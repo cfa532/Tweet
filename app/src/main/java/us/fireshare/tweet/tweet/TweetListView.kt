@@ -87,13 +87,13 @@ fun TweetListView(
     onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
 ) {
     // Debug logging for TweetListView recreation - only log when essential parameters change
-    val previousTweetsSize = remember { mutableStateOf(tweets.size) }
+    val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
     val previousUserId = remember { mutableStateOf(currentUserId) }
     
     LaunchedEffect(tweets.size, currentUserId) {
-        if (tweets.size != previousTweetsSize.value || currentUserId != previousUserId.value) {
+        if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
             Timber.tag("TweetListView").d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.value}, userId=$currentUserId->${previousUserId.value}")
-            previousTweetsSize.value = tweets.size
+            previousTweetsSize.intValue = tweets.size
             previousUserId.value = currentUserId
         }
     }
