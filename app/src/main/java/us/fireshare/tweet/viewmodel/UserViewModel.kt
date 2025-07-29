@@ -913,26 +913,33 @@ class UserViewModel @AssistedInject constructor(
                         if (event.tweet.authorId == user.value.mid) {
                             // Ensure the author is set correctly
                             val tweetWithAuthor = event.tweet.copy(author = user.value)
-                            _tweets.update { currentTweets ->
-                                (listOf(tweetWithAuthor) + currentTweets)
-                                    .distinctBy { it.mid }
-                                    .sortedByDescending { it.timestamp }
-                            }
-                            _user.value = user.value.copy(tweetCount = tweets.value.size)
-                            _tweetCount.value = tweets.value.size
+                            
+                            // Batch update all related state to reduce recompositions
+                            val updatedTweets = (listOf(tweetWithAuthor) + tweets.value)
+                                .distinctBy { it.mid }
+                                .sortedByDescending { it.timestamp }
+                            
+                            _tweets.value = updatedTweets
+                            _user.value = user.value.copy(tweetCount = updatedTweets.size)
+                            _tweetCount.value = updatedTweets.size
                         }
                     }
 
                     is TweetEvent.TweetDeleted -> {
-                        // Remove from all lists
-                        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
-                        _pinnedTweets.update { topTweets -> topTweets.filterNot { it.mid == event.tweetId } }
-                        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
-                        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == event.tweetId } }
+                        // Batch update all related state to reduce recompositions
+                        val updatedTweets = tweets.value.filterNot { it.mid == event.tweetId }
+                        val updatedPinnedTweets = pinnedTweets.value.filterNot { it.mid == event.tweetId }
+                        val updatedFavorites = favorites.value.filterNot { it.mid == event.tweetId }
+                        val updatedBookmarks = bookmarks.value.filterNot { it.mid == event.tweetId }
+
+                        _tweets.value = updatedTweets
+                        _pinnedTweets.value = updatedPinnedTweets
+                        _favorites.value = updatedFavorites
+                        _bookmarks.value = updatedBookmarks
 
                         // Update user's tweet count while preserving other fields
-                        _user.value = _user.value.copy(tweetCount = tweets.value.size)
-                        _tweetCount.value = tweets.value.size
+                        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
+                        _tweetCount.value = updatedTweets.size
                     }
 
                     else -> {
@@ -948,13 +955,18 @@ class UserViewModel @AssistedInject constructor(
      * This is used for optimistic updates when tweets are deleted.
      */
     fun removeTweetFromAllLists(tweetId: MimeiId) {
-        // Remove from all lists
-        _tweets.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _pinnedTweets.update { topTweets -> topTweets.filterNot { it.mid == tweetId } }
-        _favorites.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
-        _bookmarks.update { currentTweets -> currentTweets.filterNot { it.mid == tweetId } }
+        // Batch update all related state to reduce recompositions
+        val updatedTweets = tweets.value.filterNot { it.mid == tweetId }
+        val updatedPinnedTweets = pinnedTweets.value.filterNot { it.mid == tweetId }
+        val updatedFavorites = favorites.value.filterNot { it.mid == tweetId }
+        val updatedBookmarks = bookmarks.value.filterNot { it.mid == tweetId }
+
+        _tweets.value = updatedTweets
+        _pinnedTweets.value = updatedPinnedTweets
+        _favorites.value = updatedFavorites
+        _bookmarks.value = updatedBookmarks
 
         // Update user's tweet count while preserving other fields
-        _user.value = _user.value.copy(tweetCount = tweets.value.size)
+        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
     }
 }

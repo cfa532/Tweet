@@ -25,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +67,7 @@ import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import androidx.compose.ui.graphics.Color
+import us.fireshare.tweet.tweet.TweetListView
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -76,12 +78,15 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
+    
+    // Create ViewModel - move hiltViewModel outside of remember
     val viewModel = if (userId == appUser.mid) appUserViewModel
         else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
             parentEntry, key = userId
         ) { factory ->
             factory.create(userId)
         }
+    
     val initState by viewModel.initState.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -96,7 +101,7 @@ fun ProfileScreen(
     // State for full-screen video overlay
     var fullScreenVideo by remember { mutableStateOf<Pair<String, MimeiId>?>(null) }
     
-    // Callback to show full-screen video
+    // Callback to show full-screen video - stabilize with remember
     val showFullScreenVideo = remember {
         { videoUrl: String, videoMid: MimeiId ->
             fullScreenVideo = Pair(videoUrl, videoMid)
@@ -135,42 +140,44 @@ fun ProfileScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
             ) {
-                // Profile content with TweetListView
-                ProfileContentWithTweetListView(
-                    viewModel = viewModel,
-                    navController = navController,
-                    parentEntry = parentEntry,
-                    scrollBehavior = scrollBehavior,
-                    initState = initState,
-                    userId = userId, // Pass userId directly
-                    onScrollStateChange = { newScrollState ->
-                        scrollState = newScrollState
-                        
-                        // Update bottom bar transparency based on scroll direction
-                        when (newScrollState.direction) {
-                            ScrollDirection.UP -> {
-                                // Scroll UP (content moves down): restore header and bottom bar
-                                bottomBarTransparency = 0.98f
-                            }
-                            ScrollDirection.DOWN -> {
-                                // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
-                                coroutineScope.launch {
-                                    withContext(Dispatchers.Main) {
-                                        delay(100) // Small delay for smooth transition
-                                        if (scrollState.direction == ScrollDirection.DOWN) {
-                                            bottomBarTransparency = 0.2f
+                // Profile content with TweetListView - use key to prevent recreation
+                key(userId) {
+                    ProfileContentWithTweetListView(
+                        viewModel = viewModel,
+                        navController = navController,
+                        parentEntry = parentEntry,
+                        scrollBehavior = scrollBehavior,
+                        initState = initState,
+                        userId = userId, // Pass userId directly
+                        onScrollStateChange = { newScrollState ->
+                            scrollState = newScrollState
+                            
+                            // Update bottom bar transparency based on scroll direction
+                            when (newScrollState.direction) {
+                                ScrollDirection.UP -> {
+                                    // Scroll UP (content moves down): restore header and bottom bar
+                                    bottomBarTransparency = 0.98f
+                                }
+                                ScrollDirection.DOWN -> {
+                                    // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.Main) {
+                                            delay(100) // Small delay for smooth transition
+                                            if (scrollState.direction == ScrollDirection.DOWN) {
+                                                bottomBarTransparency = 0.2f
+                                            }
                                         }
                                     }
                                 }
+                                ScrollDirection.NONE -> {
+                                    // Idle state: keep current opacity, don't restore automatically
+                                    // Only restore when user starts scrolling up
+                                }
                             }
-                            ScrollDirection.NONE -> {
-                                // Idle state: keep current opacity, don't restore automatically
-                                // Only restore when user starts scrolling up
-                            }
-                        }
-                    },
-                    onFullScreenVideo = showFullScreenVideo
-                )
+                        },
+                        onFullScreenVideo = showFullScreenVideo
+                    )
+                }
             }
         }
         
@@ -205,7 +212,7 @@ private fun ProfileContentWithTweetListView(
     viewModel: UserViewModel,
     navController: NavHostController,
     parentEntry: NavBackStackEntry,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    scrollBehavior: TopAppBarScrollBehavior,
     initState: Boolean,
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
@@ -216,38 +223,43 @@ private fun ProfileContentWithTweetListView(
     val user by viewModel.user.collectAsState()
     
     // Create header content with profile details and pinned tweets - make it stable
-    val headerContent: @Composable () -> Unit = remember(user, pinnedTweets) {
+    // Use remember with no dependencies to create a stable reference that doesn't change
+    val headerContent: @Composable () -> Unit = remember {
         {
             Column {
-                // Profile details section
-                ProfileDetail(viewModel, navController)
+                // Profile details section - use key to force recomposition only when user changes
+                key(user.mid) {
+                    ProfileDetail(viewModel, navController)
+                }
                 
-                // Pinned tweets section (if any)
-                if (pinnedTweets.isNotEmpty()) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 100.dp,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.pinToTop),
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                top = 0.dp,
-                                bottom = 4.dp
-                            ),
-                            style = MaterialTheme.typography.titleMedium
+                // Pinned tweets section (if any) - use key to force recomposition only when pinnedTweets change
+                key(pinnedTweets.size, pinnedTweets.firstOrNull()?.mid) {
+                    if (pinnedTweets.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            tonalElevation = 100.dp,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.pinToTop),
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    top = 0.dp,
+                                    bottom = 4.dp
+                                ),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        
+                        pinnedTweets.forEach { tweet ->
+                            TweetItem(tweet, parentEntry)
+                        }
+                        
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                            thickness = 2.dp,
+                            color = MaterialTheme.colorScheme.primaryContainer
                         )
                     }
-                    
-                    pinnedTweets.forEach { tweet ->
-                        TweetItem(tweet, parentEntry)
-                    }
-                    
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 2.dp),
-                        thickness = 2.dp,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    )
                 }
             }
         }
@@ -265,25 +277,28 @@ private fun ProfileContentWithTweetListView(
             .pullRefresh(pullRefreshState)
     ) {
         // Use TweetListView with header content for unified scrolling
-        us.fireshare.tweet.tweet.TweetListView(
-            tweets = tweets,
-            fetchTweets = { pageNumber ->
-                viewModel.fetchTweets(pageNumber)
-            },
-            modifier = Modifier.fillMaxSize(),
-            scrollBehavior = scrollBehavior,
-            contentPadding = PaddingValues(bottom = 60.dp),
-            showPrivateTweets = true, // Show private tweets in profile
-            parentEntry = parentEntry,
-            onScrollStateChange = onScrollStateChange,
-            currentUserId = userId, // Use userId directly
-            onTweetUnavailable = { tweetId ->
-                viewModel.removeTweetFromAllLists(tweetId)
-            },
-            headerContent = headerContent,
-            onFullScreenVideo = onFullScreenVideo,
-            restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
-        )
+        // Use key to prevent recreation unless essential parameters change
+        key(userId, tweets.size, pinnedTweets.size) {
+            TweetListView(
+                tweets = tweets,
+                fetchTweets = { pageNumber ->
+                    viewModel.fetchTweets(pageNumber)
+                },
+                modifier = Modifier.fillMaxSize(),
+                scrollBehavior = scrollBehavior,
+                contentPadding = PaddingValues(bottom = 60.dp),
+                showPrivateTweets = true, // Show private tweets in profile
+                parentEntry = parentEntry,
+                onScrollStateChange = onScrollStateChange,
+                currentUserId = userId, // Use userId directly
+                onTweetUnavailable = { tweetId ->
+                    viewModel.removeTweetFromAllLists(tweetId)
+                },
+                headerContent = headerContent,
+                onFullScreenVideo = onFullScreenVideo,
+                restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
+            )
+        }
         
         // Show pull-to-refresh style indicator during initial load
         if (initState) {

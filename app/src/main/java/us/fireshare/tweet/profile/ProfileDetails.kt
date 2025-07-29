@@ -48,14 +48,15 @@ fun ProfileDetail(
     val displayUser = if (user.mid == appUser.mid) appUser else user
     val profile by remember { derivedStateOf { displayUser.profile } }
     
-    // Use ViewModel's public count variables
+    // Use ViewModel's public count variables - collect them efficiently
     val bookmarksCount by viewModel.bookmarksCount.collectAsState()
     val favoritesCount by viewModel.favoritesCount.collectAsState()
     val followingsCount by viewModel.followingsCount.collectAsState()
     val followersCount by viewModel.followersCount.collectAsState()
     val tweetCount by viewModel.tweetCount.collectAsState()
 
-    LaunchedEffect(appUserFollowings) {
+    // Stabilize the LaunchedEffect to prevent unnecessary calls
+    LaunchedEffect(appUserFollowings.size) {
         withContext(IO) {
             viewModel.refreshFollowingsAndFans()
         }

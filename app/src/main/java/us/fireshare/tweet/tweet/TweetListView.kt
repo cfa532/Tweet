@@ -86,12 +86,21 @@ fun TweetListView(
     restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
     onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
 ) {
-    // Debug logging for TweetListView recreation
-    Timber.tag("TweetListView").d("TweetListView created/recreated with ${tweets.size} tweets, currentUserId: $currentUserId, restoreScrollPosition: $restoreScrollPosition")
+    // Debug logging for TweetListView recreation - only log when essential parameters change
+    val previousTweetsSize = remember { mutableStateOf(tweets.size) }
+    val previousUserId = remember { mutableStateOf(currentUserId) }
     
-    // Track tweets list changes
-    LaunchedEffect(tweets) {
-        Timber.tag("TweetListView").d("Tweets list changed: ${tweets.size} tweets")
+    LaunchedEffect(tweets.size, currentUserId) {
+        if (tweets.size != previousTweetsSize.value || currentUserId != previousUserId.value) {
+            Timber.tag("TweetListView").d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.value}, userId=$currentUserId->${previousUserId.value}")
+            previousTweetsSize.value = tweets.size
+            previousUserId.value = currentUserId
+        }
+    }
+    
+    // Track tweets list changes - only when size actually changes
+    LaunchedEffect(tweets.size) {
+        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
     }
     
     // Internal state management
@@ -470,9 +479,9 @@ fun TweetListView(
             state = listState,
             contentPadding = contentPadding,
         ) {
-            // Header content (if provided)
+            // Header content (if provided) - use key to make it stable
             headerContent?.let { header ->
-                item {
+                item(key = "header") {
                     header()
                 }
             }
@@ -493,9 +502,9 @@ fun TweetListView(
                 }
             }
             
-            // Loading spinner at bottom
+            // Loading spinner at bottom - use key to make it stable
             if (isRefreshingAtBottom) {
-                item {
+                item(key = "loading_spinner") {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
