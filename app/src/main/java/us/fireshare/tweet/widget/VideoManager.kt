@@ -407,7 +407,7 @@ object VideoManager {
         isSequentialPlaybackEnabled = false
         currentPlaylistIndex = -1
         videoPlaylist.clear()
-        pauseAllVideos()
+//        pauseAllVideos()
     }
     
     /**
