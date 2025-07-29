@@ -17,6 +17,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.CleanUpWorker
+import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
 
@@ -57,6 +58,8 @@ class TweetApplication : Application(){
         VideoManager.stopMemoryMonitoring()
         // Release all video players to prevent memory leaks
         VideoManager.releaseAllVideos()
+        // Release full screen video player
+        FullScreenVideoManager.release()
         // Cancel the scope when the application is terminating (rare in modern Android)
         applicationScope.cancel()
     }
