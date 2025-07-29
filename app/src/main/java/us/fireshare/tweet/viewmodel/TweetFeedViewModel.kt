@@ -3,12 +3,10 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import java.lang.ref.WeakReference
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.work.OneTimeWorkRequest
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +35,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.service.UploadTweetWorker
+import java.lang.ref.WeakReference
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -224,13 +223,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         tweets.value.forEach {
             dao.deleteCachedTweet(it.mid)
         }
-        _tweets.value = emptyList()
-    }
-
-    /**
-     * Clear the tweet list when user changes
-     */
-    fun clearTweets() {
         _tweets.value = emptyList()
     }
 

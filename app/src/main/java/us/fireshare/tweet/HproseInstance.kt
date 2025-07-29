@@ -19,8 +19,12 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.BlacklistedMid
+import us.fireshare.tweet.datamodel.BlacklistedMidDao
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
@@ -39,13 +43,8 @@ import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
-
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import us.fireshare.tweet.datamodel.BlacklistedMid
-import us.fireshare.tweet.datamodel.BlacklistedMidDao
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -1487,7 +1486,7 @@ object HproseInstance {
 
     /**
      * Upload media file to node and return its IPFS cid with its media type.
-     * For videos, first tries to upload to netdisk URL, then falls back to IPFS method.
+     * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
      * */
     @OptIn(UnstableApi::class)
     suspend fun uploadToIPFS(

@@ -1,11 +1,10 @@
 package us.fireshare.tweet.widget
 
-import android.app.ActivityManager
 import android.content.Context
-import android.os.Build
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -39,9 +38,7 @@ object VideoManager {
     
     // Memory management
     private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB
-    private val lastMemoryCheck = mutableMapOf<MimeiId, Long>()
-    private const val MEMORY_CHECK_INTERVAL_MS = 5000L // Check every 5 seconds
-    
+
     /**
      * Get or create an ExoPlayer instance for a video
      * @param context Android context
@@ -66,7 +63,7 @@ object VideoManager {
                 val player = createExoPlayer(context, videoUrl, MediaType.Video)
                 player
             } catch (e: Exception) {
-                Timber.e("VideoManager - Error creating ExoPlayer for video: $videoMid", e)
+                Timber.tag("getVideoPlayer").e("VideoManager - Error creating ExoPlayer for video: $videoMid")
                 // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
@@ -103,30 +100,6 @@ object VideoManager {
             }
         } catch (e: Exception) {
             Timber.e("VideoManager - Error resetting player state: $e")
-        }
-    }
-    
-    /**
-     * Get human-readable player state name
-     */
-    private fun getPlayerStateName(state: Int): String {
-        return when (state) {
-            androidx.media3.common.Player.STATE_IDLE -> "IDLE"
-            androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
-            androidx.media3.common.Player.STATE_READY -> "READY"
-            androidx.media3.common.Player.STATE_ENDED -> "ENDED"
-            else -> "UNKNOWN"
-        }
-    }
-    
-    /**
-     * Force reset a specific video player (for debugging/testing)
-     * @param videoMid Video's unique identifier
-     */
-    fun forceResetVideo(videoMid: MimeiId) {
-        videoPlayers[videoMid]?.let { player ->
-            Timber.d("VideoManager - Force resetting video: $videoMid")
-            resetPlayerState(player)
         }
     }
     
@@ -185,16 +158,7 @@ object VideoManager {
             player.playWhenReady = false
         }
     }
-    
-    /**
-     * Resume all active videos
-     */
-    fun resumeAllActiveVideos() {
-        activeVideos.keys.forEach { videoMid ->
-            resumeVideo(videoMid, true)
-        }
-    }
-    
+
     /**
      * Release a specific video player
      * @param videoMid Video's unique identifier
@@ -252,22 +216,12 @@ object VideoManager {
      * Get the number of active videos
      */
     fun getActiveVideoCount(): Int = activeVideos.size
-    
-    /**
-     * Check if a specific video is active
-     */
-    fun isVideoActive(videoMid: MimeiId): Boolean = activeVideos.containsKey(videoMid)
-    
+
     /**
      * Get the active count for a specific video
      */
     fun getVideoActiveCount(videoMid: MimeiId): Int = activeVideos.getOrDefault(videoMid, 0)
-    
-    /**
-     * Check if a video is cached
-     */
-    fun isVideoCached(videoMid: MimeiId): Boolean = videoPlayers.containsKey(videoMid)
-    
+
     /**
      * Get cache statistics
      */
@@ -329,6 +283,7 @@ object VideoManager {
      * @param videoMid Video's unique identifier
      * @param videoUrl Video URL
      */
+    @kotlin.OptIn(DelicateCoroutinesApi::class)
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
         // Check memory usage before preloading
         checkMemoryAndReleaseVideos()
@@ -369,16 +324,12 @@ object VideoManager {
     fun isVideoPreloaded(videoMid: MimeiId): Boolean {
         return preloadedVideos.contains(videoMid) || videoPlayers.containsKey(videoMid)
     }
-    
-    /**
-     * Get preload queue size
-     */
-    fun getPreloadQueueSize(): Int = preloadQueue.size
-    
+
     /**
      * Start periodic memory monitoring
      * This should be called from the application class
      */
+    @kotlin.OptIn(DelicateCoroutinesApi::class)
     fun startMemoryMonitoring() {
         GlobalScope.launch(Dispatchers.IO) {
             while (true) {
@@ -467,120 +418,6 @@ object VideoManager {
         } else {
             // Playlist completed
             stopSequentialPlayback()
-        }
-    }
-    
-    /**
-     * Check if sequential playback is enabled
-     */
-    fun isSequentialPlaybackEnabled(): Boolean = isSequentialPlaybackEnabled
-    
-    /**
-     * Get current playlist index
-     */
-    fun getCurrentPlaylistIndex(): Int = currentPlaylistIndex
-    
-    /**
-     * Get current playlist
-     */
-    fun getCurrentPlaylist(): List<MimeiId> = videoPlaylist.toList()
-    
-    /**
-     * Clean up unused video players (optional - for memory management)
-     * This can be called periodically to free up memory
-     * Note: This method must be called on the main thread
-     */
-    fun cleanupUnusedVideos() {
-        // Ensure we're on the main thread
-        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - cleanupUnusedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
-            throw IllegalStateException("VideoManager.cleanupUnusedVideos() must be called on the main thread")
-        }
-        
-        // Check memory usage first
-        checkMemoryAndReleaseVideos()
-        
-        val unusedVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        unusedVideos.forEach { videoMid ->
-            releaseVideo(videoMid)
-        }
-        if (unusedVideos.size > 0) {
-            Timber.tag("cleanupUnusedVideos").d("Cleaned up ${unusedVideos.size} unused videos")
-        }
-    }
-    
-    /**
-     * Limit the number of cached videos to prevent memory issues
-     * Note: This method must be called on the main thread
-     */
-    fun limitCachedVideos(maxCached: Int = 8) {
-        // Ensure we're on the main thread
-        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - limitCachedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
-            throw IllegalStateException("VideoManager.limitCachedVideos() must be called on the main thread")
-        }
-        
-        // Check memory usage first
-        checkMemoryAndReleaseVideos()
-        
-        if (videoPlayers.size <= maxCached) {
-            return
-        }
-        
-        // Keep active videos, remove oldest inactive ones
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        val videosToRemove = inactiveVideos.take(videoPlayers.size - maxCached)
-        
-        videosToRemove.forEach { videoMid ->
-            releaseVideo(videoMid)
-        }
-        
-        if (videosToRemove.isNotEmpty()) {
-            Timber.d("VideoManager - Limited cached videos to $maxCached, removed ${videosToRemove.size} videos")
-        }
-    }
-    
-    /**
-     * Mark a video as failed and release its player to prevent memory leaks
-     * @param videoMid Video's unique identifier
-     * Note: This method must be called on the main thread
-     */
-    fun markVideoAsFailed(videoMid: MimeiId) {
-        // Ensure we're on the main thread
-        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - markVideoAsFailed() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
-            throw IllegalStateException("VideoManager.markVideoAsFailed() must be called on the main thread")
-        }
-        
-        Timber.w("VideoManager - Marking video as failed: $videoMid")
-        releaseVideo(videoMid)
-    }
-    
-    /**
-     * Clean up failed or problematic video players
-     * Note: This method must be called on the main thread
-     */
-    fun cleanupFailedVideos() {
-        // Ensure we're on the main thread
-        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - cleanupFailedVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
-            throw IllegalStateException("VideoManager.cleanupFailedVideos() must be called on the main thread")
-        }
-        
-        val videosToRemove = videoPlayers.keys.filter { videoMid ->
-            val player = videoPlayers[videoMid]
-            // Remove players that are in error state or have been idle for too long
-            player?.playbackState == androidx.media3.common.Player.STATE_IDLE ||
-            player?.hasNextMediaItem() == false && player.playbackState == androidx.media3.common.Player.STATE_ENDED
-        }
-        
-        videosToRemove.forEach { videoMid ->
-            Timber.d("VideoManager - Cleaning up failed video: $videoMid")
-            releaseVideo(videoMid)
-        }
-        
-        if (videosToRemove.isNotEmpty()) {
-            Timber.d("VideoManager - Cleaned up ${videosToRemove.size} failed videos")
         }
     }
 } 

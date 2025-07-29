@@ -49,13 +49,13 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import kotlin.concurrent.timer
-import us.fireshare.tweet.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,7 +128,7 @@ fun ChatScreen(
                         Column {
                             UserAvatar(user = receipt, size = 32)
                             Text(
-                                text = receipt?.profile ?: " ",
+                                text = receipt.profile ?: " ",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

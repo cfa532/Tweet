@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,20 +31,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 
 @OptIn(UnstableApi::class)
@@ -73,7 +72,6 @@ fun FullScreenVideoPlayer(
     val exoPlayer = remember(videoMid) {
         // Get the existing player from VideoManager
         val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
-        val currentPosition = existingPlayer.currentPosition
         wasPlayingBefore = existingPlayer.playWhenReady
         
         // Store the original mute state (volume == 0f means muted)
@@ -96,14 +94,14 @@ fun FullScreenVideoPlayer(
                 Timber.d("FullScreenVideoPlayer - Playback state changed: $playbackState")
                 
                 when (playbackState) {
-                    androidx.media3.common.Player.STATE_READY -> {
+                    Player.STATE_READY -> {
                         // Auto-start playback when ready
                         if (autoPlay) {
                             Timber.d("FullScreenVideoPlayer - Starting playback (autoPlay: $autoPlay)")
                             exoPlayer.play()
                         }
                     }
-                    androidx.media3.common.Player.STATE_ENDED -> {
+                    Player.STATE_ENDED -> {
                         // Handle video completion - auto-replay if enabled
                         if (autoReplay) {
                             Timber.d("FullScreenVideoPlayer - Video ended, auto-replaying")
@@ -114,6 +112,14 @@ fun FullScreenVideoPlayer(
                             // Notify VideoManager about completion for sequential playback
                             VideoManager.onVideoCompleted(videoMid)
                         }
+                    }
+
+                    Player.STATE_BUFFERING -> {
+                        TODO()
+                    }
+
+                    Player.STATE_IDLE -> {
+                        TODO()
                     }
                 }
             }

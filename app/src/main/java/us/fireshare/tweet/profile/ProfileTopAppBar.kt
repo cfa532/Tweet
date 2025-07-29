@@ -3,7 +3,6 @@ package us.fireshare.tweet.profile
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -128,7 +127,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 popUpTo(NavTweet.TweetFeed) { inclusive = true }
                             }
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Fallback: navigate to tweet feed
                         navController.navigate(NavTweet.TweetFeed) {
                             popUpTo(NavTweet.TweetFeed) { inclusive = true }

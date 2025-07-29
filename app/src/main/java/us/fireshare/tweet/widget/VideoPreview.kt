@@ -9,20 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -37,7 +32,6 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 
 /**
@@ -64,8 +58,7 @@ fun VideoPreview(
     var isLoading by remember { 
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true) 
     }
-    var hasError by remember { mutableStateOf(false) }
-    
+
     val exoPlayer = remember(url, videoMid) { 
         if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url)
@@ -162,7 +155,6 @@ fun VideoPreview(
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
                         isLoading = false
-                        hasError = false
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> {
                         // Only show loading if not already cached/preloaded
@@ -187,7 +179,6 @@ fun VideoPreview(
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isLoading = false
-                hasError = true
                 Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
                 Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
                 Timber.tag("VideoPreview").e("Error code: ${error.errorCode}")

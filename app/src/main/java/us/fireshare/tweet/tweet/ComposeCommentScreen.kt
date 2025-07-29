@@ -24,11 +24,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
@@ -73,7 +72,6 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-
 import us.fireshare.tweet.widget.UploadFilePreview
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,12 +110,9 @@ fun ComposeCommentScreen(
         }
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
             imageUri?.let {
-                val source = ImageDecoder.createSource(context.contentResolver, it)
-                bitmap = ImageDecoder.decodeBitmap(source)
                 selectedAttachments.add(it)
             }
         }

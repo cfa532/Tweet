@@ -1,12 +1,10 @@
 package us.fireshare.tweet.tweet
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,7 +33,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -105,7 +102,6 @@ fun TweetListView(
     var serverDepleted by rememberSaveable { mutableStateOf(false) } // Use rememberSaveable to persist across recompositions
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) } // Track which page is currently being loaded
     var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
-    var lastExternalRequestTime by remember { mutableLongStateOf(0L) } // Track last external request time for debouncing
     var spinnerStartTime by remember { mutableLongStateOf(0L) } // Track when spinner started for minimum display time
     var wasAtLastTweet by remember { mutableStateOf(false) } // Track if user was previously at last tweet
     
@@ -231,7 +227,7 @@ fun TweetListView(
             
             // Debug logging for isAtLastTweet
             if (result || (lastVisibleItem != null && lastVisibleItem.index >= totalItems - 3)) {
-                Timber.tag("TweetListView").d("isAtLastTweet debug: result=$result, lastVisibleIndex=${lastVisibleItem?.index}, totalItems=$totalItems, serverDepleted=$serverDepleted")
+                Timber.tag("TweetListView").d("isAtLastTweet debug: result=$result, lastVisibleIndex=${lastVisibleItem.index}, totalItems=$totalItems, serverDepleted=$serverDepleted")
             }
             
             result

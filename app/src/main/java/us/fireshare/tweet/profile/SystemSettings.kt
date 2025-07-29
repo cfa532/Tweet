@@ -59,8 +59,8 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.widget.VideoManager
 

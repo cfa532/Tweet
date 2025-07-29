@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.getString
 import androidx.lifecycle.viewModelScope
@@ -53,12 +55,10 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
-import android.widget.Toast
-import androidx.compose.ui.res.stringResource
-
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import kotlin.random.Random
+import androidx.core.graphics.scale
 
 @Composable
 fun ShareScreenshotButton(viewModel: TweetViewModel) {
@@ -137,7 +137,7 @@ fun ShareBottomSheet(
         ShareOption(getString(context, R.string.screenshot), painterResource(R.drawable.ic_camera_2)) {
             captureScreenshot(context as Activity) {bitmap ->
                 if (bitmap == null) return@captureScreenshot
-                val newBitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, false)
+                val newBitmap = bitmap.scale(bitmap.width / 2, bitmap.height / 2, false)
                 val fileName = "screenshot${System.currentTimeMillis()}.png"
                 val file = saveBitmapToFile(context, newBitmap, fileName)
                 viewModel.viewModelScope.launch {

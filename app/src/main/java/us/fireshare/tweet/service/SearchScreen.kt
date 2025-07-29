@@ -48,6 +48,7 @@ import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserId
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
+
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet

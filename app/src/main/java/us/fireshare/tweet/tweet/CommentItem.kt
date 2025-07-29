@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,10 +60,6 @@ import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
-import kotlin.math.max
-import kotlin.math.min
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun CommentItem(
@@ -109,12 +107,12 @@ fun CommentItem(
                         modifier = Modifier.padding(bottom = 0.dp),
                     ) {
                         Text(
-                            text = author?.name ?: "No One",
+                            text = author.name ?: "No One",
                             modifier = Modifier.padding(horizontal = 0.dp),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Text(
-                            text = "@${author?.username}",
+                            text = "@${author.username}",
                             modifier = Modifier.padding(horizontal = 2.dp),
                             style = MaterialTheme.typography.labelSmall
                         )

@@ -58,6 +58,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
+
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
@@ -81,7 +82,6 @@ fun ProfileScreen(
         ) { factory ->
             factory.create(userId)
         }
-    val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     val initState by viewModel.initState.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())

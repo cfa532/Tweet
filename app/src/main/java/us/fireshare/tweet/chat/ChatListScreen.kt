@@ -46,6 +46,7 @@ import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatSession
+
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -146,7 +147,7 @@ fun ChatSession(
             modifier = Modifier
                 .size(40.dp)
                 .clickable(onClick = {
-                    user?.mid?.let {
+                    user.mid.let {
                         navController.navigate(NavTweet.UserProfile(it))
                     }
                 })
@@ -170,7 +171,7 @@ fun ChatSession(
         }
         Column(modifier = Modifier.padding(start = 4.dp)
             .clickable(onClick = {
-                user?.mid?.let { navController.navigate(NavTweet.ChatBox(it)) }
+                user.mid.let { navController.navigate(NavTweet.ChatBox(it)) }
             })
         ) {
             Row(
@@ -178,7 +179,7 @@ fun ChatSession(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${user?.name}@${user?.username}",
+                    text = "${user.name}@${user.username}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

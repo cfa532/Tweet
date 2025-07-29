@@ -2,6 +2,7 @@ package us.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,14 +36,11 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
-import android.widget.Toast
-
 import kotlin.math.max
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId,
-//    private val savedStateHandle: SavedStateHandle
 ): ViewModel() {
     private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
@@ -177,31 +175,6 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * @param subjectUserId to add/remove it to/from the following list
-     * */
-    suspend fun toggleFollowing(
-        subjectUserId: MimeiId,
-        userId: MimeiId = appUser.mid,
-        updateTweetFeed: (Boolean) -> Unit
-    ) {
-        // toggle the Following status on the given UserId
-        HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
-            _followings.update { list ->
-                if (isFollowing)
-                    (listOf(subjectUserId) + list).toSet().toList()
-                else
-                    list.filterNot { it == subjectUserId }
-            }
-            _user.value = user.value.copy(followingCount = followings.value.size)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                TweetCacheManager.saveUser(appUser)
-            }
-            // callback to update tweet feed. Load or remove tweets of the others.
-            updateTweetFeed(isFollowing)
-        }
-    }
-
-    /**
-     * @param subjectUserId to add/remove it to/from the following list
      * @return Boolean? - true if now following, false if now unfollowing, null if operation failed
      * */
     suspend fun toggleFollowingWithResult(
@@ -279,7 +252,7 @@ class UserViewModel @AssistedInject constructor(
                     Timber.tag("fetchFollowers").d("No more followers to return for page: $pageNumber")
                     emptyList()
                 } else {
-                    val filteredSlice = slice.filterNotNull()
+                    val filteredSlice = slice
                     Timber.tag("fetchFollowers").d("Returning slice for page $pageNumber: ${filteredSlice.size} user IDs")
                     filteredSlice
                 }
@@ -302,18 +275,16 @@ class UserViewModel @AssistedInject constructor(
                 _followings.value = allFollowings
                 
                 // Return the first batch of users, filtering out nulls
-                allFollowings.take(TW_CONST.USER_BATCH_SIZE).filterNotNull()
+                allFollowings.take(TW_CONST.USER_BATCH_SIZE)
             } else {
                 // For subsequent pages, return the appropriate slice of already-loaded followings
                 val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
                 val endIndex = startIndex + TW_CONST.USER_BATCH_SIZE
                 val slice = _followings.value.slice(startIndex until minOf(endIndex, _followings.value.size))
-                
-                if (slice.isEmpty()) {
+
+                slice.ifEmpty {
                     // No more followings to return
                     emptyList()
-                } else {
-                    slice.filterNotNull()
                 }
             }
         } catch (e: Exception) {

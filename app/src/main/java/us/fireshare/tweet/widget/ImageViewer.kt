@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -18,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -172,7 +170,6 @@ fun FullScreenImageViewer(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val imageMid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
-    val previewMid = remember(previewUrl) { previewUrl.getMimeiKeyFromUrl() }
     var loadState by remember(imageMid) { mutableStateOf(ImageLoadState()) }
 
     // Load image using ImageCacheManager
@@ -237,7 +234,7 @@ fun FullScreenImageViewer(
         // Long press menu
         if (enableLongPress && showMenu) {
             DropdownMenu(
-                expanded = showMenu,
+                expanded = true,
                 onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(

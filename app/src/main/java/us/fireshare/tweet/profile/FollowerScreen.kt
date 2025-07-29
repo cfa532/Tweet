@@ -37,6 +37,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -57,7 +58,6 @@ fun FollowerScreen(
         ) { factory ->
             factory.create(userId)
         }
-    val followersOfProfile by viewModel.followers.collectAsState()
     val userOfProfile by viewModel.user.collectAsState()
 
     Scaffold(

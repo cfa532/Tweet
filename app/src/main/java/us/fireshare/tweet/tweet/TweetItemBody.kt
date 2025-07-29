@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
@@ -30,17 +31,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
-import us.fireshare.tweet.tweet.TweetDropdownMenu
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 import java.util.concurrent.TimeUnit
-import androidx.compose.ui.res.stringResource
-import us.fireshare.tweet.R
 
 @Composable
 fun TweetItemBody(
@@ -61,6 +60,7 @@ fun TweetItemBody(
         modifier = modifier
             .padding(start = 0.dp, end = 8.dp)
             .clickable(onClick = {
+                // necessary to deal with corrupted data.
                 if (tweet.authorId != null && tweet.mid != null)
                     navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             })

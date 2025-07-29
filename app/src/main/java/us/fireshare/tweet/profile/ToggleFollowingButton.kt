@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -29,7 +30,6 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-import kotlinx.coroutines.withContext
 
 @Composable
 fun ToggleFollowingButton(
@@ -58,44 +58,50 @@ fun ToggleFollowingButton(
             .clickable(
                 enabled = !isUpdating,
                 onClick = {
-                if (appUser.isGuest()) {
-                    appUserViewModel.viewModelScope.launch {
-                        guestWarning(context, navController)
+                    if (appUser.isGuest()) {
+                        appUserViewModel.viewModelScope.launch {
+                            guestWarning(context, navController)
+                        }
+                        return@clickable
                     }
-                    return@clickable
-                }
 
                     // Optimistic update - immediately change the button state
                     val newFollowState = !followState
                     followState = newFollowState
                     isUpdating = true
 
-                appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                         try {
                             // Attempt the actual toggle operation
-                            val result = appUserViewModel.toggleFollowingWithResult(userId, appUser.mid) { isFollowingResult ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            val result = appUserViewModel.toggleFollowingWithResult(
+                                userId,
+                                appUser.mid
+                            ) { isFollowingResult ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     viewModel.toggleFollower(userId, isFollowingResult, appUser.mid)
-                                    tweetFeedViewModel.updateFollowingsTweets(userId, isFollowingResult)
-                        }
-                    }
+                                    tweetFeedViewModel.updateFollowingsTweets(
+                                        userId,
+                                        isFollowingResult
+                                    )
+                                }
+                            }
 
                             if (result == null) {
                                 // Operation failed, revert the optimistic update
                                 followState = !newFollowState
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(
-                                        context, 
-                                        context.getString(R.string.follow_operation_failed), 
+                                        context,
+                                        context.getString(R.string.follow_operation_failed),
                                         Toast.LENGTH_SHORT
                                     ).show()
-                }
+                                }
                             } else {
                                 // Operation succeeded, show success message
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(
-                                        context, 
-                                        context.getString(R.string.update_following), 
+                                        context,
+                                        context.getString(R.string.update_following),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -105,8 +111,8 @@ fun ToggleFollowingButton(
                             followState = !newFollowState
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(
-                                    context, 
-                                    context.getString(R.string.follow_operation_failed), 
+                                    context,
+                                    context.getString(R.string.follow_operation_failed),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
