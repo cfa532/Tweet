@@ -21,8 +21,8 @@
 #-renamesourcefileattribute SourceFile
 
 -keep class us.fireshare.tweet.HproseInstance { *; }
--keep class us.fireshare.tweet.HproseService { *; }
--keep class us.fireshare.tweet.ScorePair { *; }
+-keep class us.fireshare.tweet.datamodel.HproseService { *; }
+-keep class us.fireshare.tweet.datamodel.ScorePair { *; }
 -keep class us.fireshare.tweet.widget.Gadget { *; }
 -keep class us.fireshare.tweet.viewmodel.** { *; }
 -keep class hprose.client.** { *; }

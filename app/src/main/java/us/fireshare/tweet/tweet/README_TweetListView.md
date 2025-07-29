@@ -43,6 +43,8 @@ fun TweetListView(
     headerContent: (@Composable () -> Unit)? = null, // Optional header content
     onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
+    restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
+    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
 )
 ```
 
@@ -128,7 +130,10 @@ fun MyTweetScreen(
         fetchTweets = { pageNumber ->
             viewModel.fetchTweets(pageNumber) // Suspend function
         },
-        parentEntry = parentEntry
+        parentEntry = parentEntry,
+        onFullScreenVideo = { videoUrl, videoMid ->
+            // Handle full-screen video
+        }
     )
 }
 ```
@@ -152,15 +157,18 @@ fun TweetFeedWithTopBar(
             )
         }
     ) { padding ->
-        TweetListView(
-            tweets = tweets,
-            fetchTweets = { pageNumber ->
-                viewModel.fetchTweets(pageNumber)
-            },
-            scrollBehavior = scrollBehavior,
-            parentEntry = parentEntry,
-            modifier = Modifier.padding(padding)
-        )
+            TweetListView(
+        tweets = tweets,
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
+        },
+        scrollBehavior = scrollBehavior,
+        parentEntry = parentEntry,
+        modifier = Modifier.padding(padding),
+        onFullScreenVideo = { videoUrl, videoMid ->
+            // Handle full-screen video
+        }
+    )
     }
 }
 ```
@@ -201,6 +209,9 @@ fun ProfileScreen(
         currentUserId = user.mid,
         onTweetUnavailable = { tweetId ->
             viewModel.removeTweetFromAllLists(tweetId)
+        },
+        onFullScreenVideo = { videoUrl, videoMid ->
+            // Handle full-screen video
         }
     )
 }
@@ -230,6 +241,9 @@ fun FollowingsTweet(
         },
         onTriggerLoadMore = {
             // External trigger for loadmore
+        },
+        onFullScreenVideo = { videoUrl, videoMid ->
+            // Handle full-screen video
         }
     )
 }
@@ -257,7 +271,10 @@ TweetListView(
     },
     scrollBehavior = scrollBehavior,
     parentEntry = parentEntry,
-    onScrollStateChange = { viewModel.updateScrollPosition(it) }
+    onScrollStateChange = { viewModel.updateScrollPosition(it) },
+    onFullScreenVideo = { videoUrl, videoMid ->
+        // Handle full-screen video
+    }
 )
 ```
 
@@ -286,7 +303,10 @@ TweetListView(
     },
     scrollBehavior = scrollBehavior,
     showPrivateTweets = appUser.mid == userId,
-    headerContent = { /* Profile details and pinned tweets */ }
+    headerContent = { /* Profile details and pinned tweets */ },
+    onFullScreenVideo = { videoUrl, videoMid ->
+        // Handle full-screen video
+    }
 )
 ```
 
@@ -324,6 +344,9 @@ TweetListView(
     fetchTweets = { pageNumber ->
         // This is a suspend function that returns List<Tweet?>
         viewModel.fetchTweets(pageNumber)
+    },
+    onFullScreenVideo = { videoUrl, videoMid ->
+        // Handle full-screen video
     }
 )
 ```

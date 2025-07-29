@@ -4,11 +4,9 @@
 
 The `FullScreenVideoPlayer` component provides an immersive full-screen video viewing experience with auto-replay functionality, independent mute state management, and efficient player reuse from MediaPreview.
 
-## Memory Leak Prevention (Latest Updates)
+## Current Implementation
 
-### Implementation Details
-
-#### Player Listener Management
+### Player Listener Management
 ```kotlin
 // Create a single listener that will be properly managed
 val playerListener = remember {
@@ -26,7 +24,7 @@ DisposableEffect(exoPlayer) {
 }
 ```
 
-#### Coroutine Cancellation
+### Coroutine Cancellation
 ```kotlin
 LaunchedEffect(autoPlay) {
     if (autoPlay) {
@@ -38,7 +36,7 @@ LaunchedEffect(autoPlay) {
 }
 ```
 
-#### VideoManager Cleanup
+### VideoManager Cleanup
 ```kotlin
 // In TweetApplication.onTerminate()
 override fun onTerminate() {
@@ -48,13 +46,6 @@ override fun onTerminate() {
     applicationScope.cancel()
 }
 ```
-
-### Benefits
-
-- **Reduced Memory Usage**: Proper cleanup prevents accumulation of unused objects
-- **Better Performance**: No background tasks running unnecessarily
-- **Stable Application**: Prevents memory-related crashes and slowdowns
-- **Resource Efficiency**: Proper lifecycle management ensures optimal resource usage
 
 ## Key Features
 
@@ -254,9 +245,6 @@ val exoPlayer = remember(videoMid) {
 2. **Auto-replay not working**: Verify `autoReplay` parameter is set to `true`
 3. **Player not reusing**: Ensure `VideoManager.getVideoPlayer()` is used
 4. **State loss**: Check if player state is being reset unnecessarily
-5. **Video stops after entering full screen**: This was fixed by using `LaunchedEffect(Unit)` instead of `LaunchedEffect(exoPlayer)` to prevent multiple triggers
-6. **Auto-play not working**: This was fixed by overriding VideoManager's `resetPlayerState()` which was setting `playWhenReady = false` for reused players, plus added aggressive playback maintenance with periodic checks and `onIsPlayingChanged` listener
-7. **Memory leaks**: Fixed by properly managing player listeners and coroutine cancellation
 
 ### Debug Logging
 - **State changes**: Logs playback state transitions
