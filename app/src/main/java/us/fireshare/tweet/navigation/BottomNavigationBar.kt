@@ -60,7 +60,6 @@ fun BottomNavigationBar(
     selectedIndex: Int = 100,
     bottomBarViewModel: BottomBarViewModel = hiltViewModel()
 ) {
-    var selectedItemIndex by rememberSaveable { mutableIntStateOf(0) }
     val badgeCount by bottomBarViewModel.badgeCount.collectAsState()
 
     val items = listOf(
@@ -113,7 +112,6 @@ fun BottomNavigationBar(
                         .weight(1f)
                         .padding(vertical = 4.dp)
                         .clickable {
-                            selectedItemIndex = index
                             if (appUser.isGuest() && index > 0) {
                                 bottomBarViewModel.viewModelScope.launch {
                                     guestWarning(context, navController)
