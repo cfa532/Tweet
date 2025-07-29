@@ -7,6 +7,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -325,14 +326,20 @@ object VideoManager {
         return preloadedVideos.contains(videoMid) || videoPlayers.containsKey(videoMid)
     }
 
+    // Memory monitoring job that can be cancelled
+    private var memoryMonitoringJob: kotlinx.coroutines.Job? = null
+
     /**
      * Start periodic memory monitoring
      * This should be called from the application class
      */
     @kotlin.OptIn(DelicateCoroutinesApi::class)
     fun startMemoryMonitoring() {
-        GlobalScope.launch(Dispatchers.IO) {
-            while (true) {
+        // Cancel existing job if any
+        memoryMonitoringJob?.cancel()
+        
+        memoryMonitoringJob = GlobalScope.launch(Dispatchers.IO) {
+            while (isActive) {
                 try {
                     withContext(Dispatchers.Main) {
                         checkMemoryAndReleaseVideos()
@@ -345,6 +352,16 @@ object VideoManager {
             }
         }
         Timber.tag("startMemoryMonitoring").d("Started periodic memory monitoring")
+    }
+
+    /**
+     * Stop memory monitoring
+     * This should be called when the application is being destroyed
+     */
+    fun stopMemoryMonitoring() {
+        memoryMonitoringJob?.cancel()
+        memoryMonitoringJob = null
+        Timber.tag("stopMemoryMonitoring").d("Stopped periodic memory monitoring")
     }
     
     /**

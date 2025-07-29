@@ -41,6 +41,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -80,10 +81,9 @@ fun FullScreenVideoPlayer(
         existingPlayer
     }
 
-    // Autoplay when entering full screen - use LaunchedEffect(Unit) to ensure it only runs once
-    LaunchedEffect(Unit) {
-        // Add error listener to catch source errors
-        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+    // Create a single listener that will be properly managed
+    val playerListener = remember {
+        object : androidx.media3.common.Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 Timber.e("FullScreenVideoPlayer - Player error: ${error.message}")
                 Timber.e("FullScreenVideoPlayer - Error cause: ${error.cause}")
@@ -113,13 +113,11 @@ fun FullScreenVideoPlayer(
                             VideoManager.onVideoCompleted(videoMid)
                         }
                     }
-
                     Player.STATE_BUFFERING -> {
-                        TODO()
+                        Timber.d("FullScreenVideoPlayer - Buffering")
                     }
-
                     Player.STATE_IDLE -> {
-                        TODO()
+                        Timber.d("FullScreenVideoPlayer - Idle")
                     }
                 }
             }
@@ -132,8 +130,19 @@ fun FullScreenVideoPlayer(
                     exoPlayer.play()
                 }
             }
-        })
-        
+        }
+    }
+
+    // Add and remove listener properly
+    DisposableEffect(exoPlayer) {
+        exoPlayer.addListener(playerListener)
+        onDispose {
+            exoPlayer.removeListener(playerListener)
+        }
+    }
+
+    // Autoplay when entering full screen - use LaunchedEffect(Unit) to ensure it only runs once
+    LaunchedEffect(Unit) {
         // Set volume to 1f (unmuted) for full screen
         exoPlayer.volume = 1f
         
@@ -164,9 +173,10 @@ fun FullScreenVideoPlayer(
     }
     
     // Add a periodic check to ensure the player stays playing if autoPlay is enabled
+    // This coroutine will be automatically cancelled when the composable is disposed
     LaunchedEffect(autoPlay) {
         if (autoPlay) {
-            while (true) {
+            while (isActive) {
                 delay(500) // Check every 500ms
                 if (!exoPlayer.isPlaying && exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
                     Timber.d("FullScreenVideoPlayer - Periodic check: Player not playing, restarting...")

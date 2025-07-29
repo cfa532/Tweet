@@ -148,9 +148,9 @@ fun VideoPreview(
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
     
-    // Add listener for video completion and error handling
-    LaunchedEffect(exoPlayer) {
-        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+    // Create a single listener that will be properly managed
+    val playerListener = remember {
+        object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
@@ -187,7 +187,15 @@ fun VideoPreview(
                 // It will mark the video as failed only after all attempts are exhausted
                 // We just log the error here and let the fallback mechanism work
             }
-        })
+        }
+    }
+
+    // Add and remove listener properly
+    DisposableEffect(exoPlayer) {
+        exoPlayer.addListener(playerListener)
+        onDispose {
+            exoPlayer.removeListener(playerListener)
+        }
     }
 
     // When previewing a single video, limit its height to show more content.

@@ -4,6 +4,80 @@
 
 The `FullScreenVideoPlayer` component provides an immersive full-screen video viewing experience with auto-replay functionality, independent mute state management, and efficient player reuse from MediaPreview.
 
+## Memory Leak Prevention (Latest Updates)
+
+### Issues Fixed
+
+1. **Player Listener Memory Leaks**
+   - **Problem**: Player listeners were added but never removed, causing memory leaks
+   - **Solution**: Created a single `playerListener` using `remember` and properly managed it with `DisposableEffect`
+   - **Impact**: Prevents accumulation of listener objects in memory
+
+2. **Infinite Coroutine Loops**
+   - **Problem**: Periodic playback checks used `while (true)` without proper cancellation
+   - **Solution**: Changed to `while (isActive)` to ensure automatic cancellation when composable is disposed
+   - **Impact**: Prevents background coroutines from running indefinitely
+
+3. **VideoManager Memory Monitoring**
+   - **Problem**: Memory monitoring job was never cancelled, potentially running forever
+   - **Solution**: Added `memoryMonitoringJob` variable and `stopMemoryMonitoring()` method
+   - **Impact**: Proper cleanup of background monitoring tasks
+
+4. **Application Lifecycle Management**
+   - **Problem**: VideoManager resources weren't properly cleaned up on application termination
+   - **Solution**: Added proper cleanup in `TweetApplication.onTerminate()`
+   - **Impact**: Prevents memory leaks during application shutdown
+
+### Implementation Details
+
+#### Player Listener Management
+```kotlin
+// Create a single listener that will be properly managed
+val playerListener = remember {
+    object : androidx.media3.common.Player.Listener {
+        // ... listener implementation
+    }
+}
+
+// Add and remove listener properly
+DisposableEffect(exoPlayer) {
+    exoPlayer.addListener(playerListener)
+    onDispose {
+        exoPlayer.removeListener(playerListener)
+    }
+}
+```
+
+#### Coroutine Cancellation
+```kotlin
+LaunchedEffect(autoPlay) {
+    if (autoPlay) {
+        while (isActive) { // Automatically cancelled when composable is disposed
+            delay(500)
+            // ... playback check logic
+        }
+    }
+}
+```
+
+#### VideoManager Cleanup
+```kotlin
+// In TweetApplication.onTerminate()
+override fun onTerminate() {
+    super.onTerminate()
+    VideoManager.stopMemoryMonitoring()
+    VideoManager.releaseAllVideos()
+    applicationScope.cancel()
+}
+```
+
+### Benefits
+
+- **Reduced Memory Usage**: Proper cleanup prevents accumulation of unused objects
+- **Better Performance**: No background tasks running unnecessarily
+- **Stable Application**: Prevents memory-related crashes and slowdowns
+- **Resource Efficiency**: Proper lifecycle management ensures optimal resource usage
+
 ## Key Features
 
 ### 1. **Auto-Replay Functionality**
@@ -170,11 +244,14 @@ val exoPlayer = remember(videoMid) {
 - **Player reuse**: Prevents duplicate player instances
 - **State preservation**: Avoids unnecessary player resets
 - **Automatic cleanup**: VideoManager handles memory optimization
+- **Listener cleanup**: Proper removal of player listeners
+- **Coroutine cancellation**: Automatic cancellation of background tasks
 
 ### Battery Optimization
 - **Efficient playback**: Reuses existing buffered content
 - **State tracking**: Minimal overhead for state management
 - **Resource sharing**: Shared player instances reduce resource usage
+- **Background task management**: Proper cleanup prevents unnecessary background work
 
 ## Best Practices
 
@@ -183,6 +260,8 @@ val exoPlayer = remember(videoMid) {
 2. **Preserve state**: Use `getVideoPlayer()` for full screen
 3. **Handle mute state**: Always restore original mute state on exit
 4. **Enable auto-replay**: Provide better user experience in full screen
+5. **Clean up listeners**: Always remove player listeners in `DisposableEffect`
+6. **Use isActive**: Check coroutine state before running loops
 
 ### User Experience
 1. **Smooth transitions**: Ensure no interruption during mode switches
@@ -199,12 +278,14 @@ val exoPlayer = remember(videoMid) {
 4. **State loss**: Check if player state is being reset unnecessarily
 5. **Video stops after entering full screen**: This was fixed by using `LaunchedEffect(Unit)` instead of `LaunchedEffect(exoPlayer)` to prevent multiple triggers
 6. **Auto-play not working**: This was fixed by overriding VideoManager's `resetPlayerState()` which was setting `playWhenReady = false` for reused players, plus added aggressive playback maintenance with periodic checks and `onIsPlayingChanged` listener
+7. **Memory leaks**: Fixed by properly managing player listeners and coroutine cancellation
 
 ### Debug Logging
 - **State changes**: Logs playback state transitions
 - **Mute state**: Logs mute state restoration
 - **Player reuse**: Logs when existing players are reused
 - **Error handling**: Logs player errors and recovery attempts
+- **Memory management**: Logs memory cleanup operations
 
 ## Future Enhancements
 
@@ -213,4 +294,6 @@ val exoPlayer = remember(videoMid) {
 2. **Picture-in-picture**: Support for PiP mode
 3. **Quality selection**: Dynamic quality switching
 4. **Subtitle support**: Display video subtitles
-5. **Playback speed**: Variable playback speed controls 
+5. **Playback speed**: Variable playback speed controls
+6. **Memory profiling**: Add memory usage monitoring and alerts
+7. **Background playback**: Support for background audio playback 

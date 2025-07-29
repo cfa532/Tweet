@@ -49,12 +49,16 @@ class TweetApplication : Application(){
 
         // Start video memory monitoring
         VideoManager.startMemoryMonitoring()
+    }
 
-        fun onTerminate() {
-            super.onTerminate()
-            // Cancel the scope when the application is terminating (rare in modern Android)
-            applicationScope.cancel()
-        }
+    override fun onTerminate() {
+        super.onTerminate()
+        // Stop video memory monitoring
+        VideoManager.stopMemoryMonitoring()
+        // Release all video players to prevent memory leaks
+        VideoManager.releaseAllVideos()
+        // Cancel the scope when the application is terminating (rare in modern Android)
+        applicationScope.cancel()
     }
 }
 
