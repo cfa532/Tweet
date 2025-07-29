@@ -278,7 +278,6 @@ fun TweetListView(
                     withContext(Dispatchers.IO) {
                         serverDepleted = false // User-initiated: allow loading again
                         lastLoadedPage = -1 // Reset last loaded page for fresh start
-                        Timber.tag("TweetListView").d("Pull refresh: Loading page 0, current tweets: ${tweets.size}")
                         val result = fetchTweets(0) // Await the suspend function
                         Timber.tag("TweetListView").d("Pull refresh: fetchTweets completed, returned ${result.size} tweets")
                     }
