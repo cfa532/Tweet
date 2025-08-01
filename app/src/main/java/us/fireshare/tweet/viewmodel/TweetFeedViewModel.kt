@@ -221,7 +221,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     fun reset() {
         tweets.value.forEach {
-            dao.deleteCachedTweet(it.mid)
+            if (it.mid != null) {   // deal with corrupted data
+                dao.deleteCachedTweet(it.mid)
+            }
         }
         _tweets.value = emptyList()
     }

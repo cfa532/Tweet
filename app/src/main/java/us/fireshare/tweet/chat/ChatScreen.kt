@@ -1,5 +1,8 @@
 package us.fireshare.tweet.chat
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,13 +10,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,26 +27,37 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +84,8 @@ fun ChatScreen(
     val receipt by viewModel.receipt.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     fun scrollToBottom() {
         if (chatMessages.isNotEmpty()) {
@@ -82,7 +101,7 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
 
-        // fetch new messages every 10s when on chat screen.
+        // fetch new messages every 15s when on chat screen.
         timer(period = 15000, action = {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
                 viewModel.fetchNewMessage()
@@ -152,6 +171,14 @@ fun ChatScreen(
             Box(modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    // Hide keyboard when tapping outside
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                }
                 // Scroll to the bottom when the keyboard is opened
                 .onSizeChanged {
                     scrollToBottom()
@@ -160,7 +187,7 @@ fun ChatScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 64.dp),
+                        .padding(bottom = 80.dp), // Increased padding for new input design
                     state = listState
                 ) {
                     items(chatMessages) { msg ->
@@ -171,7 +198,7 @@ fun ChatScreen(
                     viewModel = viewModel,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(8.dp)
+                        .padding(horizontal = 4.dp, vertical = 8.dp)
                 )
             }
         }
@@ -217,48 +244,124 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
 @Composable
 fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val textState by viewModel.message
+    val hasInput = textState.isNotBlank()
+    val isSending = remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(0.dp)
+        modifier = modifier.fillMaxWidth()
     ) {
-        TextField(
-            value = textState,
-            onValueChange = { viewModel.message.value = it },
+        // Top shadow as divider
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 150.dp)
-                .padding(0.dp),
-                            placeholder = { Text(stringResource(R.string.type_message)) },
-            keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Default, // Allow Enter key to add a new line
-                keyboardType = KeyboardType.Text
-            ),
-            keyboardActions = KeyboardActions(
-                onSend = {
-                    viewModel.viewModelScope.launch(Dispatchers.IO) {
-                        viewModel.sendMessage()
-                        viewModel.message.value = ""
-                    }
-                }
-            ),
-            trailingIcon = {
-                IconButton(onClick = {
-                    if (textState.isNotBlank()) {
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            viewModel.sendMessage()
-                            viewModel.message.value = ""
+                .height(1.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+//                    shape = RoundedCornerShape(0.dp)
+                )
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 4.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Attachment button
+            IconButton(
+                onClick = {
+                    // TODO: Implement attachment functionality
+                },
+                modifier = Modifier.size(40.dp),
+                enabled = !isSending.value
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AttachFile,
+                    contentDescription = stringResource(R.string.attached_file),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Text input field with rounded corners
+            OutlinedTextField(
+                value = textState,
+                onValueChange = { viewModel.message.value = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(max = 120.dp)
+                    .focusRequester(focusRequester),
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.type_message),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                },
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    imeAction = ImeAction.Default,
+                    keyboardType = KeyboardType.Text
+                ),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (hasInput && !isSending.value) {
+                            isSending.value = true
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                viewModel.sendMessage()
+                                viewModel.message.value = "" // Clear input after sending
+                                isSending.value = false
+                                // Keep focus on the input field
+                                focusRequester.requestFocus()
+                            }
                         }
                     }
-                }) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = stringResource(R.string.send),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
-                }
-            },
-            singleLine = false,
-            maxLines = 5
-        )
+                ),
+                shape = RoundedCornerShape(20.dp),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                singleLine = false,
+                maxLines = 5,
+                enabled = !isSending.value
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Send button without background decoration
+            IconButton(
+                onClick = {
+                    if (hasInput && !isSending.value) {
+                        isSending.value = true
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            viewModel.sendMessage()
+                            viewModel.message.value = "" // Clear input after sending
+                            isSending.value = false
+                            // Keep focus on the input field
+                            focusRequester.requestFocus()
+                        }
+                    }
+                },
+                modifier = Modifier.size(40.dp),
+                enabled = hasInput && !isSending.value
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = stringResource(R.string.send),
+                    tint = if (hasInput && !isSending.value)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .scale(scaleX = -1f, scaleY = 1f)
+                )
+            }
+        }
     }
 }
