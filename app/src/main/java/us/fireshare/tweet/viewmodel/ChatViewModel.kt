@@ -80,7 +80,18 @@ class ChatViewModel @AssistedInject constructor(
         val fetchedMessages = HproseInstance.fetchMessages(receiptId) ?: return
         val news = fetchedMessages.toMutableList()
         if (news.isNotEmpty()) {
-            chatRepository.insertMessages(news.filter { it.authorId != appUser.mid })
+            // Update timestamps with local system time for received messages
+            val currentTime = System.currentTimeMillis()
+            val updatedNews = news.map { message ->
+                if (message.authorId != appUser.mid) {
+                    // Update timestamp for incoming messages with local time
+                    message.copy(timestamp = currentTime)
+                } else {
+                    message
+                }
+            }
+            
+            chatRepository.insertMessages(updatedNews.filter { it.authorId != appUser.mid })
             /**
              * All outgoing and incoming messages are stored at user's mimei database.
              * When fetching new messages, all messages during the last waiting period
@@ -88,14 +99,14 @@ class ChatViewModel @AssistedInject constructor(
              * inserted into Room database when sending out.
              * */
             _chatMessages.update {
-                it.plus(news.filter { m ->
+                it.plus(updatedNews.filter { m ->
                     m.authorId != appUser.mid   // only count incoming messages
                 })
             }
             // update session in database
             chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
             // update session in memory
-            chatListViewModel?.updateSession(news.last(), hasNews = false)
+            chatListViewModel?.updateSession(updatedNews.last(), hasNews = false)
         }
     }
 

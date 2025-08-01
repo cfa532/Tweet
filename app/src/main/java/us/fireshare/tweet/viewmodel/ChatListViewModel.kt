@@ -84,8 +84,20 @@ class ChatListViewModel @Inject constructor(
 
     suspend fun previewMessages() {
         val newMessages = HproseInstance.checkNewMessages() ?: return
+        
+        // Update timestamps with local system time for received messages
+        val currentTime = System.currentTimeMillis()
+        val updatedNewMessages = newMessages.map { message ->
+            if (message.authorId != appUser.mid) {
+                // Update timestamp for incoming messages with local time
+                message.copy(timestamp = currentTime)
+            } else {
+                message
+            }
+        }
+        
         val updatedSessions =
-            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, newMessages)
+            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, updatedNewMessages)
 
         // Do not update chat session database, only show new sessions on UI
         // Update chat session database only when user opens chat screen.

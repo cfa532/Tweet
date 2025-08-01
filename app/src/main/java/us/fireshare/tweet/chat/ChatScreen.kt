@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -37,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,8 +67,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
@@ -144,14 +150,11 @@ fun ChatScreen(
                     Row(modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
-                            UserAvatar(user = receipt, size = 32)
-                            Text(
-                                text = receipt.profile ?: " ",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
+                        UserAvatar(user = receipt, size = 32)
+                        Text(
+                            text = "${receipt.name} @${receipt.username}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 },
                 navigationIcon = {
@@ -190,8 +193,51 @@ fun ChatScreen(
                         .padding(bottom = 80.dp), // Increased padding for new input design
                     state = listState
                 ) {
-                    items(chatMessages) { msg ->
-                        ChatItem(viewModel, msg)
+                    itemsIndexed(chatMessages) { index, msg ->
+                        // Add time divider if more than 1 hour difference from previous message
+                        if (index > 0) {
+                            val previousMessage = chatMessages[index - 1]
+                            val timeDifference = msg.timestamp - previousMessage.timestamp
+                            val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
+                            
+                            if (timeDifference > oneHourInMillis) {
+                                // Time divider
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 0.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        HorizontalDivider(
+                                            modifier = Modifier
+                                                .padding(start = 8.dp)
+                                                .weight(1f),
+                                            thickness = 1.dp,
+                                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        )
+                                        Text(
+                                            text = formatTimestamp(msg.timestamp),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                            modifier = Modifier.padding(horizontal = 12.dp)
+                                        )
+                                        HorizontalDivider(
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .weight(1f),
+                                            thickness = 1.dp,
+                                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        ChatItem(viewModel, msg, chatMessages)
                     }
                 }
                 ChatInput(
@@ -206,37 +252,74 @@ fun ChatScreen(
 }
 
 @Composable
-fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
+fun ChatItem(viewModel: ChatViewModel, message: ChatMessage, messages: List<ChatMessage>) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
+    
+    // Determine if this is the last message from this party
+    val currentMessageIndex = messages.indexOf(message)
+    val isLastMessageFromParty = if (isSentByCurrentUser) {
+        // Check if this is the last message from current user
+        currentMessageIndex == messages.lastIndex || 
+        (currentMessageIndex < messages.lastIndex && 
+         messages[currentMessageIndex + 1].authorId != appUser.mid)
+    } else {
+        // Check if this is the last message from other user
+        currentMessageIndex == messages.lastIndex || 
+        (currentMessageIndex < messages.lastIndex && 
+         messages[currentMessageIndex + 1].authorId == appUser.mid)
+    }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
-        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
     ) {
-        if (! isSentByCurrentUser) {
-            UserAvatar(user = receipt, size = 32)
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = ChatBubbleShape(isSentByCurrentUser),
-            modifier = Modifier.padding(4.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            SelectionContainer {
-                BasicText(
-                    text = buildAnnotatedText(message.content ?: ""),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(8.dp)
-                )
+            if (!isSentByCurrentUser) {
+                UserAvatar(user = receipt, size = 32)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = if (isLastMessageFromParty) {
+                    ChatBubbleShape(isSentByCurrentUser)
+                } else {
+                    RegularChatBubbleShape()
+                },
+                modifier = Modifier.padding(4.dp)
+            ) {
+                SelectionContainer {
+                    BasicText(
+                        text = buildAnnotatedText(message.content ?: ""),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+            if (isSentByCurrentUser) {
+                Spacer(modifier = Modifier.width(8.dp))
+                UserAvatar(user = appUser, size = 32)
             }
         }
-        if (isSentByCurrentUser) {
-            Spacer(modifier = Modifier.width(8.dp))
-            UserAvatar(user = appUser, size = 32)
+        
+        // Show timestamp for last message from each party
+        if (isLastMessageFromParty) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = formatTimestamp(message.timestamp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(
+                    start = if (isSentByCurrentUser) 0.dp else 40.dp,
+                    end = if (isSentByCurrentUser) 40.dp else 0.dp
+                )
+            )
         }
     }
 }
@@ -313,8 +396,10 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                                 viewModel.sendMessage()
                                 viewModel.message.value = "" // Clear input after sending
                                 isSending.value = false
-                                // Keep focus on the input field
-                                focusRequester.requestFocus()
+                                // Keep focus on the input field (must be on main thread)
+                                withContext(Dispatchers.Main) {
+                                    focusRequester.requestFocus()
+                                }
                             }
                         }
                     }
@@ -342,8 +427,10 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                             viewModel.sendMessage()
                             viewModel.message.value = "" // Clear input after sending
                             isSending.value = false
-                            // Keep focus on the input field
-                            focusRequester.requestFocus()
+                            // Keep focus on the input field (must be on main thread)
+                            withContext(Dispatchers.Main) {
+                                focusRequester.requestFocus()
+                            }
                         }
                     }
                 },
@@ -362,6 +449,33 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                         .scale(scaleX = -1f, scaleY = 1f)
                 )
             }
+        }
+    }
+}
+
+private fun formatTimestamp(timestamp: Long): String {
+    val date = Date(timestamp)
+    val now = Date()
+    val calendar = java.util.Calendar.getInstance()
+    val messageCalendar = java.util.Calendar.getInstance().apply { time = date }
+    
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    
+    return when {
+        // Same day
+        calendar.get(java.util.Calendar.YEAR) == messageCalendar.get(java.util.Calendar.YEAR) &&
+        calendar.get(java.util.Calendar.DAY_OF_YEAR) == messageCalendar.get(java.util.Calendar.DAY_OF_YEAR) -> {
+            timeFormat.format(date)
+        }
+        // Yesterday
+        calendar.get(java.util.Calendar.YEAR) == messageCalendar.get(java.util.Calendar.YEAR) &&
+        calendar.get(java.util.Calendar.DAY_OF_YEAR) == messageCalendar.get(java.util.Calendar.DAY_OF_YEAR) + 1 -> {
+            "昨天 ${timeFormat.format(date)}"
+        }
+        // Other days
+        else -> {
+            dateFormat.format(date)
         }
     }
 }

@@ -1,6 +1,7 @@
 package us.fireshare.tweet.chat
 
 import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
@@ -8,65 +9,72 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ChatBubbleShape(flipHorizontally: Boolean = false): GenericShape {
-    val cornerRadius = 8.dp
-    val tailWidth = 12.dp
-    val tailHeight = 12.dp
-    val padding = 2.dp // Add padding inside the bubble
-    val shiftLeft = 4.dp // Shift the shape to the left
-    val expandWidth = 2.dp // Expand the rectangle by 2.dp on each side
+fun ChatBubbleShape(isFromCurrentUser: Boolean = false): GenericShape {
+    val cornerRadius = 12.dp
     val density = LocalDensity.current
 
     return GenericShape { size, _ ->
         with(density) {
             val cornerRadiusPx = cornerRadius.toPx()
-            val tailWidthPx = tailWidth.toPx()
-            val tailHeightPx = tailHeight.toPx()
-            val paddingPx = padding.toPx()
-            val shiftLeftPx = shiftLeft.toPx()
-            val expandWidthPx = expandWidth.toPx()
+            val width = size.width
+            val height = size.height
 
-            if (flipHorizontally) {
-                // Draw the main rounded rectangle with padding, flipped horizontally
-                addRoundRect(
-                    RoundRect(
-                        left = -tailWidthPx / 2 + paddingPx + shiftLeftPx - expandWidthPx, // Adjust left to account for the tail, shift, and expansion
-                        top = paddingPx,
-                        right = size.width - paddingPx + shiftLeftPx + expandWidthPx, // Adjust right to account for the expansion
-                        bottom = size.height - 2 * paddingPx,
-                        topLeftCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        topRightCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        bottomLeftCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        bottomRightCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
-                    )
-                )
-
-                // Draw the tail at the right side, pointing outward
-                moveTo(size.width - paddingPx - shiftLeftPx, size.height / 2 + tailHeightPx / 2)
-                lineTo(size.width + shiftLeftPx, size.height / 2)
-                lineTo(size.width - paddingPx - shiftLeftPx, size.height / 2 + tailHeightPx / 2)
+            if (isFromCurrentUser) {
+                // Right-aligned bubble (sent by current user) - rounded except bottom-right
+                // Bottom edge
+                moveTo(width - cornerRadiusPx, height)
+                lineTo(cornerRadiusPx, height)
+                
+                // Bottom-left corner curve
+                quadraticTo(0f, height, 0f, height - cornerRadiusPx)
+                
+                // Left edge
+                lineTo(0f, cornerRadiusPx)
+                
+                // Top-left corner curve
+                quadraticTo(0f, 0f, cornerRadiusPx, 0f)
+                
+                // Top edge
+                lineTo(width - cornerRadiusPx, 0f)
+                
+                // Top-right corner curve
+                quadraticTo(width, 0f, width, cornerRadiusPx)
+                
+                // Right edge
+                lineTo(width, height)
+                
                 close()
             } else {
-                // Draw the main rounded rectangle with padding
-                addRoundRect(
-                    RoundRect(
-                        left = tailWidthPx / 2 + paddingPx - shiftLeftPx - expandWidthPx, // Adjust left to account for the tail, shift, and expansion
-                        top = paddingPx,
-                        right = size.width + paddingPx - shiftLeftPx + expandWidthPx, // Adjust right to account for the expansion
-                        bottom = size.height - 2 * paddingPx,
-                        topLeftCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        topRightCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        bottomLeftCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                        bottomRightCornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx)
-                    )
-                )
-
-                // Draw the tail at the left side, pointing outward
-                moveTo(paddingPx + shiftLeftPx, size.height / 2 - tailHeightPx / 2)
-                lineTo(-shiftLeftPx, size.height / 2)
-                lineTo(paddingPx + shiftLeftPx, size.height / 2 + tailHeightPx / 2)
+                // Left-aligned bubble (received from other user) - rounded except bottom-left
+                // Bottom edge
+                moveTo(cornerRadiusPx, height)
+                lineTo(width - cornerRadiusPx, height)
+                
+                // Bottom-right corner curve
+                quadraticTo(width, height, width, height - cornerRadiusPx)
+                
+                // Right edge
+                lineTo(width, cornerRadiusPx)
+                
+                // Top-right corner curve
+                quadraticTo(width, 0f, width - cornerRadiusPx, 0f)
+                
+                // Top edge
+                lineTo(cornerRadiusPx, 0f)
+                
+                // Top-left corner curve
+                quadraticTo(0f, 0f, 0f, cornerRadiusPx)
+                
+                // Left edge
+                lineTo(0f, height)
+                
                 close()
             }
         }
     }
+}
+
+@Composable
+fun RegularChatBubbleShape(): RoundedCornerShape {
+    return RoundedCornerShape(12.dp)
 }
