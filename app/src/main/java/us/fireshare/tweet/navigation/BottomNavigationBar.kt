@@ -121,6 +121,14 @@ fun BottomNavigationBar(
             val context = LocalContext.current
 
             items.forEachIndexed { index, item ->
+                val isSelected = index == selectedIndex
+                val baseSize = when (index) {
+                    0 -> 28.dp  // Home button - larger
+                    2 -> 20.dp  // Compose button - smaller
+                    else -> 24.dp  // Default size for others
+                }
+                val finalSize = if (isSelected) baseSize + 4.dp else baseSize
+                
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -158,10 +166,10 @@ fun BottomNavigationBar(
                         }
                     ) {
                         Icon(
-                            imageVector = if (index == selectedIndex) item.selectedIcon else item.unselectedIcon,
+                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                             contentDescription = item.title,
-                            modifier = Modifier.size(24.dp),
-                            tint = if (index == selectedIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            modifier = Modifier.size(finalSize),
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
                 }
