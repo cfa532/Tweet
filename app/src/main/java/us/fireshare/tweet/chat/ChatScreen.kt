@@ -142,14 +142,17 @@ fun ChatScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    Row(modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        UserAvatar(user = receipt, size = 32)
+                        UserAvatar(user = receipt, size = 40)
                         Text(
                             text = "${receipt.name} @${receipt.username}",
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodyMedium,
                         )
+                        Spacer(modifier = Modifier.fillMaxWidth())
                     }
                 },
                 navigationIcon = {
@@ -387,9 +390,12 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                     onSend = {
                         if (hasInput && !isSending.value) {
                             isSending.value = true
+                            // Store the message content before clearing
+                            val messageContent = textState
+                            // Clear input immediately to provide instant feedback
+                            viewModel.message.value = ""
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                viewModel.sendMessage()
-                                viewModel.message.value = "" // Clear input after sending
+                                viewModel.sendMessage(messageContent)
                                 isSending.value = false
                                 // Keep focus on the input field (must be on main thread)
                                 withContext(Dispatchers.Main) {
@@ -418,9 +424,12 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 onClick = {
                     if (hasInput && !isSending.value) {
                         isSending.value = true
+                        // Store the message content before clearing
+                        val messageContent = textState
+                        // Clear input immediately to provide instant feedback
+                        viewModel.message.value = ""
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            viewModel.sendMessage()
-                            viewModel.message.value = "" // Clear input after sending
+                            viewModel.sendMessage(messageContent)
                             isSending.value = false
                             // Keep focus on the input field (must be on main thread)
                             withContext(Dispatchers.Main) {

@@ -145,11 +145,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
         actions = {
             if (! appUser.isGuest()) {
                 if (appUser.mid != user.mid) {
-                    val context = LocalContext.current
                     IconButton(onClick = {
-                        viewModel.viewModelScope.launch {
-                            guestWarning(context, navController)
-                        }
+                        // Navigate to chat screen with the user
+                        navController.navigate(NavTweet.ChatBox(user.mid))
                     }) {
                         Icon(
                             imageVector = Icons.Default.MailOutline,

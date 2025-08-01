@@ -211,6 +211,20 @@ fun MediaBrowser(
 
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            
+            // Show system bars when exiting full screen
+            activity?.window?.let { window ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.insetsController?.let { controller ->
+                        controller.show(WindowInsets.Type.systemBars())
+                    }
+                } else {
+                    // Fallback for older versions
+                    val controller = WindowInsetsControllerCompat(window, window.decorView)
+                    controller.show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+            
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.releaseAllPlayers()
         }

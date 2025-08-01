@@ -53,12 +53,12 @@ class ChatViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun sendMessage() {
+    suspend fun sendMessage(content: String) {
         val message = ChatMessage(
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
-            content = message.value.trim(),
+            content = content.trim(),
             sessionId = null // Will be set when session is created/updated
         )
         // update message list in memory
