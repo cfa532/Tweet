@@ -80,7 +80,7 @@ fun ChatScreen(
         // Assume user read new message when opening this chat screen.
         // Upon opening ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,
-            hasNews = false, sessionId = viewModel.receiptId)
+            hasNews = false, receiptId = viewModel.receiptId)
 
         // fetch new messages every 10s when on chat screen.
         timer(period = 15000, action = {

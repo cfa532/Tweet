@@ -43,11 +43,11 @@ fun ProfileDetail(
     val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
-    
+
     // Use appUser data when viewing own profile, otherwise use profile user data
     val displayUser = if (user.mid == appUser.mid) appUser else user
     val profile by remember { derivedStateOf { displayUser.profile } }
-    
+
     // Use ViewModel's public count variables - collect them efficiently
     val bookmarksCount by viewModel.bookmarksCount.collectAsState()
     val favoritesCount by viewModel.favoritesCount.collectAsState()
@@ -77,7 +77,10 @@ fun ProfileDetail(
             )
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp, end = if (displayUser.mid == appUser.mid ) 20.dp else 120.dp),
+                    .padding(
+                        start = 0.dp,
+                        end = if (displayUser.mid == appUser.mid) 20.dp else 120.dp
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
@@ -114,10 +117,10 @@ fun ProfileDetail(
                             contentDescription = stringResource(R.string.user_bookmarks),
                             modifier = Modifier.size(IconSize)
                         )
-                                                    Text(
-                                text = "${if (bookmarksCount > 0) bookmarksCount else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                        Text(
+                            text = "${if (bookmarksCount > 0) bookmarksCount else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     Row(
                         modifier = Modifier.clickable(
@@ -131,10 +134,10 @@ fun ProfileDetail(
                             contentDescription = stringResource(R.string.user_favorites),
                             modifier = Modifier.size(IconSize)
                         )
-                                                    Text(
-                                text = "${if (favoritesCount > 0) favoritesCount else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                        Text(
+                            text = "${if (favoritesCount > 0) favoritesCount else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }

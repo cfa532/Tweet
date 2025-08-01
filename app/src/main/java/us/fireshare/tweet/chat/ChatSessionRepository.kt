@@ -19,7 +19,10 @@ class ChatSessionRepository(
         val sessionEntities = chatSessionDao.getAllSessions(appUser.mid)
         return sessionEntities.mapNotNull { sessionEntity ->
             val lastMessageEntity = chatMessageDao.getMessageById(sessionEntity.lastMessageId)
-            lastMessageEntity?.let { sessionEntity.toChatSession(it.toChatMessage()) }
+            lastMessageEntity?.let { messageEntity ->
+                val chatMessage = messageEntity.toChatMessage().copy(sessionId = sessionEntity.id)
+                sessionEntity.toChatSession(chatMessage)
+            }
         }
     }
 
@@ -28,6 +31,7 @@ class ChatSessionRepository(
         val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
         lastMessageEntity?.let { messageEntity ->
             if (sessionEntity != null) {
+                // Update existing session
                 chatSessionDao.updateSession(
                     userId = userId,
                     receiptId = receiptId,
@@ -35,16 +39,26 @@ class ChatSessionRepository(
                     lastMessageId = messageEntity.id,
                     hasNews = hasNews
                 )
+                
+                // Update message with sessionId if not already set
+                if (messageEntity.sessionId == null) {
+                    val updatedMessage = messageEntity.copy(sessionId = sessionEntity.id)
+                    chatMessageDao.insertMessage(updatedMessage)
+                }
             } else {
-                chatSessionDao.insertSession(
-                    ChatSessionEntity(
-                        userId = userId,
-                        receiptId = receiptId,
-                        lastMessageId = messageEntity.id,
-                        timestamp = messageEntity.timestamp,
-                        hasNews = hasNews
-                    )
+                // Create new session
+                val newSessionEntity = ChatSessionEntity(
+                    userId = userId,
+                    receiptId = receiptId,
+                    lastMessageId = messageEntity.id,
+                    timestamp = messageEntity.timestamp,
+                    hasNews = hasNews
                 )
+                chatSessionDao.insertSession(newSessionEntity)
+                
+                // Update message with sessionId
+                val updatedMessage = messageEntity.copy(sessionId = newSessionEntity.id)
+                chatMessageDao.insertMessage(updatedMessage)
             }
         }
     }
@@ -93,11 +107,12 @@ class ChatSessionRepository(
                 // a new session is created.
                 updatedSessions.add(
                     ChatSession(
+                        id = 0, // Will be auto-generated when saved to database
                         timestamp = msg.timestamp,
                         userId = appUser.mid,
                         receiptId = if (key.first == appUser.mid) key.second else key.first,
                         hasNews = true,
-                        lastMessage = msg
+                        lastMessage = msg.copy(sessionId = 0) // Will be updated when session is saved
                     )
                 )
             } else {
@@ -106,7 +121,7 @@ class ChatSessionRepository(
                     updatedSessions.remove(es)
                     updatedSessions.add(
                         es.copy(
-                            lastMessage = msg,
+                            lastMessage = msg.copy(sessionId = es.id),
                             timestamp = msg.timestamp,
                             hasNews = true
                         )

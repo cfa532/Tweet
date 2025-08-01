@@ -35,17 +35,17 @@ class ChatListViewModel @Inject constructor(
 
     /**
      * Called only from ChatBox screen. Given a message, update corresponding chat session.
-     * If a session id is given, update its hasNews message flag to false.
+     * If a receiptId is given, update its hasNews message flag to false.
      * */
-    fun updateSession(msg: ChatMessage?, hasNews: Boolean = false, sessionId: MimeiId? = null) {
+    fun updateSession(msg: ChatMessage?, hasNews: Boolean = false, receiptId: MimeiId? = null) {
         val targetReceiptId =
-            sessionId ?: if (msg?.receiptId == appUser.mid) msg.authorId else msg?.receiptId
+            receiptId ?: if (msg?.receiptId == appUser.mid) msg.authorId else msg?.receiptId
 
         val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
 
         if (existingSession != null) {
             val updatedSession = existingSession.copy(
-                hasNews = if (sessionId != null) false else hasNews,
+                hasNews = if (receiptId != null) false else hasNews,
                 lastMessage = msg ?: existingSession.lastMessage,
                 timestamp = msg?.timestamp ?: existingSession.timestamp
             )
@@ -55,10 +55,11 @@ class ChatListViewModel @Inject constructor(
         } else if (msg != null) { // Only create a new session if a message is provided
             _chatSessions.update { sessions ->
                 sessions + ChatSession(
+                    id = 0, // Will be auto-generated when saved to database
                     userId = appUser.mid,
                     receiptId = msg.receiptId,
                     hasNews = hasNews,
-                    lastMessage = msg
+                    lastMessage = msg.copy(sessionId = 0) // Will be updated when session is saved
                 )
             }
         }

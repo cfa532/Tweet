@@ -164,7 +164,7 @@ fun UserSearchResult(user: User, navController: NavController) {
             // Navigate to user profile
             navController.navigate(NavTweet.UserProfile(user.mid))
         }) {
-                                    UserAvatar(user = user, size = 32)
+            UserAvatar(user = user, size = 32)
         }
         Column {
             Text(

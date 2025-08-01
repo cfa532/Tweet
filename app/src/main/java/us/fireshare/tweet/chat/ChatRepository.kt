@@ -1,6 +1,5 @@
 package us.fireshare.tweet.chat
 
-import com.google.gson.Gson
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatMessageEntity
@@ -16,13 +15,7 @@ class ChatRepository(private val chatMessageDao: ChatMessageDao) {
     }
 
     suspend fun insertMessages(messages: List<ChatMessage>) {
-        val gson = Gson()
-        val messageEntities = mutableListOf<ChatMessageEntity>()
-        for(i in messages.indices) {
-            val str = gson.toJson(messages[i])
-            val message = gson.fromJson(str, ChatMessage::class.java)
-            messageEntities.add(message.toEntity())
-        }
+        val messageEntities = messages.map { it.toEntity() }
         chatMessageDao.insertMessages(messageEntities)
     }
 }

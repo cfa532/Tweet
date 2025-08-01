@@ -58,7 +58,8 @@ class ChatViewModel @AssistedInject constructor(
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
-            content = message.value.trim()
+            content = message.value.trim(),
+            sessionId = null // Will be set when session is created/updated
         )
         // update message list in memory
         _chatMessages.value += message

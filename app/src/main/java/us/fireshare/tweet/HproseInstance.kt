@@ -8,6 +8,7 @@ import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import hprose.client.HproseClient
 import hprose.io.HproseClassManager
 import io.ktor.client.HttpClient
@@ -28,6 +29,7 @@ import us.fireshare.tweet.datamodel.BlacklistedMidDao
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.ChatMessageDeserializer
 import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -284,9 +286,13 @@ object HproseInstance {
         )
 
         return try {
+            val gson = GsonBuilder()
+                .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
+                .create()
+            
             appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
                 ?.mapNotNull { messageData ->
-                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
+                    gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
                 }
         } catch (e: Exception) {
             Timber.tag("fetchMessages").e(e)
@@ -307,9 +313,13 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         return try {
+            val gson = GsonBuilder()
+                .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
+                .create()
+            
             appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
                 ?.mapNotNull { messageData ->
-                    Gson().fromJson(Gson().toJson(messageData), ChatMessage::class.java)
+                    gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
                 }
         } catch (e: Exception) {
             Timber.tag("checkNewMessages").e(e)
@@ -549,9 +559,6 @@ object HproseInstance {
                 Timber.tag("getTweetFeed").e("Tweet feed loading failed: $errorMessage")
                 Timber.tag("getTweetFeed").e("Response: $response")
                 
-                // Post notification for tweet loading failure
-                TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed(errorMessage))
-                
                 return emptyList()
             }
 
@@ -605,9 +612,6 @@ object HproseInstance {
             Timber.tag("getTweetFeed").e("Exception type: ${e.javaClass.simpleName}")
             Timber.tag("getTweetFeed").e("Stack trace: ${e.stackTraceToString()}")
             
-            // Post notification for network/exception errors
-            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${rootCause.message ?: e.message}"))
-            
             emptyList()
         }
     }
@@ -642,9 +646,6 @@ object HproseInstance {
                 val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
                 Timber.tag("getTweetsByUser").e("Tweets loading failed for user ${user.mid}: $errorMessage")
                 Timber.tag("getTweetsByUser").e("Response: $response")
-                
-                // Post notification for tweet loading failure
-                TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed(errorMessage))
                 
                 return emptyList()
             }
@@ -700,9 +701,6 @@ object HproseInstance {
             Timber.tag("getTweetsByUser").e("Exception type: ${e.javaClass.simpleName}")
             Timber.tag("getTweetsByUser").e("Root cause type: ${rootCause.javaClass.simpleName}")
             Timber.tag("getTweetsByUser").e("Stack trace: ${e.stackTraceToString()}")
-            
-            // Post notification for network/exception errors
-            TweetNotificationCenter.post(TweetEvent.TweetLoadingFailed("Network error: ${e.message}"))
             
             throw e
         }
@@ -829,7 +827,6 @@ object HproseInstance {
             if (isResourceNotFoundError(rootCause)) {
                 addToBlacklist(tweetId)
             }
-            
             null
         }
     }

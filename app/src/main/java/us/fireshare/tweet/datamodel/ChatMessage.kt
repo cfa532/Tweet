@@ -12,20 +12,79 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.google.gson.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.lang.reflect.Type
+
+// Custom deserializer to handle both Long and Double timestamp values
+class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): ChatMessage {
+        val jsonObject = json?.asJsonObject ?: throw JsonParseException("Invalid JSON")
+        
+        val receiptId = jsonObject.get("receiptId")?.asString ?: ""
+        val authorId = jsonObject.get("authorId")?.asString ?: ""
+        val content = jsonObject.get("content")?.asString ?: ""
+        
+        // Handle timestamp - convert Double to Long if needed
+        val timestampElement = jsonObject.get("timestamp")
+        val timestamp = when {
+            timestampElement?.isJsonPrimitive == true -> {
+                val primitive = timestampElement.asJsonPrimitive
+                when {
+                    primitive.isNumber -> {
+                        val number = primitive.asNumber
+                        when (number) {
+                            is Long -> number
+                            is Double -> number.toLong()
+                            is Int -> number.toLong()
+                            else -> number.toLong()
+                        }
+                    }
+                    else -> throw JsonParseException("Timestamp must be a number")
+                }
+            }
+            else -> throw JsonParseException("Timestamp is required")
+        }
+        
+        // Handle sessionId (optional)
+        val sessionId = jsonObject.get("sessionId")?.asLong
+        
+        // Handle attachments (optional)
+        val attachmentsElement = jsonObject.get("attachments")
+        val attachments = if (attachmentsElement?.isJsonArray == true) {
+            val gson = Gson()
+            gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java).toList()
+        } else null
+        
+        return ChatMessage(
+            receiptId = receiptId,
+            authorId = authorId,
+            content = content,
+            attachments = attachments,
+            timestamp = timestamp,
+            sessionId = sessionId
+        )
+    }
+}
 
 @Serializable
 data class ChatMessage(
     val receiptId: MimeiId,     // receiver of the message
     val authorId: MimeiId,      // author of the message
     val content: String,
-    val attachments: List<MimeiId>? = null,  // media file
-    val timestamp: Long
+    val attachments: List<MimeiFileType>? = null,  // media file
+    val timestamp: Long,
+    val sessionId: Long? = null  // reference to the chat session
 )
 
 @Serializable
 data class ChatSession(
+    val id: Long = 0,  // auto-generated session ID
     var timestamp: Long = System.currentTimeMillis(),    // last time the chat screen is opened
     val userId: MimeiId,    // always the appUser
     val receiptId: MimeiId, // whom the app user is chatting with
@@ -39,8 +98,9 @@ data class ChatMessageEntity(
     val receiptId: String,
     val authorId: String,
     val content: String,
-    val attachments: List<MimeiId>? = null,
-    val timestamp: Long
+    val attachments: List<MimeiFileType>? = null,
+    val timestamp: Long,
+    val sessionId: Long? = null
 )
 
 @Entity(tableName = "chat_sessions")
@@ -59,7 +119,8 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
         authorId = this.authorId,
         content = this.content,
         attachments = this.attachments,
-        timestamp = this.timestamp
+        timestamp = this.timestamp,
+        sessionId = this.sessionId
     )
 }
 
@@ -69,12 +130,14 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
         authorId = this.authorId,
         content = this.content,
         attachments = this.attachments,
-        timestamp = this.timestamp
+        timestamp = this.timestamp,
+        sessionId = this.sessionId
     )
 }
 
 fun ChatSession.toEntity(lastMessageId: Long): ChatSessionEntity {
     return ChatSessionEntity(
+        id = this.id,
         timestamp = this.timestamp,
         userId = this.userId,
         receiptId = this.receiptId,
@@ -85,6 +148,7 @@ fun ChatSession.toEntity(lastMessageId: Long): ChatSessionEntity {
 
 fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
     return ChatSession(
+        id = this.id,
         timestamp = this.timestamp,
         userId = this.userId,
         receiptId = this.receiptId,
@@ -142,8 +206,8 @@ interface ChatSessionDao {
     suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 4)
-@TypeConverters(MimeiIdListConverter::class)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 5)
+@TypeConverters(MimeiFileTypeListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun chatSessionDao(): ChatSessionDao
@@ -152,13 +216,36 @@ abstract class ChatDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: ChatDatabase? = null
 
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                try {
+                    // Add sessionId column to chat_messages table
+                    db.execSQL("ALTER TABLE chat_messages ADD COLUMN sessionId INTEGER")
+                    
+                    // The attachments column type change from List<MimeiId> to List<MimeiFileType> 
+                    // will be handled by the new TypeConverter automatically
+                    // No need to modify the column as Room handles the conversion
+                    
+                    // The id column in chat_sessions is already auto-generated, so no migration needed
+                } catch (e: Exception) {
+                    // If the column already exists, ignore the error
+                    if (e.message?.contains("duplicate column name") != true) {
+                        throw e
+                    }
+                }
+            }
+        }
+
         fun getInstance(context: Context): ChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                                 context.applicationContext,
                                 ChatDatabase::class.java,
                                 "chat_database"
-                            ).fallbackToDestructiveMigration(false).build()
+                            )
+                            .fallbackToDestructiveMigration(false) // Re-enable proper migration
+                            .addMigrations(MIGRATION_4_5)
+                            .build()
                 INSTANCE = instance
                 instance
             }
@@ -166,14 +253,14 @@ abstract class ChatDatabase : RoomDatabase() {
     }
 }
 
-class MimeiIdListConverter {
+class MimeiFileTypeListConverter {
     @TypeConverter
-    fun fromList(list: List<MimeiId>?): String? {
+    fun fromList(list: List<MimeiFileType>?): String? {
         return list?.let { Json.encodeToString(it) }
     }
 
     @TypeConverter
-    fun toList(data: String?): List<MimeiId>? {
-        return data?.let { Json.decodeFromString<List<MimeiId>>(it) }
+    fun toList(data: String?): List<MimeiFileType>? {
+        return data?.let { Json.decodeFromString<List<MimeiFileType>>(it) }
     }
 }

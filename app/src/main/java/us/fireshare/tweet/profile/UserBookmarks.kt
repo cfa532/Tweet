@@ -97,7 +97,7 @@ fun UserBookmarks(
                 tweets = bookmarks,
                 fetchTweets = { pageNumber ->
                     viewModel.getBookmarks(pageNumber)
-                    emptyList<Tweet?>() // Return empty list since getBookmarks updates the state
+                    emptyList() // Return empty list since getBookmarks updates the state
                 },
                 showPrivateTweets = true,
                 parentEntry = parentEntry
