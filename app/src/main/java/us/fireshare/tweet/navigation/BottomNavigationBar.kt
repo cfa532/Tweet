@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -98,10 +99,23 @@ fun BottomNavigationBar(
             .fillMaxWidth()
             .height(72.dp) // Reduced height from default 80dp
             .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 8.dp, vertical = 8.dp) // Reduced padding
     ) {
+        // Top shadow line as divider
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .height(1.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+        )
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp) // Reduced padding
+                .padding(top = 4.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             val context = LocalContext.current
@@ -110,7 +124,8 @@ fun BottomNavigationBar(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(vertical = 4.dp)
+                        .fillMaxWidth()
+                        .fillMaxHeight() // Full height touchable area
                         .clickable {
                             if (appUser.isGuest() && index > 0) {
                                 bottomBarViewModel.viewModelScope.launch {
