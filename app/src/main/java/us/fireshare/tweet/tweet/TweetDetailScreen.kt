@@ -326,6 +326,15 @@ fun TweetDetailScreen(
                             parentTweetViewModel = viewModel,
                             parentEntry = parentEntry
                         )
+                        
+                        // Add divider after each comment (except the last one)
+                        if (comments.indexOf(comment) < comments.size - 1) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 1.dp),
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                            )
+                        }
                     }
                     
                     // Show top refresh spinner

@@ -735,11 +735,11 @@ class UserViewModel @AssistedInject constructor(
             && password.value.isNotEmpty()
         ) {
             val ret = HproseInstance.login(username.value!!, password.value, context)
-            isLoading.value = false
 
             if (ret.second != null) {
                 // something wrong
                 loginError.value = ret.second.toString()
+                isLoading.value = false
             } else {
                 appUser = ret.first as User
                 preferenceHelper.setUserId(appUser.mid)
@@ -749,7 +749,13 @@ class UserViewModel @AssistedInject constructor(
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 refreshFollowingsAndFans()
+                
+                // Show success Toast message
+                Toast.makeText(context, context.getString(R.string.login_success), Toast.LENGTH_SHORT).show()
+                
+                // Keep spinner visible during navigation
                 callback()
+                // Spinner will be hidden when screen navigates away
             }
         } else {
             loginError.value = context.getString(R.string.username_required)

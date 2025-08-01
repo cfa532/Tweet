@@ -16,6 +16,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -146,6 +147,15 @@ fun SearchScreen(
             LazyColumn {
                 items(searchUsers.size, key = { index -> searchUsers[index].mid }) { index ->
                     UserSearchResult(searchUsers[index], navController)
+                    
+                    // Add divider after each search result (except the last one)
+                    if (index < searchUsers.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 1.dp),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                        )
+                    }
                 }
             }
         }

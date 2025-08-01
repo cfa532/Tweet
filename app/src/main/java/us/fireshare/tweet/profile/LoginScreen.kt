@@ -79,7 +79,9 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(32.dp))
-        IconButton(onClick = { popBack() },
+        IconButton(
+            onClick = { popBack() },
+            enabled = !isLoading,
             modifier = Modifier
                 .align(Alignment.Start)
                 .padding(16.dp)
@@ -98,6 +100,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
             onValueChange = { viewModel.onUsernameChange(it)},
             label = { Text(stringResource(R.string.username)) },
             singleLine = true,
+            enabled = !isLoading,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions.Default.copy(
                 imeAction = ImeAction.Next
@@ -114,6 +117,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
             onValueChange = { viewModel.onPasswordChange(it) },
             label = { Text(stringResource(R.string.password)) },
             singleLine = true,
+            enabled = !isLoading,
             textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.primary),
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
@@ -136,12 +140,13 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                     }
                 } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
-            enabled = !isLoading    // disable Login button during uploading.
+            enabled = !isLoading    // disable Login button during loading
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
                     color = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
                 )
             } else {
                 Text(text = stringResource(R.string.login))     // Login
@@ -163,9 +168,9 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         }
 
         Text(
-            color = MaterialTheme.colorScheme.primary,
+            color = if (isLoading) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
             text = annotatedText,
-            modifier = Modifier.clickable {
+            modifier = Modifier.clickable(enabled = !isLoading) {
                 register()
             }
         )
