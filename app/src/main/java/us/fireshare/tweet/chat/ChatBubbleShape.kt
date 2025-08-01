@@ -3,8 +3,6 @@ package us.fireshare.tweet.chat
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 

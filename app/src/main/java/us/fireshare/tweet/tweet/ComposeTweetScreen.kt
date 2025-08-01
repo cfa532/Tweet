@@ -3,8 +3,6 @@ package us.fireshare.tweet.tweet
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Environment
 import android.os.SystemClock

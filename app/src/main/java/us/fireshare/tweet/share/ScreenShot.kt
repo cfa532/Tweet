@@ -2,23 +2,19 @@ package us.fireshare.tweet.share
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import android.view.View
 import android.view.Window
-import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
-import us.fireshare.tweet.R
 import java.io.File
 import java.io.FileOutputStream
 
