@@ -193,7 +193,7 @@ fun ChatSession(
                 )
             }
             Text(
-                text = chatMessage.content,
+                text = chatMessage.content ?: "",
                 style = MaterialTheme.typography.bodyLarge
             )
         }

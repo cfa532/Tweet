@@ -228,7 +228,7 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage) {
         ) {
             SelectionContainer {
                 BasicText(
-                    text = buildAnnotatedText(message.content),
+                    text = buildAnnotatedText(message.content ?: ""),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(8.dp)
                 )
