@@ -750,8 +750,10 @@ class UserViewModel @AssistedInject constructor(
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 refreshFollowingsAndFans()
                 
-                // Show success Toast message
-                Toast.makeText(context, context.getString(R.string.login_success), Toast.LENGTH_SHORT).show()
+                // Show success Toast message on main thread
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, context.getString(R.string.login_success), Toast.LENGTH_SHORT).show()
+                }
                 
                 // Keep spinner visible during navigation
                 callback()
