@@ -63,7 +63,6 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(false) }
     var isLandscape by remember { mutableStateOf(false) }
 
     // Check if video is landscape and set rotation
@@ -181,110 +180,41 @@ fun FullScreenVideoPlayer(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable { showControls = !showControls }
     ) {
-        // Video player view
+        // Video player view with native controls
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = existingPlayer
-                    useController = false // We'll implement custom controls
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    useController = true // Use native ExoPlayer controls
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize()
         )
 
-        // Custom controls overlay
-        if (showControls) {
-            Box(
+        // Close button overlay (since native controls don't have a close button)
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            IconButton(
+                onClick = onClose,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { showControls = !showControls }
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
             ) {
-                // Close button
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Play/Pause button
-                IconButton(
-                    onClick = {
-                        if (existingPlayer.isPlaying) {
-                            existingPlayer.playWhenReady = false
-                        } else {
-                            existingPlayer.playWhenReady = true
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(64.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (existingPlayer.isPlaying)
-                            androidx.compose.material.icons.Icons.Default.Pause
-                        else
-                            androidx.compose.material.icons.Icons.Default.PlayArrow,
-                        contentDescription = if (existingPlayer.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-
-                // Volume control button
-                var isMuted by remember { mutableStateOf(false) }
-                IconButton(
-                    onClick = {
-                        isMuted = !isMuted
-                        existingPlayer.volume = if (isMuted) 0f else 1f
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (isMuted)
-                            androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeOff
-                        else
-                            androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = if (isMuted) "Unmute" else "Mute",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-
-        // Auto-hide controls after 3 seconds
-        LaunchedEffect(showControls) {
-            if (showControls) {
-                kotlinx.coroutines.delay(3000)
-                showControls = false
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
@@ -550,81 +480,58 @@ fun FullScreenVideoPlayer(
                 )
             }
     ) {
-        // Video player view
+        // Video player view with native controls
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = existingPlayer
-                    useController = false // We'll implement custom controls
+                    useController = true // Use native ExoPlayer controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { showControls = !showControls } // Toggle controls on tap
+            modifier = Modifier.fillMaxSize()
         )
 
-        // Custom controls overlay
-        if (showControls) {
-            Box(
+        // Close button overlay (since native controls don't have a close button)
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            IconButton(
+                onClick = onClose,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { showControls = !showControls }
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
             ) {
-                // Close button
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.close),
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Play/Pause button
-                IconButton(
-                    onClick = {
-                        if (existingPlayer.isPlaying) {
-                            existingPlayer.playWhenReady = false
-                        } else {
-                            existingPlayer.playWhenReady = true
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(64.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (existingPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (existingPlayer.isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
+    }
+}
 
-        // Auto-hide controls after 3 seconds
-        LaunchedEffect(showControls) {
-            if (showControls) {
-                delay(3000)
-                showControls = false
-            }
-        }
+/**
+ * Format time in milliseconds to MM:SS format
+ */
+private fun formatTime(timeMs: Long): String {
+    if (timeMs <= 0) return "0:00"
+    
+    val totalSeconds = timeMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    
+    return if (minutes > 0) {
+        "$minutes:${seconds.toString().padStart(2, '0')}"
+    } else {
+        "0:${seconds.toString().padStart(2, '0')}"
     }
 }
