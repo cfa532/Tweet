@@ -85,6 +85,7 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
+import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoPreview
@@ -913,17 +914,9 @@ fun ChatMediaPreview(
             }
 
             us.fireshare.tweet.datamodel.MediaType.Audio -> {
-                us.fireshare.tweet.widget.AudioPreview(
-                    mediaItems = attachments,
-                    index = 0,
-                    modifier = Modifier.fillMaxSize(),
-                    tweet = us.fireshare.tweet.datamodel.Tweet(
-                        mid = "",
-                        authorId = "",
-                        content = "",
-                        attachments = attachments,
-                        timestamp = System.currentTimeMillis()
-                    )
+                AudioPlayer(
+                    attachments,
+                    0,
                 )
             }
 

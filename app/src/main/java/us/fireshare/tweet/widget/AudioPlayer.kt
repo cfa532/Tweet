@@ -4,6 +4,7 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.Tweet
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -150,5 +152,34 @@ fun AudioPlayer(
                 .aspectRatio(aspectRatio)
                 .clipToBounds() // Ensure content is clipped to bounds
         )
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+fun AudioPreview(
+    mediaItems: List<MimeiFileType>,
+    index: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.btn_play),
+                contentDescription = stringResource(R.string.play),
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = mediaItems[index].fileName ?: mediaItems[index].mid,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

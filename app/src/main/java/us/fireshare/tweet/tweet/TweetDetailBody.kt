@@ -69,7 +69,6 @@ import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.share.ShareScreenshotButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
-import us.fireshare.tweet.widget.MediaItemView
 import us.fireshare.tweet.widget.SelectableText
 
 @Composable
