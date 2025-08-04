@@ -51,6 +51,8 @@ import timber.log.Timber
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import us.fireshare.tweet.HproseInstance.appUser
@@ -71,6 +73,7 @@ import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun MediaItemView(
     mediaItems: List<MimeiFileType>,
@@ -322,6 +325,7 @@ fun MediaItemView(
  * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
  * This prevents conflicts when multiple videos are opened in full-screen
  */
+@RequiresApi(Build.VERSION_CODES.R)
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun FullScreenVideoPlayerWrapper(
@@ -339,14 +343,13 @@ private fun FullScreenVideoPlayerWrapper(
         // Hide system bars on enter
         if (enableImmersiveMode) {
             activity?.let { act ->
-                val decorView = act.window.decorView
-                val flags = (android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-                decorView.systemUiVisibility = flags
+                val windowInsetsController = act.window.insetsController
+                windowInsetsController?.let { controller ->
+                    // Hide system bars
+                    controller.hide(android.view.WindowInsets.Type.systemBars())
+                    // Set immersive sticky behavior
+                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
             }
         }
 
@@ -354,8 +357,8 @@ private fun FullScreenVideoPlayerWrapper(
             // Show system bars on exit
             if (enableImmersiveMode) {
                 activity?.let { act ->
-                    val decorView = act.window.decorView
-                    decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                    val windowInsetsController = act.window.insetsController
+                    windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
         }
