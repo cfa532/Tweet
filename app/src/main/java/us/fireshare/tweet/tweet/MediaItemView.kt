@@ -15,11 +15,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
@@ -44,7 +50,9 @@ import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPreview
+import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.ImageViewer
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
@@ -56,9 +64,11 @@ fun MediaItemView(
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
-    viewModel: TweetViewModel,
-
-    ) {
+    viewModel: TweetViewModel
+) {
+    // State for full-screen video
+    var showFullScreenVideo by remember { mutableStateOf(false) }
+    var fullScreenVideoMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -80,17 +90,9 @@ fun MediaItemView(
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
             MediaType.Video -> {
-                // For videos, navigate to MediaBrowser for now
-                // TODO: Implement direct full-screen video player
-                try {
-                    navController.navigate(
-                        NavTweet.MediaViewer(MediaViewerParams(
-                            attachments, idx, tweet.mid, tweet.authorId
-                        ))
-                    )
-                } catch (e: Exception) {
-                    Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
-                }
+                // Show full-screen video directly
+                fullScreenVideoMid = mediaItems[idx].mid
+                showFullScreenVideo = true
             }
             else -> {
                 // Navigate to MediaBrowser for all other media types to enable swipe navigation
@@ -189,6 +191,49 @@ fun MediaItemView(
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .alpha(0.8f)
+                    )
+                }
+            }
+        }
+    }
+    
+    // Full-screen video overlay
+    if (showFullScreenVideo && fullScreenVideoMid != null) {
+        val videoMid = fullScreenVideoMid!!
+        val mediaUrl = getMediaUrl(videoMid, tweet.author?.baseUrl.orEmpty()).toString()
+        
+        // Try to get existing player for seamless transition
+        val existingPlayer = VideoManager.transferToFullScreen(videoMid)
+        
+        Dialog(
+            onDismissRequest = { showFullScreenVideo = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                if (existingPlayer != null) {
+                    // Use existing player for seamless transition
+                    FullScreenVideoPlayer(
+                        existingPlayer = existingPlayer,
+                        videoMid = videoMid,
+                        onClose = { showFullScreenVideo = false },
+                        enableImmersiveMode = true
+                    )
+                } else {
+                    // Fallback to regular full-screen player
+                    FullScreenVideoPlayer(
+                        videoUrl = mediaUrl,
+                        onClose = { showFullScreenVideo = false },
+                        autoPlay = true,
+                        enableImmersiveMode = true,
+                        autoReplay = true
                     )
                 }
             }
