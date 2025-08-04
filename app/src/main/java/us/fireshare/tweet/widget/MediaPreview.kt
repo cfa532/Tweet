@@ -625,30 +625,34 @@ fun MediaItemView(
         val attachment = attachments[idx]
         
         // Audio files should navigate to tweet detail page
-        if (attachment.type == MediaType.Audio) {
-            navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
-        } else if (attachment.type == MediaType.Video) {
-            // For videos, navigate to MediaBrowser for now
-            // TODO: Implement direct full-screen video player
-            try {
-                navController.navigate(
-                    NavTweet.MediaViewer(MediaViewerParams(
-                        attachments, idx, tweet.mid, tweet.authorId
-                    ))
-                )
-            } catch (e: Exception) {
-                Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+        when (attachment.type) {
+            MediaType.Audio -> {
+                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
-        } else {
-            // Navigate to MediaBrowser for all other media types to enable swipe navigation
-            try {
-                navController.navigate(
-                    NavTweet.MediaViewer(MediaViewerParams(
-                        attachments, idx, tweet.mid, tweet.authorId
-                    ))
-                )
-            } catch (e: Exception) {
-                Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+            MediaType.Video -> {
+                // For videos, navigate to MediaBrowser for now
+                // TODO: Implement direct full-screen video player
+                try {
+                    navController.navigate(
+                        NavTweet.MediaViewer(MediaViewerParams(
+                            attachments, idx, tweet.mid, tweet.authorId
+                        ))
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+                }
+            }
+            else -> {
+                // Navigate to MediaBrowser for all other media types to enable swipe navigation
+                try {
+                    navController.navigate(
+                        NavTweet.MediaViewer(MediaViewerParams(
+                            attachments, idx, tweet.mid, tweet.authorId
+                        ))
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+                }
             }
         }
     }
