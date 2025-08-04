@@ -178,19 +178,7 @@ fun ChatScreen(
         }
     }
     
-    // Scroll to bottom for new messages from other users (received messages)
-    LaunchedEffect(chatMessages.size) {
-        if (chatMessages.isNotEmpty()) {
-            val lastMessage = chatMessages.last()
-            // Only scroll for recent messages from other users (within last 3 seconds)
-            // This handles messages received from the network
-            if (lastMessage.authorId != appUser.mid && 
-                System.currentTimeMillis() - lastMessage.timestamp < 3000) {
-                delay(50)
-                scrollToBottom()
-            }
-        }
-    }
+
 
     Scaffold(
         topBar = {
