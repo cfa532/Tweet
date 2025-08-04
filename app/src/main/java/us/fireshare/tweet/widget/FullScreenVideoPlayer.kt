@@ -7,6 +7,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -64,6 +65,8 @@ fun FullScreenVideoPlayer(
     val activity = context as? Activity
     var isLandscape by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(false) } // Start with controls hidden
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
 
     // Check if video is landscape and set rotation
     LaunchedEffect(Unit) {
@@ -178,20 +181,42 @@ fun FullScreenVideoPlayer(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { 
+                        isDragging = true
+                        dragOffset = 0f
+                    },
+                    onDragEnd = {
+                        isDragging = false
+                        // Check if it's a downward swipe (positive Y value means downward)
+                        if (dragOffset > 30f) { // Very low threshold - 30dp
+                            onClose()
+                        }
+                        dragOffset = 0f
+                    },
+                    onDrag = { _, dragAmount ->
+                        dragOffset += dragAmount.y
+                    }
+                )
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { showControls = !showControls }
+                )
+            }
     ) {
         // Video player view with native controls
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = existingPlayer
-                    useController = true // Use native ExoPlayer controls
+                    useController = true // Re-enable native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { showControls = !showControls }, // Toggle controls on tap
+            modifier = Modifier.fillMaxSize(),
             update = { playerView ->
                 // Control the visibility of the native controller
                 if (showControls) {
