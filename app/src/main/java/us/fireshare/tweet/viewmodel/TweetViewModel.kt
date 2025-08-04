@@ -62,7 +62,7 @@ class TweetViewModel @AssistedInject constructor(
     // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
 
-    fun getExoPlayer(url: String, context: Context): ExoPlayer {
+    fun getAudioPlayer(url: String, context: Context): ExoPlayer {
         return exoPlayers.getOrPut(url) {
             createExoPlayer(context, url).also { player ->
                 val position = savedStateHandle.get<Long>("playbackPosition_$url") ?: 0L

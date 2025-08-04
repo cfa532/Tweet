@@ -308,7 +308,7 @@ fun MediaBrowser(
                 // audio preview - keep existing implementation
                 MediaType.Audio -> {
                     exoPlayer =
-                        remember(mediaItem.url) { viewModel.getExoPlayer(mediaItem.url, context) }
+                        remember(mediaItem.url) { viewModel.getAudioPlayer(mediaItem.url, context) }
                     exoPlayer?.volume = 1f
 
                     DisposableEffect(page) {
