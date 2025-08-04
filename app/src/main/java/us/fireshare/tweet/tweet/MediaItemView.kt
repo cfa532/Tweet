@@ -48,7 +48,6 @@ import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
-
 @Composable
 fun MediaItemView(
     mediaItems: List<MimeiFileType>,
