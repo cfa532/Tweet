@@ -60,6 +60,10 @@ class ChatViewModel @AssistedInject constructor(
     private val _hasMoreMessages = MutableStateFlow(true)
     val hasMoreMessages: StateFlow<Boolean> get() = _hasMoreMessages.asStateFlow()
 
+    // State to trigger scroll to bottom when current user sends a message
+    private val _shouldScrollToBottom = MutableStateFlow(false)
+    val shouldScrollToBottom: StateFlow<Boolean> get() = _shouldScrollToBottom.asStateFlow()
+
     companion object {
         private const val MESSAGES_PER_PAGE = 10
         
@@ -125,6 +129,9 @@ class ChatViewModel @AssistedInject constructor(
             Timber.tag("ChatViewModel")
                 .d("sendTextMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
             chatListViewModel?.updateSession(message, hasNews = false)
+            
+            // Trigger scroll to bottom
+            _shouldScrollToBottom.value = true
         } catch (e: Exception) {
             Timber.tag("ChatViewModel").e(e, "Error sending text message")
             _toastMessage.value = "Failed to send message: ${e.message}"
@@ -181,6 +188,11 @@ class ChatViewModel @AssistedInject constructor(
                                     hasNews = false
                                 )
                                 
+                                // Trigger scroll to bottom for messages from current user
+                                if (event.message.authorId == appUser.mid) {
+                                    _shouldScrollToBottom.value = true
+                                }
+                                
                                 Timber.tag("ChatViewModel")
                                     .d("ChatMessageSent: Added new message with ID: ${event.message.id}")
                             } else {
@@ -216,6 +228,10 @@ class ChatViewModel @AssistedInject constructor(
 
     fun clearToastMessage() {
         _toastMessage.value = null
+    }
+    
+    fun resetScrollToBottomFlag() {
+        _shouldScrollToBottom.value = false
     }
     
     fun scrollToBottom() {

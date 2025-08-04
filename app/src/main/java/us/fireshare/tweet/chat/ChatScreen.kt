@@ -102,6 +102,7 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+    val shouldScrollToBottom by viewModel.shouldScrollToBottom.collectAsState()
     
     // Pull-to-refresh state
     val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
@@ -163,6 +164,31 @@ fun ChatScreen(
             // Add a small delay to ensure the LazyColumn is properly laid out
             delay(100)
             scrollToBottom()
+        }
+    }
+    
+    // Scroll to bottom when current user sends a message
+    LaunchedEffect(shouldScrollToBottom) {
+        if (shouldScrollToBottom && chatMessages.isNotEmpty()) {
+            // Add a small delay to ensure the new message is rendered
+            delay(50)
+            scrollToBottom()
+            // Reset the flag
+            viewModel.resetScrollToBottomFlag()
+        }
+    }
+    
+    // Scroll to bottom for new messages from other users (received messages)
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            val lastMessage = chatMessages.last()
+            // Only scroll for recent messages from other users (within last 3 seconds)
+            // This handles messages received from the network
+            if (lastMessage.authorId != appUser.mid && 
+                System.currentTimeMillis() - lastMessage.timestamp < 3000) {
+                delay(50)
+                scrollToBottom()
+            }
         }
     }
 
