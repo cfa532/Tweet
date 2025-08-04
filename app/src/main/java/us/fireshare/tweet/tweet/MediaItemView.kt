@@ -13,12 +13,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,15 +48,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import timber.log.Timber
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.AudioPreview
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.ImageViewer
@@ -66,9 +81,11 @@ fun MediaItemView(
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     viewModel: TweetViewModel
 ) {
-    // State for full-screen video
+    // State for full-screen video and image
     var showFullScreenVideo by remember { mutableStateOf(false) }
     var fullScreenVideoMid by remember { mutableStateOf<String?>(null) }
+    var showFullScreenImage by remember { mutableStateOf(false) }
+    var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -77,15 +94,22 @@ fun MediaItemView(
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
+    val context = LocalContext.current
     /**
      * Action to take when any media item is clicked.
-     * Audio files navigate to tweet detail page, others open in MediaBrowser for browsing with swipe navigation.
+     * Images and videos open in full-screen mode, audio files navigate to tweet detail page, 
+     * other files open with appropriate apps or download.
      * */
     val goto: (Int) -> Unit = { idx: Int ->
         val attachment = attachments[idx]
 
-        // Audio files should navigate to tweet detail page
+        // Handle different media types
         when (attachment.type) {
+            MediaType.Image -> {
+                // Show full-screen image directly
+                fullScreenImageMid = mediaItems[idx].mid
+                showFullScreenImage = true
+            }
             MediaType.Audio -> {
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
@@ -95,15 +119,30 @@ fun MediaItemView(
                 showFullScreenVideo = true
             }
             else -> {
-                // Navigate to MediaBrowser for all other media types to enable swipe navigation
+                // Open other media types with appropriate apps
                 try {
-                    navController.navigate(
-                        NavTweet.MediaViewer(MediaViewerParams(
-                            attachments, idx, tweet.mid, tweet.authorId
-                        ))
-                    )
+                    val mediaUrl = getMediaUrl(mediaItems[idx].mid, tweet.author?.baseUrl.orEmpty()).toString()
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        data = mediaUrl.toUri()
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    
+                    // Check if there's an app to handle this file type
+                    if (intent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(intent)
+                    } else {
+                        // Fallback: try to download the file
+                        downloadFile(context, mediaUrl, mediaItems[idx].fileName.toString())
+                    }
                 } catch (e: Exception) {
-                    Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+                    Timber.tag("MediaItemView").e("Failed to open file: ${e.message}")
+                    // Fallback: try to download the file
+                    try {
+                        val mediaUrl = getMediaUrl(mediaItems[idx].mid, tweet.author?.baseUrl.orEmpty()).toString()
+                        downloadFile(context, mediaUrl, mediaItems[idx].fileName.toString())
+                    } catch (downloadException: Exception) {
+                        Timber.tag("MediaItemView").e("Failed to download file: ${downloadException.message}")
+                    }
                 }
             }
         }
@@ -206,7 +245,13 @@ fun MediaItemView(
         val existingPlayer = VideoManager.transferToFullScreen(videoMid)
         
         Dialog(
-            onDismissRequest = { showFullScreenVideo = false },
+            onDismissRequest = { 
+                showFullScreenVideo = false
+                // Return player back to VideoManager when dialog is dismissed
+                existingPlayer?.let { player ->
+                    VideoManager.returnFromFullScreen(videoMid)
+                }
+            },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,
@@ -219,11 +264,15 @@ fun MediaItemView(
                     .background(Color.Black)
             ) {
                 if (existingPlayer != null) {
-                    // Use existing player for seamless transition
-                    FullScreenVideoPlayer(
+                    // Use existing player for seamless transition - create a simple full-screen wrapper
+                    FullScreenVideoPlayerWrapper(
                         existingPlayer = existingPlayer,
                         videoMid = videoMid,
-                        onClose = { showFullScreenVideo = false },
+                        onClose = { 
+                            showFullScreenVideo = false
+                            // Return player back to VideoManager when closed
+                            VideoManager.returnFromFullScreen(videoMid)
+                        },
                         enableImmersiveMode = true
                     )
                 } else {
@@ -236,6 +285,169 @@ fun MediaItemView(
                         autoReplay = true
                     )
                 }
+            }
+        }
+    }
+    
+    // Full-screen image overlay
+    if (showFullScreenImage && fullScreenImageMid != null) {
+        val imageMid = fullScreenImageMid!!
+        val mediaUrl = getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+        
+        Dialog(
+            onDismissRequest = { showFullScreenImage = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                AdvancedImageViewer(
+                    imageUrl = mediaUrl,
+                    enableLongPress = true,
+                    onClose = { showFullScreenImage = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
+ * This prevents conflicts when multiple videos are opened in full-screen
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun FullScreenVideoPlayerWrapper(
+    existingPlayer: ExoPlayer,
+    videoMid: MimeiId,
+    onClose: () -> Unit,
+    enableImmersiveMode: Boolean = true
+) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    var showControls by remember { mutableStateOf(false) }
+
+    // Immersive full screen
+    DisposableEffect(Unit) {
+        // Hide system bars on enter
+        if (enableImmersiveMode) {
+            activity?.let { act ->
+                val decorView = act.window.decorView
+                val flags = (android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                        or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+                decorView.systemUiVisibility = flags
+            }
+        }
+
+        onDispose {
+            // Show system bars on exit
+            if (enableImmersiveMode) {
+                activity?.let { act ->
+                    val decorView = act.window.decorView
+                    decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                }
+            }
+        }
+    }
+
+    // Start playback when entering full screen
+    LaunchedEffect(Unit) {
+        existingPlayer.playWhenReady = true
+    }
+
+    // Full screen video player UI
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { showControls = !showControls }
+    ) {
+        // Video player view
+        AndroidView(
+            factory = {
+                androidx.media3.ui.PlayerView(context).apply {
+                    player = existingPlayer
+                    useController = false // We'll implement custom controls
+                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Custom controls overlay
+        if (showControls) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { showControls = !showControls }
+            ) {
+                // Close button
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Play/Pause button
+                IconButton(
+                    onClick = {
+                        if (existingPlayer.isPlaying) {
+                            existingPlayer.playWhenReady = false
+                        } else {
+                            existingPlayer.playWhenReady = true
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (existingPlayer.isPlaying) 
+                            androidx.compose.material.icons.Icons.Default.Pause 
+                        else 
+                            androidx.compose.material.icons.Icons.Default.PlayArrow,
+                        contentDescription = if (existingPlayer.isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+
+        // Auto-hide controls after 3 seconds
+        LaunchedEffect(showControls) {
+            if (showControls) {
+                kotlinx.coroutines.delay(3000)
+                showControls = false
             }
         }
     }
