@@ -85,7 +85,7 @@ fun TweetListView(
     onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
     restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
-    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
+    onFullScreenVideo: ((String) -> Unit)? = null, // Callback for full-screen video
 ) {
     // Debug logging for TweetListView recreation - only log when essential parameters change
     val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }

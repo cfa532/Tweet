@@ -85,6 +85,7 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
+import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -378,7 +379,7 @@ fun ChatScreen(
                 
                 if (existingPlayer != null) {
                     // Use existing player for seamless transition
-                    us.fireshare.tweet.widget.FullScreenVideoPlayer(
+                    FullScreenVideoPlayer(
                         existingPlayer = existingPlayer,
                         videoMid = attachment.mid,
                         onClose = { showFullScreen = false },
@@ -386,8 +387,7 @@ fun ChatScreen(
                     )
                 } else {
                     // Fallback to regular full-screen player
-                    us.fireshare.tweet.widget.FullScreenVideoPlayer(
-                        videoMid = attachment.mid,
+                    FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
                         onClose = { showFullScreen = false },
                         autoPlay = true,

@@ -17,7 +17,6 @@ import us.fireshare.tweet.datamodel.MimeiId
 object FullScreenVideoManager {
 
     private var fullScreenPlayer: ExoPlayer? = null
-    private var currentVideoMid: MimeiId? = null
     private var currentVideoUrl: String? = null
     private var autoReplayListener: Player.Listener? = null
 
@@ -35,14 +34,11 @@ object FullScreenVideoManager {
     /**
      * Load a video into the full screen player
      */
-    fun loadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
-        if (currentVideoMid == videoMid && currentVideoUrl == videoUrl) {
-            Timber.d("FullScreenVideoManager - Video already loaded: $videoMid")
+    fun loadVideo(context: Context, videoUrl: String) {
+        if (currentVideoUrl == videoUrl) {
             return
         }
 
-        Timber.d("FullScreenVideoManager - Loading video: $videoMid")
-        currentVideoMid = videoMid
         currentVideoUrl = videoUrl
 
         val player = getFullScreenPlayer(context)
@@ -79,7 +75,6 @@ object FullScreenVideoManager {
         
         // Use the existing player
         fullScreenPlayer = existingPlayer
-        currentVideoMid = videoMid
         currentVideoUrl = null // Not needed when using existing player
     }
 
@@ -165,13 +160,6 @@ object FullScreenVideoManager {
     }
 
     /**
-     * Get current video info
-     */
-    fun getCurrentVideo(): Pair<MimeiId?, String?> {
-        return currentVideoMid to currentVideoUrl
-    }
-
-    /**
      * Release the full screen player
      * This should be called when the app is being destroyed
      */
@@ -192,7 +180,6 @@ object FullScreenVideoManager {
             }
         }
         fullScreenPlayer = null
-        currentVideoMid = null
         currentVideoUrl = null
     }
 }

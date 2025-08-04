@@ -58,7 +58,7 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
-    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // callback for full-screen video
+    onFullScreenVideo: ((String) -> Unit)? = null, // callback for full-screen video
 ) {
     // Check if tweet or author is null and remove the item if so
     LaunchedEffect(tweet, tweet.author) {

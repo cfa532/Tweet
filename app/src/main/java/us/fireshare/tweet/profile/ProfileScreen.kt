@@ -88,18 +88,18 @@ fun ProfileScreen(
     var bottomBarTransparency by remember { mutableStateOf(0.98f) }
 
     // State for full-screen video overlay
-    var fullScreenVideo by remember { mutableStateOf<Pair<String, MimeiId>?>(null) }
+    var fullScreenVideo by remember { mutableStateOf<String?>(null) }
 
     // Callback to show full-screen video - stabilize with remember
     val showFullScreenVideo = remember {
-        { videoUrl: String, videoMid: MimeiId ->
-            fullScreenVideo = Pair(videoUrl, videoMid)
+        { videoUrl: String ->
+            fullScreenVideo = videoUrl
         }
     }
 
     // Show dialog using LaunchedEffect to avoid conditional rendering
     LaunchedEffect(fullScreenVideo) {
-        fullScreenVideo?.let { (videoUrl, videoMid) ->
+        fullScreenVideo?.let { videoUrl ->
             // This will trigger the dialog to show
         }
     }
@@ -184,10 +184,9 @@ fun ProfileScreen(
 
     // Show full-screen video overlay outside the main content tree
     if (fullScreenVideo != null) {
-        val (videoUrl, videoMid) = fullScreenVideo!!
+        val videoUrl = fullScreenVideo!!
         VideoModalDialog(
             videoUrl = videoUrl,
-            videoMid = videoMid,
             onDismiss = { fullScreenVideo = null }
         )
     }
@@ -207,7 +206,7 @@ private fun ProfileContentWithTweetListView(
     initState: Boolean,
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
-    onFullScreenVideo: (String, MimeiId) -> Unit
+    onFullScreenVideo: (String) -> Unit
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -312,7 +311,6 @@ private fun ProfileContentWithTweetListView(
 @Composable
 fun VideoModalDialog(
     videoUrl: String,
-    videoMid: MimeiId,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -330,7 +328,6 @@ fun VideoModalDialog(
         ) {
             FullScreenVideoPlayer(
                 videoUrl = videoUrl,
-                videoMid = videoMid,
                 onClose = onDismiss
             )
         }

@@ -73,7 +73,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 fun MediaPreviewGrid(
     mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel,
-    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null, // Callback for full-screen video
+    onFullScreenVideo: ((String) -> Unit)? = null, // Callback for full-screen video
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -623,7 +623,7 @@ fun MediaItemView(
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     viewModel: TweetViewModel,
-    onFullScreenVideo: ((String, MimeiId) -> Unit)? = null // Callback for full-screen video
+    onFullScreenVideo: ((String) -> Unit)? = null // Callback for full-screen video
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
@@ -646,8 +646,7 @@ fun MediaItemView(
         } else if (onFullScreenVideo != null && attachment.type == MediaType.Video) {
             // If we have a full-screen video callback and this is a video, use the callback
             val videoUrl = attachment.url
-            val videoMid = attachment.url.getMimeiKeyFromUrl()
-            onFullScreenVideo(videoUrl, videoMid)
+            onFullScreenVideo(videoUrl)
         } else {
             // Navigate to MediaBrowser for all other media types to enable swipe navigation
             try {

@@ -281,7 +281,6 @@ fun MediaBrowser(
                     val isCurrentPage = pagerState.currentPage == page
 
                     FullScreenVideoPlayer(
-                        videoMid = videoMid,
                         videoUrl = mediaItem.url,
                         onClose = {
                             Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")

@@ -45,7 +45,6 @@ import kotlin.math.abs
 @OptIn(UnstableApi::class)
 @Composable
 fun FullScreenVideoPlayer(
-    videoMid: MimeiId,
     videoUrl: String,
     onClose: () -> Unit,
     autoPlay: Boolean = true, // Auto-start playback when entering full screen
@@ -65,8 +64,8 @@ fun FullScreenVideoPlayer(
     }
 
     // Load video into the full screen player
-    LaunchedEffect(videoMid, videoUrl) {
-        FullScreenVideoManager.loadVideo(context, videoMid, videoUrl)
+    LaunchedEffect(videoUrl) {
+        FullScreenVideoManager.loadVideo(context, videoUrl)
     }
 
     // Start playback when entering full screen
