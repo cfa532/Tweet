@@ -47,7 +47,6 @@ import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import kotlin.math.abs
 
-
 /**
  * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
  * This prevents conflicts when multiple videos are opened in full-screen
@@ -64,6 +63,7 @@ fun FullScreenVideoPlayer(
     val context = LocalContext.current
     val activity = context as? Activity
     var isLandscape by remember { mutableStateOf(false) }
+    var showControls by remember { mutableStateOf(false) } // Start with controls hidden
 
     // Check if video is landscape and set rotation
     LaunchedEffect(Unit) {
@@ -118,8 +118,6 @@ fun FullScreenVideoPlayer(
                     // Set immersive sticky behavior
                     controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 }
-                
-
             }
         }
 
@@ -191,8 +189,26 @@ fun FullScreenVideoPlayer(
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { showControls = !showControls }, // Toggle controls on tap
+            update = { playerView ->
+                // Control the visibility of the native controller
+                if (showControls) {
+                    playerView.showController()
+                } else {
+                    playerView.hideController()
+                }
+            }
         )
+
+        // Auto-hide controls after 3 seconds
+        LaunchedEffect(showControls) {
+            if (showControls) {
+                kotlinx.coroutines.delay(2000)
+                showControls = false
+            }
+        }
 
         // Close button overlay (since native controls don't have a close button)
         Box(
