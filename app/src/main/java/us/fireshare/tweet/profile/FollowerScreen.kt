@@ -53,11 +53,11 @@ fun FollowerScreen(
 ) {
     val navController = LocalNavController.current
     val viewModel = if (userId == appUser.mid) appUserViewModel
-        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            parentEntry, key = userId
-        ) { factory ->
-            factory.create(userId)
-        }
+    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = userId
+    ) { factory ->
+        factory.create(userId)
+    }
     val userOfProfile by viewModel.user.collectAsState()
 
     Scaffold(
@@ -156,7 +156,7 @@ fun FollowerItem(
                 navController.navigate(NavTweet.UserProfile(user.mid))
             }
         }) {
-                            UserAvatar(user = user, size = 40)
+            UserAvatar(user = user, size = 40)
         }
         Column {
             Row(

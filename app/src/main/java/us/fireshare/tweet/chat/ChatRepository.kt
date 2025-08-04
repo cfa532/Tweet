@@ -6,8 +6,13 @@ import us.fireshare.tweet.datamodel.ChatMessageEntity
 import us.fireshare.tweet.datamodel.toEntity
 
 class ChatRepository(private val chatMessageDao: ChatMessageDao) {
-    suspend fun loadMessages(userId: String, receiptId: String, limit: Int): List<ChatMessageEntity> {
-        return chatMessageDao.loadMessages(userId, receiptId, limit)
+
+    suspend fun loadMessagesBySession(sessionId: String, limit: Int): List<ChatMessageEntity> {
+        return chatMessageDao.loadMessagesBySession(sessionId, limit)
+    }
+
+    suspend fun loadOlderMessagesBySession(sessionId: String, beforeTimestamp: Long, limit: Int): List<ChatMessageEntity> {
+        return chatMessageDao.loadOlderMessagesBySession(sessionId, beforeTimestamp, limit)
     }
 
     suspend fun insertMessage(message: ChatMessage) {

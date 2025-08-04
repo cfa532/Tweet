@@ -62,7 +62,7 @@ fun TweetFeedScreen(
         TabItem(title = context.getString(R.string.your_followings)),
         TabItem(title = context.getString(R.string.recommendation))
     )
-    
+
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -85,6 +85,7 @@ fun TweetFeedScreen(
                     bottomBarTransparency = 0.98f
                 }
             }
+
             ScrollDirection.DOWN -> {
                 // Scroll DOWN (content moves up): reduce bottom bar opacity
                 // Only reduce if we've scrolled down significantly
@@ -95,13 +96,14 @@ fun TweetFeedScreen(
                     }
                 }
             }
+
             ScrollDirection.NONE -> {
                 // Idle state: keep current opacity, don't restore automatically
                 // Only restore when user starts scrolling up
             }
         }
     }
-    
+
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
@@ -111,7 +113,7 @@ fun TweetFeedScreen(
     LaunchedEffect(pagerState.currentPage) {
         selectedTabIndex = pagerState.currentPage
     }
-    
+
     // Set notification context and start listening to notifications
     LaunchedEffect(Unit) {
         viewModel.setNotificationContext(context)
@@ -120,7 +122,13 @@ fun TweetFeedScreen(
     Box(modifier = Modifier.fillMaxSize()) { // Wrap everything in a Box
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            topBar = { MainTopAppBar(navController, onScrollToTop = null, scrollBehavior = scrollBehavior) },
+            topBar = {
+                MainTopAppBar(
+                    navController,
+                    onScrollToTop = null,
+                    scrollBehavior = scrollBehavior
+                )
+            },
             bottomBar = {} // Remove bottomBar from Scaffold
         ) { innerPadding ->
             Column(
@@ -142,11 +150,13 @@ fun TweetFeedScreen(
                                 modifier = Modifier.height(36.dp), // Original height
                                 selected = index == selectedTabIndex,
                                 onClick = { selectedTabIndex = index },
-                                text = { Text(
-                                    color = Color.Gray,
-                                    fontWeight = FontWeight.Light,
-                                    text = item.title
-                                ) },
+                                text = {
+                                    Text(
+                                        color = Color.Gray,
+                                        fontWeight = FontWeight.Light,
+                                        text = item.title
+                                    )
+                                },
                             )
                         }
                     }
@@ -163,7 +173,12 @@ fun TweetFeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (index) {
-                            0 -> FollowingsTweet(parentEntry, scrollBehavior, viewModel, onScrollStateChange = { scrollState = it })
+                            0 -> FollowingsTweet(
+                                parentEntry,
+                                scrollBehavior,
+                                viewModel,
+                                onScrollStateChange = { scrollState = it })
+
                             1 -> RecommendedTweetScreen()
                         }
                     }

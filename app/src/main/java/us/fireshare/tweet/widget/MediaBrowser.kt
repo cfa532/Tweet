@@ -118,7 +118,7 @@ fun MediaBrowser(
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
-    
+
     // Handle page changes to pause/resume videos
     LaunchedEffect(pagerState.currentPage) {
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
@@ -161,13 +161,13 @@ fun MediaBrowser(
     // Calculate visual effects based on drag for images
     val maxDragDistance = 800f
     val dragProgress = (animatedOffsetY / maxDragDistance).coerceIn(0f, 1f)
-    
+
     // Translation effect - content moves down with finger
     val translationY = animatedOffsetY * 0.5f
-    
+
     // Scale effect - content gets slightly smaller as it's dragged
     val scale = 1f - (dragProgress * 0.1f)
-    
+
     // Alpha effect - content fades out as it's dragged
     val alpha = 1f - (dragProgress * 0.3f)
 
@@ -200,10 +200,12 @@ fun MediaBrowser(
                     // Pause or stop video playback here
                     exoPlayer?.playWhenReady = false
                 }
+
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback here (if needed)
                     exoPlayer?.playWhenReady = true
                 }
+
                 else -> {}
             }
         }
@@ -211,7 +213,7 @@ fun MediaBrowser(
 
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            
+
             // Show system bars when exiting full screen
             activity?.window?.let { window ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -224,7 +226,7 @@ fun MediaBrowser(
                     controller.show(WindowInsetsCompat.Type.systemBars())
                 }
             }
-            
+
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.releaseAllPlayers()
         }
@@ -269,15 +271,15 @@ fun MediaBrowser(
                     // Extract video mid from URL for VideoManager using the same method as VideoPreview
                     val videoMid = mediaItem.url.getMimeiKeyFromUrl()
                     Timber.d("MediaBrowser - Video URL: ${mediaItem.url}, extracted videoMid: $videoMid")
-                    
+
                     // Add more debugging
                     Timber.d("MediaBrowser - Creating FullScreenVideoPlayer for video: $videoMid")
                     Timber.d("MediaBrowser - Video type: ${mediaItem.type}")
                     Timber.d("MediaBrowser - Current page: ${pagerState.currentPage}, Video page: $page")
-                    
+
                     // Only activate video if it's the current page
                     val isCurrentPage = pagerState.currentPage == page
-                    
+
                     FullScreenVideoPlayer(
                         videoMid = videoMid,
                         videoUrl = mediaItem.url,
@@ -306,7 +308,8 @@ fun MediaBrowser(
                 }
                 // audio preview - keep existing implementation
                 MediaType.Audio -> {
-                    exoPlayer = remember(mediaItem.url) { viewModel.getExoPlayer(mediaItem.url, context) }
+                    exoPlayer =
+                        remember(mediaItem.url) { viewModel.getExoPlayer(mediaItem.url, context) }
                     exoPlayer?.volume = 1f
 
                     DisposableEffect(page) {
@@ -373,11 +376,12 @@ fun MediaBrowser(
                 // image view with enhanced drag effects
                 else -> {
                     // Get the preview URL for this image to use as placeholder
-                    val previewUrl = mediaItem.url // The same URL is used for both preview and full-size
-                    
-                    FullScreenImageViewer(
+                    val previewUrl =
+                        mediaItem.url // The same URL is used for both preview and full-size
+
+                    AdvancedImageViewer(
                         imageUrl = mediaItem.url,
-                        previewUrl = previewUrl, // Use the same URL as placeholder (ImageCacheManager will use cached version)
+                        onClose = { navController.popBackStack() },
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), 0) }
                             .draggable(
@@ -409,7 +413,8 @@ fun MediaBrowser(
                                     isDragging = true
                                     offsetY += delta
                                     if (offsetY > 200f && scaleFactor <= 1 && !isNavigationTriggered.value) {
-                                        isNavigationTriggered.value = true    // prevent multiple popBack
+                                        isNavigationTriggered.value =
+                                            true    // prevent multiple popBack
                                         navController.popBackStack()
                                     }
                                 }

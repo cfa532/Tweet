@@ -5,10 +5,10 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.ChatSessionDao
-import us.fireshare.tweet.datamodel.ChatSessionEntity
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.toChatMessage
 import us.fireshare.tweet.datamodel.toChatSession
+import us.fireshare.tweet.datamodel.toEntity
 
 class ChatSessionRepository(
     private val chatSessionDao: ChatSessionDao,
@@ -27,40 +27,90 @@ class ChatSessionRepository(
     }
 
     suspend fun updateChatSession(userId: String, receiptId: String, hasNews: Boolean) {
-        val sessionEntity = chatSessionDao.getSession(userId, receiptId)
-        val lastMessageEntity = chatMessageDao.getLatestMessage(userId, receiptId)
+        // Get or create session ID for this conversation
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        
+        // Get the latest message for this conversation
+        val lastMessageEntity = chatMessageDao.getLatestMessageBySession(sessionId)
         lastMessageEntity?.let { messageEntity ->
-            if (sessionEntity != null) {
-                // Update existing session
-                chatSessionDao.updateSession(
-                    userId = userId,
-                    receiptId = receiptId,
-                    timestamp = messageEntity.timestamp,
-                    lastMessageId = messageEntity.id,
-                    hasNews = hasNews
-                )
-                
-                // Update message with sessionId if not already set
-                if (messageEntity.sessionId == null) {
-                    val updatedMessage = messageEntity.copy(sessionId = sessionEntity.id)
-                    chatMessageDao.insertMessage(updatedMessage)
-                }
-            } else {
-                // Create new session
-                val newSessionEntity = ChatSessionEntity(
-                    userId = userId,
-                    receiptId = receiptId,
-                    lastMessageId = messageEntity.id,
-                    timestamp = messageEntity.timestamp,
-                    hasNews = hasNews
-                )
-                chatSessionDao.insertSession(newSessionEntity)
-                
-                // Update message with sessionId
-                val updatedMessage = messageEntity.copy(sessionId = newSessionEntity.id)
+            // Update existing session using sessionId
+            chatSessionDao.updateSession(
+                sessionId = sessionId,
+                timestamp = messageEntity.timestamp,
+                lastMessageId = messageEntity.id,
+                hasNews = hasNews
+            )
+
+            // Update message with sessionId if not already set
+            if (messageEntity.sessionId == null) {
+                val updatedMessage = messageEntity.copy(sessionId = sessionId)
                 chatMessageDao.insertMessage(updatedMessage)
             }
         }
+    }
+
+    /**
+     * Update an existing chat session without creating a new one
+     * This is used when we just want to mark a session as read
+     */
+    suspend fun updateExistingChatSession(userId: String, receiptId: String, hasNews: Boolean) {
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        val sessionEntity = chatSessionDao.getSessionById(sessionId)
+        sessionEntity?.let {
+            // Only update if session exists
+            chatSessionDao.updateSession(
+                sessionId = sessionId,
+                timestamp = it.timestamp,
+                lastMessageId = it.lastMessageId,
+                hasNews = hasNews
+            )
+        }
+    }
+
+    /**
+     * Update a specific message in the database
+     */
+    suspend fun updateMessage(message: ChatMessage) {
+        chatMessageDao.insertMessage(message.toEntity())
+    }
+
+    /**
+     * Update messages with the correct sessionId for a conversation
+     */
+    suspend fun updateMessagesWithSessionId(userId: String, receiptId: String, sessionId: String) {
+        chatMessageDao.updateMessagesWithSessionId(userId, receiptId, sessionId)
+    }
+
+    /**
+     * Get or create session ID for a conversation
+     */
+    suspend fun getOrCreateSessionId(userId: String, receiptId: String): String {
+        return ChatSession.getOrCreateSession(userId, receiptId, chatSessionDao, chatMessageDao)
+    }
+
+    /**
+     * Get a chat session by userId and receiptId
+     */
+    suspend fun getChatSession(userId: String, receiptId: String): ChatSession? {
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        val sessionEntity = chatSessionDao.getSessionById(sessionId) ?: return null
+        val lastMessage =
+            chatMessageDao.getLatestMessageBySession(sessionEntity.id)?.toChatMessage()
+                ?: return null
+        return sessionEntity.toChatSession(lastMessage)
+    }
+
+    /**
+     * Delete a chat session and all its messages
+     */
+    suspend fun deleteChatSession(userId: String, receiptId: String) {
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        
+        // Delete the session from chat session database
+        chatSessionDao.deleteSession(sessionId)
+
+        // Delete all messages using the sessionId
+        chatMessageDao.deleteMessagesBySession(sessionId)
     }
 
     /**
@@ -107,12 +157,12 @@ class ChatSessionRepository(
                 // a new session is created.
                 updatedSessions.add(
                     ChatSession(
-                        id = 0, // Will be auto-generated when saved to database
+                        id = ChatSession.generateSessionId(), // Generate UUID for session
                         timestamp = msg.timestamp,
                         userId = appUser.mid,
                         receiptId = if (key.first == appUser.mid) key.second else key.first,
                         hasNews = true,
-                        lastMessage = msg.copy(sessionId = 0) // Will be updated when session is saved
+                        lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()) // Will be updated when session is saved
                     )
                 )
             } else {

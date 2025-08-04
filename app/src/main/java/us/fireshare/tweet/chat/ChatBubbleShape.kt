@@ -73,6 +73,6 @@ fun ChatBubbleShape(isFromCurrentUser: Boolean = false): GenericShape {
 }
 
 @Composable
-fun RegularChatBubbleShape(): RoundedCornerShape {
+fun regularChatBubbleShape(): RoundedCornerShape {
     return RoundedCornerShape(12.dp)
 }

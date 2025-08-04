@@ -72,25 +72,25 @@ fun UserAvatar(
     val context = LocalContext.current
     val mid = user.avatar ?: ""
     var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
-    
+
     LaunchedEffect(key1 = user.avatar) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
         loadState = loadState.copy(avatarUrl = newAvatarUrl)
-        
+
         if (mid.isNotEmpty()) {
             try {
                 loadState = loadState.copy(isLoading = true, hasError = false)
-                
+
                 // Try to load from cache first
                 val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-                
+
                 // If not cached, download and cache
                 if (cachedBitmap == null && !newAvatarUrl.isNullOrEmpty()) {
                     val downloadedBitmap = ImageCacheManager.loadImage(context, newAvatarUrl, mid)
-                    
+
                     if (downloadedBitmap == null) {
                         loadState = loadState.copy(isLoading = false, hasError = true)
-                        Timber.e("UserAvatar - Failed to load avatar: $newAvatarUrl")
+                        Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
                     } else {
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     }
@@ -103,7 +103,7 @@ fun UserAvatar(
             }
         }
     }
-    
+
     val modifier = Modifier
         .size(size.dp)
         .clip(CircleShape)
@@ -119,7 +119,7 @@ fun UserAvatar(
         // Show cached avatar image
         Image(
             bitmap = loadState.bitmap!!.asImageBitmap(),
-                            contentDescription = stringResource(R.string.user_avatar),
+            contentDescription = stringResource(R.string.user_avatar),
             contentScale = ContentScale.Crop,
             modifier = modifier
         )

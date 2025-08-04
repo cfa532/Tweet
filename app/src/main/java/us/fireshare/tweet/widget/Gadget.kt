@@ -76,7 +76,12 @@ object Gadget {
                     }
 
                     pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
-                    withStyle(style = SpanStyle(color = Color.Cyan, textDecoration = TextDecoration.None)) {
+                    withStyle(
+                        style = SpanStyle(
+                            color = Color.Cyan,
+                            textDecoration = TextDecoration.None
+                        )
+                    ) {
                         append(originalMentionText)
                     }
                     pop()
@@ -106,37 +111,37 @@ object Gadget {
 
         for (i in 0 until nodeList.size) {
             val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
-            
+
             for (ipData in nodeIps) {
                 val pair = ipData as? ArrayList<*> ?: continue
                 if (pair.size < 2) continue
-                
+
                 val ip = pair[0].toString()
                 val responseTimeStr = pair[1].toString()
-                
+
                 // Parse response time (scientific format)
                 val responseTime = try {
                     responseTimeStr.toDouble()
                 } catch (e: NumberFormatException) {
                     continue // Skip invalid response time
                 }
-                
+
                 // Check if IP is valid and has correct port range
                 val ipOnly = ip.getIP() ?: continue
                 val port = ip.substringAfterLast(":", "8080").toIntOrNull() ?: continue
-                
+
                 if (port !in 8000..9000) continue
-                
+
                 // Check if it's a public IP
                 if (!isValidPublicIpAddress(ip)) continue
-                
+
                 // Determine if this IP is better than the current best
                 val isBetter = when {
                     bestIp == null -> true // First valid IP
                     responseTime < bestResponseTime -> true // Faster response time
                     else -> false
                 }
-                
+
                 if (isBetter) {
                     bestIp = ip
                     bestResponseTime = responseTime
@@ -149,42 +154,42 @@ object Gadget {
 
     /**
      * Filters a list of IP addresses to find the best accessible public IP address.
-     * 
+     *
      * This function processes a list of IP:port combinations and returns the first valid
      * public IP address that meets the following criteria:
      * - Port number is in the valid range (8000-8999)
      * - IP address is a valid public IP (not local/private network)
      * - IPv4 addresses are preferred over IPv6
-     * 
+     *
      * @param ipList List of IP:port strings to filter (e.g., ["192.168.1.1:8010", "203.0.113.1:8010"])
      * @return The first valid public IP:port string, or null if no valid IPs found
      */
     fun getAccessibleIP2(ipList: List<String>): String? {
         var ip4: String? = null  // Store the first valid IPv4 address
         var ip6: String? = null  // Store the first valid IPv6 address
-        
+
         ipList.forEach { ipPortString ->
             // Extract IP address and port from "IP:port" format
             val ip = ipPortString.substringBeforeLast(":").trim('[').trim(']')
             val port: Int = ipPortString.substringAfterLast(":").toInt()
-            
+
             // Only accept port numbers in the valid range (8000-8999)
             if (port !in 8000..8999) {
                 return@forEach  // Skip this IP if port is invalid
             }
-            
+
             if (InetAddressUtils.isIPv6Address(ip)) {
                 // Handle IPv6 addresses
                 ip6 = "[$ip]:$port"
             } else {
                 // Handle IPv4 addresses
-                
+
                 // Validate IPv4 format using regex pattern
                 // Pattern matches: xxx.xxx.xxx.xxx where each xxx is 0-255
                 if (!ip.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))) {
                     return@forEach  // Skip if IP format is invalid
                 }
-                
+
                 try {
                     val address = InetAddress.getByName(ip) as Inet4Address
                     val addressBytes = address.address
@@ -203,7 +208,7 @@ object Gadget {
                 }
             }
         }
-        
+
         // Return IPv4 if available, otherwise return IPv6, or null if neither found
         return ip4 ?: ip6
     }

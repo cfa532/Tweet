@@ -53,7 +53,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             refresh(0)
             initState.value = false
         }
-        
+
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
     }
@@ -258,49 +258,51 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
         val isRetweet = tweetToDelete?.originalTweetId != null
         val originalTweetId = tweetToDelete?.originalTweetId
-        
+
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
-        
+
         // Update user's tweet count if it's the current user's tweet
         if (tweetToDelete?.authorId == appUser.mid) {
             appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
             TweetCacheManager.saveUser(appUser)
             Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
         }
-        
+
         // Optimistically decrease retweet count if this is a retweet
         if (isRetweet && originalTweetId != null) {
             _tweets.value = _tweets.value.map { tweet ->
                 if (tweet.mid == originalTweetId) {
                     val newRetweetCount = max(0, tweet.retweetCount - 1)
-                    Timber.tag("TweetFeedViewModel").d("Optimistically decreased retweet count for ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
+                    Timber.tag("TweetFeedViewModel")
+                        .d("Optimistically decreased retweet count for ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
                     tweet.copy(retweetCount = newRetweetCount)
                 } else {
                     tweet
                 }
             }
-            
+
             // Post TweetUpdated notification to update individual TweetViewModel instances
             val updatedOriginalTweet = _tweets.value.find { it.mid == originalTweetId }
             if (updatedOriginalTweet != null) {
                 applicationScope.launch {
                     TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
-                    Timber.tag("TweetFeedViewModel").d("Posted TweetUpdated notification for optimistically updated original tweet ${originalTweetId}")
+                    Timber.tag("TweetFeedViewModel")
+                        .d("Posted TweetUpdated notification for optimistically updated original tweet ${originalTweetId}")
                 }
             }
         }
-        
+
         // Also remove from UserViewModel lists if provided (for profile screen)
         userViewModel?.removeTweetFromAllLists(tweetId)
-        
+
         // Navigate back immediately for better UX
         applicationScope.launch(Main) {
             if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
                 navController.popBackStack()
             }
         }
-        
+
         // Perform actual deletion in background
         applicationScope.launch(IO) {
             try {
@@ -316,8 +318,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 }
             } catch (e: Exception) {
                 // If backend deletion fails, just log the error
-                Timber.tag("TweetFeedViewModel").e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
-                
+                Timber.tag("TweetFeedViewModel")
+                    .e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
+
                 // Call callback on main thread
                 withContext(Main) {
                     callback()
@@ -368,15 +371,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (context != null) {
             notificationContextRef = WeakReference(context)
         }
-        
+
         // Prevent multiple listeners
         if (isListeningToNotifications) {
             Timber.tag("TweetFeedViewModel").d("Already listening to notifications, skipping")
             return
         }
-        
+
         isListeningToNotifications = true
-        Timber.tag("TweetFeedViewModel").d("TweetFeedViewModel instance starting to listen to notifications")
+        Timber.tag("TweetFeedViewModel")
+            .d("TweetFeedViewModel instance starting to listen to notifications")
         applicationScope.launch {
             try {
                 Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
@@ -392,16 +396,21 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 .d("TweetFeedViewModel received TweetUploaded notification for tweet: ${event.tweet.mid}")
                             Timber.tag("TweetFeedViewModel")
                                 .d("Current tweets count: ${_tweets.value.size}")
-                            
+
                             // Show success toast if it's the current user's tweet
                             val context = notificationContextRef?.get()
                             if (tweetWithAuthor.authorId == appUser.mid && context != null) {
-                                Timber.tag("TweetFeedViewModel").d("Showing tweet upload success toast for tweet: ${event.tweet.mid}")
+                                Timber.tag("TweetFeedViewModel")
+                                    .d("Showing tweet upload success toast for tweet: ${event.tweet.mid}")
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.tweet_uploaded), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.tweet_uploaded),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
-                            
+
                             // Update on main thread to ensure UI updates
                             withContext(Main) {
                                 // Check if tweet already exists to avoid duplicates
@@ -412,14 +421,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                         .d("Updated tweets count: ${_tweets.value.size}")
                                     Timber.tag("TweetFeedViewModel")
                                         .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
-                                    
+
                                     // Update user's tweet count if it's the current user's tweet
                                     if (tweetWithAuthor.authorId == appUser.mid) {
                                         appUser = appUser.copy(tweetCount = appUser.tweetCount + 1)
                                         withContext(IO) {
                                             TweetCacheManager.saveUser(appUser)
                                         }
-                                        Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Updated user tweet count to: ${appUser.tweetCount}")
                                     }
                                 } else {
                                     Timber.tag("TweetFeedViewModel")
@@ -433,15 +443,21 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.tweet_failed),
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
-                            Timber.tag("TweetFeedViewModel").e("Tweet upload failed: ${event.error}")
+                            Timber.tag("TweetFeedViewModel")
+                                .e("Tweet upload failed: ${event.error}")
                         }
 
                         is TweetEvent.TweetDeleted -> {
                             // Tweet is already removed optimistically, just log
-                            Timber.tag("TweetFeedViewModel").d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
                         }
 
                         is TweetEvent.CommentUploaded -> {
@@ -449,10 +465,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val context = notificationContextRef?.get()
                             if (event.comment.authorId == appUser.mid && context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.comment_uploaded), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.comment_uploaded),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
-                            
+
                             // Update comment count for parent tweet
                             withContext(Main) {
                                 _tweets.value = _tweets.value.map { tweet ->
@@ -470,10 +490,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.comment_failed),
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
-                            Timber.tag("TweetFeedViewModel").e("Comment upload failed: ${event.error}")
+                            Timber.tag("TweetFeedViewModel")
+                                .e("Comment upload failed: ${event.error}")
                         }
 
                         is TweetEvent.CommentDeleted -> {
@@ -528,9 +553,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 val existingTweetIds = _tweets.value.map { it.mid }.toSet()
                                 if (retweetWithAuthor.mid !in existingTweetIds) {
                                     _tweets.value = listOf(retweetWithAuthor) + _tweets.value
-                                    Timber.tag("TweetFeedViewModel").d("Retweet added to feed: ${retweetWithAuthor.mid}")
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Retweet added to feed: ${retweetWithAuthor.mid}")
                                 } else {
-                                    Timber.tag("TweetFeedViewModel").d("Retweet already exists in feed: ${retweetWithAuthor.mid}")
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Retweet already exists in feed: ${retweetWithAuthor.mid}")
                                 }
                             }
                         }
@@ -546,6 +573,28 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                     }
                                 }
                             }
+                        }
+
+                        // Chat events - ignore in TweetFeedViewModel
+                        is TweetEvent.ChatMessageSent -> {
+                            // Chat events are handled in ChatViewModel
+                            Timber.tag("TweetFeedViewModel").d("Ignoring ChatMessageSent event")
+                        }
+
+                        is TweetEvent.ChatMessageSendFailed -> {
+                            // Chat events are handled in ChatViewModel
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Ignoring ChatMessageSendFailed event")
+                        }
+
+                        is TweetEvent.ChatMessageReceived -> {
+                            // Chat events are handled in ChatViewModel
+                            Timber.tag("TweetFeedViewModel").d("Ignoring ChatMessageReceived event")
+                        }
+
+                        is TweetEvent.ChatSessionUpdated -> {
+                            // Chat events are handled in ChatViewModel
+                            Timber.tag("TweetFeedViewModel").d("Ignoring ChatSessionUpdated event")
                         }
                     }
                 }

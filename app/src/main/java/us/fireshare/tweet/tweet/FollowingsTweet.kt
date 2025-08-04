@@ -37,11 +37,11 @@ fun FollowingsTweet(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val coroutineScope = rememberCoroutineScope()
-    
+
     // State for gesture detection
     var isAtLastTweet by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    
+
     // Constants
     val MINMIMUM_TWEET_COUNT = 4
 
@@ -57,51 +57,25 @@ fun FollowingsTweet(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(isAtLastTweet, isRefreshingAtBottom) {
-                Timber.tag("FollowingsTweet").d("Gesture PointerInput setup: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom")
                 detectDragGestures(
-                    onDragEnd = { 
-                        Timber.tag("FollowingsTweet").d("Gesture onDragEnd called")
-                    },
-                    onDragCancel = { 
-                        Timber.tag("FollowingsTweet").d("Gesture onDragCancel called")
-                    },
-                    onDragStart = { 
-                        Timber.tag("FollowingsTweet").d("Gesture onDragStart called")
-                    },
                     onDrag = { change, dragAmount ->
-                        Timber.tag("FollowingsTweet").d("Gesture onDrag called with dragAmount=$dragAmount")
                         change.consume()
-                        
                         val (x, y) = dragAmount
-                        Timber.tag("FollowingsTweet").d("Gesture debug: isAtLastTweet=$isAtLastTweet, isRefreshingAtBottom=$isRefreshingAtBottom, tweets.size=${tweets.size}, dragAmount=($x, $y)")
-                        
+
                         // Only detect upward gestures when at last tweet and not already loading
                         if (isAtLastTweet && !isRefreshingAtBottom && tweets.size >= MINMIMUM_TWEET_COUNT) {
                             // Check if it's an upward gesture (negative Y means up)
                             if (y < -50) { // Threshold for upward gesture
-                                Timber.tag("FollowingsTweet").d("Upward gesture detected, triggering manual loadmore...")
                                 isRefreshingAtBottom = true
-                                
+
                                 // Trigger the loadmore in TweetListView
                                 triggerLoadMore()
-                                
+
                                 // Reset the loading state after a short delay
                                 coroutineScope.launch {
                                     kotlinx.coroutines.delay(100) // Small delay to allow TweetListView to process
                                     isRefreshingAtBottom = false
-                                    Timber.tag("FollowingsTweet").d("Gesture loadmore completed")
                                 }
-                            } else {
-                                Timber.tag("FollowingsTweet").d("Gesture not upward enough: y=$y (threshold: -50)")
-                            }
-                        } else if (isAtLastTweet) {
-                            // Log why gesture wasn't triggered
-                            val reasons = mutableListOf<String>()
-                            if (isRefreshingAtBottom) reasons.add("isRefreshingAtBottom=true")
-                            if (tweets.size < MINMIMUM_TWEET_COUNT) reasons.add("tweets.size=${tweets.size}")
-                            
-                            if (reasons.isNotEmpty()) {
-                                Timber.tag("FollowingsTweet").d("Gesture conditions not met: ${reasons.joinToString(", ")}")
                             }
                         }
                     }
@@ -109,7 +83,7 @@ fun FollowingsTweet(
             }
     ) {
         TweetListView(
-            tweets = tweets.also { 
+            tweets = tweets.also {
 //                timber.log.Timber.tag("FollowingsTweet").d("Passing tweets to TweetListView: ${it.size}")
             },
             fetchTweets = { pageNumber ->

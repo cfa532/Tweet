@@ -86,10 +86,10 @@ fun ComposeCommentScreen(
     val tweet by tweetViewModel.tweetState.collectAsState()
     val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
-    
+
     // Get TweetFeedViewModel to set notification context for Toast messages
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    
+
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         tweetViewModel.startListeningToNotifications(context)
@@ -108,13 +108,14 @@ fun ComposeCommentScreen(
         }
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            imageUri?.let {
-                selectedAttachments.add(it)
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            if (success) {
+                imageUri?.let {
+                    selectedAttachments.add(it)
+                }
             }
         }
-    }
     val takeAShot = {
         val photoFile = createImageFile(context)
         photoFile?.also {
@@ -165,32 +166,34 @@ fun ComposeCommentScreen(
                 actions = {
                     var isLoading by remember { mutableStateOf(false) }
                     val coroutineScope = rememberCoroutineScope()
-                    
-                    IconButton(enabled = !isLoading,
+
+                    IconButton(
+                        enabled = !isLoading,
                         onClick = {
-                        if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
-                            isLoading = true
-                            // Store content before clearing
-                            val contentToUpload = tweetContent.trim()
-                            val attachmentsToUpload = selectedAttachments.toList()
-                            
-                            // Clear UI immediately for better UX
-                            selectedAttachments.clear()
-                            tweetContent = ""
-                            
-                            // Upload comment
-                            tweetViewModel.uploadComment(
-                                context,
-                                contentToUpload,
-                                attachmentsToUpload,
-                            )
-                            
-                            // Navigate back after a short delay to ensure upload is initiated
-                            coroutineScope.launch {
-                                delay(100) // Small delay to ensure upload is started
-                                popBack()
+                            if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                                isLoading = true
+                                // Store content before clearing
+                                val contentToUpload = tweetContent.trim()
+                                val attachmentsToUpload = selectedAttachments.toList()
+
+                                // Clear UI immediately for better UX
+                                selectedAttachments.clear()
+                                tweetContent = ""
+
+                                // Upload comment
+                                tweetViewModel.uploadComment(
+                                    context,
+                                    contentToUpload,
+                                    attachmentsToUpload,
+                                )
+
+                                // Navigate back after a short delay to ensure upload is initiated
+                                coroutineScope.launch {
+                                    delay(100) // Small delay to ensure upload is started
+                                    popBack()
+                                }
                             }
-                        } })
+                        })
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
@@ -216,12 +219,17 @@ fun ComposeCommentScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Row (
+                    Row(
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 36)
+                        UserAvatar(
+                            user = author ?: User(
+                                mid = TW_CONST.GUEST_ID,
+                                baseUrl = appUser.baseUrl
+                            ), size = 36
+                        )
                         Spacer(modifier = Modifier.padding(4.dp))
                         Text(
                             text = "Reply to @${author?.username}",
@@ -237,7 +245,7 @@ fun ComposeCommentScreen(
                 }
                 OutlinedTextField(
                     value = tweetContent,
-                    onValueChange = { 
+                    onValueChange = {
                         // Limit comment content to 280 characters (same as tweets)
                         if (it.length <= 280) {
                             tweetContent = it
@@ -256,7 +264,7 @@ fun ComposeCommentScreen(
                             }
                         },
                 )
-                
+
                 // Character counter
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -265,8 +273,8 @@ fun ComposeCommentScreen(
                     Text(
                         text = "${tweetContent.length}/280",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error 
-                               else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 // row of icons at bottom of text field.
@@ -276,7 +284,7 @@ fun ComposeCommentScreen(
                         .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row (
+                    Row(
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -297,16 +305,18 @@ fun ComposeCommentScreen(
 
                     Spacer(Modifier.weight(1f))
 
-                    IconButton(onClick = {
-                        if (ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            takeAShot()
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        } },
+                    IconButton(
+                        onClick = {
+                            if (ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.CAMERA
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                takeAShot()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
                         modifier = Modifier
                             .size(40.dp)
                             .padding(top = 10.dp, end = 8.dp)
@@ -319,7 +329,16 @@ fun ComposeCommentScreen(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(onClick = { filePickerLauncher.launch(arrayOf("image/*", "video/*", "audio/*")) },
+                    IconButton(
+                        onClick = {
+                            filePickerLauncher.launch(
+                                arrayOf(
+                                    "image/*",
+                                    "video/*",
+                                    "audio/*"
+                                )
+                            )
+                        },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -354,13 +373,13 @@ fun ComposeCommentScreen(
                 }
             }
         }
-        
+
         // Exit confirmation dialog
         if (showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = { showExitConfirmation = false },
-                            title = { Text(stringResource(R.string.discard_comment)) },
-            text = { Text(stringResource(R.string.unsaved_content_warning)) },
+                title = { Text(stringResource(R.string.discard_comment)) },
+                text = { Text(stringResource(R.string.unsaved_content_warning)) },
                 confirmButton = {
                     TextButton(
                         onClick = {

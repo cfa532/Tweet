@@ -267,13 +267,14 @@ fun MediaGrid(
                 MediaItemView(
                     mediaItems,
                     modifier.clickable {
-                        val params =MediaViewerParams(
+                        val params = MediaViewerParams(
                             mediaItems.map {
                                 MediaItem(
                                     getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                     it.type
                                 )
-                            }, index, tweet.mid, tweet.authorId)
+                            }, index, tweet.mid, tweet.authorId
+                        )
                         navController.navigate(
                             NavTweet.MediaViewer(params)
                         )
@@ -297,13 +298,13 @@ fun TweetDropdownMenu(
 ) {
     // Use tweet.mid as key to ensure state is reset when tweet changes
     var expanded by remember(tweet.mid) { mutableStateOf(false) }
-    
+
     // Dismiss popup menu when tweet is deleted or becomes unavailable
     LaunchedEffect(tweet.mid) {
         // Reset expanded state when tweet changes
         expanded = false
     }
-    
+
     Box(
         modifier = Modifier.padding(end = 0.dp)
     ) {

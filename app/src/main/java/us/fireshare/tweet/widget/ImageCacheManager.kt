@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.LruCache
+import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -37,164 +38,191 @@ object ImageCacheManager {
         override fun sizeOf(key: String, value: Bitmap): Int {
             return value.byteCount
         }
-        
-        override fun entryRemoved(evicted: Boolean, key: String, oldValue: Bitmap, newValue: Bitmap?) {
+
+        override fun entryRemoved(
+            evicted: Boolean,
+            key: String,
+            oldValue: Bitmap,
+            newValue: Bitmap?
+        ) {
             super.entryRemoved(evicted, key, oldValue, newValue)
             // Recycle bitmap when removed from cache
             if (evicted && !oldValue.isRecycled) {
                 try {
                     oldValue.recycle()
                 } catch (e: Exception) {
-                    Timber.e("ImageCacheManager - Error recycling bitmap: $e")
+                    Timber.tag("ImageCacheManager").e("Error recycling bitmap: $e")
                 }
             }
         }
     }
+
+    /**
+     * Get cached image file by mid, or null if not cached
+     */
+    suspend fun getCachedImageFile(context: Context, mid: String): File? =
+        withContext(Dispatchers.IO) {
+            try {
+                val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
+                return@withContext if (file.exists()) file else null
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error in getCachedImageFile: $e")
+                null
+            }
+        }
 
     /**
      * Get cached image by mid, or null if not cached
      */
-    suspend fun getCachedImage(context: Context, mid: String): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            // Check memory cache first
-            memoryCache.get(mid)?.let { 
-                if (!it.isRecycled) {
-                    return@withContext it
-                } else {
-                    // Remove recycled bitmap from cache
-                    memoryCache.remove(mid)
-                }
-            }
-            
-            // Check disk cache
-            val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
-            if (file.exists()) {
-                try {
-                    val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                    if (bitmap != null && !bitmap.isRecycled) {
-                        memoryCache.put(mid, bitmap)
-                        return@withContext bitmap
+    suspend fun getCachedImage(context: Context, mid: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                // Check memory cache first
+                memoryCache.get(mid)?.let {
+                    if (!it.isRecycled) {
+                        return@withContext it
+                    } else {
+                        // Remove recycled bitmap from cache
+                        memoryCache.remove(mid)
                     }
-                } catch (e: OutOfMemoryError) {
-                    Timber.e("ImageCacheManager - OutOfMemoryError loading cached image: $e")
-                    clearMemoryCache()
-                    return@withContext null
-                } catch (e: Exception) {
-                    Timber.e("ImageCacheManager - Error loading cached image: $e")
                 }
+
+                // Check disk cache
+                val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
+                if (file.exists()) {
+                    try {
+                        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                        if (bitmap != null && !bitmap.isRecycled) {
+                            memoryCache.put(mid, bitmap)
+                            return@withContext bitmap
+                        }
+                    } catch (e: OutOfMemoryError) {
+                        Timber.tag("ImageCacheManager")
+                            .e("OutOfMemoryError loading cached image: $e")
+                        clearMemoryCache()
+                        return@withContext null
+                    } catch (e: Exception) {
+                        Timber.tag("ImageCacheManager").e("Error loading cached image: $e")
+                    }
+                }
+                null
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error in getCachedImage: $e")
+                null
             }
-            null
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error in getCachedImage: $e")
-            null
         }
-    }
+
 
     /**
      * Download and cache image from URL
      */
-    suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            // Check if already cached first
-            getCachedImage(context, mid)?.let { return@withContext it }
-            
-            val url = URL(imageUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = CONNECTION_TIMEOUT
-            connection.readTimeout = READ_TIMEOUT
-            connection.requestMethod = "GET"
-            
-            var inputStream: InputStream? = null
+    suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+        withContext(Dispatchers.IO) {
             try {
-                inputStream = connection.inputStream
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                
-                if (bitmap != null && !bitmap.isRecycled) {
-                    // Cache the downloaded image
-                    cacheImage(context, mid, bitmap)
-                    return@withContext bitmap
-                } else {
-                    Timber.e("ImageCacheManager - Failed to decode image from URL: $imageUrl")
+                // Check if already cached first
+                getCachedImage(context, mid)?.let { return@withContext it }
+
+                val url = URL(imageUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = CONNECTION_TIMEOUT
+                connection.readTimeout = READ_TIMEOUT
+                connection.requestMethod = "GET"
+
+                var inputStream: InputStream? = null
+                try {
+                    inputStream = connection.inputStream
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+
+                    if (bitmap != null && !bitmap.isRecycled) {
+                        // Cache the downloaded image
+                        cacheImage(context, mid, bitmap)
+                        return@withContext bitmap
+                    } else {
+                        Timber.tag("ImageCacheManager")
+                            .e("Failed to decode image from URL: $imageUrl")
+                        return@withContext null
+                    }
+                } catch (e: OutOfMemoryError) {
+                    Timber.tag("ImageCacheManager").e("OutOfMemoryError downloading image: $e")
+                    clearMemoryCache()
                     return@withContext null
+                } catch (e: Exception) {
+                    Timber.tag("ImageCacheManager").e("Error downloading image: $e")
+                    return@withContext null
+                } finally {
+                    inputStream?.close()
+                    connection.disconnect()
                 }
-            } catch (e: OutOfMemoryError) {
-                Timber.e("ImageCacheManager - OutOfMemoryError downloading image: $e")
-                clearMemoryCache()
-                return@withContext null
             } catch (e: Exception) {
-                Timber.e("ImageCacheManager - Error downloading image: $e")
-                return@withContext null
-            } finally {
-                inputStream?.close()
-                connection.disconnect()
+                Timber.tag("ImageCacheManager").e("Error in downloadAndCacheImage: $e")
+                null
             }
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error in downloadAndCacheImage: $e")
-            null
         }
-    }
 
     /**
      * Load image from URL or cache
      */
-    suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            // First try to get from cache
-            getCachedImage(context, mid)?.let { return@withContext it }
-            
-            // If not in cache, download and cache
-            downloadAndCacheImage(context, imageUrl, mid)
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error in loadImage: $e")
-            null
+    suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                // First try to get from cache
+                getCachedImage(context, mid)?.let { return@withContext it }
+
+                // If not in cache, download and cache
+                downloadAndCacheImage(context, imageUrl, mid)
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error in loadImage: $e")
+                null
+            }
         }
-    }
 
     /**
      * Cache and compress a bitmap by mid
      */
-    suspend fun cacheImage(context: Context, mid: String, bitmap: Bitmap) = withContext(Dispatchers.IO) {
-        try {
-            if (bitmap.isRecycled) {
-                Timber.w("ImageCacheManager - Attempting to cache recycled bitmap for: $mid")
-                return@withContext
-            }
-            
-            // Compress bitmap
-            val compressed = compressBitmap(bitmap)
-            if (compressed != null && !compressed.isRecycled) {
-                memoryCache.put(mid, compressed)
-                
-                // Save to disk
-                val dir = File(context.cacheDir, CACHE_DIR)
-                if (!dir.exists()) dir.mkdirs()
-                val file = File(dir, "$mid.jpg")
-                
-                try {
-                    var quality = COMPRESS_QUALITY
-                    var byteArray: ByteArray
-                    do {
-                        val stream = java.io.ByteArrayOutputStream()
-                        compressed.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-                        byteArray = stream.toByteArray()
-                        stream.close()
-                        quality -= 5
-                    } while (byteArray.size > 200 * 1024 && quality >= 50)
-                    
-                    FileOutputStream(file).use { out ->
-                        out.write(byteArray)
-                    }
-                } catch (e: IOException) {
-                    Timber.e("ImageCacheManager - Error saving image to disk: $e")
+    suspend fun cacheImage(context: Context, mid: String, bitmap: Bitmap) =
+        withContext(Dispatchers.IO) {
+            try {
+                if (bitmap.isRecycled) {
+                    Timber.tag("ImageCacheManager")
+                        .w("Attempting to cache recycled bitmap for: $mid")
+                    return@withContext
                 }
+
+                // Compress bitmap
+                val compressed = compressBitmap(bitmap)
+                if (compressed != null && !compressed.isRecycled) {
+                    memoryCache.put(mid, compressed)
+
+                    // Save to disk
+                    val dir = File(context.cacheDir, CACHE_DIR)
+                    if (!dir.exists()) dir.mkdirs()
+                    val file = File(dir, "$mid.jpg")
+
+                    try {
+                        var quality = COMPRESS_QUALITY
+                        var byteArray: ByteArray
+                        do {
+                            val stream = java.io.ByteArrayOutputStream()
+                            compressed.compress(Bitmap.CompressFormat.JPEG, quality, stream)
+                            byteArray = stream.toByteArray()
+                            stream.close()
+                            quality -= 5
+                        } while (byteArray.size > 200 * 1024 && quality >= 50)
+
+                        FileOutputStream(file).use { out ->
+                            out.write(byteArray)
+                        }
+                    } catch (e: IOException) {
+                        Timber.tag("ImageCacheManager").e("Error saving image to disk: $e")
+                    }
+                }
+            } catch (e: OutOfMemoryError) {
+                Timber.tag("ImageCacheManager").e("OutOfMemoryError caching image: $e")
+                clearMemoryCache()
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error caching image: $e")
             }
-        } catch (e: OutOfMemoryError) {
-            Timber.e("ImageCacheManager - OutOfMemoryError caching image: $e")
-            clearMemoryCache()
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error caching image: $e")
         }
-    }
 
     /**
      * Compress a bitmap to JPEG with quality
@@ -202,35 +230,35 @@ object ImageCacheManager {
     private fun compressBitmap(bitmap: Bitmap): Bitmap? {
         try {
             if (bitmap.isRecycled) return null
-            
+
             val width = bitmap.width
             val height = bitmap.height
-            
+
             // Check if resizing is needed
             if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
                 return bitmap
             }
-            
+
             val scale = MAX_IMAGE_DIMENSION / maxOf(width, height).toFloat()
             val newW = (width * scale).toInt().coerceAtLeast(1)
             val newH = (height * scale).toInt().coerceAtLeast(1)
-            
+
             if (newW <= 0 || newH <= 0 || newW > 4096 || newH > 4096) {
                 return bitmap
             }
-            
-            val resized = Bitmap.createBitmap(newW, newH, Bitmap.Config.ARGB_8888)
+
+            val resized = createBitmap(newW, newH)
             val canvas = Canvas(resized)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
             canvas.drawBitmap(bitmap, null, android.graphics.Rect(0, 0, newW, newH), paint)
-            
+
             return resized
         } catch (e: OutOfMemoryError) {
-            Timber.e("ImageCacheManager - OutOfMemoryError compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").e("OutOfMemoryError compressing bitmap: $e")
             clearMemoryCache()
             return null
         } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").e("Error compressing bitmap: $e")
             return null
         }
     }
@@ -256,12 +284,11 @@ object ImageCacheManager {
             if (dir.exists()) {
                 dir.deleteRecursively()
             }
-
         } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error clearing all cached images: $e")
+            Timber.tag("ImageCacheManager").e("Error clearing all cached images: $e")
         }
     }
-    
+
     /**
      * Get memory cache statistics
      */
@@ -273,7 +300,7 @@ object ImageCacheManager {
         val hitRate = if (hitCount + missCount > 0) {
             (hitCount * 100.0 / (hitCount + missCount)).toInt()
         } else 0
-        
+
         return "Memory: ${currentSize}/${maxSize}, Hit Rate: ${hitRate}%"
     }
-} 
+}

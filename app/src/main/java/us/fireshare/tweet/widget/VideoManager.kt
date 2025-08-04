@@ -21,22 +21,22 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @OptIn(UnstableApi::class)
 object VideoManager {
-    
+
     // Thread-safe map to store ExoPlayer instances by video mid
     private val videoPlayers = ConcurrentHashMap<MimeiId, ExoPlayer>()
-    
+
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
-    
+
     // Sequential playback management
     private val videoPlaylist = mutableListOf<MimeiId>()
     private var currentPlaylistIndex = -1
     private var isSequentialPlaybackEnabled = false
-    
+
     // Preload management
     private val preloadedVideos = mutableSetOf<MimeiId>()
     private val preloadQueue = mutableListOf<MimeiId>()
-    
+
     // Memory management
     private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB
 
@@ -50,21 +50,22 @@ object VideoManager {
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
         // Check memory usage before creating new player
         checkMemoryAndReleaseVideos()
-        
+
         // Mark as preloaded if it was in the preload queue
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
-        
+
         val isReusing = videoPlayers.containsKey(videoMid)
-        
+
         return videoPlayers.getOrPut(videoMid) {
             Timber.tag("getVideoPlayer").d("Creating new player for $videoMid")
-            
+
             try {
                 val player = createExoPlayer(context, videoUrl, MediaType.Video)
                 player
             } catch (e: Exception) {
-                Timber.tag("getVideoPlayer").e("VideoManager - Error creating ExoPlayer for video: $videoMid")
+                Timber.tag("getVideoPlayer")
+                    .e("VideoManager - Error creating ExoPlayer for video: $videoMid")
                 // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
@@ -77,7 +78,7 @@ object VideoManager {
             }
         }
     }
-    
+
     /**
      * Reset player state to ensure proper playback when reused
      * @param player ExoPlayer instance to reset
@@ -89,12 +90,12 @@ object VideoManager {
                 player.playWhenReady = false
                 return
             }
-            
+
             // Stop playback and reset to beginning
             player.stop()
             player.seekTo(0)
             player.playWhenReady = false
-            
+
             // Clear any error state
             if (player.playbackState == androidx.media3.common.Player.STATE_IDLE) {
                 player.prepare()
@@ -103,7 +104,7 @@ object VideoManager {
             Timber.e("VideoManager - Error resetting player state: $e")
         }
     }
-    
+
     /**
      * Mark a video as active (being used by a composable)
      * @param videoMid Video's unique identifier
@@ -112,7 +113,7 @@ object VideoManager {
         val currentCount = activeVideos.getOrDefault(videoMid, 0)
         activeVideos[videoMid] = currentCount + 1
     }
-    
+
     /**
      * Mark a video as inactive (no longer being used by a composable)
      * @param videoMid Video's unique identifier
@@ -128,7 +129,7 @@ object VideoManager {
             }
         }
     }
-    
+
     /**
      * Pause a specific video
      * @param videoMid Video's unique identifier
@@ -139,7 +140,7 @@ object VideoManager {
             Timber.d("VideoManager - Paused video: $videoMid")
         }
     }
-    
+
     /**
      * Resume a specific video
      * @param videoMid Video's unique identifier
@@ -150,7 +151,7 @@ object VideoManager {
             player.playWhenReady = shouldPlay
         }
     }
-    
+
     /**
      * Pause all videos
      */
@@ -171,7 +172,7 @@ object VideoManager {
             Timber.e("VideoManager - releaseVideo() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
             throw IllegalStateException("VideoManager.releaseVideo() must be called on the main thread")
         }
-        
+
         videoPlayers.remove(videoMid)?.let { player ->
             try {
                 // Stop playback before releasing
@@ -183,7 +184,7 @@ object VideoManager {
             }
         }
     }
-    
+
     /**
      * Release all video players
      * Note: This method must be called on the main thread
@@ -194,7 +195,7 @@ object VideoManager {
             Timber.e("VideoManager - releaseAllVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
             throw IllegalStateException("VideoManager.releaseAllVideos() must be called on the main thread")
         }
-        
+
         videoPlayers.values.forEach { player ->
             try {
                 // Stop playback before releasing
@@ -207,12 +208,12 @@ object VideoManager {
         videoPlayers.clear()
         activeVideos.clear()
     }
-    
+
     /**
      * Get the number of cached video players
      */
     fun getCachedVideoCount(): Int = videoPlayers.size
-    
+
     /**
      * Get the number of active videos
      */
@@ -230,7 +231,7 @@ object VideoManager {
         val memoryUsage = getCurrentMemoryUsage()
         return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Preloaded: ${preloadedVideos.size}, Memory: ${memoryUsage / (1024 * 1024)}MB"
     }
-    
+
     /**
      * Get current memory usage in bytes
      */
@@ -243,14 +244,14 @@ object VideoManager {
             0L
         }
     }
-    
+
     /**
      * Check if memory usage is above threshold
      */
     private fun isMemoryUsageHigh(): Boolean {
         return getCurrentMemoryUsage() > MEMORY_THRESHOLD_BYTES
     }
-    
+
     /**
      * Monitor memory usage and release videos if needed
      */
@@ -258,26 +259,28 @@ object VideoManager {
         if (!isMemoryUsageHigh()) {
             return
         }
-        
+
         Timber.w("VideoManager - Memory usage high (${getCurrentMemoryUsage() / (1024 * 1024)}MB), releasing inactive videos")
-        
+
         // Get inactive videos (not currently being used)
         val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        
+
         if (inactiveVideos.isNotEmpty()) {
             // Release oldest inactive videos first
-            val videosToRelease = inactiveVideos.take(inactiveVideos.size / 2) // Release half of inactive videos
-            
+            val videosToRelease =
+                inactiveVideos.take(inactiveVideos.size / 2) // Release half of inactive videos
+
             videosToRelease.forEach { videoMid ->
                 releaseVideo(videoMid)
             }
-            
-            Timber.tag("checkMemoryAndReleaseVideos").d("Released ${videosToRelease.size} videos due to memory pressure")
+
+            Timber.tag("checkMemoryAndReleaseVideos")
+                .d("Released ${videosToRelease.size} videos due to memory pressure")
         } else {
             Timber.w("VideoManager - No inactive videos to release, memory pressure remains high")
         }
     }
-    
+
     /**
      * Preload a video in the background
      * @param context Android context
@@ -288,14 +291,14 @@ object VideoManager {
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
         // Check memory usage before preloading
         checkMemoryAndReleaseVideos()
-        
+
         if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
             return // Already cached or preloaded
         }
-        
+
         if (!preloadQueue.contains(videoMid)) {
             preloadQueue.add(videoMid)
-            
+
             // Start preloading in background
             GlobalScope.launch(Dispatchers.IO) {
                 try {
@@ -318,7 +321,7 @@ object VideoManager {
             }
         }
     }
-    
+
     /**
      * Check if a video is preloaded
      */
@@ -337,7 +340,7 @@ object VideoManager {
     fun startMemoryMonitoring() {
         // Cancel existing job if any
         memoryMonitoringJob?.cancel()
-        
+
         memoryMonitoringJob = GlobalScope.launch(Dispatchers.IO) {
             while (isActive) {
                 try {
@@ -363,7 +366,7 @@ object VideoManager {
         memoryMonitoringJob = null
         Timber.tag("stopMemoryMonitoring").d("Stopped periodic memory monitoring")
     }
-    
+
     /**
      * Get detailed memory statistics
      */
@@ -373,10 +376,10 @@ object VideoManager {
         val freeMemory = runtime.freeMemory()
         val usedMemory = totalMemory - freeMemory
         val maxMemory = runtime.maxMemory()
-        
+
         return "Memory: ${usedMemory / (1024 * 1024)}MB used, ${freeMemory / (1024 * 1024)}MB free, ${totalMemory / (1024 * 1024)}MB total, ${maxMemory / (1024 * 1024)}MB max"
     }
-    
+
     /**
      * Set up sequential playback for a list of videos
      * @param videoMids List of video MIDs to play in sequence
@@ -386,20 +389,20 @@ object VideoManager {
         videoPlaylist.addAll(videoMids)
         currentPlaylistIndex = if (videoMids.isNotEmpty()) 0 else -1
         isSequentialPlaybackEnabled = videoMids.isNotEmpty()
-        
+
         Timber.d("VideoManager - Sequential playback setup: ${videoMids.size} videos")
         Timber.d("VideoManager - Playlist: $videoMids")
-        
+
         // Start playing the first video if available
         if (currentPlaylistIndex >= 0) {
             val firstVideo = videoPlaylist[currentPlaylistIndex]
             videoPlayers[firstVideo]?.let { player ->
                 player.playWhenReady = true
-        
+
             }
         }
     }
-    
+
     /**
      * Stop sequential playback
      */
@@ -409,7 +412,7 @@ object VideoManager {
         videoPlaylist.clear()
 //        pauseAllVideos()
     }
-    
+
     /**
      * Handle video completion for sequential playback
      * @param completedVideoMid The video that just finished
@@ -418,13 +421,13 @@ object VideoManager {
         if (!isSequentialPlaybackEnabled || videoPlaylist.isEmpty()) {
             return
         }
-        
+
         // Find the completed video in the playlist
         val completedIndex = videoPlaylist.indexOf(completedVideoMid)
         if (completedIndex == -1 || completedIndex != currentPlaylistIndex) {
             return
         }
-        
+
         // Move to next video
         currentPlaylistIndex++
         if (currentPlaylistIndex < videoPlaylist.size) {
@@ -437,4 +440,30 @@ object VideoManager {
             stopSequentialPlayback()
         }
     }
-} 
+
+    /**
+     * Transfer video player to full-screen mode
+     * This allows seamless transition from preview to full-screen without losing position
+     * @param videoMid Video's unique identifier
+     * @return The current player instance if it exists, null otherwise
+     */
+    fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
+        return videoPlayers[videoMid]?.also { player ->
+            Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
+            // Pause the player to prevent conflicts during transition
+            player.playWhenReady = false
+        }
+    }
+
+    /**
+     * Return video player from full-screen mode back to preview
+     * @param videoMid Video's unique identifier
+     */
+    fun returnFromFullScreen(videoMid: MimeiId) {
+        videoPlayers[videoMid]?.let { player ->
+            Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
+            // Resume normal preview behavior
+            player.playWhenReady = false
+        }
+    }
+}

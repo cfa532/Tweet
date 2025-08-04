@@ -34,6 +34,7 @@ data class CachedTweet(
 data class CachedUser(
     @PrimaryKey val userId: MimeiId = appUser.mid,
     val user: User,
+    val timestamp: Date = Date() // Timestamp when the user was cached
 )
 
 class UserConverter {
@@ -106,6 +107,9 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedUser")
     fun clearAllCachedUsers()
+    
+    @Query("DELETE FROM CachedUser WHERE timestamp < :cutoffTime")
+    fun deleteOldCachedUsers(cutoffTime: Date)
 
     /**
      * Cache of tweets. Clear tweets cached more than a month ago with Cleanup workerManager.
@@ -134,11 +138,11 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistedMid::class], version = 8)
+@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 11)
 @TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
-    abstract fun blacklistedMidDao(): BlacklistedMidDao
+    abstract fun blacklistDao(): BlacklistDao
 
     companion object {
         @Volatile
@@ -152,35 +156,17 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     "tweet_cache_database"
                 )
                     .fallbackToDestructiveMigration(false)
-                    .addMigrations(MIGRATION_7_8)
+                    .addMigrations(MIGRATION_10_11)
                     .build()
                 INSTANCE = instance
                 instance
             }
         }
 
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Create new table with updated schema
-                db.execSQL(
-                    "CREATE TABLE blacklisted_mid_new (" +
-                    "mid TEXT NOT NULL PRIMARY KEY, " +
-                    "lastSuccessfulAccess INTEGER NOT NULL, " +
-                    "lastFailureTime INTEGER NOT NULL)"
-                )
-                
-                // Copy data from old table to new table
-                // Map firstDetected -> lastSuccessfulAccess and lastChecked -> lastFailureTime
-                db.execSQL(
-                    "INSERT INTO blacklisted_mid_new (mid, lastSuccessfulAccess, lastFailureTime) " +
-                    "SELECT mid, firstDetected, lastChecked FROM blacklisted_mid"
-                )
-                
-                // Drop old table
-                db.execSQL("DROP TABLE blacklisted_mid")
-                
-                // Rename new table to original name
-                db.execSQL("ALTER TABLE blacklisted_mid_new RENAME TO blacklisted_mid")
+                // Add timestamp column to CachedUser table
+                db.execSQL("ALTER TABLE CachedUser ADD COLUMN timestamp INTEGER DEFAULT ${System.currentTimeMillis()}")
             }
         }
     }

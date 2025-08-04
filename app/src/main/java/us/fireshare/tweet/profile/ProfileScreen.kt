@@ -67,15 +67,15 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
-    
+
     // Create ViewModel - move hiltViewModel outside of remember
     val viewModel = if (userId == appUser.mid) appUserViewModel
-        else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            parentEntry, key = userId
-        ) { factory ->
-            factory.create(userId)
-        }
-    
+    else hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
+        parentEntry, key = userId
+    ) { factory ->
+        factory.create(userId)
+    }
+
     val initState by viewModel.initState.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -83,20 +83,20 @@ fun ProfileScreen(
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Calculate the transparency based on scrolling state
     var bottomBarTransparency by remember { mutableStateOf(0.98f) }
-    
+
     // State for full-screen video overlay
     var fullScreenVideo by remember { mutableStateOf<Pair<String, MimeiId>?>(null) }
-    
+
     // Callback to show full-screen video - stabilize with remember
     val showFullScreenVideo = remember {
         { videoUrl: String, videoMid: MimeiId ->
             fullScreenVideo = Pair(videoUrl, videoMid)
         }
     }
-    
+
     // Show dialog using LaunchedEffect to avoid conditional rendering
     LaunchedEffect(fullScreenVideo) {
         fullScreenVideo?.let { (videoUrl, videoMid) ->
@@ -113,7 +113,7 @@ fun ProfileScreen(
             viewModel.initLoad()
         }
     }
-    
+
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
@@ -140,13 +140,14 @@ fun ProfileScreen(
                         userId = userId, // Pass userId directly
                         onScrollStateChange = { newScrollState ->
                             scrollState = newScrollState
-                            
+
                             // Update bottom bar transparency based on scroll direction
                             when (newScrollState.direction) {
                                 ScrollDirection.UP -> {
                                     // Scroll UP (content moves down): restore header and bottom bar
                                     bottomBarTransparency = 0.98f
                                 }
+
                                 ScrollDirection.DOWN -> {
                                     // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
                                     coroutineScope.launch {
@@ -158,6 +159,7 @@ fun ProfileScreen(
                                         }
                                     }
                                 }
+
                                 ScrollDirection.NONE -> {
                                     // Idle state: keep current opacity, don't restore automatically
                                     // Only restore when user starts scrolling up
@@ -169,7 +171,7 @@ fun ProfileScreen(
                 }
             }
         }
-        
+
         // Place the BottomNavigationBar on top with opacity control
         BottomNavigationBar(
             Modifier
@@ -179,7 +181,7 @@ fun ProfileScreen(
             0
         )
     }
-    
+
     // Show full-screen video overlay outside the main content tree
     if (fullScreenVideo != null) {
         val (videoUrl, videoMid) = fullScreenVideo!!
@@ -210,7 +212,7 @@ private fun ProfileContentWithTweetListView(
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
     val user by viewModel.user.collectAsState()
-    
+
     // Create header content with profile details and pinned tweets - make it stable
     // Use remember with no dependencies to create a stable reference that doesn't change
     val headerContent: @Composable () -> Unit = remember {
@@ -220,7 +222,7 @@ private fun ProfileContentWithTweetListView(
                 key(user.mid) {
                     ProfileDetail(viewModel, navController)
                 }
-                
+
                 // Pinned tweets section (if any) - use key to force recomposition only when pinnedTweets change
                 key(pinnedTweets.size, pinnedTweets.firstOrNull()?.mid) {
                     if (pinnedTweets.isNotEmpty()) {
@@ -238,11 +240,11 @@ private fun ProfileContentWithTweetListView(
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
-                        
+
                         pinnedTweets.forEach { tweet ->
                             TweetItem(tweet, parentEntry)
                         }
-                        
+
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 2.dp),
                             thickness = 2.dp,
@@ -253,13 +255,13 @@ private fun ProfileContentWithTweetListView(
             }
         }
     }
-    
+
     // Create pull refresh state for initial loading
     val pullRefreshState = rememberPullRefreshState(
         refreshing = initState,
         onRefresh = { /* No-op for initial load */ }
     )
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -288,7 +290,7 @@ private fun ProfileContentWithTweetListView(
                 restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
             )
         }
-        
+
         // Show pull-to-refresh style indicator during initial load
         if (initState) {
             PullRefreshIndicator(

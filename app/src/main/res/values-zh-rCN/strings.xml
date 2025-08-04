@@ -58,6 +58,10 @@
     <string name="username_taken">用户名已被占用</string>
     <string name="node_not_found">无法访问节点</string>
     <string name="no_chat">没有私信。请点击用户主页右上角的✉️发送私信。</string>
+    <string name="start_new_chat">开始新对话</string>
+    <string name="add_chat">添加对话</string>
+    <string name="select_user_to_chat">选择聊天用户</string>
+    <string name="delete_chat">删除对话</string>
     <string name="login_error">用户名或密码错误</string>
     <string name="comment_failed">评论失败</string>
     <string name="comment_uploaded">评论发布成功</string>
@@ -129,6 +133,7 @@
     <string name="app_icon">应用图标</string>
     <string name="user_avatar">用户头像</string>
     <string name="play">播放</string>
+    <string name="pause">暂停</string>
     <string name="search">搜索</string>
     <string name="share_via">分享到</string>
     <string name="hide">隐藏</string>
@@ -137,4 +142,49 @@
     <string name="clear">清除</string>
     <string name="search_placeholder">搜索 @用户名 或 #话题</string>
     <string name="content_to_share">分享内容</string>
+    <string name="yesterday">昨天</string>
+    
+    <!-- Chat-related strings -->
+    <string name="uploading_attachment">您可以继续聊天，文件正在后台上传</string>
+    <string name="attachment_sent">附件已发送</string>
+    <string name="attachment_received">附件已接收</string>
+    <string name="unknown_file">未知文件</string>
+    <string name="new_chat_started">新对话已开始</string>
+    <string name="no_one">未知用户</string>
+    <string name="remove_attachment">移除附件</string>
+    <string name="file_attachment">文件附件</string>
+    <string name="no_more_messages">没有更多消息</string>
+    <string name="loading_older_messages">正在加载更多消息...</string>
+    
+    <!-- Toast messages -->
+    <string name="failed_to_send_message">发送消息失败：%s</string>
+    <string name="uploading_attachment_background">正在后台上传附件...</string>
+    <string name="image_saved_to_gallery">图片已保存到相册</string>
+    <string name="failed_to_save_image">保存图片失败</string>
+    <string name="permission_granted">权限已授予</string>
+    <string name="permission_denied">权限被拒绝</string>
+    
+    <!-- UI elements -->
+    <string name="tweet">推文</string>
+    <string name="private_tweet">私密</string>
+    <string name="post_as_tweet">同时发帖</string>
+    
+    <!-- Service names -->
+    <string name="message_check_service">消息检查服务</string>
+    <string name="background_service_description">检查新消息的后台服务</string>
+    
+    <!-- Error messages -->
+    <string name="content_empty_text_message">文本消息内容不能为空</string>
+    <string name="attachments_empty_media_message">媒体消息附件不能为空</string>
+    <string name="content_empty_mixed_message">混合消息内容不能为空</string>
+    <string name="attachments_empty_mixed_message">混合消息附件不能为空</string>
+    <string name="invalid_json">无效的JSON</string>
+    <string name="timestamp_must_be_number">时间戳必须是数字</string>
+    <string name="timestamp_required">时间戳是必需的</string>
+    <string name="cannot_convert_dict_to_tweet">无法将字典转换为推文</string>
+    <string name="cannot_update_tweet_from_dict">无法从字典更新推文</string>
+    <string name="cannot_decode_dict_to_user">无法将字典解码为用户</string>
+    
+    <!-- Clipboard/Share -->
+    <string name="shared_text">共享文本</string>
 </resources>

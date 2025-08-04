@@ -78,7 +78,8 @@ fun EditProfileScreen(
     val hostId by viewModel.hostId
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading.collectAsState()
-    val launcher = rememberLauncherForActivityResult( contract = ActivityResultContracts.GetContent()
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -124,7 +125,8 @@ fun EditProfileScreen(
             if (!appUser.isGuest()) {
                 AppUserAvatar(launcher, viewModel)
             } else {
-                Text(text = stringResource(R.string.register),
+                Text(
+                    text = stringResource(R.string.register),
                     modifier = Modifier.fillMaxWidth()
                         .padding(top = 8.dp),
                     textAlign = TextAlign.Center,
@@ -146,9 +148,12 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.onPasswordChange(it) },
-                    label = { Text(
-                        if (appUser.isGuest()) stringResource(R.string.password)
-                        else stringResource(R.string.use_current_pswd) ) },
+                    label = {
+                        Text(
+                            if (appUser.isGuest()) stringResource(R.string.password)
+                            else stringResource(R.string.use_current_pswd)
+                        )
+                    },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
@@ -206,17 +211,26 @@ fun EditProfileScreen(
                 onClick = {
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
                         if (password.isNotEmpty() && password != confirm.value) {
-                            Toast.makeText(context, context.getString(R.string.confirm_pwd), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.confirm_pwd),
+                                Toast.LENGTH_SHORT
+                            ).show()
                             viewModel.isLoading.value = false
                             return@launch
                         }
                         viewModel.register(context) {
                             viewModel.viewModelScope.launch(Dispatchers.Main) {
-                                Toast.makeText(context, context.getString(R.string.registration_ok), Toast.LENGTH_LONG).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.registration_ok),
+                                    Toast.LENGTH_LONG
+                                ).show()
                                 navController.popBackStack()
                             }
                         }
-                    } },
+                    }
+                },
                 enabled = !isLoading,
                 modifier = Modifier
                     .padding(top = 16.dp)

@@ -19,7 +19,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 35
-        versionCode = 27    // Google Play store version code
+        versionCode = 40    // Google Play store version code
         versionName = "34"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
     implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.ui.graphics)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)
@@ -136,6 +137,9 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
+    
+    // Subsampling Scale Image View for efficient large image handling
+    implementation("com.davemorrissey.labs:subsampling-scale-image-view:3.10.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

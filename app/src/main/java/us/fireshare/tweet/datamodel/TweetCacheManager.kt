@@ -163,12 +163,14 @@ object TweetCacheManager {
     fun saveUser(user: User) {
         try {
             synchronized(userCacheLock) {
+                val currentTime = System.currentTimeMillis()
+                
                 // Update memory cache
                 userMemoryCache[user.mid] = user
-                userCacheTimestamps[user.mid] = System.currentTimeMillis()
+                userCacheTimestamps[user.mid] = currentTime
 
-                // Update database cache
-                HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user))
+                // Update database cache with timestamp
+                HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user, Date(currentTime)))
             }
         } catch (e: Exception) {
             Timber.e("Error saving user to cache: $e")
@@ -203,15 +205,17 @@ object TweetCacheManager {
             val dbCachedUser = HproseInstance.dao.getCachedUser(userId)
             dbCachedUser?.let { cachedUser ->
                 val user = cachedUser.user
-                if (!isUserExpired(user)) {
-                    // Add to memory cache for faster access
+                val cacheAge = System.currentTimeMillis() - cachedUser.timestamp.time
+                
+                if (cacheAge < USER_CACHE_EXPIRATION_TIME) {
+                    // Cache is still valid, add to memory cache for faster access
                     synchronized(userCacheLock) {
                         userMemoryCache[userId] = user
-                        userCacheTimestamps[userId] = System.currentTimeMillis()
+                        userCacheTimestamps[userId] = cachedUser.timestamp.time
                     }
                     return user
                 } else {
-                    // Remove expired user from database cache
+                    // Cache is expired, remove from database cache
                     removeCachedUserInternal(userId)
                 }
             }
@@ -257,6 +261,11 @@ object TweetCacheManager {
      */
     fun cleanupExpiredUsers() {
         try {
+            // Remove expired users from database cache
+            val cutoffTime = Date(System.currentTimeMillis() - USER_CACHE_EXPIRATION_TIME)
+            HproseInstance.dao.deleteOldCachedUsers(cutoffTime)
+            
+            // Remove expired users from memory cache
             val expiredUserIds = synchronized(userCacheLock) {
                 userMemoryCache.filter { (_, user) ->
                     isUserExpired(user)

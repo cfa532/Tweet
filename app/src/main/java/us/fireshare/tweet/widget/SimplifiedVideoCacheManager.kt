@@ -46,12 +46,13 @@ object SimplifiedVideoCacheManager {
      * Check if device has network connectivity
      */
     private fun isNetworkAvailable(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork ?: return false
         val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
-        
+
         return activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-               activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     /**
@@ -74,7 +75,7 @@ object SimplifiedVideoCacheManager {
     fun createExoPlayer(context: Context, url: String): ExoPlayer {
         val cache = getCache(context)
         val dataSourceFactory = DefaultDataSource.Factory(context)
-        
+
         // Configure cache strategy based on network availability
         val isOnline = isNetworkAvailable(context)
         val cacheFlags = if (isOnline) {
@@ -83,7 +84,7 @@ object SimplifiedVideoCacheManager {
             // When offline, only use cache, don't try network
             CacheDataSource.FLAG_BLOCK_ON_CACHE or CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
         }
-        
+
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(dataSourceFactory)
@@ -96,7 +97,6 @@ object SimplifiedVideoCacheManager {
         val baseUrl = if (url.endsWith("/")) url else "$url/"
         val masterUrl = "${baseUrl}master.m3u8"
         val playlistUrl = "${baseUrl}playlist.m3u8"
-
 
 
         val exoPlayer = ExoPlayer.Builder(context)
@@ -117,7 +117,13 @@ object SimplifiedVideoCacheManager {
                 Timber.e("SimplifiedVideoCacheManager - Error code: ${error.errorCode}")
                 Timber.e("SimplifiedVideoCacheManager - Has tried playlist: $hasTriedPlaylist")
                 Timber.e("SimplifiedVideoCacheManager - Has tried original: $hasTriedOriginal")
-                Timber.e("SimplifiedVideoCacheManager - Network available: ${isNetworkAvailable(context)}")
+                Timber.e(
+                    "SimplifiedVideoCacheManager - Network available: ${
+                        isNetworkAvailable(
+                            context
+                        )
+                    }"
+                )
 
                 // If offline, try to use cached data only
                 if (!isNetworkAvailable(context)) {
@@ -166,7 +172,7 @@ object SimplifiedVideoCacheManager {
                         .setCache(cache)
                         .setUpstreamDataSourceFactory(dataSourceFactory)
                         .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE)
-                    
+
                     // Try original URL first (most likely to be cached)
                     val originalMediaItem = MediaItem.Builder()
                         .setUri(url)
@@ -247,7 +253,7 @@ object SimplifiedVideoCacheManager {
         val cacheSize = cache.cacheSpace
         val maxCacheSize = CACHE_SIZE_BYTES
         val usedPercentage = (cacheSize * 100 / maxCacheSize).toInt()
-        
+
         return "${cacheSize / (1024 * 1024)}MB / ${maxCacheSize / (1024 * 1024)}MB ($usedPercentage%)"
     }
 
@@ -259,12 +265,12 @@ object SimplifiedVideoCacheManager {
             val cache = getCache(context)
             cache.release()
             videoCache = null
-            
+
             val videoCacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
             if (videoCacheDir.exists()) {
                 videoCacheDir.deleteRecursively()
             }
-            
+
             Timber.d("SimplifiedVideoCacheManager - Video cache cleared")
         } catch (e: Exception) {
             Timber.e("SimplifiedVideoCacheManager - Error clearing video cache. ${e.message}")
@@ -294,38 +300,43 @@ object SimplifiedVideoCacheManager {
         val retriever = MediaMetadataRetriever()
         return@withContext try {
             Timber.d("SimplifiedVideoCacheManager - Extracting aspect ratio from URI: $uri")
-            
+
             // Try to access the data source
             when {
                 uri.scheme == "http" || uri.scheme == "https" -> {
                     // For HTTP/HTTPS URLs, download the data first to a temporary file
                     Timber.d("SimplifiedVideoCacheManager - Downloading video data for aspect ratio extraction")
-                    val connection = java.net.URL(uri.toString()).openConnection() as java.net.HttpURLConnection
+                    val connection =
+                        java.net.URL(uri.toString()).openConnection() as java.net.HttpURLConnection
                     connection.connectTimeout = 10000 // 10 seconds
                     connection.readTimeout = 30000 // 30 seconds
                     connection.requestMethod = "GET"
-                    
-                    val tempFile = java.io.File.createTempFile("aspect_ratio_", ".tmp", context.cacheDir)
+
+                    val tempFile =
+                        java.io.File.createTempFile("aspect_ratio_", ".tmp", context.cacheDir)
                     tempFile.deleteOnExit()
-                    
+
                     connection.inputStream.use { input ->
                         tempFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
                     connection.disconnect()
-                    
+
                     Timber.d("SimplifiedVideoCacheManager - Downloaded video to temp file: ${tempFile.absolutePath}")
                     retriever.setDataSource(tempFile.absolutePath)
                 }
+
                 else -> {
                     // For local files, use the context method
                     retriever.setDataSource(context, uri)
                 }
             }
-            
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloat()
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloat()
+
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toFloat()
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toFloat()
 
             Timber.d("SimplifiedVideoCacheManager - Extracted width: $width, height: $height")
 

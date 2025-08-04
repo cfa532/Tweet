@@ -92,7 +92,7 @@ fun ComposeTweetScreen(
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    
+
     // Set context for notifications
     LaunchedEffect(Unit) {
         tweetFeedViewModel.setNotificationContext(context)
@@ -112,13 +112,14 @@ fun ComposeTweetScreen(
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
 
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            imageUri?.let {
-                selectedAttachments.add(it)
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            if (success) {
+                imageUri?.let {
+                    selectedAttachments.add(it)
+                }
             }
         }
-    }
 
     // take a picture as attachment
     val takeAShot = {
@@ -156,7 +157,7 @@ fun ComposeTweetScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                ),
                 title = {
                     Text("Edit", fontSize = 18.sp)
                 },
@@ -177,27 +178,29 @@ fun ComposeTweetScreen(
                 actions = {
                     var isLoading by remember { mutableStateOf(false) }
                     val coroutineScope = rememberCoroutineScope()
-                    
+
                     // Listen for upload completion to reset loading state
                     LaunchedEffect(Unit) {
                         tweetFeedViewModel.startListeningToNotifications(context)
                     }
-                    
+
                     IconButton(
                         enabled = !isLoading,
                         onClick = {
-                            if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
+                            if (tweetContent.trim()
+                                    .isNotEmpty() || selectedAttachments.isNotEmpty()
+                            ) {
                                 isLoading = true
-                                
+
                                 // Store content before clearing
                                 val contentToUpload = tweetContent.trim()
                                 val attachmentsToUpload = selectedAttachments.toList()
                                 val isPrivateUpload = isPrivate
-                                
+
                                 // Clear UI immediately for better UX
                                 selectedAttachments.clear()
                                 tweetContent = ""
-                                
+
                                 // Upload tweet
                                 tweetFeedViewModel.uploadTweet(
                                     context,
@@ -205,7 +208,7 @@ fun ComposeTweetScreen(
                                     attachmentsToUpload,
                                     isPrivateUpload
                                 )
-                                
+
                                 // Navigate back after a short delay to ensure upload is initiated
                                 val currentTime = SystemClock.elapsedRealtime()
                                 if (currentTime - lastClickTime > debounceTime) {
@@ -257,7 +260,8 @@ fun ComposeTweetScreen(
                                 isSearching = true  // start search for suggestions
                                 val query = it.substringAfterLast("@")
                                 tweetFeedViewModel.viewModelScope.launch {
-                                    suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
+                                    suggestions =
+                                        sharedViewModel.appUserViewModel.getSuggestions(query)
                                     isSearching = false
                                 }
                             } else {
@@ -285,8 +289,10 @@ fun ComposeTweetScreen(
                                 isSearching = false
                                 focusManager.clearFocus()
                             }) {
-                                Icon(Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.close_suggestions))
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = stringResource(R.string.close_suggestions)
+                                )
                             }
                         }
                     }
@@ -321,7 +327,7 @@ fun ComposeTweetScreen(
                         }
                     }
                 }
-                
+
                 // Character counter
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -330,11 +336,11 @@ fun ComposeTweetScreen(
                     Text(
                         text = "${tweetContent.length}/280",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error 
-                               else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // the row of action icons.
@@ -342,7 +348,7 @@ fun ComposeTweetScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Row (
+                    Row(
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -363,16 +369,18 @@ fun ComposeTweetScreen(
 
                     Spacer(Modifier.weight(1f))
 
-                    IconButton(onClick = {
-                        if (ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            takeAShot()
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        } },
+                    IconButton(
+                        onClick = {
+                            if (ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.CAMERA
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                takeAShot()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
@@ -384,8 +392,9 @@ fun ComposeTweetScreen(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     // select media files to upload
-                    IconButton(onClick = { filesPickerLauncher.launch(arrayOf("*/*")) },
-                        ) {
+                    IconButton(
+                        onClick = { filesPickerLauncher.launch(arrayOf("*/*")) },
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_photo_plus),
                             contentDescription = stringResource(R.string.upload_file),
@@ -420,13 +429,13 @@ fun ComposeTweetScreen(
                 }
             }
         }
-        
+
         // Exit confirmation dialog
         if (showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = { showExitConfirmation = false },
-                            title = { Text(stringResource(R.string.discard_tweet)) },
-            text = { Text(stringResource(R.string.unsaved_content_warning)) },
+                title = { Text(stringResource(R.string.discard_tweet)) },
+                text = { Text(stringResource(R.string.unsaved_content_warning)) },
                 confirmButton = {
                     TextButton(
                         onClick = {

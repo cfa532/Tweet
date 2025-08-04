@@ -74,10 +74,10 @@ fun ReplyEditorBox(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Confirmation dialog state
     var showExitConfirmation by remember { mutableStateOf(false) }
-    
+
     // Attachment handling
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -90,13 +90,14 @@ fun ReplyEditorBox(
         }
     }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            imageUri?.let {
-                selectedAttachments.add(it)
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            if (success) {
+                imageUri?.let {
+                    selectedAttachments.add(it)
+                }
             }
         }
-    }
     val takeAShot = {
         val photoFile = createImageFile(context)
         photoFile?.also {
@@ -119,12 +120,12 @@ fun ReplyEditorBox(
             Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
         }
     }
-    
+
     // Function to check if there's unsaved content
     fun hasUnsavedContent(): Boolean {
         return textValue.text.isNotBlank() || selectedAttachments.isNotEmpty()
     }
-    
+
     // Function to handle close attempt
     fun handleCloseAttempt() {
         if (hasUnsavedContent()) {
@@ -133,7 +134,7 @@ fun ReplyEditorBox(
             onExpandedChange(false)
         }
     }
-    
+
     // Function to clear content and close
     fun clearAndClose() {
         textValue = TextFieldValue("")
@@ -141,7 +142,7 @@ fun ReplyEditorBox(
         onExpandedChange(false)
         showExitConfirmation = false
     }
-    
+
     // Auto-focus when expanded
     LaunchedEffect(isExpanded) {
         if (isExpanded) {
@@ -149,15 +150,15 @@ fun ReplyEditorBox(
             focusRequester.requestFocus()
         }
     }
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp)
             .background(
-                color = if (isExpanded) 
+                color = if (isExpanded)
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                else 
+                else
                     Color.Transparent
             )
             .shadow(
@@ -180,9 +181,9 @@ fun ReplyEditorBox(
                     user = appUser,
                     size = 32
                 )
-                
+
                 Spacer(modifier = Modifier.width(12.dp))
-                
+
                 // Placeholder text with background
                 Box(
                     modifier = Modifier
@@ -199,7 +200,7 @@ fun ReplyEditorBox(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
-                
+
                 // Expand icon
                 Icon(
                     imageVector = Icons.Default.MoreVert,
@@ -226,7 +227,7 @@ fun ReplyEditorBox(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    
+
                     IconButton(
                         onClick = { handleCloseAttempt() }
                     ) {
@@ -237,9 +238,9 @@ fun ReplyEditorBox(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
-                
+
                 // Text input area
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -250,9 +251,9 @@ fun ReplyEditorBox(
                         user = appUser,
                         size = 40
                     )
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     // Text field with placeholder overlay
                     Box(
                         modifier = Modifier
@@ -275,7 +276,7 @@ fun ReplyEditorBox(
                                 .focusRequester(focusRequester),
                             maxLines = 8
                         )
-                        
+
                         // Show placeholder when text is empty
                         if (textValue.text.isEmpty()) {
                             Text(
@@ -286,7 +287,7 @@ fun ReplyEditorBox(
                         }
                     }
                 }
-                
+
                 // Display previews for attached files
                 if (selectedAttachments.isNotEmpty()) {
                     LazyColumn(
@@ -302,19 +303,21 @@ fun ReplyEditorBox(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(rowItems) { uri ->
-                                    UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
-                                        if (!checked) {
-                                            selectedAttachments.remove(updatedUri)
-                                        }
-                                    })
+                                    UploadFilePreview(
+                                        uri,
+                                        onCheckedChange = { updatedUri, checked ->
+                                            if (!checked) {
+                                                selectedAttachments.remove(updatedUri)
+                                            }
+                                        })
                                 }
                             }
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 // Input options bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -329,7 +332,11 @@ fun ReplyEditorBox(
                         // Camera/Video icon
                         IconButton(
                             onClick = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.CAMERA
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
                                     takeAShot()
                                 } else {
                                     permissionLauncher.launch(Manifest.permission.CAMERA)
@@ -344,10 +351,18 @@ fun ReplyEditorBox(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        
+
                         // Attachment icon
                         IconButton(
-                            onClick = { filePickerLauncher.launch(arrayOf("image/*", "video/*", "audio/*")) },
+                            onClick = {
+                                filePickerLauncher.launch(
+                                    arrayOf(
+                                        "image/*",
+                                        "video/*",
+                                        "audio/*"
+                                    )
+                                )
+                            },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -358,7 +373,7 @@ fun ReplyEditorBox(
                             )
                         }
                     }
-                    
+
                     // Right side - reply button
                     Button(
                         onClick = {
@@ -392,7 +407,7 @@ fun ReplyEditorBox(
             }
         }
     }
-    
+
     // Exit confirmation dialog
     if (showExitConfirmation) {
         androidx.compose.material3.AlertDialog(
@@ -403,16 +418,16 @@ fun ReplyEditorBox(
                 androidx.compose.material3.TextButton(
                     onClick = { clearAndClose() }
                 ) {
-                                            Text(stringResource(R.string.discard))
+                    Text(stringResource(R.string.discard))
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(
                     onClick = { showExitConfirmation = false }
                 ) {
-                                            Text(stringResource(R.string.keep_editing))
+                    Text(stringResource(R.string.keep_editing))
                 }
             }
         )
     }
-} 
+}

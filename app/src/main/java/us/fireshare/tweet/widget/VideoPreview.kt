@@ -50,23 +50,29 @@ fun VideoPreview(
     inPreviewGrid: Boolean = true,
     aspectRatio: Float?,
     callback: (Int) -> Unit,
-    videoMid: MimeiId? = null
+    videoMid: MimeiId? = null,
+    onLoadComplete: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var isLoading by remember { 
-        mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true) 
+    var isLoading by remember {
+        mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
 
-    val exoPlayer = remember(url, videoMid) { 
-        if (videoMid != null) {
+    val exoPlayer = remember(url, videoMid) {
+        val player = if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url)
         } else {
             createExoPlayer(context, url, MediaType.Video)
         }
+
+        // Explicitly disable repeat mode to prevent auto-replay
+        player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
+
+        player
     }
-    
+
     // Preload video if not already cached
     LaunchedEffect(videoMid, url) {
         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
@@ -115,18 +121,21 @@ fun VideoPreview(
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
             }
-            
+
+            // Ensure repeat mode is disabled
+            exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
+
             // If player is already ready, start immediately
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
                 exoPlayer.playWhenReady = autoPlay
                 return@LaunchedEffect
             }
-            
+
             // Ensure player is in a good state before playing
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
                 exoPlayer.prepare()
             }
-            
+
             // Set playWhenReady after ensuring player is ready
             exoPlayer.playWhenReady = autoPlay
         } else {
@@ -147,7 +156,7 @@ fun VideoPreview(
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
     }
-    
+
     // Create a single listener that will be properly managed
     val playerListener = remember {
         object : androidx.media3.common.Player.Listener {
@@ -155,19 +164,25 @@ fun VideoPreview(
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
                         isLoading = false
+                        onLoadComplete?.invoke()
                     }
+
                     androidx.media3.common.Player.STATE_BUFFERING -> {
                         // Only show loading if not already cached/preloaded
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
                             isLoading = true
                         }
                     }
+
                     androidx.media3.common.Player.STATE_ENDED -> {
                         isLoading = false
+                        // Ensure video doesn't restart by setting playWhenReady to false
+                        exoPlayer.playWhenReady = false
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)
                         }
                     }
+
                     androidx.media3.common.Player.STATE_IDLE -> {
                         // Only show loading if not already cached/preloaded
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
@@ -176,13 +191,13 @@ fun VideoPreview(
                     }
                 }
             }
-            
+
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isLoading = false
                 Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
                 Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
                 Timber.tag("VideoPreview").e("Error code: ${error.errorCode}")
-                
+
                 // Let the SimplifiedVideoCacheManager handle the fallback logic
                 // It will mark the video as failed only after all attempts are exhausted
                 // We just log the error here and let the fallback mechanism work
@@ -230,7 +245,7 @@ fun VideoPreview(
                 .fillMaxWidth()
                 .clipToBounds() // Ensure content is clipped to bounds
         )
-        
+
         // Show loading indicator when video is loading
         if (isLoading) {
             Box(

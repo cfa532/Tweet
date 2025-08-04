@@ -8,14 +8,13 @@ import jakarta.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.viewmodel.BottomBarViewModel
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @AndroidEntryPoint
 class NetworkCheckJobService : JobService() {
 
-    @Inject
-    lateinit var bottomBarViewModel: BottomBarViewModel
+    // BadgeStateManager is now a singleton object, no injection needed
     @Inject
     lateinit var tweetFeedViewModel: TweetFeedViewModel
 
@@ -27,7 +26,11 @@ class NetworkCheckJobService : JobService() {
         // You can replace this with actual network check logic
         val isNetworkAvailable = checkNetworkAvailability()
 
-        bottomBarViewModel.updateBadgeCount()
+        // Use runBlocking to call suspend function
+        kotlinx.coroutines.runBlocking {
+            val newMessages = HproseInstance.checkNewMessages()
+            BadgeStateManager.updateBadgeCount(newMessages?.size ?: 0)
+        }
         tweetFeedViewModel.viewModelScope.launch(Dispatchers.IO) {
             tweetFeedViewModel.fetchTweets(0)
         }

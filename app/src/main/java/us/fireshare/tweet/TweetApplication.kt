@@ -15,8 +15,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.CleanUpWorker
+import us.fireshare.tweet.service.MessageCheckService
 import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
@@ -50,6 +52,12 @@ class TweetApplication : Application(){
 
         // Start video memory monitoring
         VideoManager.startMemoryMonitoring()
+        
+        // Start message check service
+        MessageCheckService.startService(this)
+        
+        // Initialize BlackList with database
+        BlackList.initialize(this)
     }
 
     override fun onTerminate() {

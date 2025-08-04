@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -55,10 +54,9 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.ImageViewer
+import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,7 +231,7 @@ fun ImageModalDialog(
                     .verticalScroll(scrollState)
             ) {
                 getMediaUrl(user.avatar, user.baseUrl)?.let {
-                    ImageViewer(it, isFullSize = true)
+                    AdvancedImageViewer(it)
                 }
                 SelectableText(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
@@ -241,19 +239,17 @@ fun ImageModalDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
-//                Text(
-//                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
-//                    color = Color.Gray,
-//                    style = MaterialTheme.typography.bodySmall,
-//                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp) // Add some padding
-//                )
             }
 
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close), tint = Color.White)
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White
+                )
             }
         }
     }

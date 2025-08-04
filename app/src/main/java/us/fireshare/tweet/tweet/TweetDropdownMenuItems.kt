@@ -46,14 +46,20 @@ fun TweetDropdownMenuItems(
     val navController = LocalNavController.current
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val originTweetViewModel = if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-            parentEntry, key = tweet.originalTweetId
-        ) { factory ->
-            // Create a temporary tweet for the ViewModel, the actual tweet will be loaded by the ViewModel
-            factory.create(Tweet(mid = tweet.originalTweetId!!, authorId = tweet.originalAuthorId!!))
-        }
-    } else null
+    val originTweetViewModel =
+        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                parentEntry, key = tweet.originalTweetId
+            ) { factory ->
+                // Create a temporary tweet for the ViewModel, the actual tweet will be loaded by the ViewModel
+                factory.create(
+                    Tweet(
+                        mid = tweet.originalTweetId!!,
+                        authorId = tweet.originalAuthorId!!
+                    )
+                )
+            }
+        } else null
     val context = LocalContext.current
 
     // Only author can delete a tweet
@@ -61,7 +67,11 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
-                Toast.makeText(context, context.getString(R.string.delete_tweet), Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.delete_tweet),
+                    Toast.LENGTH_SHORT
+                ).show()
                 // Dismiss popup immediately for better UX
                 onDismissRequest()
 
@@ -86,7 +96,8 @@ fun TweetDropdownMenuItems(
                             }
                         }, appUserViewModel)
                     } catch (e: Exception) {
-                        Timber.tag("TweetDropdownMenuItems").e(e, "Error deleting tweet: ${e.message}")
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Error deleting tweet: ${e.message}")
                     }
                 }
             },

@@ -1,5 +1,10 @@
 package us.fireshare.tweet.chat
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,12 +34,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,25 +52,31 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
@@ -73,7 +89,6 @@ import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.concurrent.timer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,12 +101,44 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    
+    // Pull-to-refresh state
+    val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
+    val hasMoreMessages by viewModel.hasMoreMessages.collectAsState()
+    
+    // Load older messages when scrolling to top
+    LaunchedEffect(remember { derivedStateOf { listState.firstVisibleItemIndex } }) {
+        if (listState.firstVisibleItemIndex <= 2 && hasMoreMessages && !isLoadingOlderMessages) {
+            coroutineScope.launch {
+                viewModel.loadOlderMessages()
+            }
+        }
+    }
+    
+    // Observe toast messages
+    val toastMessage by viewModel.toastMessage.collectAsState()
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            viewModel.clearToastMessage()
+        }
+    }
     val focusManager = LocalFocusManager.current
+    
+    // Global state to control full screen display
+    var showFullScreen by remember { mutableStateOf(false) }
+    var fullScreenAttachment by remember { mutableStateOf<us.fireshare.tweet.datamodel.MimeiFileType?>(null) }
 
     fun scrollToBottom() {
         if (chatMessages.isNotEmpty()) {
             coroutineScope.launch {
-                listState.animateScrollToItem(chatMessages.size - 1)
+                try {
+                    listState.animateScrollToItem(chatMessages.size - 1)
+                } catch (e: Exception) {
+                    // Fallback to scroll to end if animateScrollToItem fails
+                    listState.scrollToItem(chatMessages.size - 1)
+                }
             }
         }
     }
@@ -101,36 +148,21 @@ fun ChatScreen(
         // Upon opening ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
-
-        // fetch new messages every 15s when on chat screen.
-        timer(period = 15000, action = {
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
+        
+        while (true) {
+            withContext(Dispatchers.IO) {
                 viewModel.fetchNewMessage()
             }
-        }, initialDelay = 100)
-    }
-
-    // Scroll to the bottom when the screen is first shown
-    LaunchedEffect(key1 = listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress && chatMessages.isNotEmpty()) {
-            scrollToBottom()
+            delay(15_000)
         }
     }
 
-    // Scroll to the bottom when a new message is added
-    LaunchedEffect(chatMessages) {
+    // Scroll to bottom when messages are first loaded
+    LaunchedEffect(chatMessages.isNotEmpty()) {
         if (chatMessages.isNotEmpty()) {
-            snapshotFlow {
-                listState.layoutInfo.visibleItemsInfo.lastOrNull()?.offset?.let { offset ->
-                    offset + (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.size
-                        ?: 0) > listState.layoutInfo.viewportEndOffset
-                } ?: false
-            }
-                .collect { isLastItemVisible ->
-                    if (isLastItemVisible) {
-                        scrollToBottom()
-                    }
-                }
+            // Add a small delay to ensure the LazyColumn is properly laid out
+            delay(100)
+            scrollToBottom()
         }
     }
 
@@ -180,66 +212,130 @@ fun ChatScreen(
                     keyboardController?.hide()
                     focusManager.clearFocus()
                 }
-                // Scroll to the bottom when the keyboard is opened
-                .onSizeChanged {
-                    scrollToBottom()
-                }
             ) {
-                LazyColumn(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 80.dp), // Increased padding for new input design
-                    state = listState
+                        // Removed .pullRefresh(pullRefreshState)
                 ) {
-                    itemsIndexed(chatMessages) { index, msg ->
-                        // Add time divider if more than 1 hour difference from previous message
-                        if (index > 0) {
-                            val previousMessage = chatMessages[index - 1]
-                            val timeDifference = msg.timestamp - previousMessage.timestamp
-                            val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
-                            
-                            if (timeDifference > oneHourInMillis) {
-                                // Time divider
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 80.dp), // Increased padding for new input design
+                        state = listState
+                    ) {
+                        // Show loading indicator at the top when loading older messages
+                        if (isLoadingOlderMessages) {
+                            item {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 0.dp),
+                                        .padding(vertical = 16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.Center
                                     ) {
-                                        HorizontalDivider(
-                                            modifier = Modifier
-                                                .padding(start = 8.dp)
-                                                .weight(1f),
-                                            thickness = 1.dp,
-                                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = formatTimestamp(msg.timestamp),
+                                            text = stringResource(R.string.loading_older_messages),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                            modifier = Modifier.padding(horizontal = 12.dp)
-                                        )
-                                        HorizontalDivider(
-                                            modifier = Modifier
-                                                .padding(end = 8.dp)
-                                                .weight(1f),
-                                            thickness = 1.dp,
-                                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
                                     }
                                 }
                             }
                         }
                         
-                        ChatItem(viewModel, msg, chatMessages)
+                        // Show "No more messages" indicator at the top if no more messages
+                        if (!hasMoreMessages && chatMessages.isNotEmpty() && !isLoadingOlderMessages) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.no_more_messages),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        itemsIndexed(chatMessages) { index, msg ->
+                            // Add time divider if more than 1 hour difference from previous message
+                            if (index > 0) {
+                                val previousMessage = chatMessages[index - 1]
+                                val timeDifference = msg.timestamp - previousMessage.timestamp
+                                val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
+                                
+                                if (timeDifference > oneHourInMillis) {
+                                    // Time divider
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 0.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            HorizontalDivider(
+                                                modifier = Modifier
+                                                    .padding(start = 8.dp)
+                                                    .weight(1f),
+                                                thickness = 1.dp,
+                                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                            )
+                                            Text(
+                                                text = formatTimestamp(msg.timestamp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                modifier = Modifier.padding(horizontal = 12.dp)
+                                            )
+                                            HorizontalDivider(
+                                                modifier = Modifier
+                                                    .padding(end = 8.dp)
+                                                    .weight(1f),
+                                                thickness = 1.dp,
+                                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            ChatItem(
+                                viewModel = viewModel, 
+                                message = msg, 
+                                messages = chatMessages,
+                                onImageClick = { attachment ->
+                                    fullScreenAttachment = attachment
+                                    showFullScreen = true
+                                },
+                                onVideoClick = { attachment ->
+                                    fullScreenAttachment = attachment
+                                    showFullScreen = true
+                                }
+                            )
+                        }
                     }
+                    
+                    // Removed PullRefreshIndicator
                 }
                 ChatInput(
                     viewModel = viewModel,
+                    onFocusGained = { scrollToBottom() },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 4.dp, vertical = 8.dp)
@@ -247,12 +343,66 @@ fun ChatScreen(
             }
         }
     }
+    
+    // Full screen overlays - rendered at the top level
+    if (showFullScreen && fullScreenAttachment != null) {
+        val attachment = fullScreenAttachment!!
+        val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+        
+        when (attachment.type) {
+            us.fireshare.tweet.datamodel.MediaType.Image -> {
+                us.fireshare.tweet.widget.AdvancedImageViewer(
+                    imageUrl = mediaUrl,
+                    enableLongPress = true,
+                    onClose = { showFullScreen = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            us.fireshare.tweet.datamodel.MediaType.Video -> {
+                // Try to get existing player for seamless transition
+                val existingPlayer = us.fireshare.tweet.widget.VideoManager.transferToFullScreen(attachment.mid)
+                
+                if (existingPlayer != null) {
+                    // Use existing player for seamless transition
+                    us.fireshare.tweet.widget.FullScreenVideoPlayer(
+                        existingPlayer = existingPlayer,
+                        videoMid = attachment.mid,
+                        onClose = { showFullScreen = false },
+                        enableImmersiveMode = true
+                    )
+                } else {
+                    // Fallback to regular full-screen player
+                    us.fireshare.tweet.widget.FullScreenVideoPlayer(
+                        videoMid = attachment.mid,
+                        videoUrl = mediaUrl,
+                        onClose = { showFullScreen = false },
+                        autoPlay = true,
+                        enableImmersiveMode = true,
+                        autoReplay = true
+                    )
+                }
+            }
+            else -> {
+                // For other file types, do nothing
+            }
+        }
+    }
 }
 
 @Composable
-fun ChatItem(viewModel: ChatViewModel, message: ChatMessage, messages: List<ChatMessage>) {
+fun ChatItem(
+    viewModel: ChatViewModel, 
+    message: ChatMessage, 
+    messages: List<ChatMessage>,
+    onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit,
+    onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
+) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
+    
+    // Check if this message is being sent (has placeholder content and no attachments yet, but it's from current user)
+    val isSending = isSentByCurrentUser && 
+                   (message.content == "sending_attachment" || (message.content.isNullOrBlank() && message.attachments.isNullOrEmpty()))
     
     // Determine if this is the last message from this party
     val currentMessageIndex = messages.indexOf(message)
@@ -271,35 +421,115 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage, messages: List<Chat
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp),
         horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             if (!isSentByCurrentUser) {
                 UserAvatar(user = receipt, size = 32)
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = if (isLastMessageFromParty) {
-                    ChatBubbleShape(isSentByCurrentUser)
-                } else {
-                    RegularChatBubbleShape()
-                },
-                modifier = Modifier.padding(4.dp)
+            
+            // Message content in a column with two rows
+            Column(
+                horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
             ) {
-                SelectionContainer {
-                    BasicText(
-                        text = buildAnnotatedText(message.content ?: ""),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(8.dp)
-                    )
+                // First row: Text content (if any) - hide placeholder text for attachments
+                if (message.content?.isNotBlank() == true && message.content != "sending_attachment") {
+                    Surface(
+                        color = if (isSending) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.primaryContainer
+                        },
+                        shape = if (isLastMessageFromParty) {
+                            ChatBubbleShape(isSentByCurrentUser)
+                        } else {
+                            regularChatBubbleShape()
+                        },
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        SelectionContainer {
+                            BasicText(
+                                text = buildAnnotatedText(message.content),
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                }
+                
+                // Second row: Media preview grid (if attachments exist)
+                message.attachments?.let { attachments ->
+                    if (attachments.isNotEmpty()) {
+                        Surface(
+                            color = if (isSending) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            },
+                            shape = if (isLastMessageFromParty) {
+                                ChatBubbleShape(isSentByCurrentUser)
+                            } else {
+                                regularChatBubbleShape()
+                            },
+                            modifier = Modifier.padding(4.dp)
+                        ) {
+                            // Simple media preview for chat messages
+                            ChatMediaPreview(
+                                attachments = attachments,
+                                onImageClick = { onImageClick(attachments.first()) },
+                                onVideoClick = { onVideoClick(attachments.first()) }
+                            )
+                        }
+                    }
+                }
+                
+                // Show loading placeholder when sending attachment
+                if (isSending && message.attachments.isNullOrEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                        shape = if (isLastMessageFromParty) {
+                            ChatBubbleShape(isSentByCurrentUser)
+                        } else {
+                            regularChatBubbleShape()
+                        },
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth(0.7f)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Sending attachment in background...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.uploading_attachment),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
+            
             if (isSentByCurrentUser) {
                 Spacer(modifier = Modifier.width(8.dp))
                 UserAvatar(user = appUser, size = 32)
@@ -323,11 +553,77 @@ fun ChatItem(viewModel: ChatViewModel, message: ChatMessage, messages: List<Chat
 }
 
 @Composable
-fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
+fun ChatInput(
+    viewModel: ChatViewModel, 
+    onFocusGained: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val textState by viewModel.message
-    val hasInput = textState.isNotBlank()
+    val selectedAttachment by viewModel.selectedAttachment
+    val hasInput = textState.isNotBlank() || selectedAttachment != null
     val isSending = remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
+    
+    // Track focus state
+    var isFocused by remember { mutableStateOf(false) }
+    
+    // Call onFocusGained when focus is gained
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            // Add a small delay to allow keyboard to start appearing
+            delay(100)
+            onFocusGained()
+        }
+    }
+    
+    // Function to send message while maintaining focus
+    fun sendMessage() {
+        // Check if there's input and we're not already sending
+        val currentText = textState
+        val currentAttachment = selectedAttachment
+        val hasCurrentInput = currentText.isNotBlank() || currentAttachment != null
+        
+        if (hasCurrentInput && !isSending.value) {
+            isSending.value = true
+            
+            // Clear input immediately to show it's been sent
+            viewModel.message.value = ""
+            viewModel.selectedAttachment.value = null
+            
+            // Send message in background
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.sendMessage(currentText, currentAttachment, context)
+                isSending.value = false
+                // Ensure focus is maintained after sending
+                withContext(Dispatchers.Main) {
+                    focusRequester.requestFocus()
+                }
+            }
+        }
+    }
+    
+    // File picker launcher for single file selection
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.selectedAttachment.value = it
+        }
+    }
+    
+    // Function to get filename from URI
+    fun getFileName(uri: Uri): String {
+        return try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                cursor.moveToFirst()
+                cursor.getString(nameIndex) ?: context.getString(R.string.unknown_file)
+            } ?: context.getString(R.string.unknown_file)
+        } catch (e: Exception) {
+            context.getString(R.string.unknown_file)
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth()
@@ -353,7 +649,7 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             // Attachment button
             IconButton(
                 onClick = {
-                    // TODO: Implement attachment functionality
+                    filePickerLauncher.launch(arrayOf("*/*"))
                 },
                 modifier = Modifier.size(40.dp),
                 enabled = !isSending.value
@@ -375,7 +671,10 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(max = 120.dp)
-                    .focusRequester(focusRequester),
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    },
                 placeholder = {
                     Text(
                         text = stringResource(R.string.type_message),
@@ -388,33 +687,19 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 ),
                 keyboardActions = KeyboardActions(
                     onSend = {
-                        if (hasInput && !isSending.value) {
-                            isSending.value = true
-                            // Store the message content before clearing
-                            val messageContent = textState
-                            // Clear input immediately to provide instant feedback
-                            viewModel.message.value = ""
-                            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                viewModel.sendMessage(messageContent)
-                                isSending.value = false
-                                // Keep focus on the input field (must be on main thread)
-                                withContext(Dispatchers.Main) {
-                                    focusRequester.requestFocus()
-                                }
-                            }
-                        }
+                        sendMessage()
                     }
                 ),
                 shape = RoundedCornerShape(20.dp),
-                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
                 singleLine = false,
                 maxLines = 5,
-                enabled = !isSending.value
+                enabled = true
             )
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -422,29 +707,15 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             // Send button without background decoration
             IconButton(
                 onClick = {
-                    if (hasInput && !isSending.value) {
-                        isSending.value = true
-                        // Store the message content before clearing
-                        val messageContent = textState
-                        // Clear input immediately to provide instant feedback
-                        viewModel.message.value = ""
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            viewModel.sendMessage(messageContent)
-                            isSending.value = false
-                            // Keep focus on the input field (must be on main thread)
-                            withContext(Dispatchers.Main) {
-                                focusRequester.requestFocus()
-                            }
-                        }
-                    }
+                    sendMessage()
                 },
                 modifier = Modifier.size(40.dp),
-                enabled = hasInput && !isSending.value
+                enabled = hasInput
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = stringResource(R.string.send),
-                    tint = if (hasInput && !isSending.value)
+                    tint = if (hasInput)
                         MaterialTheme.colorScheme.primary
                     else
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
@@ -454,9 +725,45 @@ fun ChatInput(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 )
             }
         }
+        
+        // Display selected attachment filename with remove button
+        selectedAttachment?.let { uri ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Remove button
+                IconButton(
+                    onClick = {
+                        viewModel.selectedAttachment.value = null
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.remove_attachment),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // Filename
+                Text(
+                    text = getFileName(uri),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
 
+@Composable
 private fun formatTimestamp(timestamp: Long): String {
     val date = Date(timestamp)
     val now = Date()
@@ -475,11 +782,158 @@ private fun formatTimestamp(timestamp: Long): String {
         // Yesterday
         calendar.get(java.util.Calendar.YEAR) == messageCalendar.get(java.util.Calendar.YEAR) &&
         calendar.get(java.util.Calendar.DAY_OF_YEAR) == messageCalendar.get(java.util.Calendar.DAY_OF_YEAR) + 1 -> {
-            "昨天 ${timeFormat.format(date)}"
+            "${stringResource(R.string.yesterday)} ${timeFormat.format(date)}"
         }
         // Other days
         else -> {
             dateFormat.format(date)
+        }
+    }
+}
+
+@Composable
+fun ChatMediaPreview(
+    attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
+    onImageClick: (() -> Unit)? = null,
+    onVideoClick: (() -> Unit)? = null
+) {
+    if (attachments.isEmpty()) return
+
+    // For chat messages, we'll show a simple preview of the first attachment
+    val attachment = attachments.first()
+    val mediaUrl =
+        us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+
+    // State to track loading
+    var isLoading by remember { mutableStateOf(true) }
+
+    // Helper function to apply aspect ratio rule: use 0.8 if aspect ratio is smaller than 0.8, otherwise use original value
+    fun applyAspectRatioRule(originalAspectRatio: Float?): Float {
+        return when {
+            originalAspectRatio == null -> 16f / 9f // Default aspect ratio
+            originalAspectRatio < 0.8f -> 0.8f // Use 0.8 if smaller than 0.8
+            else -> originalAspectRatio // Use original value if >= 0.8
+        }
+    }
+
+    val adjustedAspectRatio = applyAspectRatioRule(attachment.aspectRatio)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(0.7f)
+            .aspectRatio(adjustedAspectRatio)
+            .heightIn(max = 200.dp)
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        // Show loading spinner initially
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        when (attachment.type) {
+            us.fireshare.tweet.datamodel.MediaType.Image -> {
+                us.fireshare.tweet.widget.ImageViewer(
+                    imageUrl = mediaUrl,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable { onImageClick?.invoke() },
+                    enableLongPress = false,
+                    onLoadComplete = { isLoading = false }
+                )
+            }
+
+            us.fireshare.tweet.datamodel.MediaType.Video -> {
+                Box(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Use VideoPreview with shared player that can transition to full-screen
+                    us.fireshare.tweet.widget.VideoPreview(
+                        url = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        index = 0,
+                        autoPlay = false,
+                        inPreviewGrid = true,
+                        aspectRatio = adjustedAspectRatio,
+                        callback = { index ->
+                            // Open full-screen with the same video player
+                            onVideoClick?.invoke()
+                        },
+                        videoMid = attachment.mid,
+                        onLoadComplete = { isLoading = false }
+                    )
+                    
+                    // Play button overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onVideoClick?.invoke() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(48.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = stringResource(R.string.play),
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            us.fireshare.tweet.datamodel.MediaType.Audio -> {
+                us.fireshare.tweet.widget.AudioPreview(
+                    mediaItems = attachments,
+                    index = 0,
+                    modifier = Modifier.fillMaxSize(),
+                    tweet = us.fireshare.tweet.datamodel.Tweet(
+                        mid = "",
+                        authorId = "",
+                        content = "",
+                        attachments = attachments,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+
+            else -> {
+                // For other file types, show a file icon with filename
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AttachFile,
+                        contentDescription = stringResource(R.string.file_attachment),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = attachment.fileName ?: stringResource(R.string.unknown_file),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

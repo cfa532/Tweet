@@ -85,20 +85,20 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
     val navController = LocalNavController.current
     val context = LocalContext.current
-    
+
     // ReplyEditorBox state management
     var isReplyBoxExpanded by remember { mutableStateOf(false) }
-    
+
     // Grid columns state for media layout
     var gridColumns by remember { mutableStateOf(1) }
     var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }
-    
+
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
-    
+
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
     val listState = rememberLazyListState(
@@ -106,7 +106,7 @@ fun TweetDetailScreen(
         initialFirstVisibleItemScrollOffset = savedScrollPosition.value.second
     )
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Pull-to-refresh state
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
@@ -124,7 +124,7 @@ fun TweetDetailScreen(
             }
         }
     )
-    
+
     // Detect when at bottom for infinite scroll
     val isAtBottom by remember {
         derivedStateOf {
@@ -133,20 +133,25 @@ fun TweetDetailScreen(
             lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
         }
     }
-    
+
     // Set context for notifications
     LaunchedEffect(Unit) {
         viewModel.setNotificationContext(context)
     }
-    
+
     // Track scroll position changes and save them
     LaunchedEffect(listState) {
-        snapshotFlow { Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+        snapshotFlow {
+            Pair(
+                listState.firstVisibleItemIndex,
+                listState.firstVisibleItemScrollOffset
+            )
+        }
             .collect { position ->
                 savedScrollPosition.value = position
             }
     }
-    
+
     // Track initial loading completion
     LaunchedEffect(comments) {
         if (isInitialLoading) {
@@ -154,7 +159,7 @@ fun TweetDetailScreen(
             isInitialLoading = false
         }
     }
-    
+
     // Initial comment load when tweet is available
     LaunchedEffect(tweet.mid) {
         if (tweet.mid != null && isInitialLoading) {
@@ -163,7 +168,7 @@ fun TweetDetailScreen(
             }
         }
     }
-    
+
     // Infinite scroll for comments
     LaunchedEffect(isAtBottom) {
         if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
@@ -180,7 +185,7 @@ fun TweetDetailScreen(
             }
         }
     }
-    
+
     // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
     LaunchedEffect(Unit) {
         delay(3000L)
@@ -196,7 +201,7 @@ fun TweetDetailScreen(
             }
         }
     }
-    
+
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
     }
@@ -206,27 +211,29 @@ fun TweetDetailScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                titleContentColor = MaterialTheme.colorScheme.primary,
-            ),
-            title = {
-                Text(
-                    text = "Tweet",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() } )
-                {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                title = {
+                    Text(
+                        text = "Tweet",
+                        style = MaterialTheme.typography.bodyLarge
                     )
-                }
-            },
-        )},
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() })
+                    {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                },
+            )
+        },
         bottomBar = {
             Column {
                 ReplyEditorBox(
@@ -262,7 +269,9 @@ fun TweetDetailScreen(
                 containerColor = Color.White.copy(alpha = 0.7f)
             ) {
                 Icon(
-                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(R.drawable.ic_grid_layout),
+                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(
+                        R.drawable.ic_grid_layout
+                    ),
                     contentDescription = stringResource(R.string.switch_layout),
                     modifier = Modifier.size(20.dp)
                 )
@@ -285,8 +294,8 @@ fun TweetDetailScreen(
                 // Tweet detail at the top
                 item {
                     TweetDetailBody(
-                        viewModel = viewModel, 
-                        parentEntry = parentEntry, 
+                        viewModel = viewModel,
+                        parentEntry = parentEntry,
                         gridColumns = gridColumns,
                         onExpandReply = { isReplyBoxExpanded = true }
                     )
@@ -296,7 +305,7 @@ fun TweetDetailScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
-                
+
                 // Show initial loading spinner for comments
                 if (isInitialLoading) {
                     item {
@@ -321,7 +330,7 @@ fun TweetDetailScreen(
                             parentTweetViewModel = viewModel,
                             parentEntry = parentEntry
                         )
-                        
+
                         // Add divider after each comment (except the last one)
                         if (comments.indexOf(comment) < comments.size - 1) {
                             HorizontalDivider(
@@ -331,7 +340,7 @@ fun TweetDetailScreen(
                             )
                         }
                     }
-                    
+
                     // Show top refresh spinner
                     if (isRefreshingAtTop) {
                         item {
@@ -346,7 +355,7 @@ fun TweetDetailScreen(
                             )
                         }
                     }
-                    
+
                     // Show bottom pagination spinner
                     if (isRefreshingAtBottom) {
                         item {
@@ -362,7 +371,7 @@ fun TweetDetailScreen(
                     }
                 }
             }
-            
+
             // Pull-to-refresh indicator
             PullRefreshIndicator(
                 refreshing = isRefreshingAtTop,

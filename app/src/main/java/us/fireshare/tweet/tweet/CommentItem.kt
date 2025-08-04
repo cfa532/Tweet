@@ -169,7 +169,8 @@ fun CommentItem(
 fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     // Use comment.mid as key to ensure state is reset when comment changes
     var expanded by remember(comment.mid) { mutableStateOf(false) }
-    val parentTweet by parentTweetViewModel?.tweetState?.collectAsState() ?: remember { mutableStateOf(null) }
+    val parentTweet by parentTweetViewModel?.tweetState?.collectAsState()
+        ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
@@ -200,23 +201,25 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                 .height(IntrinsicSize.Min)
         ) {
             if (parentTweet?.authorId == appUser.mid || comment.authorId == appUser.mid) {
-                DropdownMenuItem( modifier = Modifier.alpha(0.9f),
+                DropdownMenuItem(
+                    modifier = Modifier.alpha(0.9f),
                     onClick = {
                         // Dismiss popup immediately for better UX
                         expanded = false
-                        
+
                         // Delete comment with optimistic updates
                         parentTweetViewModel?.let { viewModel ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 try {
                                     viewModel.deleteComment(comment.mid, comment)
                                 } catch (e: Exception) {
-                                    Timber.tag("CommentDropdownMenu").e(e, "Error deleting comment: ${e.message}")
+                                    Timber.tag("CommentDropdownMenu")
+                                        .e(e, "Error deleting comment: ${e.message}")
                                     // Show toast message on main thread
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(
-                                            context, 
-                                            context.getString(R.string.comment_delete_failed), 
+                                            context,
+                                            context.getString(R.string.comment_delete_failed),
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }

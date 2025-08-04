@@ -42,12 +42,12 @@ import java.lang.ref.WeakReference
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
     private val savedStateHandle: SavedStateHandle
-) : ViewModel()
-{
+) : ViewModel() {
     @AssistedFactory
     interface TweetViewModelFactory {
         fun create(tweet: Tweet): TweetViewModel
     }
+
     private val _tweetState = MutableStateFlow(tweet)
     val tweetState: StateFlow<Tweet> get() = _tweetState.asStateFlow()
 
@@ -58,6 +58,7 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
+
     // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
 
@@ -70,14 +71,17 @@ class TweetViewModel @AssistedInject constructor(
             }
         }
     }
+
     fun savePlaybackPosition(url: String, position: Long) {
         playbackPositions[url] = position
         savedStateHandle["playbackPosition_$url"] = position
     }
+
     fun releaseAllPlayers() {
         exoPlayers.values.forEach { it.release() }
         exoPlayers.clear()
     }
+
     fun stopPlayer(url: String) {
         exoPlayers[url]?.playWhenReady = false  // have to set it here, otherwise won't work.
     }
@@ -101,7 +105,7 @@ class TweetViewModel @AssistedInject constructor(
      */
     suspend fun refreshTweetAndOriginal() {
         val currentTweet = tweetState.value
-        
+
         try {
             if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
                 // Check if this is a pure retweet (no content/attachments) or a quoted tweet (has content/attachments)
@@ -112,26 +116,32 @@ class TweetViewModel @AssistedInject constructor(
                     _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
                 } else {
                     // Quoted tweet - refresh both the quoting tweet and the original tweet
-                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshedTweet ->
+                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
+                        ?.let { refreshedTweet ->
+                            // Only update if the refreshed tweet has valid content
+                            if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
+                                _tweetState.value = refreshedTweet
+                            }
+                        }
+
+                    // Also refresh the original tweet that's displayed as a quote
+                    HproseInstance.refreshTweet(
+                        currentTweet.originalTweetId!!,
+                        currentTweet.originalAuthorId!!
+                    )?.let { originalTweet ->
+                        Timber.tag("TweetViewModel")
+                            .d("Refreshed original tweet for quoted tweet: ${originalTweet.mid}")
+                    }
+                }
+            } else {
+                // This is an original tweet - refresh it directly
+                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
+                    ?.let { refreshedTweet ->
                         // Only update if the refreshed tweet has valid content
                         if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
                             _tweetState.value = refreshedTweet
                         }
                     }
-                    
-                    // Also refresh the original tweet that's displayed as a quote
-                    HproseInstance.refreshTweet(currentTweet.originalTweetId!!, currentTweet.originalAuthorId!!)?.let { originalTweet ->
-                        Timber.tag("TweetViewModel").d("Refreshed original tweet for quoted tweet: ${originalTweet.mid}")
-                    }
-                }
-            } else {
-                // This is an original tweet - refresh it directly
-                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshedTweet ->
-                    // Only update if the refreshed tweet has valid content
-                    if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
-                        _tweetState.value = refreshedTweet
-                    }
-                }
             }
         } catch (e: Exception) {
             // Log error but don't update state to prevent content from disappearing
@@ -163,7 +173,7 @@ class TweetViewModel @AssistedInject constructor(
             // Callback is kept for backward compatibility but UI updates are handled by notifications
         }
     }
-    
+
     /**
      * Delete a comment with optimistic updates for better UX
      */
@@ -171,7 +181,7 @@ class TweetViewModel @AssistedInject constructor(
         try {
             // Optimistically remove the comment from the UI immediately
             optimisticallyRemoveComment(commentId)
-            
+
             // Make the backend call
             delComment(commentId)
         } catch (e: Exception) {
@@ -181,7 +191,7 @@ class TweetViewModel @AssistedInject constructor(
             throw e // Re-throw to let UI handle the error if needed
         }
     }
-    
+
     /**
      * Optimistically remove a comment from the UI immediately
      */
@@ -189,13 +199,13 @@ class TweetViewModel @AssistedInject constructor(
         _comments.update { currentComments ->
             currentComments.filterNot { it.mid == commentId }
         }
-        
+
         // Update comment count
         _tweetState.value = tweetState.value.copy(
             commentCount = max(0, tweetState.value.commentCount - 1)
         )
     }
-    
+
     /**
      * Revert optimistic comment removal (add comment back to UI)
      */
@@ -205,7 +215,7 @@ class TweetViewModel @AssistedInject constructor(
                 .distinctBy { it.mid }
                 .sortedByDescending { it.timestamp }
         }
-        
+
         // Restore comment count
         _tweetState.value = tweetState.value.copy(
             commentCount = tweetState.value.commentCount + 1
@@ -259,12 +269,12 @@ class TweetViewModel @AssistedInject constructor(
         updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
     ) {
         val isFavorite = tweetState.value.isFavorite
-        _tweetState.value.isFavorite = ! isFavorite
+        _tweetState.value.isFavorite = !isFavorite
         _tweetState.value = tweetState.value.copy(
             favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
             else tweetState.value.favoriteCount + 1,
         )
-        updateAppUser(tweetState.value, ! isFavorite)
+        updateAppUser(tweetState.value, !isFavorite)
         /**
          * Overwrite in-memory favorites with result from database call that persists the change.
          * */
@@ -276,12 +286,12 @@ class TweetViewModel @AssistedInject constructor(
      * */
     suspend fun toggleBookmark(updateAppUser: (Tweet, Boolean) -> Unit) {
         val hasBookmarked = tweetState.value.isBookmarked
-        _tweetState.value.isBookmarked = ! hasBookmarked
+        _tweetState.value.isBookmarked = !hasBookmarked
         _tweetState.value = tweetState.value.copy(
             bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
             else tweetState.value.bookmarkCount + 1,
         )
-        updateAppUser(tweetState.value, ! hasBookmarked)
+        updateAppUser(tweetState.value, !hasBookmarked)
 
         /**
          * Overwrite in-memory bookmark with result from database call that persists the change.
@@ -296,12 +306,12 @@ class TweetViewModel @AssistedInject constructor(
     suspend fun retweetTweet() {
         // Update retweet count and status immediately for better UX
         val hasRetweeted = tweetState.value.isRetweeted
-        _tweetState.value.isRetweeted = ! hasRetweeted
+        _tweetState.value.isRetweeted = !hasRetweeted
         _tweetState.value = tweetState.value.copy(
             retweetCount = if (hasRetweeted) max(0, tweetState.value.retweetCount - 1)
             else tweetState.value.retweetCount + 1,
         )
-        
+
         // Perform the actual retweet operation
         try {
             HproseInstance.retweet(tweetState.value)
@@ -343,17 +353,19 @@ class TweetViewModel @AssistedInject constructor(
         }
         viewModelScope.launch {
             try {
-                Timber.tag("TweetViewModel").d("Starting notification listener for tweet ${tweetState.value.mid}")
+                Timber.tag("TweetViewModel")
+                    .d("Starting notification listener for tweet ${tweetState.value.mid}")
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
                         is TweetEvent.CommentUploaded -> {
                             // Only handle if this is the parent tweet for the comment
                             if (event.parentTweet.mid == tweetState.value.mid) {
-                                Timber.tag("TweetViewModel").d("CommentUploaded event received for tweet ${tweetState.value.mid}, comment ${event.comment.mid}, author ${event.comment.authorId}, current user ${appUser.mid}")
-                                
+                                Timber.tag("TweetViewModel")
+                                    .d("CommentUploaded event received for tweet ${tweetState.value.mid}, comment ${event.comment.mid}, author ${event.comment.authorId}, current user ${appUser.mid}")
+
                                 // Update the tweet state with new comment count
                                 _tweetState.value = event.parentTweet
-                                
+
                                 // Add the new comment to the comments list
                                 _comments.update { currentComments ->
                                     (listOf(event.comment) + currentComments)
@@ -368,11 +380,16 @@ class TweetViewModel @AssistedInject constructor(
                             val context = notificationContextRef?.get()
                             if (context != null) {
                                 withContext(Main) {
-                                    Toast.makeText(context, context.getString(R.string.comment_failed), Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.comment_failed),
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
                             Timber.tag("TweetViewModel").e("Comment upload failed: ${event.error}")
                         }
+
                         is TweetEvent.CommentDeleted -> {
                             // Only handle if this is the parent tweet for the comment
                             if (event.parentTweetId == tweetState.value.mid) {
@@ -380,19 +397,21 @@ class TweetViewModel @AssistedInject constructor(
                                 _comments.update { currentComments ->
                                     currentComments.filterNot { it.mid == event.commentId }
                                 }
-                                
+
                                 // Update comment count
                                 _tweetState.value = tweetState.value.copy(
                                     commentCount = max(0, tweetState.value.commentCount - 1)
                                 )
                             }
                         }
+
                         is TweetEvent.TweetUpdated -> {
                             // Update tweet if this is the same tweet
                             if (event.tweet.mid == tweetState.value.mid) {
                                 _tweetState.value = event.tweet
                             }
                         }
+
                         else -> {
                             // Handle other events if needed
                         }

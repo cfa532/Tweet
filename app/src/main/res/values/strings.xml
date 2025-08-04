@@ -57,6 +57,10 @@
     <string name="username_taken">Username is taken</string>
     <string name="node_not_found">Host not found</string>
     <string name="no_chat">No chat sessions found. Click the ✉️ at top right corner on user profile page to start a chat.</string>
+    <string name="start_new_chat">Start New Chat</string>
+    <string name="add_chat">Add Chat</string>
+    <string name="select_user_to_chat">Select User to Chat</string>
+    <string name="delete_chat">Delete Chat</string>
     <string name="login_error">Wrong username or password</string>
     <string name="comment_failed">Comment failed</string>
     <string name="comment_uploaded">Comment posted successfully</string>
@@ -128,6 +132,7 @@
     <string name="app_icon">App Icon</string>
     <string name="user_avatar">User Avatar</string>
     <string name="play">Play</string>
+    <string name="pause">Pause</string>
     <string name="search">Search</string>
     <string name="share_via">Share via</string>
     <string name="hide">Hide</string>
@@ -136,4 +141,49 @@
     <string name="clear">Clear</string>
     <string name="search_placeholder">Search @username or #hashtag</string>
     <string name="content_to_share">Content to Share</string>
+    <string name="yesterday">Yesterday</string>
+    
+    <!-- Chat-related strings -->
+    <string name="uploading_attachment">You can continue chatting while it uploads</string>
+    <string name="attachment_sent">Attachment sent</string>
+    <string name="attachment_received">Attachment received</string>
+    <string name="unknown_file">Unknown file</string>
+    <string name="new_chat_started">New chat started</string>
+    <string name="no_one">No One</string>
+    <string name="remove_attachment">Remove attachment</string>
+    <string name="file_attachment">File attachment</string>
+    <string name="no_more_messages">No more messages</string>
+    <string name="loading_older_messages">Loading older messages...</string>
+    
+    <!-- Toast messages -->
+    <string name="failed_to_send_message">Failed to send message: %s</string>
+    <string name="uploading_attachment_background">Uploading attachment in background...</string>
+    <string name="image_saved_to_gallery">Image saved to gallery</string>
+    <string name="failed_to_save_image">Failed to save image</string>
+    <string name="permission_granted">Permission Granted</string>
+    <string name="permission_denied">Permission Denied</string>
+    
+    <!-- UI elements -->
+    <string name="tweet">Tweet</string>
+    <string name="private_tweet">Private</string>
+    <string name="post_as_tweet">Post as Tweet</string>
+    
+    <!-- Service names -->
+    <string name="message_check_service">Message Check Service</string>
+    <string name="background_service_description">Background service for checking new messages</string>
+    
+    <!-- Error messages -->
+    <string name="content_empty_text_message">Content cannot be empty for text message</string>
+    <string name="attachments_empty_media_message">Attachments cannot be empty for media message</string>
+    <string name="content_empty_mixed_message">Content cannot be empty for mixed message</string>
+    <string name="attachments_empty_mixed_message">Attachments cannot be empty for mixed message</string>
+    <string name="invalid_json">Invalid JSON</string>
+    <string name="timestamp_must_be_number">Timestamp must be a number</string>
+    <string name="timestamp_required">Timestamp is required</string>
+    <string name="cannot_convert_dict_to_tweet">Cannot convert dictionary to Tweet</string>
+    <string name="cannot_update_tweet_from_dict">Cannot update tweet from dictionary</string>
+    <string name="cannot_decode_dict_to_user">Cannot decode dict to user</string>
+    
+    <!-- Clipboard/Share -->
+    <string name="shared_text">Shared Text</string>
 </resources>

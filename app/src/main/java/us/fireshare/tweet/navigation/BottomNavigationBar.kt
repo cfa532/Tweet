@@ -32,13 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
-import us.fireshare.tweet.viewmodel.BottomBarViewModel
 
 data class BottomNavigationItem(
     val title: String,
@@ -53,10 +51,9 @@ data class BottomNavigationItem(
 fun BottomNavigationBar(
     modifier: Modifier = Modifier,
     navController: NavController,
-    selectedIndex: Int = 100,
-    bottomBarViewModel: BottomBarViewModel = hiltViewModel()
+    selectedIndex: Int = 100
 ) {
-    val badgeCount by bottomBarViewModel.badgeCount.collectAsState()
+    val badgeCount by BadgeStateManager.badgeCount.collectAsState()
 
     val items = listOf(
         BottomNavigationItem(
@@ -123,7 +120,7 @@ fun BottomNavigationBar(
                     else -> 24.dp  // Default size for others
                 }
                 val finalSize = if (isSelected) baseSize + 4.dp else baseSize
-                
+
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -131,17 +128,20 @@ fun BottomNavigationBar(
                         .fillMaxHeight() // Full height touchable area
                         .clickable {
                             if (appUser.isGuest() && index > 0) {
-                                bottomBarViewModel.viewModelScope.launch {
-                                    guestWarning(context, navController)
-                                }
+                                // Use a coroutine scope for guest warning
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+                                    .launch {
+                                        guestWarning(context, navController)
+                                    }
                                 return@clickable
                             }
-                            val currentRoute = navController.currentBackStackEntry?.destination?.route
+                            val currentRoute =
+                                navController.currentBackStackEntry?.destination?.route
                             if (currentRoute != null) {
                                 // if in the same route as the destination, do nothing
-                                if (!currentRoute.contains(item.route.toString()) ) {
+                                if (!currentRoute.contains(item.route.toString())) {
                                     if (item.route == NavTweet.ChatList) {
-                                        bottomBarViewModel.updateBadgeCount(0)
+                                        BadgeStateManager.clearBadge()
                                     }
                                     navController.navigate(item.route)
                                 }
@@ -164,11 +164,13 @@ fun BottomNavigationBar(
                             imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                             contentDescription = item.title,
                             modifier = Modifier.size(finalSize),
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = 0.6f
+                            )
                         )
                     }
                 }
             }
         }
     }
-} 
+}

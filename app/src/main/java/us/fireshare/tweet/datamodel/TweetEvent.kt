@@ -7,7 +7,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
- * Events for tweet and comment operations
+ * Events for tweet, comment, and chat operations
  */
 sealed class TweetEvent {
     data class TweetUploaded(val tweet: Tweet) : TweetEvent()
@@ -20,6 +20,12 @@ sealed class TweetEvent {
     data class TweetLiked(val tweet: Tweet, val isLiked: Boolean) : TweetEvent()
     data class TweetBookmarked(val tweet: Tweet, val isBookmarked: Boolean) : TweetEvent()
     data class TweetRetweeted(val originalTweet: Tweet, val retweet: Tweet) : TweetEvent()
+    
+    // Chat events
+    data class ChatMessageSent(val message: ChatMessage) : TweetEvent()
+    data class ChatMessageSendFailed(val error: String) : TweetEvent()
+    data class ChatMessageReceived(val message: ChatMessage) : TweetEvent()
+    data class ChatSessionUpdated(val sessionId: String, val hasNews: Boolean) : TweetEvent()
 }
 
 /**

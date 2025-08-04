@@ -20,6 +20,7 @@ import com.google.gson.JsonParseException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.lang.reflect.Type
+import java.util.UUID
 
 // Custom deserializer to handle both Long and Double timestamp values
 class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
@@ -30,6 +31,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
     ): ChatMessage {
         val jsonObject = json?.asJsonObject ?: throw JsonParseException("Invalid JSON")
         
+        val id = jsonObject.get("id")?.asString
         val receiptId = jsonObject.get("receiptId")?.asString ?: ""
         val authorId = jsonObject.get("authorId")?.asString ?: ""
         val content = jsonObject.get("content")?.asString
@@ -56,7 +58,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         }
         
         // Handle sessionId (optional)
-        val sessionId = jsonObject.get("sessionId")?.asLong
+        val sessionId = jsonObject.get("sessionId")?.asString
         
         // Handle attachments (optional)
         val attachmentsElement = jsonObject.get("attachments")
@@ -66,6 +68,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         } else null
         
         return ChatMessage(
+            id = id,
             receiptId = receiptId,
             authorId = authorId,
             content = content,
@@ -78,12 +81,13 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
 
 @Serializable
 data class ChatMessage(
+    val id: String? = null,     // unique message ID
     val receiptId: MimeiId,     // receiver of the message
     val authorId: MimeiId,      // author of the message
     val content: String? = null,  // optional content
     val attachments: List<MimeiFileType>? = null,  // optional media files
     val timestamp: Long = System.currentTimeMillis(),
-    val sessionId: Long? = null  // reference to the chat session (created locally)
+    val sessionId: String? = null  // reference to the chat session (created locally)
 ) {
     init {
         // Validate that either content or attachments must be present
@@ -94,16 +98,25 @@ data class ChatMessage(
     
     companion object {
         /**
+         * Generate a unique message ID using UUID
+         */
+        fun generateUniqueId(): String {
+            return UUID.randomUUID().toString()
+        }
+        
+        /**
          * Create a ChatMessage with content only
          */
         fun createTextMessage(
             receiptId: MimeiId,
             authorId: MimeiId,
             content: String,
-            sessionId: Long? = null
+            sessionId: String? = null,
+            id: String? = null
         ): ChatMessage {
             require(content.isNotBlank()) { "Content cannot be empty for text message" }
             return ChatMessage(
+                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 content = content,
@@ -118,10 +131,12 @@ data class ChatMessage(
             receiptId: MimeiId,
             authorId: MimeiId,
             attachments: List<MimeiFileType>,
-            sessionId: Long? = null
+            sessionId: String? = null,
+            id: String? = null
         ): ChatMessage {
             require(attachments.isNotEmpty()) { "Attachments cannot be empty for media message" }
             return ChatMessage(
+                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 attachments = attachments,
@@ -137,11 +152,13 @@ data class ChatMessage(
             authorId: MimeiId,
             content: String,
             attachments: List<MimeiFileType>,
-            sessionId: Long? = null
+            sessionId: String? = null,
+            id: String? = null
         ): ChatMessage {
             require(content.isNotBlank()) { "Content cannot be empty for mixed message" }
             require(attachments.isNotEmpty()) { "Attachments cannot be empty for mixed message" }
             return ChatMessage(
+                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 content = content,
@@ -179,21 +196,21 @@ data class ChatMessage(
     /**
      * Create a copy of this message with the given sessionId
      */
-    fun withSessionId(sessionId: Long): ChatMessage {
+    fun withSessionId(sessionId: String): ChatMessage {
         return this.copy(sessionId = sessionId)
     }
     
     /**
      * Check if this message belongs to the given session
      */
-    fun belongsToSession(sessionId: Long): Boolean {
+    fun belongsToSession(sessionId: String): Boolean {
         return this.sessionId == sessionId
     }
 }
 
 @Serializable
 data class ChatSession(
-    val id: Long = 0,  // auto-generated session ID
+    val id: String = "",  // UUID session ID
     var timestamp: Long = System.currentTimeMillis(),    // last time the chat screen is opened
     val userId: MimeiId,    // always the appUser
     val receiptId: MimeiId, // whom the app user is chatting with
@@ -202,16 +219,24 @@ data class ChatSession(
 ) {
     companion object {
         /**
-         * Generate a unique session ID based on user IDs
+         * Generate a unique session ID using UUID
+         * This creates a new UUID for each session
+         */
+        fun generateSessionId(): String {
+            return UUID.randomUUID().toString()
+        }
+        
+        /**
+         * Generate a deterministic session ID based on user IDs
          * This ensures consistent sessionId for the same chat participants
          * Note: sessionId is only stored locally in Room database, not in backend
          */
-        fun generateSessionId(userId: MimeiId, receiptId: MimeiId): Long {
+        fun generateDeterministicSessionId(userId: MimeiId, receiptId: MimeiId): String {
             // Create a deterministic hash based on sorted user IDs to ensure consistency
             // This allows us to recreate the same sessionId when loading from backend
             val sortedIds = listOf(userId, receiptId).sorted()
             val combinedString = "${sortedIds[0]}_${sortedIds[1]}"
-            return combinedString.hashCode().toLong()
+            return UUID.nameUUIDFromBytes(combinedString.toByteArray()).toString()
         }
         
         /**
@@ -223,8 +248,9 @@ data class ChatSession(
             lastMessage: ChatMessage,
             hasNews: Boolean = false
         ): ChatSession {
-            val sessionId = generateSessionId(userId, receiptId)
+            val sessionId = generateSessionId()
             return ChatSession(
+                id = sessionId,
                 userId = userId,
                 receiptId = receiptId,
                 lastMessage = lastMessage.copy(sessionId = sessionId),
@@ -241,8 +267,8 @@ data class ChatSession(
             receiptId: MimeiId,
             chatSessionDao: ChatSessionDao,
             chatMessageDao: ChatMessageDao
-        ): Long {
-            val sessionId = generateSessionId(userId, receiptId)
+        ): String {
+            val sessionId = generateDeterministicSessionId(userId, receiptId)
             
             // Try to get existing session
             val existingSession = chatSessionDao.getSessionById(sessionId)
@@ -295,7 +321,7 @@ data class ChatSession(
                 }
                 
                 // Generate sessionId for this conversation
-                val sessionId = generateSessionId(userId, otherUserId)
+                val sessionId = generateDeterministicSessionId(userId, otherUserId)
                 
                 // Get or create session
                 val existingSession = chatSessionDao.getSessionById(sessionId)
@@ -341,17 +367,18 @@ data class ChatSession(
 @Entity(tableName = "chat_messages")
 data class ChatMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val messageId: String? = null,  // unique message ID from server
     val receiptId: String,
     val authorId: String,
     val content: String? = null,  // optional content
     val attachments: List<MimeiFileType>? = null,
     val timestamp: Long,
-    val sessionId: Long? = null
+    val sessionId: String? = null
 )
 
 @Entity(tableName = "chat_sessions")
 data class ChatSessionEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @PrimaryKey val id: String = "",  // UUID session ID
     val timestamp: Long,
     val userId: String,
     val receiptId: String,
@@ -361,6 +388,7 @@ data class ChatSessionEntity(
 
 fun ChatMessage.toEntity(): ChatMessageEntity {
     return ChatMessageEntity(
+        messageId = this.id,
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
@@ -372,6 +400,7 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
 
 fun ChatMessageEntity.toChatMessage(): ChatMessage {
     return ChatMessage(
+        id = this.messageId,
         receiptId = this.receiptId,
         authorId = this.authorId,
         content = this.content,
@@ -418,7 +447,17 @@ interface ChatMessageDao {
         LIMIT :limit
     """)
     // Load messages by sessionId - all messages in the same session
-    suspend fun loadMessagesBySession(sessionId: Long, limit: Int): List<ChatMessageEntity>
+    suspend fun loadMessagesBySession(sessionId: String, limit: Int): List<ChatMessageEntity>
+
+    @Query("""
+        SELECT * FROM chat_messages 
+        WHERE sessionId = :sessionId 
+        AND timestamp < :beforeTimestamp
+        ORDER BY timestamp DESC 
+        LIMIT :limit
+    """)
+    // Load older messages before a specific timestamp for pagination
+    suspend fun loadOlderMessagesBySession(sessionId: String, beforeTimestamp: Long, limit: Int): List<ChatMessageEntity>
 
     @Query("""
         SELECT * FROM chat_messages 
@@ -426,7 +465,7 @@ interface ChatMessageDao {
         ORDER BY timestamp ASC
     """)
     // Load all messages in a session in chronological order
-    suspend fun loadAllMessagesBySession(sessionId: Long): List<ChatMessageEntity>
+    suspend fun loadAllMessagesBySession(sessionId: String): List<ChatMessageEntity>
 
     @Query("""
         SELECT * FROM chat_messages 
@@ -435,7 +474,7 @@ interface ChatMessageDao {
         LIMIT 1
     """)
     // Get the latest message in a session
-    suspend fun getLatestMessageBySession(sessionId: Long): ChatMessageEntity?
+    suspend fun getLatestMessageBySession(sessionId: String): ChatMessageEntity?
 
     @Query("SELECT * FROM chat_messages WHERE id = :messageId LIMIT 1")
     suspend fun getMessageById(messageId: Long): ChatMessageEntity?
@@ -460,6 +499,28 @@ interface ChatMessageDao {
     """)
     @Deprecated("Use getLatestMessageBySession instead")
     suspend fun getLatestMessage(userId: String, receiptId: String): ChatMessageEntity?
+
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun deleteMessagesBySession(sessionId: String)
+
+    @Query("""
+        DELETE FROM chat_messages 
+        WHERE (authorId = :userId AND receiptId = :receiptId) 
+           OR (authorId = :receiptId AND receiptId = :userId)
+    """)
+    suspend fun deleteMessages(userId: String, receiptId: String)
+    
+    @Query("""
+        UPDATE chat_messages 
+        SET sessionId = :sessionId 
+        WHERE (sessionId IS NULL OR sessionId = '')
+        AND ((authorId = :userId AND receiptId = :receiptId) 
+           OR (authorId = :receiptId AND receiptId = :userId))
+    """)
+    suspend fun updateMessagesWithSessionId(userId: String, receiptId: String, sessionId: String)
+
+    @Query("DELETE FROM chat_messages WHERE authorId = :authorId AND receiptId = :receiptId AND timestamp = :timestamp")
+    suspend fun deleteMessage(authorId: String, receiptId: String, timestamp: Long)
 }
 
 @Dao
@@ -468,14 +529,14 @@ interface ChatSessionDao {
     suspend fun insertSession(session: ChatSessionEntity)
 
     @Query("SELECT * FROM chat_sessions WHERE id = :sessionId LIMIT 1")
-    suspend fun getSessionById(sessionId: Long): ChatSessionEntity?
+    suspend fun getSessionById(sessionId: String): ChatSessionEntity?
 
     @Query("SELECT * FROM chat_sessions WHERE userId = :userId ORDER BY timestamp DESC")
     // get all chat sessions of the current user
     suspend fun getAllSessions(userId: String): List<ChatSessionEntity>
 
     @Query("UPDATE chat_sessions SET timestamp = :timestamp, lastMessageId = :lastMessageId, hasNews = :hasNews WHERE id = :sessionId")
-    suspend fun updateSession(sessionId: Long, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
+    suspend fun updateSession(sessionId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
 
     // Legacy methods for backward compatibility (deprecated)
     @Query("SELECT * FROM chat_sessions WHERE userId = :userId AND receiptId = :receiptId LIMIT 1")
@@ -485,9 +546,15 @@ interface ChatSessionDao {
     @Query("UPDATE chat_sessions SET timestamp = :timestamp, lastMessageId = :lastMessageId, hasNews = :hasNews WHERE userId = :userId AND receiptId = :receiptId")
     @Deprecated("Use updateSession with sessionId instead")
     suspend fun updateSession(userId: String, receiptId: String, timestamp: Long, lastMessageId: Long, hasNews: Boolean)
+
+    @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
+    suspend fun deleteSession(sessionId: String)
+
+    @Query("DELETE FROM chat_sessions WHERE userId = :userId AND receiptId = :receiptId")
+    suspend fun deleteSession(userId: String, receiptId: String)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 6)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 7)
 @TypeConverters(MimeiFileTypeListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
@@ -506,7 +573,7 @@ abstract class ChatDatabase : RoomDatabase() {
                                 ChatDatabase::class.java,
                                 "chat_database"
                             )
-                            .fallbackToDestructiveMigration(true) // Allow destructive migration for development
+                            .fallbackToDestructiveMigration(true) // Always force destructive migration - delete and recreate database
                             .build()
                 INSTANCE = instance
                 instance

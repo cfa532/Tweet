@@ -67,13 +67,13 @@ fun TweetItem(
             if (tweet.mid != null) onTweetUnavailable?.invoke(tweet.mid)
         }
     }
-    
+
     // If tweet or author is null, return empty content to effectively hide this item
     if (tweet.author == null) {
         Box(modifier = Modifier.size(0.dp))
         return
     }
-    
+
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry, key = tweet.mid
     ) { factory ->
@@ -97,29 +97,33 @@ fun TweetItem(
                     // Load original tweet dynamically
                     var originalTweet by remember { mutableStateOf<Tweet?>(null) }
                     var isLoadingOriginal by remember { mutableStateOf(true) }
-                    
+
                     val currentTweet by viewModel.tweetState.collectAsState()
-                    
+
                     LaunchedEffect(tweet.originalTweetId, isVisible) {
                         withContext(IO) {
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                Timber.tag("TweetItem").d("Loading original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
+                                Timber.tag("TweetItem")
+                                    .d("Loading original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
                                 try {
                                     // Store IDs in local variables to avoid smart cast issues
                                     val originalTweetId = tweet.originalTweetId ?: ""
                                     val originalAuthorId = tweet.originalAuthorId ?: ""
-                                    
+
                                     // Use fetchTweet to get the original tweet from cache or network
-                                    Timber.tag("TweetItem").d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
+                                    Timber.tag("TweetItem")
+                                        .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
                                     originalTweet = HproseInstance.fetchTweet(
                                         originalTweetId,
                                         originalAuthorId,
                                         shouldCache = true
                                     )
                                     if (originalTweet != null) {
-                                        Timber.tag("TweetItem").d("Original tweet loaded successfully: ${originalTweet!!.mid}")
+                                        Timber.tag("TweetItem")
+                                            .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
                                     } else {
-                                        Timber.tag("TweetItem").w("Original tweet not found: $originalTweetId")
+                                        Timber.tag("TweetItem")
+                                            .w("Original tweet not found: $originalTweetId")
                                     }
                                 } catch (e: Exception) {
                                     Timber.tag("TweetItem").e(e, "Failed to load original tweet")
@@ -130,7 +134,7 @@ fun TweetItem(
                             }
                         }
                     }
-                    
+
                     if (isLoadingOriginal) {
                         // Show loading state with spinner
                         Box(
@@ -147,7 +151,7 @@ fun TweetItem(
                     } else if (originalTweet != null) {
                         // Store in local variable to avoid smart cast issues
                         val originalTweetNonNull = originalTweet!!
-                        
+
                         // Privacy check at rendering stage
                         if (originalTweetNonNull.isPrivate && originalTweetNonNull.authorId != appUser.mid) {
                             // Original tweet is private and not owned by current user - hide this item
@@ -162,28 +166,28 @@ fun TweetItem(
                                     parentEntry, key = tweet.originalTweetId
                                 ) { factory -> factory.create(originalTweetNonNull) }
 
-                        Column(modifier = Modifier.padding(top = 0.dp)) {
-                            // Label: Forward by user, above the quoted tweet
-                            val forwardBy = if (tweet.authorId == appUser.mid)
-                                stringResource(R.string.forward_by)
-                            else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
-                            Text(
-                                text = forwardBy,
-                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier
-                                    .offset(y = 12.dp)
-                                    .zIndex(1f)
-                                    .padding(start = 24.dp),
+                            Column(modifier = Modifier.padding(top = 0.dp)) {
+                                // Label: Forward by user, above the quoted tweet
+                                val forwardBy = if (tweet.authorId == appUser.mid)
+                                    stringResource(R.string.forward_by)
+                                else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
+                                Text(
+                                    text = forwardBy,
+                                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier
+                                        .offset(y = 12.dp)
+                                        .zIndex(1f)
+                                        .padding(start = 24.dp),
 
-                            )
-                            // The quoted/original tweet card
-                            TweetItemBody(
-                                originalTweetViewModel,
-                                parentEntry = parentEntry,
-                                parentTweet = tweet
-                            )
-                        }
+                                    )
+                                // The quoted/original tweet card
+                                TweetItemBody(
+                                    originalTweetViewModel,
+                                    parentEntry = parentEntry,
+                                    parentTweet = tweet
+                                )
+                            }
                         }
                     } else {
                         // Original tweet not available - this retweet should be removed from the list
@@ -280,7 +284,11 @@ fun TweetItem(
                                         ) { username ->
                                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                                 withContext(Dispatchers.Main) {
-                                                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                                                    navController.navigate(
+                                                        NavTweet.UserProfile(
+                                                            tweet.authorId
+                                                        )
+                                                    )
                                                 }
                                             }
                                         }
@@ -296,7 +304,11 @@ fun TweetItem(
                                             tonalElevation = 4.dp,
                                             shape = RoundedCornerShape(size = 8.dp)
                                         ) {
-                                            MediaPreviewGrid(tweet.attachments!!, viewModel, onFullScreenVideo)
+                                            MediaPreviewGrid(
+                                                tweet.attachments!!,
+                                                viewModel,
+                                                onFullScreenVideo
+                                            )
                                         }
                                     }
                                 }
@@ -311,20 +323,26 @@ fun TweetItem(
                                     try {
                                         withContext(IO) {
                                             // Use fetchTweet to get the original tweet from cache or network
-                                            Timber.tag("TweetItem").d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
+                                            Timber.tag("TweetItem")
+                                                .d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
                                             originalTweet = HproseInstance.fetchTweet(
                                                 tweet.originalTweetId!!,
                                                 tweet.originalAuthorId!!,
                                                 shouldCache = true
                                             )
                                             if (originalTweet != null) {
-                                                Timber.tag("TweetItem").d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
+                                                Timber.tag("TweetItem")
+                                                    .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
                                             } else {
-                                                Timber.tag("TweetItem").w("Quoted original tweet not found: ${tweet.originalTweetId}")
+                                                Timber.tag("TweetItem")
+                                                    .w("Quoted original tweet not found: ${tweet.originalTweetId}")
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        Timber.tag("TweetItem").e(e, "Error loading original tweet: ${tweet.originalTweetId}")
+                                        Timber.tag("TweetItem").e(
+                                            e,
+                                            "Error loading original tweet: ${tweet.originalTweetId}"
+                                        )
                                     } finally {
                                         isLoadingOriginal = false
                                     }
@@ -332,13 +350,17 @@ fun TweetItem(
                                     isLoadingOriginal = false
                                 }
                             }
-                            
+
                             if (isLoadingOriginal) {
                                 // Show loading state for quoted tweet with spinner
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     tonalElevation = 8.dp,
-                                    modifier = Modifier.padding(start = 4.dp, top = 8.dp, end = 8.dp)
+                                    modifier = Modifier.padding(
+                                        start = 4.dp,
+                                        top = 8.dp,
+                                        end = 8.dp
+                                    )
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -376,7 +398,7 @@ fun TweetItem(
                                 // Return empty content to effectively hide this item
                                 Box(modifier = Modifier.size(0.dp))
                             }
-                            
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -421,7 +443,7 @@ fun localizedTimeDifference(timestamp: Long): String {
         hours < 24 -> stringResource(id = R.string.hours_ago, hours)
         days < 7 -> stringResource(id = R.string.days_ago, days)
         weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
-        months < 12 -> stringResource(id = R.string.months_ago, months+1)
+        months < 12 -> stringResource(id = R.string.months_ago, months + 1)
         else -> stringResource(id = R.string.years_ago, years)
     }
 }

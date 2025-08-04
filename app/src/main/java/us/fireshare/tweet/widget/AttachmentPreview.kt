@@ -1,6 +1,5 @@
 package us.fireshare.tweet.widget
 
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
@@ -29,6 +28,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -50,7 +50,7 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
                     uri, android.util.Size(canvasSize, canvasSize), null
                 )
                 val resizedBitmap =
-                    Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888)
+                    createBitmap(canvasSize, canvasSize)
                 val canvas = Canvas(resizedBitmap)
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
                 val aspectRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
@@ -77,9 +77,10 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
             }
         }
     }
-    Box(modifier = Modifier
-        .size(canvasSize.dp)
-        .clip(RoundedCornerShape(8.dp))
+    Box(
+        modifier = Modifier
+            .size(canvasSize.dp)
+            .clip(RoundedCornerShape(8.dp))
     ) {
         imageBitmap?.let {
             Image(

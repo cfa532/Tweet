@@ -14,7 +14,6 @@ import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatSessionDao
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SearchViewModel
-import us.fireshare.tweet.viewmodel.BottomBarViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import javax.inject.Singleton
 
@@ -40,11 +39,7 @@ object AppModule {
         return SharedViewModel()
     }
 
-    @Provides
-    @Singleton
-    fun provideBadgeViewModel(): BottomBarViewModel {
-        return BottomBarViewModel()
-    }
+
 
     @Provides
     @Singleton

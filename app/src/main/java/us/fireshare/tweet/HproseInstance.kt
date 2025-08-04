@@ -24,8 +24,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.BlacklistedMid
-import us.fireshare.tweet.datamodel.BlacklistedMidDao
+
+
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
@@ -58,87 +59,6 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
-    lateinit var blacklistedMidDao: BlacklistedMidDao
-
-    /**
-     * Helper function to get the root cause of an exception
-     * Useful for unwrapping UndeclaredThrowableException and other wrapper exceptions
-     */
-    private fun getRootCause(throwable: Throwable): Throwable {
-        var cause = throwable
-        while (cause.cause != null && cause.cause != cause) {
-            cause = cause.cause!!
-        }
-        return cause
-    }
-
-    /**
-     * Helper function to determine if an exception indicates a resource not found error
-     * This helps identify when to add a resource to the blacklist
-     */
-    private fun isResourceNotFoundError(throwable: Throwable): Boolean {
-        val message = throwable.message?.lowercase() ?: ""
-        val className = throwable.javaClass.simpleName.lowercase()
-        
-        // Check for common "not found" indicators
-        return message.contains("not found") ||
-               message.contains("404") ||
-               message.contains("user not found") ||
-               message.contains("tweet not found") ||
-               message.contains("resource not found") ||
-               message.contains("does not exist") ||
-               className.contains("notfound") ||
-               className.contains("filenotfound")
-    }
-
-    /**
-     * Helper function to check if a mid should be blocked (no successful access for 3+ days)
-     */
-    private suspend fun shouldBlockMid(mid: String): Boolean {
-        val entry = blacklistedMidDao.get(mid)
-        if (entry == null) return false
-        
-        val now = System.currentTimeMillis()
-        val threeDaysMillis = 3 * 24 * 60 * 60 * 1000L
-        return now - entry.lastSuccessfulAccess >= threeDaysMillis
-    }
-
-    /**
-     * Helper function to add or update a mid in the blacklist
-     * Called when a resource fails to load
-     */
-    private suspend fun addToBlacklist(mid: String) {
-        val now = System.currentTimeMillis()
-        val existing = blacklistedMidDao.get(mid)
-        if (existing == null) {
-            // First time failure - initialize with current time as last successful access
-            // This means we start counting from now
-            blacklistedMidDao.insert(BlacklistedMid(mid, now, now))
-            Timber.tag("Blacklist").d("Added $mid to blacklist (first failure)")
-        } else {
-            // Update failure time but keep the last successful access time
-            blacklistedMidDao.insert(existing.copy(lastFailureTime = now))
-            Timber.tag("Blacklist").d("Updated $mid in blacklist (failure)")
-        }
-    }
-
-    /**
-     * Helper function to update successful access timestamp (revival mechanism)
-     * Called when a resource is successfully accessed
-     */
-    private suspend fun updateSuccessfulAccess(mid: String) {
-        val now = System.currentTimeMillis()
-        val existing = blacklistedMidDao.get(mid)
-        if (existing == null) {
-            // First successful access - add to blacklist with current time
-            blacklistedMidDao.insert(BlacklistedMid(mid, now, 0L))
-            Timber.tag("Blacklist").d("Added $mid to blacklist (first successful access)")
-        } else {
-            // Update last successful access time - this resets the 3-day counter
-            blacklistedMidDao.insert(existing.copy(lastSuccessfulAccess = now))
-            Timber.tag("Blacklist").d("Updated $mid in blacklist (successful access - counter reset)")
-        }
-    }
 
     suspend fun init(context: Context) {
         HproseClassManager.register(Tweet::class.java, "Tweet")
@@ -148,7 +68,6 @@ object HproseInstance {
         chatDatabase = ChatDatabase.getInstance(context)
         val tweetCache = TweetCacheDatabase.getInstance(context)
         dao = tweetCache.tweetDao()
-        blacklistedMidDao = tweetCache.blacklistedMidDao()
 
         appUser = User(
             mid = TW_CONST.GUEST_ID,
@@ -289,7 +208,7 @@ object HproseInstance {
             val gson = GsonBuilder()
                 .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
                 .create()
-            
+
             appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
                 ?.mapNotNull { messageData ->
                     gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
@@ -316,7 +235,7 @@ object HproseInstance {
             val gson = GsonBuilder()
                 .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
                 .create()
-            
+
             appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
                 ?.mapNotNull { messageData ->
                     gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
@@ -558,7 +477,7 @@ object HproseInstance {
                 val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
                 Timber.tag("getTweetFeed").e("Tweet feed loading failed: $errorMessage")
                 Timber.tag("getTweetFeed").e("Response: $response")
-                
+
                 return emptyList()
             }
 
@@ -605,13 +524,9 @@ object HproseInstance {
                 }
             } ?: emptyList()
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
             Timber.tag("getTweetFeed").e("Error fetching tweet feed: $e")
-            Timber.tag("getTweetFeed").e("Root cause: $rootCause")
-            Timber.tag("getTweetFeed").e("Exception type: ${e.javaClass.simpleName}")
             Timber.tag("getTweetFeed").e("Stack trace: ${e.stackTraceToString()}")
-            
+
             emptyList()
         }
     }
@@ -644,9 +559,10 @@ object HproseInstance {
             val success = response?.get("success") as? Boolean
             if (success != true) {
                 val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
-                Timber.tag("getTweetsByUser").e("Tweets loading failed for user ${user.mid}: $errorMessage")
+                Timber.tag("getTweetsByUser")
+                    .e("Tweets loading failed for user ${user.mid}: $errorMessage")
                 Timber.tag("getTweetsByUser").e("Response: $response")
-                
+
                 return emptyList()
             }
 
@@ -660,8 +576,13 @@ object HproseInstance {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
                         originalTweet.author = getUser(originalTweet.authorId)
-                        TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = false) // Memory cache only
-                        Timber.tag("getTweetsByUser").d("Cached original tweet: ${originalTweet.mid}")
+                        TweetCacheManager.saveTweet(
+                            originalTweet,
+                            appUser.mid,
+                            shouldCache = false
+                        ) // Memory cache only
+                        Timber.tag("getTweetsByUser")
+                            .d("Cached original tweet: ${originalTweet.mid}")
                     } catch (e: Exception) {
                         Timber.tag("getTweetsByUser").e("Error caching original tweet: $e")
                     }
@@ -693,15 +614,10 @@ object HproseInstance {
 
             return result
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
             Timber.tag("getTweetsByUser").e("Error fetching tweets for user: ${user.mid}")
             Timber.tag("getTweetsByUser").e("Exception: $e")
-            Timber.tag("getTweetsByUser").e("Root cause: $rootCause")
-            Timber.tag("getTweetsByUser").e("Exception type: ${e.javaClass.simpleName}")
-            Timber.tag("getTweetsByUser").e("Root cause type: ${rootCause.javaClass.simpleName}")
             Timber.tag("getTweetsByUser").e("Stack trace: ${e.stackTraceToString()}")
-            
+
             throw e
         }
     }
@@ -716,9 +632,9 @@ object HproseInstance {
         authorId: MimeiId,
         shouldCache: Boolean = true
     ): Tweet? {
-        // Check if tweet should be blocked (unavailable for 3+ days)
-        if (shouldBlockMid(tweetId)) {
-            Timber.tag("fetchTweet").d("Tweet $tweetId has been unavailable for 3+ days, returning null")
+        // Check if tweet is blacklisted
+        if (BlackList.isBlacklisted(tweetId)) {
+            Timber.tag("fetchTweet").d("Tweet $tweetId is blacklisted, returning null")
             return null
         }
 
@@ -740,9 +656,9 @@ object HproseInstance {
             )
 
             author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
-                // Successfully fetched tweet - update successful access timestamp
-                updateSuccessfulAccess(tweetId)
-                
+                // Record successful access
+                BlackList.recordSuccess(tweetId)
+
                 Tweet.from(tweetData).apply {
                     this.author = author
                     TweetCacheManager.saveTweet(
@@ -753,17 +669,12 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
+            // Record failed access
+            BlackList.recordFailure(tweetId)
+
             Timber.tag("fetchTweet").e("Error fetching tweet: $tweetId, author: $authorId")
             Timber.tag("fetchTweet").e("Exception: $e")
-            Timber.tag("fetchTweet").e("Root cause: $rootCause")
-            
-            // Add tweet to blacklist if it's a "not found" type error
-            if (isResourceNotFoundError(rootCause)) {
-                addToBlacklist(tweetId)
-            }
-            
+
             null
         }
     }
@@ -791,9 +702,9 @@ object HproseInstance {
             return null
         }
 
-        // Check if tweet should be blocked (unavailable for 3+ days)
-        if (shouldBlockMid(tweetId)) {
-            Timber.tag("refreshTweet").d("Tweet $tweetId has been unavailable for 3+ days, returning null")
+        // Check if tweet is blacklisted
+        if (BlackList.isBlacklisted(tweetId)) {
+            Timber.tag("refreshTweet").d("Tweet $tweetId is blacklisted, returning null")
             return null
         }
 
@@ -809,24 +720,20 @@ object HproseInstance {
                 "hostid" to (author.hostIds?.first() ?: "")
             )
             author.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { tweetData ->
-                // Successfully refreshed tweet - update successful access timestamp
-                updateSuccessfulAccess(tweetId)
-                
+                // Record successful access
+                BlackList.recordSuccess(tweetId)
+
                 val tweet = Tweet.from(tweetData)
                 tweet.author = author
                 tweet
             }
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
+            // Record failed access
+            BlackList.recordFailure(tweetId)
+
             Timber.tag("refreshTweet").e("Error refreshing tweet: $tweetId, author: $authorId")
             Timber.tag("refreshTweet").e("Exception: $e")
-            Timber.tag("refreshTweet").e("Root cause: $rootCause")
-            
-            // Add tweet to blacklist if it's a "not found" type error
-            if (isResourceNotFoundError(rootCause)) {
-                addToBlacklist(tweetId)
-            }
+
             null
         }
     }
@@ -897,11 +804,14 @@ object HproseInstance {
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
-                        Timber.tag("HproseInstance").d("Posting TweetUploaded notification for original tweet: $newTweetId")
+                        Timber.tag("HproseInstance")
+                            .d("Posting TweetUploaded notification for original tweet: $newTweetId")
                         TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                        Timber.tag("HproseInstance").d("TweetUploaded notification posted successfully")
+                        Timber.tag("HproseInstance")
+                            .d("TweetUploaded notification posted successfully")
                     } else {
-                        Timber.tag("HproseInstance").d("Skipping TweetUploaded notification for retweet: $newTweetId (will be handled by TweetRetweeted)")
+                        Timber.tag("HproseInstance")
+                            .d("Skipping TweetUploaded notification for retweet: $newTweetId (will be handled by TweetRetweeted)")
                     }
 
                     updatedTweet
@@ -1143,7 +1053,7 @@ object HproseInstance {
         )
         return try {
             val response = user.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
-            
+
             response?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
@@ -1305,9 +1215,9 @@ object HproseInstance {
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      */
     suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
-        // Step 0: Check if user should be blocked (unavailable for 3+ days)
-        if (shouldBlockMid(userId)) {
-            Timber.tag("getUser").d("User $userId has been unavailable for 3+ days, returning null")
+        // Check if user is blacklisted
+        if (BlackList.isBlacklisted(userId)) {
+            Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
         }
 
@@ -1358,35 +1268,22 @@ object HproseInstance {
                     val providerIP = response
                     user.baseUrl = "http://$providerIP"
                     user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
-                        // Successfully fetched user data from provider - update successful access timestamp
-                        updateSuccessfulAccess(user.mid)
+                        // Record successful access
+                        BlackList.recordSuccess(user.mid)
                         user.from(userData)
                     }
                 }
 
                 is Map<*, *> -> {
-                    // User data received directly - update successful access timestamp
-                    updateSuccessfulAccess(user.mid)
+                    // Record successful access
+                    BlackList.recordSuccess(user.mid)
                     user.from(response as Map<String, Any>)
                 }
             }
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
-            Timber.tag("updateUserFromServer").e("Error updating user from server: ${user.mid}")
-            Timber.tag("updateUserFromServer").e("Exception: $e")
-            Timber.tag("updateUserFromServer").e("Root cause: $rootCause")
-            Timber.tag("updateUserFromServer").e("Exception type: ${e.javaClass.simpleName}")
-            Timber.tag("updateUserFromServer").e("Root cause type: ${rootCause.javaClass.simpleName}")
-            Timber.tag("updateUserFromServer").e("Stack trace: ${e.stackTraceToString()}")
-            
-            // Add user to blacklist if it's a "not found" type error
-            if (isResourceNotFoundError(rootCause)) {
-                addToBlacklist(user.mid)
-            }
-            
-            // it is possible user's node has changed its IP. Try to fetch user data from another node.
-            initAppEntry()
+            // Record failed access
+            BlackList.recordFailure(user.mid)
+            Timber.tag("updateUserFromServer").e("${e.message} ${user.mid}")
         }
     }
 
@@ -1403,13 +1300,8 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
             Timber.tag("getProviderIP").e("Error getting provider IP for user: $userId")
             Timber.tag("getProviderIP").e("Exception: $e")
-            Timber.tag("getProviderIP").e("Root cause: $rootCause")
-            Timber.tag("getProviderIP").e("Exception type: ${e.javaClass.simpleName}")
-            Timber.tag("getProviderIP").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
@@ -1428,13 +1320,8 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<Boolean>(entry, params)
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
             Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId")
             Timber.tag("togglePinnedTweet").e("Exception: $e")
-            Timber.tag("togglePinnedTweet").e("Root cause: $rootCause")
-            Timber.tag("togglePinnedTweet").e("Exception type: ${e.javaClass.simpleName}")
-            Timber.tag("togglePinnedTweet").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
@@ -1455,13 +1342,8 @@ object HproseInstance {
             val response = user.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
             response
         } catch (e: Exception) {
-            // Get the root cause of the exception
-            val rootCause = getRootCause(e)
             Timber.tag("getPinnedList").e("Error getting pinned tweets for user: ${user.mid}")
             Timber.tag("getPinnedList").e("Exception: $e")
-            Timber.tag("getPinnedList").e("Root cause: $rootCause")
-            Timber.tag("getPinnedList").e("Exception type: ${e.javaClass.simpleName}")
-            Timber.tag("getPinnedList").e("Root cause type: ${rootCause.javaClass.simpleName}")
             null
         }
     }
@@ -1479,6 +1361,13 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("logging").e(e)
         }
+    }
+
+    /**
+     * Get blacklist statistics for monitoring and debugging
+     */
+    suspend fun getBlackListStats(): BlackList.BlackListStats {
+        return BlackList.getStats()
     }
 
     /**
@@ -1514,7 +1403,8 @@ object HproseInstance {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("uploadToIPFS").w("Failed to get file name from content resolver: ${e.message}")
+            Timber.tag("uploadToIPFS")
+                .w("Failed to get file name from content resolver: ${e.message}")
             // Fallback: try to get filename from URI
             fileName = uri.lastPathSegment
         }
@@ -1537,7 +1427,7 @@ object HproseInstance {
             Timber.tag("uploadToIPFS").w("Failed to get MIME type: ${e.message}")
             null
         }
-        
+
         val mediaType = when {
             mimeType?.startsWith("image/") == true -> us.fireshare.tweet.datamodel.MediaType.Image
             mimeType?.startsWith("video/") == true -> us.fireshare.tweet.datamodel.MediaType.Video
@@ -1582,7 +1472,8 @@ object HproseInstance {
 
         // Fall back to original IPFS method for non-video files or if netdisk upload fails
         Timber.tag("uploadToIPFS").d("Calling uploadToIPFSOriginal with mediaType: $mediaType")
-        val result = uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
+        val result =
+            uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
         if (result != null) {
             Timber.tag("uploadToIPFS").d("uploadToIPFSOriginal succeeded: ${result.mid}")
         } else {
@@ -1604,59 +1495,59 @@ object HproseInstance {
         noResample: Boolean = false
     ): MimeiFileType? {
         Timber.tag("uploadHLSVideo").d("Uploading original video to backend for HLS conversion")
-        
+
         // Get the user's cloudDrivePort with fallback to default
         val cloudDrivePort = appUser.cloudDrivePort.takeIf { it > 0 } ?: 8010
-        
+
         // Ensure writableUrl is available
         var writableUrl = appUser.writableUrl
         if (writableUrl.isNullOrEmpty()) {
             writableUrl = appUser.resolveWritableUrl()
         }
-        
+
         if (writableUrl.isNullOrEmpty()) {
             Timber.tag("uploadHLSVideo").e("Writable URL not available")
             return null
         }
-        
+
         // Construct convert-video endpoint URL
         val scheme = if (writableUrl.startsWith("https")) "https" else "http"
         val host = writableUrl.replace(Regex("^https?://"), "").split("/").firstOrNull()?.split(":")
             ?.firstOrNull()
             ?: writableUrl
         val convertVideoURL = "$scheme://$host:$cloudDrivePort/convert-video"
-        
+
         Timber.tag("uploadHLSVideo").d("Convert-video URL: $convertVideoURL")
-        
+
         // Read the video data once
         val videoData = context.contentResolver.openInputStream(uri)?.readBytes() ?: ByteArray(0)
         Timber.tag("uploadHLSVideo").d("Data size: ${videoData.size} bytes")
-        
+
         // Determine content type based on file extension
         val contentType = determineVideoContentType(fileName)
         Timber.tag("uploadHLSVideo").d("Determined content type: $contentType")
         Timber.tag("uploadHLSVideo").d("Filename: $fileName")
         Timber.tag("uploadHLSVideo").d("ReferenceId: $referenceId")
         Timber.tag("uploadHLSVideo").d("NoResample: $noResample")
-        
+
         return try {
             val response = httpClient.post(convertVideoURL) {
                 setBody(
                     io.ktor.client.request.forms.MultiPartFormDataContent(
                         io.ktor.client.request.forms.formData {
                             // Add filename if provided (server expects this field)
-                            fileName?.let { 
+                            fileName?.let {
                                 append("filename", it)
                             }
-                            
+
                             // Add reference ID if provided (server expects this field)
-                            referenceId?.let { 
+                            referenceId?.let {
                                 append("referenceId", it)
                             }
-                            
+
                             // Add noResample parameter - use the value passed from compose view
                             append("noResample", noResample.toString())
-                            
+
                             // Add the video file (server expects field name "videoFile")
                             append(
                                 "videoFile",
@@ -1678,7 +1569,8 @@ object HproseInstance {
                 val responseText = response.bodyAsText()
                 val responseData = Gson().fromJson(responseText, Map::class.java)
 
-                val cid = responseData?.get("cid") as? String ?: throw Exception("No CID in response")
+                val cid =
+                    responseData?.get("cid") as? String ?: throw Exception("No CID in response")
                 val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
 
                 @OptIn(UnstableApi::class)
@@ -1701,7 +1593,7 @@ object HproseInstance {
             throw e
         }
     }
-    
+
     /**
      * Determine video content type based on file extension
      */
@@ -1733,7 +1625,7 @@ object HproseInstance {
         mediaType: us.fireshare.tweet.datamodel.MediaType
     ): MimeiFileType? {
         Timber.tag("uploadToIPFSOriginal").d("Starting upload for URI: $uri, mediaType: $mediaType")
-        
+
         // Resolve writableUrl before using uploadService
         val resolvedUrl = appUser.resolveWritableUrl()
         if (resolvedUrl.isNullOrEmpty()) {
@@ -1741,7 +1633,7 @@ object HproseInstance {
             return null
         }
         Timber.tag("uploadToIPFSOriginal").d("Successfully resolved writableUrl: $resolvedUrl")
-        
+
         var offset = 0L
         var byteRead: Int
         val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
@@ -1754,11 +1646,13 @@ object HproseInstance {
                 inputStream.use { stream ->
                     Timber.tag("uploadToIPFSOriginal").d("Starting chunked upload")
                     while (stream.read(buffer).also { byteRead = it } != -1) {
-                        Timber.tag("uploadToIPFSOriginal").d("Uploading chunk: offset=$offset, bytes=$byteRead")
-                        request["fsid"] = appUser.uploadService?.runMApp("upload_ipfs",
+                        Timber.tag("uploadToIPFSOriginal")
+                            .d("Uploading chunk: offset=$offset, bytes=$byteRead")
+                        request["fsid"] = appUser.uploadService?.runMApp(
+                            "upload_ipfs",
                             request.toMap(), listOf(buffer)
                         )
-                        
+
                         offset += byteRead
                         request["offset"] = offset
                     }
@@ -1770,18 +1664,23 @@ object HproseInstance {
             referenceId?.let { request["referenceid"] = it }
             Timber.tag("uploadToIPFSOriginal").d("Finalizing upload with offset: $offset")
             Timber.tag("uploadToIPFSOriginal").d("Final request: $request")
-            
-            val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap()) ?: return null
-            
+
+            val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap())
+                ?: return null
+
             Timber.tag("uploadToIPFSOriginal").d("Upload successful, CID: $cid")
 
             // Calculate aspect ratio for image or video
             val aspectRatio = when (mediaType) {
                 us.fireshare.tweet.datamodel.MediaType.Image -> getImageAspectRatio(context, uri)
-                us.fireshare.tweet.datamodel.MediaType.Video -> SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
+                us.fireshare.tweet.datamodel.MediaType.Video -> SimplifiedVideoCacheManager.getVideoAspectRatio(
+                    context,
+                    uri
+                )
+
                 else -> null
             }
-            
+
             return MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
             Timber.tag("uploadToIPFSOriginal()").e(e, "Error: ${e.message}")
@@ -1789,19 +1688,20 @@ object HproseInstance {
         return null
     }
 
-    suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                BitmapFactory.decodeStream(input, null, options)
+    suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, options)
+                }
+                if (options.outWidth > 0 && options.outHeight > 0) {
+                    options.outWidth.toFloat() / options.outHeight.toFloat()
+                } else null
+            } catch (_: Exception) {
+                null
             }
-            if (options.outWidth > 0 && options.outHeight > 0) {
-                options.outWidth.toFloat() / options.outHeight.toFloat()
-            } else null
-        } catch (_: Exception) {
-            null
         }
-    }
 
 
     val httpClient = HttpClient(CIO) {

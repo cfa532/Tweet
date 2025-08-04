@@ -47,7 +47,7 @@ import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.FullScreenVideoPlayer
+
 import us.fireshare.tweet.widget.MediaBrowser
 import javax.inject.Inject
 import kotlin.reflect.typeOf
@@ -67,9 +67,9 @@ fun TweetNavGraph(
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
             LocalActivity.current as ComponentActivity, key = appUser.mid
-        ){ factory ->
+        ) { factory ->
             factory.create(appUser.mid)
-    }
+        }
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
 
@@ -204,18 +204,9 @@ fun TweetNavGraph(
                     md.params.authorId
                 )
             }
-            composable<NavTweet.FullScreenVideo> { navBackStackEntry ->
-                val args = navBackStackEntry.toRoute<NavTweet.FullScreenVideo>()
-                FullScreenVideoPlayer(
-                    videoMid = args.videoMid,
-                    videoUrl = args.videoUrl,
-                    onClose = {
-                        navController.popBackStack()
-                    }
-                )
-            }
+
             composable<NavTweet.Login> {
-                val register: ()->Unit = {
+                val register: () -> Unit = {
                     navController.navigate(NavTweet.Registration)
                 }
                 val scope = rememberCoroutineScope()
