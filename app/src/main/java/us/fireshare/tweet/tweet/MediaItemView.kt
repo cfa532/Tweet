@@ -270,8 +270,7 @@ fun MediaItemView(
                     // Use existing player for seamless transition - create a simple full-screen wrapper
                     FullScreenVideoPlayerWrapper(
                         existingPlayer = existingPlayer,
-                        videoMid = videoMid,
-                        onClose = { 
+                        onClose = {
                             showFullScreenVideo = false
                             // Return player back to VideoManager when closed
                             VideoManager.returnFromFullScreen(videoMid)
@@ -328,9 +327,8 @@ fun MediaItemView(
 @RequiresApi(Build.VERSION_CODES.R)
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun FullScreenVideoPlayerWrapper(
+fun FullScreenVideoPlayerWrapper(
     existingPlayer: ExoPlayer,
-    videoMid: MimeiId,
     onClose: () -> Unit,
     enableImmersiveMode: Boolean = true
 ) {

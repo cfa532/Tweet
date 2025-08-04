@@ -1,10 +1,12 @@
 package us.fireshare.tweet.chat
 
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -58,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,10 +93,12 @@ import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoPreview
+import us.fireshare.tweet.tweet.FullScreenVideoPlayerWrapper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -380,11 +386,14 @@ fun ChatScreen(
                 val existingPlayer = us.fireshare.tweet.widget.VideoManager.transferToFullScreen(attachment.mid)
                 
                 if (existingPlayer != null) {
-                    // Use existing player for seamless transition
-                    FullScreenVideoPlayer(
+                    // Use existing player for seamless transition - create a simple full-screen wrapper
+                    FullScreenVideoPlayerWrapper(
                         existingPlayer = existingPlayer,
-                        videoMid = attachment.mid,
-                        onClose = { showFullScreen = false },
+                        onClose = {
+                            showFullScreen = false
+                            // Return player back to VideoManager when closed
+                            us.fireshare.tweet.widget.VideoManager.returnFromFullScreen(attachment.mid)
+                        },
                         enableImmersiveMode = true
                     )
                 } else {
@@ -570,9 +579,9 @@ fun ChatItem(
 
 @Composable
 fun ChatInput(
-    viewModel: ChatViewModel, 
+    viewModel: ChatViewModel,
+    modifier: Modifier = Modifier,
     onFocusGained: () -> Unit = {},
-    modifier: Modifier = Modifier
 ) {
     val textState by viewModel.message
     val selectedAttachment by viewModel.selectedAttachment
@@ -782,7 +791,6 @@ fun ChatInput(
 @Composable
 private fun formatTimestamp(timestamp: Long): String {
     val date = Date(timestamp)
-    val now = Date()
     val calendar = java.util.Calendar.getInstance()
     val messageCalendar = java.util.Calendar.getInstance().apply { time = date }
     

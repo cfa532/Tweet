@@ -87,11 +87,6 @@ fun ProfileScreen(
     // Calculate the transparency based on scrolling state
     var bottomBarTransparency by remember { mutableStateOf(0.98f) }
 
-    // State for full-screen video overlay
-    var fullScreenVideo by remember { mutableStateOf<String?>(null) }
-
-
-
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
@@ -167,15 +162,6 @@ fun ProfileScreen(
                 .align(Alignment.BottomCenter),
             navController,
             0
-        )
-    }
-
-    // Show full-screen video overlay outside the main content tree
-    if (fullScreenVideo != null) {
-        val videoUrl = fullScreenVideo!!
-        VideoModalDialog(
-            videoUrl = videoUrl,
-            onDismiss = { fullScreenVideo = null }
         )
     }
 }
@@ -287,35 +273,6 @@ private fun ProfileContentWithTweetListView(
                     .padding(top = 40.dp),
                 backgroundColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-/**
- * Display full-screen video in a Modal Dialog.
- */
-@Composable
-fun VideoModalDialog(
-    videoUrl: String,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) {
-            FullScreenVideoPlayer(
-                videoUrl = videoUrl,
-                onClose = onDismiss
             )
         }
     }
