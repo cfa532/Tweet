@@ -72,6 +72,40 @@ fun FullScreenVideoPlayer(
             isLandscape = it > 1
         }
     }
+    
+    // Add player listener to handle state changes
+    DisposableEffect(existingPlayer) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    androidx.media3.common.Player.STATE_IDLE -> {
+                        // If player becomes idle, prepare it again
+                        existingPlayer.prepare()
+                    }
+                    androidx.media3.common.Player.STATE_READY -> {
+                        // When ready, start playback
+                        existingPlayer.playWhenReady = true
+                    }
+                    androidx.media3.common.Player.STATE_ENDED -> {
+                        // If video ends, restart it
+                        existingPlayer.seekTo(0)
+                        existingPlayer.playWhenReady = true
+                    }
+                }
+            }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // If there's an error, try to prepare again
+                existingPlayer.prepare()
+            }
+        }
+        
+        existingPlayer.addListener(listener)
+        
+        onDispose {
+            existingPlayer.removeListener(listener)
+        }
+    }
 
     // Immersive full screen
     DisposableEffect(Unit) {
@@ -105,13 +139,40 @@ fun FullScreenVideoPlayer(
 
     // Start playback and unmute when entering full screen
     LaunchedEffect(Unit) {
-        existingPlayer.playWhenReady = true
+        // More aggressive player state handling
+        when (existingPlayer.playbackState) {
+            androidx.media3.common.Player.STATE_IDLE -> {
+                // If player is idle, prepare it
+                existingPlayer.prepare()
+            }
+            androidx.media3.common.Player.STATE_ENDED -> {
+                // If player has ended, seek to beginning and prepare
+                existingPlayer.seekTo(0)
+                existingPlayer.prepare()
+            }
+            else -> {
+                // For other states, just ensure it's ready to play
+                if (!existingPlayer.playWhenReady) {
+                    existingPlayer.playWhenReady = true
+                }
+            }
+        }
+        
+        // Set volume and start playback
         existingPlayer.volume = 1.0f // Unmute video
+        existingPlayer.playWhenReady = true
         
         // For landscape videos, try to set video rotation
         if (isLandscape) {
             // Try to set video rotation to 90 degrees
             existingPlayer.videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        
+        // Add a retry mechanism - if player is still not ready after 1 second, try again
+        kotlinx.coroutines.delay(1000)
+        if (existingPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+            existingPlayer.prepare()
+            existingPlayer.playWhenReady = true
         }
     }
 
