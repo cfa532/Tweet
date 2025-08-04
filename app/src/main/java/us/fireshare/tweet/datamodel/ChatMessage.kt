@@ -68,7 +68,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         } else null
         
         return ChatMessage(
-            id = id,
+            id = id ?: ChatMessage.generateUniqueId(),
             receiptId = receiptId,
             authorId = authorId,
             content = content,
@@ -81,7 +81,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
 
 @Serializable
 data class ChatMessage(
-    val id: String? = null,     // unique message ID
+    val id: String = generateUniqueId(),     // unique message ID - always generated
     val receiptId: MimeiId,     // receiver of the message
     val authorId: MimeiId,      // author of the message
     val content: String? = null,  // optional content
@@ -111,12 +111,10 @@ data class ChatMessage(
             receiptId: MimeiId,
             authorId: MimeiId,
             content: String,
-            sessionId: String? = null,
-            id: String? = null
+            sessionId: String? = null
         ): ChatMessage {
             require(content.isNotBlank()) { "Content cannot be empty for text message" }
             return ChatMessage(
-                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 content = content,
@@ -131,12 +129,10 @@ data class ChatMessage(
             receiptId: MimeiId,
             authorId: MimeiId,
             attachments: List<MimeiFileType>,
-            sessionId: String? = null,
-            id: String? = null
+            sessionId: String? = null
         ): ChatMessage {
             require(attachments.isNotEmpty()) { "Attachments cannot be empty for media message" }
             return ChatMessage(
-                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 attachments = attachments,
@@ -152,13 +148,11 @@ data class ChatMessage(
             authorId: MimeiId,
             content: String,
             attachments: List<MimeiFileType>,
-            sessionId: String? = null,
-            id: String? = null
+            sessionId: String? = null
         ): ChatMessage {
             require(content.isNotBlank()) { "Content cannot be empty for mixed message" }
             require(attachments.isNotEmpty()) { "Attachments cannot be empty for mixed message" }
             return ChatMessage(
-                id = id,
                 receiptId = receiptId,
                 authorId = authorId,
                 content = content,
@@ -364,10 +358,13 @@ data class ChatSession(
     }
 }
 
-@Entity(tableName = "chat_messages")
+@Entity(
+    tableName = "chat_messages",
+    indices = [androidx.room.Index(value = ["messageId"], unique = true)]
+)
 data class ChatMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val messageId: String? = null,  // unique message ID from server
+    val messageId: String,  // unique message ID from server - now required
     val receiptId: String,
     val authorId: String,
     val content: String? = null,  // optional content
@@ -554,7 +551,7 @@ interface ChatSessionDao {
     suspend fun deleteSession(userId: String, receiptId: String)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 7)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 8)
 @TypeConverters(MimeiFileTypeListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao

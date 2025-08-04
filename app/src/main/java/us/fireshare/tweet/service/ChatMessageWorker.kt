@@ -76,7 +76,6 @@ class SendChatMessageWorker @AssistedInject constructor(
                 ChatSession.generateDeterministicSessionId(appUser.mid, receiptId)
 
             val message = ChatMessage(
-                id = ChatMessage.generateUniqueId(),
                 receiptId = receiptId,
                 authorId = appUser.mid,
                 timestamp = messageTimestamp,

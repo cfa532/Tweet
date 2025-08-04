@@ -62,6 +62,14 @@ class ChatViewModel @AssistedInject constructor(
 
     companion object {
         private const val MESSAGES_PER_PAGE = 10
+        
+        /**
+         * Helper function to check if a message is new (not already in the list)
+         */
+        private fun isNewMessage(message: ChatMessage, existingMessages: List<ChatMessage>): Boolean {
+            val existingIds = existingMessages.map { it.id }.toSet()
+            return message.id !in existingIds
+        }
     }
 
     init {
@@ -96,7 +104,6 @@ class ChatViewModel @AssistedInject constructor(
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
 
         val message = ChatMessage(
-            id = ChatMessage.generateUniqueId(),
             receiptId = receiptId,
             authorId = appUser.mid,
             timestamp = System.currentTimeMillis(),
@@ -157,21 +164,30 @@ class ChatViewModel @AssistedInject constructor(
                 when (event) {
                     is TweetEvent.ChatMessageSent -> {
                         if (event.message.receiptId == receiptId) {
+                            // Deduplication using unique message IDs
+                            if (isNewMessage(event.message, _chatMessages.value)) {
+                                // Add the real message to UI and database only if it's new
+                                _chatMessages.update { messages ->
+                                    (messages + event.message).sortedBy { it.timestamp }
+                                }
 
-                            // Add the real message to UI and database
-                            _chatMessages.update { messages ->
-                                (messages + event.message).sortedBy { it.timestamp }
+                                // Insert message to database
+                                chatRepository.insertMessage(event.message)
+
+                                // Update chat session
+                                chatSessionRepository.updateChatSession(
+                                    appUser.mid,
+                                    receiptId,
+                                    hasNews = false
+                                )
+                                
+                                Timber.tag("ChatViewModel")
+                                    .d("ChatMessageSent: Added new message with ID: ${event.message.id}")
+                            } else {
+                                Timber.tag("ChatViewModel")
+                                    .d("ChatMessageSent: Skipped duplicate message with ID: ${event.message.id}")
                             }
-
-                            // Insert message to database
-                            chatRepository.insertMessage(event.message)
-
-                            // Update chat session
-                            chatSessionRepository.updateChatSession(
-                                appUser.mid,
-                                receiptId,
-                                hasNews = false
-                            )
+                            
                             // If message has attachments but no content, add descriptive text
                             val messageWithContent =
                                 if (!event.message.attachments.isNullOrEmpty() && event.message.content.isNullOrBlank()) {
@@ -231,12 +247,11 @@ class ChatViewModel @AssistedInject constructor(
             }
 
             /**
-             * Filter out messages that already exist in our local list to avoid duplicates.
-             * Use message ID for deduplication for better accuracy.
+             * Deduplication logic using unique message IDs to prevent message duplication.
              */
-            val existingMessageIds = _chatMessages.value.mapNotNull { it.id }.toSet()
             val newMessages = updatedNews.filter { message ->
-                val isNew = message.id !in existingMessageIds
+                val isNew = isNewMessage(message, _chatMessages.value)
+                
                 if (!isNew) {
                     Timber.tag("ChatViewModel")
                         .d("fetchNewMessage: filtering out duplicate message with ID: ${message.id}")
@@ -244,7 +259,7 @@ class ChatViewModel @AssistedInject constructor(
                 isNew
             }
             Timber.tag("ChatViewModel")
-                .d("fetchNewMessage: existing IDs count: ${existingMessageIds.size}, new messages count: ${newMessages.size}, total fetched: ${updatedNews.size}")
+                .d("fetchNewMessage: existing messages count: ${_chatMessages.value.size}, new messages count: ${newMessages.size}, total fetched: ${updatedNews.size}")
 
             // Insert only new messages to database (avoid duplicates)
             if (newMessages.isNotEmpty()) {
