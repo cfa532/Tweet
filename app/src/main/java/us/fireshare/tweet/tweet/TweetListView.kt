@@ -84,8 +84,7 @@ fun TweetListView(
     headerContent: (@Composable () -> Unit)? = null, // Optional header content
     onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
-    restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
-    onFullScreenVideo: ((String) -> Unit)? = null, // Callback for full-screen video
+    restoreScrollPosition: Boolean = true // Control whether to restore scroll position
 ) {
     // Debug logging for TweetListView recreation - only log when essential parameters change
     val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
@@ -536,8 +535,7 @@ fun TweetListView(
                         TweetItem(
                             tweet = tweet,
                             parentEntry = it,
-                            onTweetUnavailable = onTweetUnavailable,
-                            onFullScreenVideo = onFullScreenVideo
+                            onTweetUnavailable = onTweetUnavailable
                         )
                     }
 

@@ -72,8 +72,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 @Composable
 fun MediaPreviewGrid(
     mediaItems: List<MimeiFileType>,
-    viewModel: TweetViewModel,
-    onFullScreenVideo: ((String) -> Unit)? = null, // Callback for full-screen video
+    viewModel: TweetViewModel
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -192,8 +191,7 @@ fun MediaPreviewGrid(
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
                     autoPlay = firstVideoIndex == 0,
                     inPreviewGrid = true,
-                    viewModel = viewModel,
-                    onFullScreenVideo = onFullScreenVideo
+                    viewModel = viewModel
                 )
             }
             2 -> {
@@ -226,8 +224,7 @@ fun MediaPreviewGrid(
                                     index = idx,
                                     autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -254,8 +251,7 @@ fun MediaPreviewGrid(
                                     index = idx,
                                     autoPlay = firstVideoIndex == idx,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -283,8 +279,7 @@ fun MediaPreviewGrid(
                                     index = 0,
                                     autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -300,8 +295,7 @@ fun MediaPreviewGrid(
                                     index = 1,
                                     autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                         } else {
@@ -319,8 +313,7 @@ fun MediaPreviewGrid(
                                     index = 0,
                                     autoPlay = firstVideoIndex == 0,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -336,8 +329,7 @@ fun MediaPreviewGrid(
                                     index = 1,
                                     autoPlay = firstVideoIndex == 1,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onFullScreenVideo = onFullScreenVideo
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -378,8 +370,7 @@ fun MediaPreviewGrid(
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel,
-                                onFullScreenVideo = onFullScreenVideo
+                                viewModel = viewModel
                             )
                         }
                         // Second and third: right 38.2%, stacked vertically
@@ -402,8 +393,7 @@ fun MediaPreviewGrid(
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onFullScreenVideo = onFullScreenVideo
+                                        viewModel = viewModel
                                     )
                                 }
                             }
@@ -431,8 +421,7 @@ fun MediaPreviewGrid(
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel,
-                                onFullScreenVideo = onFullScreenVideo
+                                viewModel = viewModel
                             )
                         }
                         // Second and third: bottom 38.2%, side by side
@@ -457,8 +446,7 @@ fun MediaPreviewGrid(
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onFullScreenVideo = onFullScreenVideo
+                                        viewModel = viewModel
                                     )
                                 }
                             }
@@ -485,8 +473,7 @@ fun MediaPreviewGrid(
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel,
-                                onFullScreenVideo = onFullScreenVideo
+                                viewModel = viewModel
                             )
                         }
                         // Second and third: right 38.2%, stacked vertically
@@ -509,8 +496,7 @@ fun MediaPreviewGrid(
                                         index = idx,
                                         autoPlay = firstVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onFullScreenVideo = onFullScreenVideo
+                                        viewModel = viewModel
                                     )
                                 }
                             }
@@ -538,8 +524,7 @@ fun MediaPreviewGrid(
                                 index = 0,
                                 autoPlay = firstVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel,
-                                onFullScreenVideo = onFullScreenVideo
+                                viewModel = viewModel
                             )
                         }
                         // Second and third: bottom 38.2%, side by side
@@ -622,7 +607,7 @@ fun MediaItemView(
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     viewModel: TweetViewModel,
-    onFullScreenVideo: ((String) -> Unit)? = null // Callback for full-screen video
+
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
@@ -642,10 +627,18 @@ fun MediaItemView(
         // Audio files should navigate to tweet detail page
         if (attachment.type == MediaType.Audio) {
             navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
-        } else if (onFullScreenVideo != null && attachment.type == MediaType.Video) {
-            // If we have a full-screen video callback and this is a video, use the callback
-            val videoUrl = attachment.url
-            onFullScreenVideo(videoUrl)
+        } else if (attachment.type == MediaType.Video) {
+            // For videos, navigate to MediaBrowser for now
+            // TODO: Implement direct full-screen video player
+            try {
+                navController.navigate(
+                    NavTweet.MediaViewer(MediaViewerParams(
+                        attachments, idx, tweet.mid, tweet.authorId
+                    ))
+                )
+            } catch (e: Exception) {
+                Timber.tag("MediaItemView").e("Navigation failed: ${e.message}")
+            }
         } else {
             // Navigate to MediaBrowser for all other media types to enable swipe navigation
             try {

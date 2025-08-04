@@ -57,8 +57,7 @@ import java.util.concurrent.TimeUnit
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
-    onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
-    onFullScreenVideo: ((String) -> Unit)? = null, // callback for full-screen video
+    onTweetUnavailable: ((MimeiId) -> Unit)? = null // callback when tweet becomes unavailable
 ) {
     // Check if tweet or author is null and remove the item if so
     LaunchedEffect(tweet, tweet.author) {
@@ -306,8 +305,7 @@ fun TweetItem(
                                         ) {
                                             MediaPreviewGrid(
                                                 tweet.attachments!!,
-                                                viewModel,
-                                                onFullScreenVideo
+                                                viewModel
                                             )
                                         }
                                     }

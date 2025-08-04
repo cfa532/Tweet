@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,8 +15,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -41,6 +45,9 @@ fun FollowingsTweet(
     // State for gesture detection
     var isAtLastTweet by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    
+    // State for full-screen video
+    var fullScreenVideoUrl by remember { mutableStateOf<String?>(null) }
 
     // Constants
     val MINMIMUM_TWEET_COUNT = 4
@@ -106,5 +113,28 @@ fun FollowingsTweet(
             },
             onTriggerLoadMore = triggerLoadMore
         )
+    }
+    
+    // Show full-screen video overlay
+    if (fullScreenVideoUrl != null) {
+        Dialog(
+            onDismissRequest = { fullScreenVideoUrl = null },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                us.fireshare.tweet.widget.FullScreenVideoPlayer(
+                    videoUrl = fullScreenVideoUrl!!,
+                    onClose = { fullScreenVideoUrl = null }
+                )
+            }
+        }
     }
 }

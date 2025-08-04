@@ -90,19 +90,7 @@ fun ProfileScreen(
     // State for full-screen video overlay
     var fullScreenVideo by remember { mutableStateOf<String?>(null) }
 
-    // Callback to show full-screen video - stabilize with remember
-    val showFullScreenVideo = remember {
-        { videoUrl: String ->
-            fullScreenVideo = videoUrl
-        }
-    }
 
-    // Show dialog using LaunchedEffect to avoid conditional rendering
-    LaunchedEffect(fullScreenVideo) {
-        fullScreenVideo?.let { videoUrl ->
-            // This will trigger the dialog to show
-        }
-    }
 
     val activity = context as? Activity
     activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -166,7 +154,7 @@ fun ProfileScreen(
                                 }
                             }
                         },
-                        onFullScreenVideo = showFullScreenVideo
+
                     )
                 }
             }
@@ -206,7 +194,7 @@ private fun ProfileContentWithTweetListView(
     initState: Boolean,
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
-    onFullScreenVideo: (String) -> Unit
+
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -285,7 +273,6 @@ private fun ProfileContentWithTweetListView(
                     viewModel.removeTweetFromAllLists(tweetId)
                 },
                 headerContent = headerContent,
-                onFullScreenVideo = onFullScreenVideo,
                 restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
             )
         }
