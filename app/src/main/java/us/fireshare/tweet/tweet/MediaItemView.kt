@@ -13,18 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
@@ -48,21 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import timber.log.Timber
-import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
-import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
@@ -268,8 +253,9 @@ fun MediaItemView(
             ) {
                 if (existingPlayer != null) {
                     // Use existing player for seamless transition - create a simple full-screen wrapper
-                    FullScreenVideoPlayerWrapper(
+                    FullScreenVideoPlayer(
                         existingPlayer = existingPlayer,
+                        videoItem = mediaItems.find { it.mid == videoMid } ?: mediaItems.first(),
                         onClose = {
                             showFullScreenVideo = false
                             // Return player back to VideoManager when closed
@@ -319,141 +305,6 @@ fun MediaItemView(
         }
     }
 }
-
-/**
- * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
- * This prevents conflicts when multiple videos are opened in full-screen
- */
-@RequiresApi(Build.VERSION_CODES.R)
-@androidx.annotation.OptIn(UnstableApi::class)
-@Composable
-fun FullScreenVideoPlayerWrapper(
-    existingPlayer: ExoPlayer,
-    onClose: () -> Unit,
-    enableImmersiveMode: Boolean = true
-) {
-    val context = LocalContext.current
-    val activity = context as? Activity
-    var showControls by remember { mutableStateOf(false) }
-
-    // Immersive full screen
-    DisposableEffect(Unit) {
-        // Hide system bars on enter
-        if (enableImmersiveMode) {
-            activity?.let { act ->
-                val windowInsetsController = act.window.insetsController
-                windowInsetsController?.let { controller ->
-                    // Hide system bars
-                    controller.hide(android.view.WindowInsets.Type.systemBars())
-                    // Set immersive sticky behavior
-                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                }
-            }
-        }
-
-        onDispose {
-            // Show system bars on exit
-            if (enableImmersiveMode) {
-                activity?.let { act ->
-                    val windowInsetsController = act.window.insetsController
-                    windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
-                }
-            }
-        }
-    }
-
-    // Start playback when entering full screen
-    LaunchedEffect(Unit) {
-        existingPlayer.playWhenReady = true
-    }
-
-    // Full screen video player UI
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .clickable { showControls = !showControls }
-    ) {
-        // Video player view
-        AndroidView(
-            factory = {
-                androidx.media3.ui.PlayerView(context).apply {
-                    player = existingPlayer
-                    useController = false // We'll implement custom controls
-                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    setBackgroundColor(android.graphics.Color.BLACK)
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // Custom controls overlay
-        if (showControls) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { showControls = !showControls }
-            ) {
-                // Close button
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Play/Pause button
-                IconButton(
-                    onClick = {
-                        if (existingPlayer.isPlaying) {
-                            existingPlayer.playWhenReady = false
-                        } else {
-                            existingPlayer.playWhenReady = true
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(64.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = androidx.compose.foundation.shape.CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (existingPlayer.isPlaying) 
-                            androidx.compose.material.icons.Icons.Default.Pause 
-                        else 
-                            androidx.compose.material.icons.Icons.Default.PlayArrow,
-                        contentDescription = if (existingPlayer.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-        }
-
-        // Auto-hide controls after 3 seconds
-        LaunchedEffect(showControls) {
-            if (showControls) {
-                kotlinx.coroutines.delay(3000)
-                showControls = false
-            }
-        }
-    }
-}
-
 
 @Composable
 fun BlobLink(

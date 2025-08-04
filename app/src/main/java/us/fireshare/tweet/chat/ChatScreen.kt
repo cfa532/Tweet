@@ -52,7 +52,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -61,7 +60,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,7 +91,7 @@ import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoPreview
-import us.fireshare.tweet.tweet.FullScreenVideoPlayerWrapper
+import us.fireshare.tweet.widget.VideoManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -383,12 +381,13 @@ fun ChatScreen(
             }
             us.fireshare.tweet.datamodel.MediaType.Video -> {
                 // Try to get existing player for seamless transition
-                val existingPlayer = us.fireshare.tweet.widget.VideoManager.transferToFullScreen(attachment.mid)
+                val existingPlayer = VideoManager.transferToFullScreen(attachment.mid)
                 
                 if (existingPlayer != null) {
                     // Use existing player for seamless transition - create a simple full-screen wrapper
-                    FullScreenVideoPlayerWrapper(
+                    FullScreenVideoPlayer(
                         existingPlayer = existingPlayer,
+                        videoItem = attachment,
                         onClose = {
                             showFullScreen = false
                             // Return player back to VideoManager when closed

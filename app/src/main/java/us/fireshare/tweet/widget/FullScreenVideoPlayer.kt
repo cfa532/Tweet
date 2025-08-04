@@ -1,7 +1,9 @@
 package us.fireshare.tweet.widget
 
 import android.app.Activity
+import android.os.Build
 import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -11,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -39,8 +43,191 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import kotlin.math.abs
+
+
+/**
+ * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
+ * This prevents conflicts when multiple videos are opened in full-screen
+ */
+@RequiresApi(Build.VERSION_CODES.R)
+@OptIn(UnstableApi::class)
+@Composable
+fun FullScreenVideoPlayer(
+    existingPlayer: ExoPlayer,
+    videoItem: MimeiFileType,
+    onClose: () -> Unit,
+    enableImmersiveMode: Boolean = true
+) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    var showControls by remember { mutableStateOf(false) }
+    var isLandscape by remember { mutableStateOf(false) }
+
+    // Check if video is landscape and set rotation
+    LaunchedEffect(Unit) {
+        videoItem.aspectRatio?.let { 
+            isLandscape = it > 1
+        }
+    }
+
+    // Immersive full screen
+    DisposableEffect(Unit) {
+        // Hide system bars on enter
+        if (enableImmersiveMode) {
+            activity?.let { act ->
+                val windowInsetsController = act.window.insetsController
+                windowInsetsController?.let { controller ->
+                    // Hide system bars
+                    controller.hide(android.view.WindowInsets.Type.systemBars())
+                    // Set immersive sticky behavior
+                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+                
+
+            }
+        }
+
+        onDispose {
+            // Show system bars on exit
+            if (enableImmersiveMode) {
+                activity?.let { act ->
+                    val windowInsetsController = act.window.insetsController
+                    windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
+                    
+
+                }
+            }
+        }
+    }
+
+    // Start playback and unmute when entering full screen
+    LaunchedEffect(Unit) {
+        existingPlayer.playWhenReady = true
+        existingPlayer.volume = 1.0f // Unmute video
+        
+        // For landscape videos, try to set video rotation
+        if (isLandscape) {
+            // Try to set video rotation to 90 degrees
+            existingPlayer.videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+    }
+
+    // Full screen video player UI
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { showControls = !showControls }
+    ) {
+        // Video player view
+        AndroidView(
+            factory = {
+                PlayerView(context).apply {
+                    player = existingPlayer
+                    useController = false // We'll implement custom controls
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Custom controls overlay
+        if (showControls) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { showControls = !showControls }
+            ) {
+                // Close button
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Play/Pause button
+                IconButton(
+                    onClick = {
+                        if (existingPlayer.isPlaying) {
+                            existingPlayer.playWhenReady = false
+                        } else {
+                            existingPlayer.playWhenReady = true
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (existingPlayer.isPlaying)
+                            androidx.compose.material.icons.Icons.Default.Pause
+                        else
+                            androidx.compose.material.icons.Icons.Default.PlayArrow,
+                        contentDescription = if (existingPlayer.isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                // Volume control button
+                var isMuted by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = {
+                        isMuted = !isMuted
+                        existingPlayer.volume = if (isMuted) 0f else 1f
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isMuted)
+                            androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeOff
+                        else
+                            androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = if (isMuted) "Unmute" else "Mute",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+
+        // Auto-hide controls after 3 seconds
+        LaunchedEffect(showControls) {
+            if (showControls) {
+                kotlinx.coroutines.delay(3000)
+                showControls = false
+            }
+        }
+    }
+}
 
 @OptIn(UnstableApi::class)
 @Composable
