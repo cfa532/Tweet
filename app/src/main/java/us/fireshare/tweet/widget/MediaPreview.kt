@@ -89,7 +89,6 @@ fun MediaPreviewGrid(
     @Composable
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
-        val context = LocalContext.current // Get context in composable scope
         if (itemType == MediaType.Video) {
             // For videos, try to get aspect ratio from stored value first
             val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }

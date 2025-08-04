@@ -87,6 +87,7 @@ import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
+import us.fireshare.tweet.widget.VideoPreview
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -868,7 +869,7 @@ fun ChatMediaPreview(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     // Use VideoPreview with shared player that can transition to full-screen
-                    us.fireshare.tweet.widget.VideoPreview(
+                    VideoPreview(
                         url = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
