@@ -3,7 +3,9 @@ package us.fireshare.tweet
 import android.app.Application
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
@@ -18,7 +20,7 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.CleanUpWorker
-import us.fireshare.tweet.service.MessageCheckService
+import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
@@ -50,11 +52,23 @@ class TweetApplication : Application(){
             cleanUpRequest
         )
 
+        // Schedule message check worker
+        val messageCheckRequest = PeriodicWorkRequestBuilder<MessageCheckWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "MessageCheck",
+            ExistingPeriodicWorkPolicy.KEEP,
+            messageCheckRequest
+        )
+
         // Start video memory monitoring
         VideoManager.startMemoryMonitoring()
-        
-        // Start message check service
-        MessageCheckService.startService(this)
         
         // Initialize BlackList with database
         BlackList.initialize(this)

@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
-import us.fireshare.tweet.service.NetworkCheckJobService
+
 import us.fireshare.tweet.ui.theme.TweetTheme
 import java.util.concurrent.TimeUnit
 
@@ -70,7 +70,6 @@ class TweetActivity : ComponentActivity() {
 
             launch {
                 delay(60000)
-                scheduleNetworkCheckJob()
                 activityViewModel.checkForUpgrade(this@TweetActivity)
             }
 
@@ -92,17 +91,7 @@ class TweetActivity : ComponentActivity() {
 
 
 
-    private fun scheduleNetworkCheckJob() {
-        val componentName = ComponentName(this, NetworkCheckJobService::class.java)
-        val jobInfo = JobInfo.Builder(1, componentName)
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setPeriodic(TimeUnit.MINUTES.toMillis(15)) // Set the interval to 15 minutes
-            .setPersisted(true) // Persist the job across device reboots
-            .build()
 
-        val jobScheduler = getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
-        jobScheduler.schedule(jobInfo)
-    }
 }
 
 class ActivityViewModel: ViewModel() {

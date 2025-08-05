@@ -476,6 +476,9 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE id = :messageId LIMIT 1")
     suspend fun getMessageById(messageId: Long): ChatMessageEntity?
 
+    @Query("SELECT * FROM chat_messages WHERE messageId = :messageId LIMIT 1")
+    suspend fun getMessageByMessageId(messageId: String): ChatMessageEntity?
+
     // Legacy methods for backward compatibility (deprecated)
     @Query("""
         SELECT * FROM chat_messages 

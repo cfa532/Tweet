@@ -101,6 +101,16 @@ class ChatSessionRepository(
     }
 
     /**
+     * Filter out messages that already exist in the local database
+     */
+    suspend fun filterExistingMessages(messages: List<ChatMessage>): List<ChatMessage> {
+        return messages.filter { message ->
+            val existingMessage = chatMessageDao.getMessageByMessageId(message.id)
+            existingMessage == null
+        }
+    }
+
+    /**
      * Delete a chat session and all its messages
      */
     suspend fun deleteChatSession(userId: String, receiptId: String) {

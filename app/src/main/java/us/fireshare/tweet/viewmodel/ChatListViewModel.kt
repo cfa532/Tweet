@@ -97,12 +97,19 @@ class ChatListViewModel @Inject constructor(
     suspend fun previewMessages() {
         val newMessages = HproseInstance.checkNewMessages() ?: return
 
+        // Filter out messages that already exist in local database
+        val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
+
+        if (trulyNewMessages.isEmpty()) {
+            return // No truly new messages
+        }
+
         // Notify callback about new messages found
-        onNewMessageCallback?.invoke(newMessages.size)
+        onNewMessageCallback?.invoke(trulyNewMessages.size)
 
         // Update timestamps with local system time for received messages
         val currentTime = System.currentTimeMillis()
-        val updatedNewMessages = newMessages.map { message ->
+        val updatedNewMessages = trulyNewMessages.map { message ->
             if (message.authorId != appUser.mid) {
                 // Update timestamp for incoming messages with local time
                 message.copy(timestamp = currentTime)
