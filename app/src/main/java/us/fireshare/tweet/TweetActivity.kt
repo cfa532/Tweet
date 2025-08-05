@@ -57,9 +57,7 @@ class TweetActivity : ComponentActivity() {
                 !activityViewModel.isAppReady.value
             }
         }
-        
 
-        
         initJob = CoroutineScope(IO).async {
             HproseInstance.init(this@TweetActivity)
         }
@@ -84,14 +82,10 @@ class TweetActivity : ComponentActivity() {
             }
         }
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
     }
-
-
-
-
 }
 
 class ActivityViewModel: ViewModel() {
@@ -155,7 +149,8 @@ class ActivityViewModel: ViewModel() {
         viewModelScope.launch(IO) {
             var finishDownload = false
             while (!finishDownload) {
-                val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+                val cursor =
+                    downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
                 if (cursor.moveToFirst()) {
                     val columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                     val status = cursor.getInt(columnIndex)
@@ -168,8 +163,12 @@ class ActivityViewModel: ViewModel() {
 
                         // Create an intent to install the APK
                         val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(downloadedApkUri, "application/vnd.android.package-archive")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            setDataAndType(
+                                downloadedApkUri,
+                                "application/vnd.android.package-archive"
+                            )
+                            flags =
+                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                         }
                         // Start the installation activity
                         context.startActivity(installIntent)

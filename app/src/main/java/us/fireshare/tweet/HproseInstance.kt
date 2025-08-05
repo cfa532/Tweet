@@ -156,7 +156,7 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage) {
+    suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage): Pair<Boolean, String?> {
         val entry = "message_outgoing"
         val params = mapOf(
             "aid" to appId,
@@ -182,14 +182,29 @@ object HproseInstance {
                         "msg" to Json.encodeToString(msg)
                     )
                     try {
-                        receipt.hproseService?.runMApp<Any>(receiptEntry, receiptParams)
+                        val receiptResponse = receipt.hproseService?.runMApp<Map<String, Any>>(receiptEntry, receiptParams)
+                        
+                        // Check if the response indicates success or failure
+                        val success = receiptResponse?.get("success") as? Boolean ?: true
+                        val errorMsg = receiptResponse?.get("error") as? String
+                        
+                        if (success) {
+                            return Pair(true, null)
+                        } else {
+                            return Pair(false, errorMsg ?: "Unknown error")
+                        }
                     } catch (e: Exception) {
                         Timber.tag("sendMessage").e("Error sending to receipt: $e")
+                        return Pair(false, e.message ?: "Network error")
                     }
                 }
+                return Pair(true, null) // No receipt user found, but outgoing was successful
+            } else {
+                return Pair(false, "Failed to send outgoing message")
             }
         } catch (e: Exception) {
             Timber.tag("sendMessage").e(e)
+            return Pair(false, e.message ?: "Network error")
         }
     }
 

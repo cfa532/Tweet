@@ -67,6 +67,10 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
             gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java).toList()
         } else null
         
+        // Handle success and errorMsg (optional)
+        val success = jsonObject.get("success")?.asBoolean ?: true
+        val errorMsg = jsonObject.get("errorMsg")?.asString
+        
         return ChatMessage(
             id = id ?: ChatMessage.generateUniqueId(),
             receiptId = receiptId,
@@ -74,7 +78,9 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
             content = content,
             attachments = attachments,
             timestamp = timestamp,
-            sessionId = sessionId
+            sessionId = sessionId,
+            success = success,
+            errorMsg = errorMsg
         )
     }
 }
@@ -87,7 +93,9 @@ data class ChatMessage(
     val content: String? = null,  // optional content
     val attachments: List<MimeiFileType>? = null,  // optional media files
     val timestamp: Long = System.currentTimeMillis(),
-    val sessionId: String? = null  // reference to the chat session (created locally)
+    val sessionId: String? = null,  // reference to the chat session (created locally)
+    val success: Boolean = true,  // whether the message was sent successfully
+    val errorMsg: String? = null  // error message if sending failed
 ) {
     init {
         // Validate that either content or attachments must be present
@@ -370,7 +378,9 @@ data class ChatMessageEntity(
     val content: String? = null,  // optional content
     val attachments: List<MimeiFileType>? = null,
     val timestamp: Long,
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    val success: Boolean = true,  // whether the message was sent successfully
+    val errorMsg: String? = null  // error message if sending failed
 )
 
 @Entity(tableName = "chat_sessions")
@@ -391,7 +401,9 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
         content = this.content,
         attachments = this.attachments,
         timestamp = this.timestamp,
-        sessionId = this.sessionId
+        sessionId = this.sessionId,
+        success = this.success,
+        errorMsg = this.errorMsg
     )
 }
 
@@ -403,7 +415,9 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
         content = this.content,
         attachments = this.attachments,
         timestamp = this.timestamp,
-        sessionId = this.sessionId
+        sessionId = this.sessionId,
+        success = this.success,
+        errorMsg = this.errorMsg
     )
 }
 
@@ -554,7 +568,7 @@ interface ChatSessionDao {
     suspend fun deleteSession(userId: String, receiptId: String)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 8)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 9)
 @TypeConverters(MimeiFileTypeListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao

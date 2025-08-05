@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -184,8 +186,6 @@ fun ChatScreen(
             viewModel.resetScrollToBottomFlag()
         }
     }
-    
-
 
     Scaffold(
         topBar = {
@@ -457,6 +457,23 @@ fun ChatItem(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             
+            // Show failure icon for failed messages sent by current user
+            if (isSentByCurrentUser && !message.success) {
+                val context = LocalContext.current
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = "Message failed to send - tap to see error details",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.CenterVertically)
+                        .clickable {
+                            val errorMessage = message.errorMsg ?: "Unknown error"
+                            Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
+                        }
+                )
+            }
+            
             // Message content in a column with two rows
             Column(
                 horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
@@ -556,6 +573,23 @@ fun ChatItem(
             if (isSentByCurrentUser) {
                 Spacer(modifier = Modifier.width(8.dp))
                 UserAvatar(user = appUser, size = 32)
+                
+                // Show failure icon for failed messages sent by current user
+                if (!message.success) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    val context = LocalContext.current
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = "Message failed to send - tap to see error details",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable {
+                                val errorMessage = message.errorMsg ?: "Unknown error"
+                                Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
+                            }
+                    )
+                }
             }
         }
         

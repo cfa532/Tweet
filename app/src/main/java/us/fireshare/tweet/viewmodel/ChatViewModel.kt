@@ -120,21 +120,39 @@ class ChatViewModel @AssistedInject constructor(
             // Add message to UI immediately for instant feedback
             _chatMessages.value += message
             chatRepository.insertMessage(message)
-            HproseInstance.sendMessage(receiptId, message)
-            chatSessionRepository.updateChatSession(
-                appUser.mid,
-                receiptId,
-                hasNews = false
-            )
-            Timber.tag("ChatViewModel")
-                .d("sendTextMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
-            chatListViewModel?.updateSession(message, hasNews = false)
             
-            // Trigger scroll to bottom
-            _shouldScrollToBottom.value = true
+            // Send message and get result
+            val (success, errorMsg) = HproseInstance.sendMessage(receiptId, message)
+            
+            if (success) {
+                // Message sent successfully, update session
+                chatSessionRepository.updateChatSession(
+                    appUser.mid,
+                    receiptId,
+                    hasNews = false
+                )
+                Timber.tag("ChatViewModel")
+                    .d("sendTextMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
+                chatListViewModel?.updateSession(message, hasNews = false)
+                
+                // Trigger scroll to bottom
+                _shouldScrollToBottom.value = true
+            } else {
+                // Message failed to send, update the message with failure status
+                val failedMessage = message.copy(success = false, errorMsg = errorMsg)
+                _chatMessages.update { messages ->
+                    messages.map { if (it.id == message.id) failedMessage else it }
+                }
+                chatRepository.insertMessage(failedMessage)
+            }
         } catch (e: Exception) {
             Timber.tag("ChatViewModel").e(e, "Error sending text message")
-            _toastMessage.value = "Failed to send message: ${e.message}"
+            // Update message with failure status
+            val failedMessage = message.copy(success = false, errorMsg = e.message ?: "Network error")
+            _chatMessages.update { messages ->
+                messages.map { if (it.id == message.id) failedMessage else it }
+            }
+            chatRepository.insertMessage(failedMessage)
         }
     }
 

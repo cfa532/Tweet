@@ -85,13 +85,12 @@ class SendChatMessageWorker @AssistedInject constructor(
             )
 
             // Send message via network
-            val success = withContext(Dispatchers.IO) {
+            val (success, errorMsg) = withContext(Dispatchers.IO) {
                 try {
                     HproseInstance.sendMessage(receiptId, message)
-                    true
                 } catch (e: Exception) {
                     Timber.tag("SendChatMessageWorker").e(e, "Error sending message")
-                    false
+                    Pair(false, e.message ?: "Network error")
                 }
             }
 
@@ -105,7 +104,9 @@ class SendChatMessageWorker @AssistedInject constructor(
                     )
                 )
             } else {
-                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to send message"))
+                // Create failed message with error info
+                val failedMessage = message.copy(success = false, errorMsg = errorMsg)
+                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSent(failedMessage))
                 Result.failure()
             }
         } catch (e: Exception) {
