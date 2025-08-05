@@ -42,7 +42,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
-import us.fireshare.tweet.datamodel.Tweet
 
 @OptIn(UnstableApi::class)
 @Composable

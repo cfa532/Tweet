@@ -90,8 +90,8 @@ import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
-import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.VideoManager
+import us.fireshare.tweet.widget.VideoPreview
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -400,7 +400,6 @@ fun ChatScreen(
                     FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
                         onClose = { showFullScreen = false },
-                        autoPlay = true,
                         enableImmersiveMode = true,
                         autoReplay = true
                     )

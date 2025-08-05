@@ -14,8 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
+
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -67,7 +66,6 @@ fun FullScreenVideoPlayer(
     var isLandscape by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(false) } // Start with controls hidden
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    var isDragging by remember { mutableStateOf(false) }
 
     // Check if video is landscape and set rotation
     LaunchedEffect(Unit) {
@@ -185,11 +183,9 @@ fun FullScreenVideoPlayer(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { 
-                        isDragging = true
                         dragOffset = 0f
                     },
                     onDragEnd = {
-                        isDragging = false
                         // Check if it's a downward swipe (positive Y value means downward)
                         if (dragOffset > 100f) { // Increased threshold - 100dp
                             onClose()
@@ -279,7 +275,6 @@ fun FullScreenVideoPlayer(
 fun FullScreenVideoPlayer(
     videoUrl: String,
     onClose: () -> Unit,
-    autoPlay: Boolean = true, // Auto-start playback when entering full screen
     enableImmersiveMode: Boolean = true,
     autoReplay: Boolean = true, // Auto-replay when video ends
     onHorizontalSwipe: ((direction: Int) -> Unit)? = null // -1 for left, 1 for right
@@ -315,25 +310,22 @@ fun FullScreenVideoPlayer(
     // Immersive full screen and audio control
     DisposableEffect(Unit) {
         // Hide system bars on enter
-        if (enableImmersiveMode) {
+        if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             activity?.let { act ->
-                val decorView = act.window.decorView
-                val flags = (android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-                decorView.systemUiVisibility = flags
+                val windowInsetsController = act.window.insetsController
+                windowInsetsController?.let { controller ->
+                    controller.hide(android.view.WindowInsets.Type.systemBars())
+                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
             }
         }
 
         onDispose {
             // Show system bars on exit
-            if (enableImmersiveMode) {
+            if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity?.let { act ->
-                    val decorView = act.window.decorView
-                    decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                    val windowInsetsController = act.window.insetsController
+                    windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
         }
@@ -487,25 +479,22 @@ fun FullScreenVideoPlayer(
     // Immersive full screen and audio control
     DisposableEffect(Unit) {
         // Hide system bars on enter
-        if (enableImmersiveMode) {
+        if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             activity?.let { act ->
-                val decorView = act.window.decorView
-                val flags = (android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-                decorView.systemUiVisibility = flags
+                val windowInsetsController = act.window.insetsController
+                windowInsetsController?.let { controller ->
+                    controller.hide(android.view.WindowInsets.Type.systemBars())
+                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
             }
         }
 
         onDispose {
             // Show system bars on exit
-            if (enableImmersiveMode) {
+            if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity?.let { act ->
-                    val decorView = act.window.decorView
-                    decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+                    val windowInsetsController = act.window.insetsController
+                    windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
             // Return player to preview mode
@@ -573,19 +562,4 @@ fun FullScreenVideoPlayer(
     }
 }
 
-/**
- * Format time in milliseconds to MM:SS format
- */
-private fun formatTime(timeMs: Long): String {
-    if (timeMs <= 0) return "0:00"
-    
-    val totalSeconds = timeMs / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    
-    return if (minutes > 0) {
-        "$minutes:${seconds.toString().padStart(2, '0')}"
-    } else {
-        "0:${seconds.toString().padStart(2, '0')}"
-    }
-}
+

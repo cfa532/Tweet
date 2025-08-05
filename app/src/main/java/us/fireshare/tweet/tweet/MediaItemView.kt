@@ -2,8 +2,11 @@ package us.fireshare.tweet.tweet
 
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Environment
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,8 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,11 +39,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import timber.log.Timber
-import android.content.Intent
-import android.os.Build
-import androidx.annotation.RequiresApi
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
@@ -268,7 +268,6 @@ fun MediaItemView(
                     FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
                         onClose = { showFullScreenVideo = false },
-                        autoPlay = true,
                         enableImmersiveMode = true,
                         autoReplay = true
                     )
