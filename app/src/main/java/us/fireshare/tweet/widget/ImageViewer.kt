@@ -3,6 +3,7 @@ package us.fireshare.tweet.widget
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -130,6 +132,9 @@ fun AdvancedImageViewer(
         }
     }
 
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -140,6 +145,25 @@ fun AdvancedImageViewer(
                         onLongPress = { showMenu = true }
                     )
                 }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { 
+                        isDragging = true
+                        dragOffset = 0f
+                    },
+                    onDragEnd = { 
+                        isDragging = false
+                        // If dragged down more than 30f, close the image viewer
+                        if (dragOffset > 30f) {
+                            onClose?.invoke()
+                        }
+                        dragOffset = 0f
+                    },
+                    onDrag = { _, dragAmount ->
+                        dragOffset += dragAmount.y
+                    }
+                )
             }
     ) {
         if (imageFile != null) {
