@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -190,13 +191,16 @@ fun FullScreenVideoPlayer(
                     onDragEnd = {
                         isDragging = false
                         // Check if it's a downward swipe (positive Y value means downward)
-                        if (dragOffset > 30f) { // Very low threshold - 30dp
+                        if (dragOffset > 100f) { // Increased threshold - 100dp
                             onClose()
                         }
                         dragOffset = 0f
                     },
                     onDrag = { _, dragAmount ->
-                        dragOffset += dragAmount.y
+                        // Only allow downward dragging (positive Y values)
+                        if (dragAmount.y > 0) {
+                            dragOffset += dragAmount.y
+                        }
                     }
                 )
             }
@@ -216,7 +220,16 @@ fun FullScreenVideoPlayer(
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = dragOffset
+                    // Add some scaling effect as the video is dragged down
+                    scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                    scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                    // Add alpha effect for fade out
+                    alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                },
             update = { playerView ->
                 // Control the visibility of the native controller
                 if (showControls) {
