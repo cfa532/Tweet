@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -154,14 +155,17 @@ fun AdvancedImageViewer(
                     },
                     onDragEnd = { 
                         isDragging = false
-                        // If dragged down more than 30f, close the image viewer
-                        if (dragOffset > 30f) {
+                        // If dragged down more than 100f, close the image viewer
+                        if (dragOffset > 100f) {
                             onClose?.invoke()
                         }
                         dragOffset = 0f
                     },
                     onDrag = { _, dragAmount ->
-                        dragOffset += dragAmount.y
+                        // Only allow downward dragging (positive Y values)
+                        if (dragAmount.y > 0) {
+                            dragOffset += dragAmount.y
+                        }
                     }
                 )
             }
@@ -189,7 +193,16 @@ fun AdvancedImageViewer(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = dragOffset
+                        // Add some scaling effect as the image is dragged down
+                        scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                        scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                        // Add alpha effect for fade out
+                        alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                    }
             )
         } else if (loadState.bitmap != null) {
             // Fallback to regular Image if no file is available
@@ -197,7 +210,16 @@ fun AdvancedImageViewer(
                 bitmap = loadState.bitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = dragOffset
+                        // Add some scaling effect as the image is dragged down
+                        scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                        scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                        // Add alpha effect for fade out
+                        alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                    }
             )
         } else if (loadState.hasError) {
             // Show error state
