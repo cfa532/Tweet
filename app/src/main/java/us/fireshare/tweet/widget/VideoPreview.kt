@@ -15,10 +15,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,8 +29,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -67,6 +71,8 @@ fun VideoPreview(
     var isLoading by remember {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
+    var showTimeLabel by remember { mutableStateOf(false) }
+    var remainingTime by remember { mutableLongStateOf(0L) }
 
     val exoPlayer = remember(url, videoMid) {
         val player = if (videoMid != null) {
@@ -163,6 +169,23 @@ fun VideoPreview(
 
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
+    }
+
+    // Show time label when video starts playing and auto-hide after 3 seconds
+    LaunchedEffect(exoPlayer.isPlaying) {
+        if (exoPlayer.isPlaying) {
+            showTimeLabel = true
+            kotlinx.coroutines.delay(3000)
+            showTimeLabel = false
+        }
+    }
+
+    // Update remaining time every second when time label is shown
+    LaunchedEffect(showTimeLabel) {
+        while (showTimeLabel) {
+            remainingTime = exoPlayer.duration - exoPlayer.currentPosition
+            kotlinx.coroutines.delay(1000)
+        }
     }
 
     // Create a single listener that will be properly managed
@@ -294,5 +317,48 @@ fun VideoPreview(
                 )
             }
         }
+        
+        // Time label in lower left corner
+        if (showTimeLabel) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                contentAlignment = androidx.compose.ui.Alignment.BottomStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = Color.Black.copy(alpha = 0.1f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = formatTime(remainingTime),
+                        color = Color.White.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Format time in milliseconds to MM:SS format
+ */
+private fun formatTime(timeMs: Long): String {
+    if (timeMs <= 0) return "0:00"
+    
+    val totalSeconds = timeMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    
+    return if (minutes > 0) {
+        "$minutes:${seconds.toString().padStart(2, '0')}"
+    } else {
+        "0:${seconds.toString().padStart(2, '0')}"
     }
 }
