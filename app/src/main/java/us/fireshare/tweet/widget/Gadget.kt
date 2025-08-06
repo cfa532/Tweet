@@ -10,10 +10,16 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
-import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.conn.util.InetAddressUtils
 import timber.log.Timber
 import java.net.Inet4Address
 import java.net.InetAddress
+
+/**
+ * Check if a string represents an IPv6 address
+ */
+private fun isIPv6Address(ip: String): Boolean {
+    return ip.contains(":") && !ip.matches(Regex("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"))
+}
 
 /**
  * Extract host IP from a full IP address.
@@ -178,7 +184,7 @@ object Gadget {
                 return@forEach  // Skip this IP if port is invalid
             }
 
-            if (InetAddressUtils.isIPv6Address(ip)) {
+            if (isIPv6Address(ip)) {
                 // Handle IPv6 addresses
                 ip6 = "[$ip]:$port"
             } else {
@@ -215,7 +221,7 @@ object Gadget {
 
     private fun isValidPublicIpAddress(fullIp: String): Boolean {
         val ip = fullIp.substringBeforeLast(":").trim('[').trim(']')
-        if (InetAddressUtils.isIPv6Address(ip))
+        if (isIPv6Address(ip))
             return true
         else {
             // Check for invalid format using a regular expression

@@ -7,6 +7,7 @@ plugins {
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
+    alias(libs.plugins.firebase.crashlytics)
     id("kotlin-parcelize")
 }
 
@@ -18,13 +19,18 @@ android {
     defaultConfig {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 40    // Google Play store version code
         versionName = "35"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        
+        // Enable 16 KB page size compatibility
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
     }
     buildTypes {
@@ -71,6 +77,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    @Suppress("DEPRECATION")
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -78,12 +85,28 @@ android {
         compose = true
         buildConfig = true
     }
+    @Suppress("UnstableApiUsage")
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Exclude problematic binaries for 16 KB page size compatibility
+            excludes += "**/dump_syms/**"
+            excludes += "**/dump_syms.bin"
+            excludes += "**/linux/dump_syms.bin"
+            excludes += "**/mac/dump_syms.bin"
+            excludes += "**/win32/dump_syms.exe"
+            excludes += "**/win64/dump_syms.exe"
+            // Exclude other potential problematic binaries
+            excludes += "**/*.so"
+            excludes += "**/lib/**"
+            pickFirsts += "**/lib/**"
+        }
+        // Enable 16 KB page size compatibility
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }
@@ -100,7 +123,7 @@ dependencies {
     implementation(libs.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
-    implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.firebase.crashlytics)
     implementation(libs.ui.graphics)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
@@ -138,8 +161,11 @@ dependencies {
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     
+    // ShortcutBadger for launcher badge support
+    implementation(libs.shortcutbadger)
+    
     // Subsampling Scale Image View for efficient large image handling
-    implementation("com.davemorrissey.labs:subsampling-scale-image-view:3.10.0")
+    implementation(libs.subsampling.scale.image.view)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -154,6 +180,12 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    
+    // WorkManager testing dependencies
+    androidTestImplementation(libs.androidx.work.testing)
+    androidTestImplementation(libs.androidx.core)
+    androidTestImplementation(libs.androidx.runner)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

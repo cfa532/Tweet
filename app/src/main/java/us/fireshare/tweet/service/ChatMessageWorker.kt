@@ -26,10 +26,17 @@ class SendChatMessageWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        val receiptId = inputData.getString("receiptId") ?: return Result.failure()
+        val receiptId = inputData.getString("receiptId") ?: run {
+            Timber.tag("SendChatMessageWorker").e("Missing receiptId in input data")
+            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Missing recipient ID"))
+            return Result.failure()
+        }
+        
         val content = inputData.getString("content") ?: ""
         val attachmentUri = inputData.getString("attachmentUri")
         val messageTimestamp = inputData.getLong("messageTimestamp", System.currentTimeMillis())
+
+        Timber.tag("SendChatMessageWorker").d("Starting message send: receiptId=$receiptId, content=$content, attachmentUri=$attachmentUri")
 
         val powerManager =
             applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -45,6 +52,7 @@ class SendChatMessageWorker @AssistedInject constructor(
             // Upload attachment if provided
             if (attachmentUri != null) {
                 try {
+                    Timber.tag("SendChatMessageWorker").d("Starting attachment upload: $attachmentUri")
                     val uploadedFile = withContext(Dispatchers.IO) {
                         uploadToIPFS(applicationContext, attachmentUri.toUri())
                     }
@@ -53,12 +61,12 @@ class SendChatMessageWorker @AssistedInject constructor(
                         Timber.tag("SendChatMessageWorker")
                             .d("File uploaded successfully: ${uploadedFile.mid}")
                     } else {
-                        Timber.tag("SendChatMessageWorker").e("Failed to upload file")
+                        Timber.tag("SendChatMessageWorker").e("Failed to upload file - uploadToIPFS returned null")
                         TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment"))
                         return Result.failure()
                     }
                 } catch (e: Exception) {
-                    Timber.tag("SendChatMessageWorker").e(e, "Error uploading file")
+                    Timber.tag("SendChatMessageWorker").e(e, "Error uploading file: $attachmentUri")
                     TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment: ${e.message}"))
                     return Result.failure()
                 }
@@ -84,18 +92,21 @@ class SendChatMessageWorker @AssistedInject constructor(
                 sessionId = conversationSessionId
             )
 
+            Timber.tag("SendChatMessageWorker").d("Sending message: ${message.id}")
+
             // Send message via network
             val (success, errorMsg) = withContext(Dispatchers.IO) {
                 try {
                     HproseInstance.sendMessage(receiptId, message)
                 } catch (e: Exception) {
-                    Timber.tag("SendChatMessageWorker").e(e, "Error sending message")
+                    Timber.tag("SendChatMessageWorker").e(e, "Error sending message via network")
                     Pair(false, e.message ?: "Network error")
                 }
             }
 
             if (success) {
                 // Notify success
+                Timber.tag("SendChatMessageWorker").d("Message sent successfully: ${message.id}")
                 TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSent(message))
                 Result.success(
                     workDataOf(
@@ -105,16 +116,22 @@ class SendChatMessageWorker @AssistedInject constructor(
                 )
             } else {
                 // Create failed message with error info
+                Timber.tag("SendChatMessageWorker").e("Message send failed: $errorMsg")
                 val failedMessage = message.copy(success = false, errorMsg = errorMsg)
                 TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSent(failedMessage))
                 Result.failure()
             }
         } catch (e: Exception) {
-            Timber.tag("SendChatMessageWorker").e(e, "Error in doWork")
+            Timber.tag("SendChatMessageWorker").e(e, "Unexpected error in doWork")
             TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}"))
             Result.failure()
         } finally {
-            wakeLock.release()
+            try {
+                wakeLock.release()
+                Timber.tag("SendChatMessageWorker").d("Wake lock released")
+            } catch (e: Exception) {
+                Timber.tag("SendChatMessageWorker").e(e, "Error releasing wake lock")
+            }
         }
     }
 }
