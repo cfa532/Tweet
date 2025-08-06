@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,6 +80,9 @@ fun TweetItem(
         factory.create(tweet)
     }
     var isVisible by remember { mutableStateOf(false) }
+    var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
+    val debounceMs = 200L // 200ms debounce for visibility detection
+    
     // TweetRefreshHandler removed - refresh is now handled at the screen level
 
     Surface(
@@ -86,7 +90,11 @@ fun TweetItem(
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
             .onGloballyPositioned { layoutCoordinates ->
-                isVisible = isElementVisible(layoutCoordinates, 30)
+                val now = System.currentTimeMillis()
+                if (now - lastVisibilityUpdate > debounceMs) {
+                    isVisible = isElementVisible(layoutCoordinates, 50)
+                    lastVisibilityUpdate = now
+                }
             }
     ) {
         if (tweet.originalTweetId != null) {
