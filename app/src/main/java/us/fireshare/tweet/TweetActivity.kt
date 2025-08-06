@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
-
+import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.ui.theme.TweetTheme
 import java.util.concurrent.TimeUnit
 
@@ -66,6 +66,9 @@ class TweetActivity : ComponentActivity() {
             initJob.await()   // wait until network ready
             activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
+            // Request notification permission on app startup
+            requestNotificationPermissionIfNeeded()
+
             launch {
                 delay(60000)
                 activityViewModel.checkForUpgrade(this@TweetActivity)
@@ -85,6 +88,31 @@ class TweetActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+    }
+
+    /**
+     * Request notification permission if needed (on app install or upgrade)
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (NotificationPermissionManager.shouldRequestNotificationPermission(this)) {
+            // Add a small delay to ensure the app is fully loaded
+            lifecycleScope.launch {
+                delay(2000) // 2 second delay
+                
+                if (NotificationPermissionManager.isNotificationPermissionGranted(this@TweetActivity)) {
+                    // Permission already granted, just mark as asked
+                    NotificationPermissionManager.markNotificationPermissionAsked(this@TweetActivity)
+                    Timber.d("Notification permission already granted")
+                } else {
+                    // Request permission
+                    NotificationPermissionManager.requestNotificationPermission(
+                        this@TweetActivity
+                    ) { isGranted ->
+                        Timber.d("Notification permission request completed: $isGranted")
+                    }
+                }
+            }
+        }
     }
 }
 

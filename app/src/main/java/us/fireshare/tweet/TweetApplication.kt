@@ -22,6 +22,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.BadgeStateManager
+import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
@@ -45,6 +46,9 @@ class TweetApplication : Application(){
 
         // Initialize BadgeStateManager for launcher badge support
         BadgeStateManager.initialize(this)
+        
+        // Initialize notification channels for system bar notifications
+        SystemNotificationManager.initializeChannels(this)
 
         // Schedule the CleanUpWorker
         val cleanUpRequest = PeriodicWorkRequestBuilder<CleanUpWorker>(1, TimeUnit.DAYS)

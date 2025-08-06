@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.ChatDatabase
+import us.fireshare.tweet.datamodel.ChatMessage
 
 /**
  * Worker for periodic message checking using WorkManager.
@@ -68,6 +69,9 @@ class MessageCheckWorker @AssistedInject constructor(
                 if (trulyNewMessages.isNotEmpty()) {
                     BadgeStateManager.updateBadgeCount(trulyNewMessages.size)
                     Timber.tag("MessageCheckWorker").d("Updated badge count to: ${trulyNewMessages.size}")
+                    
+                    // Show system bar notification for new messages
+                    showNewMessageNotifications(trulyNewMessages)
                 } else {
                     BadgeStateManager.updateBadgeCount(0)
                     Timber.tag("MessageCheckWorker").d("Cleared badge count - no new messages")
@@ -82,6 +86,37 @@ class MessageCheckWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Timber.tag("MessageCheckWorker").e(e, "Unexpected error in message check")
             Result.retry()
+        }
+    }
+    
+    /**
+     * Show system bar notifications for new messages
+     */
+    private fun showNewMessageNotifications(messages: List<ChatMessage>) {
+        try {
+            if (messages.isEmpty()) return
+            
+            // Get the first message for notification
+            val firstMessage = messages.first()
+            val authorId = firstMessage.authorId
+            val messagePreview = firstMessage.content ?: "New message"
+            
+            // Count messages from the same sender
+            val messagesFromSameSender = messages.count { it.authorId == authorId }
+            
+            // Use authorId as sender name for simplicity
+            val senderName = authorId
+            
+            SystemNotificationManager.showChatMessageNotification(
+                applicationContext,
+                senderName,
+                messagePreview,
+                messagesFromSameSender
+            )
+            
+            Timber.tag("MessageCheckWorker").d("System notifications shown for ${messages.size} new messages")
+        } catch (e: Exception) {
+            Timber.tag("MessageCheckWorker").e(e, "Error showing system notifications")
         }
     }
 } 

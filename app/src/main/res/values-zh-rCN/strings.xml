@@ -98,6 +98,32 @@
     <string name="failed_to_load_image">图片加载失败</string>
     <string name="loading">加载中...</string>
     <string name="save_image">保存图片</string>
+    
+    <!-- Notification Permission Strings -->
+    <string name="notification_permission_title">启用通知</string>
+    <string name="notification_permission_message">为了接收新的聊天消息通知并保持与您的对话同步，请为此应用启用通知。</string>
+    <string name="notification_permission_enable">启用</string>
+    <string name="notification_permission_not_now">暂不启用</string>
+    <string name="notification_permission_settings_title">通知设置</string>
+    <string name="notification_permission_settings_message">请在设备设置中为此应用启用通知，以接收聊天消息提醒。</string>
+    <string name="notification_permission_open_settings">打开设置</string>
+    
+    <!-- Notification Channel Names -->
+    <string name="notification_channel_chat_messages">聊天消息</string>
+    <string name="notification_channel_chat_messages_desc">新聊天消息和对话的通知</string>
+    <string name="notification_channel_new_tweets">新推文</string>
+    <string name="notification_channel_new_tweets_desc">您关注的用户发布新推文的通知</string>
+    <string name="notification_channel_system_updates">系统更新</string>
+    <string name="notification_channel_system_updates_desc">系统通知和应用更新</string>
+    <string name="notification_channel_default_desc">聊天消息通知和重要更新</string>
+    
+    <!-- Notification Messages -->
+    <string name="notification_new_message_title">来自 %s 的新消息</string>
+    <string name="notification_new_messages_title" formatted="false">来自 %2$s 的 %1$d 条新消息</string>
+    <string name="notification_new_tweets_title">%d 条新推文</string>
+    <string name="notification_new_tweets_single_user">来自 %s 的新推文</string>
+    <string name="notification_new_tweets_multiple_users">来自 %s 的新推文</string>
+    <string name="notification_new_tweets_many_users">来自 %d 个用户的新推文</string>
     <string name="share_image">分享图片</string>
     <string name="download">下载</string>
     <string name="type_message">输入消息...</string>

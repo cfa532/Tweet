@@ -98,6 +98,32 @@
     <string name="loading">Loading...</string>
     <string name="save_image">Save Image</string>
     <string name="share_image">Share Image</string>
+    
+    <!-- Notification Permission Strings -->
+    <string name="notification_permission_title">Enable Notifications</string>
+    <string name="notification_permission_message">To receive new chat message notifications and stay updated with your conversations, please enable notifications for this app.</string>
+    <string name="notification_permission_enable">Enable</string>
+    <string name="notification_permission_not_now">Not Now</string>
+    <string name="notification_permission_settings_title">Notification Settings</string>
+    <string name="notification_permission_settings_message">Please enable notifications for this app in your device settings to receive chat message alerts.</string>
+    <string name="notification_permission_open_settings">Open Settings</string>
+    
+    <!-- Notification Channel Names -->
+    <string name="notification_channel_chat_messages">Chat Messages</string>
+    <string name="notification_channel_chat_messages_desc">Notifications for new chat messages and conversations</string>
+    <string name="notification_channel_new_tweets">New Tweets</string>
+    <string name="notification_channel_new_tweets_desc">Notifications for new tweets from users you follow</string>
+    <string name="notification_channel_system_updates">System Updates</string>
+    <string name="notification_channel_system_updates_desc">System notifications and app updates</string>
+    <string name="notification_channel_default_desc">Chat message notifications and important updates</string>
+    
+    <!-- Notification Messages -->
+    <string name="notification_new_message_title">New message from %s</string>
+    <string name="notification_new_messages_title" formatted="false">%d new messages from %s</string>
+    <string name="notification_new_tweets_title">%d new tweets</string>
+    <string name="notification_new_tweets_single_user">New tweet from %s</string>
+    <string name="notification_new_tweets_multiple_users">New tweets from %s</string>
+    <string name="notification_new_tweets_many_users">New tweets from %d users</string>
     <string name="download">Download</string>
     <string name="type_message">Type a message...</string>
     <string name="recommended_tweets">Recommended Tweets</string>

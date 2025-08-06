@@ -81,7 +81,7 @@ fun TweetItem(
     }
     var isVisible by remember { mutableStateOf(false) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
-    val debounceMs = 200L // 200ms debounce for visibility detection
+    val debounceMs = 100L // 100ms debounce for visibility detection
     
     // TweetRefreshHandler removed - refresh is now handled at the screen level
 

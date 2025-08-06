@@ -61,6 +61,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.service.BadgeStateManager
+import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -77,6 +78,7 @@ fun ChatListScreen(
     val navController = LocalNavController.current
     var lastClickTime by remember { mutableLongStateOf(0L) }
     val debounceTime = 500L
+    val context = androidx.compose.ui.platform.LocalContext.current
     
     // State for showing the followings dialog
     var showFollowingsDialog by remember { mutableStateOf(false) }
@@ -90,6 +92,9 @@ fun ChatListScreen(
     LaunchedEffect(Unit) {
         // Clear badge when entering chat list
         BadgeStateManager.clearBadge()
+        
+        // Clear system notifications when entering chat list
+        SystemNotificationManager.clearNotification(context, 1001)
         
         // Set up callback to update badge when new messages are found
         viewModel.setOnNewMessageCallback { count ->
