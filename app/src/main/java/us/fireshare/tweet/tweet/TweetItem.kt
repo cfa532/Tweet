@@ -146,6 +146,7 @@ fun TweetItem(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 private fun RetweetContent(
     tweet: Tweet,
@@ -417,6 +418,7 @@ private fun RetweetWithContent(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 private fun QuotedTweetContent(
     tweet: Tweet,

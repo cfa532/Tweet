@@ -77,11 +77,11 @@ fun TweetItemBody(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
-            .padding(start = 0.dp, end = 8.dp)
+            .padding(start = 4.dp, end = 8.dp)
             .clickable(enabled = canNavigate, onClick = {
                 // necessary to deal with corrupted data.
                 if (canNavigate) {
-                    navController.navigate(NavTweet.TweetDetail(tweet.authorId!!, tweet.mid!!))
+                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
                 }
             })
     ) {
@@ -97,9 +97,9 @@ fun TweetItemBody(
                     onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     },
-                    modifier = Modifier.width(44.dp)
+                    modifier = Modifier.width(48.dp)
                 ) {
-                    author?.let { UserAvatar(user = it, size = 32) }
+                    author?.let { UserAvatar(user = it, size = 36) }
                 }
             }
 
@@ -110,10 +110,10 @@ fun TweetItemBody(
                 // Top row: User info and dropdown menu
                 Row(
                     modifier = Modifier
-                        .padding(top = 4.dp)
+                        .padding(vertical = 0.dp)
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+//                    verticalAlignment = Alignment.Top
                 ) {
                     // User info text
                     Row(
@@ -137,63 +137,53 @@ fun TweetItemBody(
                     }
 
                     // Dropdown menu
-                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
+//                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
                 }
 
-                // Tweet content
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier
-                        .offset(y = (-20).dp)
-                        .padding(start = 4.dp)
-                        .fillMaxWidth()
-                ) {
-                    Column {
-                        // Text content of the tweet
-                        if (hasContent) {
-                            SelectableText(
-                                text = tweet.content!!,
-                                maxLines = 10,
-                            ) { username ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    HproseInstance.getUserId(username)?.let {
-                                        withContext(Dispatchers.Main) {
-                                            navController.navigate(NavTweet.UserProfile(it))
-                                        }
-                                    }
+                // Text content of the tweet
+                if (hasContent) {
+                    SelectableText(
+                        text = tweet.content!!,
+                        maxLines = 10,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) { username ->
+                        viewModel.viewModelScope.launch(Dispatchers.IO) {
+                            HproseInstance.getUserId(username)?.let {
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate(NavTweet.UserProfile(it))
                                 }
                             }
                         }
+                    }
+                }
 
-                        // Media files
-                        if (hasAttachments) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(top = 4.dp)
-                                    .heightIn(min = 20.dp, max = 400.dp),
-                                tonalElevation = 4.dp,
-                                shape = RoundedCornerShape(size = 8.dp)
-                            ) {
-                                MediaPreviewGrid(tweet.attachments!!, viewModel)
-                            }
-                        }
+                // Media files
+                if (hasAttachments) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(top = 4.dp, end = 4.dp)
+                            .heightIn(min = 20.dp, max = 400.dp),
+                        tonalElevation = 4.dp,
+                        shape = RoundedCornerShape(size = 8.dp)
+                    ) {
+                        MediaPreviewGrid(tweet.attachments!!, viewModel)
+                    }
+                }
 
-                        // Action buttons (only if not quoted)
-                        if (!isQuoted) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 0.dp),
-                                horizontalArrangement = Arrangement.SpaceAround
-                            ) {
-                                LikeButton(viewModel)
-                                BookmarkButton(viewModel)
-                                CommentButton(viewModel)
-                                RetweetButton(viewModel)
-                                Spacer(modifier = Modifier.width(40.dp))
-                                ShareButton(viewModel)
-                            }
-                        }
+                // Action buttons (only if not quoted)
+                if (!isQuoted) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 0.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
+                        CommentButton(viewModel)
+                        RetweetButton(viewModel)
+                        Spacer(modifier = Modifier.width(40.dp))
+                        ShareButton(viewModel)
                     }
                 }
             }

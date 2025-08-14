@@ -1,5 +1,7 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,6 +70,7 @@ data class ScrollState(
  * @param onIsAtLastTweetChange Callback when isAtLastTweet state changes (for external gesture detection)
  * @param onTriggerLoadMore Callback to trigger manual loadmore (for external gesture detection)
  */
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 fun TweetListView(
@@ -542,7 +545,9 @@ fun TweetListView(
                     // Add divider after each tweet item (except the last one)
                     if (tweets.indexOf(tweet) < tweets.size - 1) {
                         HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 1.dp),
+                            modifier = Modifier
+                                .padding(bottom = 4.dp)
+                                .padding(horizontal = 1.dp),
                             thickness = 1.dp,
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
                         )

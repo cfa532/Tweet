@@ -72,6 +72,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.SelectableText
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetDetailBody(
     viewModel: TweetViewModel,
@@ -307,11 +308,11 @@ fun TweetDropdownMenu(
     }
 
     Box(
-        modifier = Modifier.padding(end = 0.dp)
+        modifier = Modifier.padding(end = 8.dp)
     ) {
         IconButton(
             modifier = Modifier
-                .width(48.dp)
+                .height(48.dp)
                 .alpha(0.7f)
                 .offset(x = 16.dp, y = (-8).dp)
                 .rotate(-90f),
