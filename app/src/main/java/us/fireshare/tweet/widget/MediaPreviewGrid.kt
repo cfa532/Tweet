@@ -177,8 +177,12 @@ fun MediaPreviewGrid(
                         .aspectRatio(aspectRatio)
                         .clipToBounds()
                         .clickable {
+                            Timber.d("MediaPreviewGrid: TAP DETECTED for single item")
+                            Timber.d("MediaPreviewGrid: Creating MediaViewerParams for single item")
+                            Timber.d("MediaPreviewGrid: mediaItems types: ${mediaItems.map { it.type }}")
                             val params = MediaViewerParams(
                                 mediaItems.map {
+                                    Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
                                     MediaItem(
                                         getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                         it.type
@@ -574,8 +578,12 @@ fun MediaPreviewGrid(
                                 .aspectRatio(1f)
                                 .clipToBounds()
                                 .clickable {
+                                    Timber.d("MediaPreviewGrid: TAP DETECTED for index $index")
+                                    Timber.d("MediaPreviewGrid: Creating MediaViewerParams for index $index")
+                                    Timber.d("MediaPreviewGrid: mediaItems types: ${mediaItems.map { it.type }}")
                                     val params = MediaViewerParams(
                                         mediaItems.map {
+                                            Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
                                             MediaItem(
                                                 getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                                 it.type

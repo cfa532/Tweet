@@ -20,7 +20,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 41    // Google Play store version code
+        versionCode = 42    // Google Play store version code
         versionName = "36"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

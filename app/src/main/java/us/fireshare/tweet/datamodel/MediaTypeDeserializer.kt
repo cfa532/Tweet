@@ -24,7 +24,7 @@ class MediaTypeDeserializer : JsonDeserializer<MediaType> {
         val typeString = json.asString.lowercase()
         Timber.d("MediaTypeDeserializer: deserializing '$typeString'")
 
-        return when {
+        val result = when {
             // Handle exact enum matches
             typeString == "image" -> MediaType.Image
             typeString == "video" -> MediaType.Video
@@ -89,5 +89,8 @@ class MediaTypeDeserializer : JsonDeserializer<MediaType> {
                 MediaType.Unknown
             }
         }
+        
+        Timber.d("MediaTypeDeserializer: converted '$typeString' to $result")
+        return result
     }
 }

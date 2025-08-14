@@ -101,7 +101,7 @@ fun MediaItemView(
             MediaType.Audio -> {
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
-            MediaType.Video -> {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Show full-screen video directly
                 fullScreenVideoMid = mediaItems[idx].mid
                 showFullScreenVideo = true
@@ -142,6 +142,7 @@ fun MediaItemView(
             .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
+        Timber.d("MediaItemView: Processing attachment with type: ${attachment.type}")
         when (attachment.type) {
             MediaType.Image -> {
                 // Use a Box with clickable modifier to handle image clicks
@@ -188,6 +189,7 @@ fun MediaItemView(
                 }
             }
             else -> {       // add link to download other file type
+                Timber.w("MediaItemView: Falling through to BlobLink for type: ${attachment.type}")
                 BlobLink(mediaItems[index], attachment.url, modifier)
             }
         }
