@@ -1619,10 +1619,10 @@ object HproseInstance {
                 @OptIn(UnstableApi::class)
                 val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
 
-                Timber.tag("uploadVideoToNetDisk").d("Video uploaded successfully: $cid")
+                Timber.tag("uploadHLSVideo").d("HLS video uploaded successfully: $cid")
                 MimeiFileType(
                     cid,
-                    us.fireshare.tweet.datamodel.MediaType.Video,
+                    us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
                     fileSize,
                     fileName,
                     fileTimestamp,
