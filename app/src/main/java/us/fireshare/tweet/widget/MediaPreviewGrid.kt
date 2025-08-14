@@ -73,7 +73,7 @@ fun MediaPreviewGrid(
     @Composable
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
-        if (itemType == MediaType.Video) {
+        if (itemType == MediaType.Video || itemType == MediaType.HLS_VIDEO) {
             // For videos, try to get aspect ratio from stored value first
             val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }
             if (storedAspectRatio != null) {
@@ -104,7 +104,8 @@ fun MediaPreviewGrid(
     val firstVideoIndex by remember(limitedMediaList) {
         derivedStateOf {
             limitedMediaList.indexOfFirst { 
-                inferMediaTypeFromAttachment(it) == MediaType.Video
+                val mediaType = inferMediaTypeFromAttachment(it)
+                mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
             }.takeIf { it >= 0 } ?: -1
         }
     }
@@ -115,7 +116,8 @@ fun MediaPreviewGrid(
     val videoMids by remember(limitedMediaList) {
         derivedStateOf {
             limitedMediaList.mapIndexedNotNull { index, item ->
-                if (inferMediaTypeFromAttachment(item) == MediaType.Video) item.mid else null
+                val mediaType = inferMediaTypeFromAttachment(item)
+                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) item.mid else null
             }
         }
     }
@@ -600,9 +602,21 @@ fun MediaPreviewGrid(
  * Infer media type from attachment properties when backend doesn't provide type
  */
 fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
-    // Check if aspectRatio is present (indicates video)
+    // Check if type is provided and valid
     if (attachment.type != null && attachment.type != MediaType.Unknown) {
+        Timber.d("MediaPreviewGrid: Using provided type: ${attachment.type}")
         return attachment.type
+    }
+    
+    // If type is Unknown but we have a valid type, try to infer from other properties
+    if (attachment.type == MediaType.Unknown) {
+        Timber.d("MediaPreviewGrid: Type is Unknown, checking for video indicators")
+        
+        // Check if it has aspect ratio (indicates video)
+        if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
+            Timber.d("MediaPreviewGrid: Found aspect ratio ${attachment.aspectRatio}, treating as video")
+            return MediaType.Video
+        }
     }
     
     // Check filename extension
@@ -617,15 +631,16 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
         }
     }
     
-    return when {
+    val inferredType = when {
         fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || 
         fileName.endsWith(".png") || fileName.endsWith(".gif") || 
         fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
         
         fileName.endsWith(".mp4") || fileName.endsWith(".mov") || 
         fileName.endsWith(".avi") || fileName.endsWith(".mkv") || 
-        fileName.endsWith(".webm") || fileName.endsWith(".m3u8") ||
-        fileName.endsWith(".m4v") || fileName.endsWith(".3gpp") -> MediaType.Video
+        fileName.endsWith(".webm") || fileName.endsWith(".m4v") || 
+        fileName.endsWith(".3gpp") -> MediaType.Video
+        fileName.endsWith(".m3u8") -> MediaType.HLS_VIDEO
         
         fileName.endsWith(".mp3") || fileName.endsWith(".wav") || 
         fileName.endsWith(".aac") || fileName.endsWith(".ogg") || 
@@ -644,4 +659,7 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
         
         else -> MediaType.Unknown
     }
+    
+    Timber.d("MediaPreviewGrid: Inferred type from filename '$fileName': $inferredType")
+    return inferredType
 }

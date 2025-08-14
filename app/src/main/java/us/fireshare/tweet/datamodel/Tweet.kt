@@ -3,6 +3,7 @@ package us.fireshare.tweet.datamodel
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import kotlinx.serialization.Serializable
 import timber.log.Timber
@@ -129,7 +130,9 @@ data class Tweet(
          */
         fun from(dict: Map<String, Any>): Tweet {
             try {
-                val gson = Gson()
+                val gson = GsonBuilder()
+                    .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
+                    .create()
                 
                 // Pre-process the dictionary to handle scientific notation in numeric fields
                 val processedDict = dict.toMutableMap()
@@ -280,12 +283,16 @@ data class Tweet(
                 }
             }
             
-            // Handle attachments timestamps if present
+            // Handle attachments timestamps and type conversion if present
             val attachments = processedDict["attachments"] as? List<*>
             if (attachments != null) {
+                Timber.d("Processing ${attachments.size} attachments")
                 val processedAttachments = attachments.map { attachment ->
                     if (attachment is Map<*, *>) {
+                        Timber.d("Processing attachment: $attachment")
                         val attachmentMap = attachment.toMutableMap()
+                        
+                        // Handle timestamp conversion
                         attachmentMap["timestamp"]?.let { value ->
                             when (value) {
                                 is Number -> attachmentMap["timestamp"] = value.toLong()
@@ -298,6 +305,8 @@ data class Tweet(
                                 }
                             }
                         }
+                        
+                        Timber.d("Final processed attachment: $attachmentMap")
                         attachmentMap
                     } else {
                         attachment
@@ -331,7 +340,7 @@ data class Tweet(
 
 @Serializable
 enum class MediaType {
-    Image, Video, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
+    Image, Video, HLS_VIDEO, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
 }
 
 /**

@@ -89,7 +89,7 @@ object FileTypeDetector {
             "3gp", "3gpp" -> MediaType.Video
             "flv" -> MediaType.Video
             "wmv" -> MediaType.Video
-            "m3u8" -> MediaType.Video
+            "m3u8" -> MediaType.HLS_VIDEO
             "ts" -> MediaType.Video
             "mts" -> MediaType.Video
             "m2ts" -> MediaType.Video

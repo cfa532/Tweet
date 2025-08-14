@@ -161,7 +161,7 @@ fun ChatScreen(
         val recentMessages = chatMessages.takeLast(10) // Preload videos from last 10 messages
         recentMessages.forEach { message ->
             message.attachments?.forEach { attachment ->
-                if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+                if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
                     !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
                     val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
                     coroutineScope.launch(Dispatchers.IO) {
@@ -194,7 +194,7 @@ fun ChatScreen(
             val newMessages = chatMessages.takeLast(5) // Preload videos from last 5 messages
             newMessages.forEach { message ->
                 message.attachments?.forEach { attachment ->
-                    if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+                    if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
                         !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
                         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
                         coroutineScope.launch(Dispatchers.IO) {
@@ -413,7 +413,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            us.fireshare.tweet.datamodel.MediaType.Video -> {
+            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
                 // Try to get existing player for seamless transition
                 val existingPlayer = VideoManager.transferToFullScreen(attachment.mid)
                 
@@ -900,7 +900,7 @@ fun ChatMediaPreview(
 
     // Preload video if it's a video attachment and not already preloaded
     LaunchedEffect(attachment.mid, attachment.type) {
-        if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+        if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
             !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
             // Preload video in background similar to MediaPreviewGrid
             withContext(Dispatchers.IO) {
@@ -937,7 +937,7 @@ fun ChatMediaPreview(
             .clip(RoundedCornerShape(8.dp))
     ) {
         // Show loading spinner only if video is not preloaded
-        if (isLoading && attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+        if (isLoading && (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
             !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -961,7 +961,7 @@ fun ChatMediaPreview(
                 )
             }
 
-            us.fireshare.tweet.datamodel.MediaType.Video -> {
+            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {

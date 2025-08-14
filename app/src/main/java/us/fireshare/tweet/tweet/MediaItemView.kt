@@ -159,7 +159,7 @@ fun MediaItemView(
                     )
                 }
             }
-            MediaType.Video -> {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
                 VideoPreview(
                     url = attachment.url,
                     modifier = modifier,

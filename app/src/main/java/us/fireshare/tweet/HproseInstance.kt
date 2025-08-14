@@ -1495,7 +1495,7 @@ object HproseInstance {
         }
 
         // For video files, try uploading to netdisk first
-        if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
+        if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video || mediaType == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) {
             Timber.tag("uploadToIPFS").d("Detected video file, attempting netdisk upload first")
             try {
                 val netdiskResult =

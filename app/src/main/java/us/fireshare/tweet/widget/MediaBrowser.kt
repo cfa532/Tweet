@@ -124,7 +124,7 @@ fun MediaBrowser(
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
         // Pause all videos except the current one
         mediaItems.forEachIndexed { index, mediaItem ->
-            if (mediaItem.type == MediaType.Video) {
+            if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
                 val videoMid = mediaItem.url.getMimeiKeyFromUrl()
                 if (index == pagerState.currentPage) {
                     // Resume current video
@@ -266,7 +266,7 @@ fun MediaBrowser(
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
                 // video preview - use new FullScreenVideoPlayer
-                MediaType.Video -> {
+                MediaType.Video, MediaType.HLS_VIDEO -> {
                     Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
                     // Extract video mid from URL for VideoManager using the same method as VideoPreview
                     val videoMid = mediaItem.url.getMimeiKeyFromUrl()
