@@ -14,6 +14,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,13 +37,12 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
-import kotlin.math.max
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId,
 ): ViewModel() {
-    private val _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
+    private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
     // unpinned tweets
@@ -119,6 +119,44 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
+     * Refresh user data to ensure it's up to date (e.g., after profile editing)
+     */
+    suspend fun refreshUserData() {
+        try {
+            // If this is the current user's profile, update from appUser
+            if (userId == appUser.mid) {
+                _user.value = appUser
+                
+                // Also update the count variables to match the updated appUser
+                _bookmarksCount.value = appUser.bookmarksCount
+                _favoritesCount.value = appUser.favoritesCount
+                _followersCount.value = appUser.followersCount
+                _followingsCount.value = appUser.followingCount
+                _tweetCount.value = appUser.tweetCount
+                
+                Timber.tag("refreshUserData").d("Refreshed user data for current user: ${appUser.name}")
+            } else {
+                // For other users, fetch fresh data from the server using existing pattern
+                refreshUser()
+                
+                // Update count variables from the refreshed user data
+                _bookmarksCount.value = user.value.bookmarksCount
+                _favoritesCount.value = user.value.favoritesCount
+                _followersCount.value = user.value.followersCount
+                _followingsCount.value = user.value.followingCount
+                _tweetCount.value = user.value.tweetCount
+                
+                Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
+            }
+            
+            // Reset the profile updated flag after refreshing
+    
+        } catch (e: Exception) {
+            Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
+        }
+    }
+
+    /**
      * Simple function to fetch tweets for a specific page number.
      * TweetListView manages pagination logic internally.
      * Returns List<Tweet?> including null elements from the backend.
@@ -142,17 +180,35 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
-        // For now, user avatar can only be image.
-        HproseInstance.uploadToIPFS(
-            context,
-            uri,
-            referenceId = appUser.mid
-        )?.let {
-            HproseInstance.setUserAvatar(appUser, it.mid)   // Update appUser's avatar
-            appUser = appUser.copy(avatar = it.mid)
-            _user.value = appUser
+        try {
+            // Store the old avatar ID to clear cache later
+            val oldAvatarId = appUser.avatar
+            
+            // For now, user avatar can only be image.
+            HproseInstance.uploadToIPFS(
+                context,
+                uri,
+                referenceId = appUser.mid
+            )?.let {
+                HproseInstance.setUserAvatar(appUser, it.mid)?.let { avatar ->  // Update appUser's avatar
+                    // Clear the old avatar from cache if it exists
+                    oldAvatarId?.let { oldId ->
+                        us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, oldId)
+                    }
+                    
+                    // Update the user objects with new avatar
+                    appUser = appUser.copy(avatar = avatar)
+                    _user.value = user.value.copy(avatar = avatar)
+                    
+
+                    
+                    // Save the updated user to cache
+                    TweetCacheManager.saveUser(appUser)
+                }
+            }
+        } finally {
+            isLoading.value = false
         }
-        isLoading.value = false
     }
 
     /**
@@ -345,57 +401,55 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Update in-memory bookmark data for display.
-     * This method performs optimistic updates to provide immediate UI feedback.
+     * This method now uses server data instead of optimistic updates.
      *
      * @param tweet The tweet to bookmark or unbookmark
      * @param isBookmarked True to add bookmark, false to remove bookmark
      */
     fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
-        // Get current bookmark count and user state for logging
-        val currentCount = user.value.bookmarksCount
+        // Get current user state for logging
         val currentUser = user.value
 
         // Log the operation details for debugging
         Timber.tag("UserViewModel")
-            .d("updateBookmark: Current bookmarks count before update: $currentCount")
+            .d("updateBookmark: Current bookmarks count: ${currentUser.bookmarksCount}")
         Timber.tag("UserViewModel").d("updateBookmark: Current user ID: ${currentUser.mid}")
         Timber.tag("UserViewModel").d("updateBookmark: Tweet author ID: ${tweet.authorId}")
         Timber.tag("UserViewModel").d("updateBookmark: Is bookmark action: $isBookmarked")
 
-        // Calculate new bookmark count (ensure it doesn't go below 0)
-        val newCount = if (isBookmarked) currentCount + 1 else max(currentCount - 1, 0)
+        // Use the server's updated user data (appUser) instead of calculating locally
+        val serverBookmarksCount = appUser.bookmarksCount
+        
+        // Update the user state with server data
+        _user.value = appUser
 
-        // Create updated user object with new bookmark count
-        val updatedUser = currentUser.copy(bookmarksCount = newCount)
+        // Update the public bookmarks count for UI with server count
+        _bookmarksCount.value = serverBookmarksCount
 
-        // Update the user state immediately for UI responsiveness
-        _user.value = updatedUser
-
-        // Update the public bookmarks count for UI
-        _bookmarksCount.value = newCount
-
-        // Update the bookmarks list optimistically
+        // Update the bookmarks list based on server response
         if (isBookmarked) {
-            // Add tweet to the beginning of bookmarks list
-            _bookmarks.update { bs -> listOf(tweet) + bs }
+            // Add tweet to the beginning of bookmarks list if not already present
+            _bookmarks.update { bs -> 
+                if (bs.any { it.mid == tweet.mid }) bs else listOf(tweet) + bs 
+            }
             Timber.tag("UserViewModel")
-                .d("Optimistic bookmark: User bookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
+                .d("Server bookmark: User bookmarked tweet ${tweet.mid}, server bookmarks count: $serverBookmarksCount")
         } else {
             // Remove tweet from bookmarks list
             _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
             Timber.tag("UserViewModel")
-                .d("Optimistic bookmark: User unbookmarked tweet ${tweet.mid}, updated bookmarks count from $currentCount to: $newCount")
+                .d("Server bookmark: User unbookmarked tweet ${tweet.mid}, server bookmarks count: $serverBookmarksCount")
         }
 
         // Log the final updated bookmark count
         Timber.tag("UserViewModel")
-            .d("Optimistic bookmark: Updated user bookmarksCount: ${updatedUser.bookmarksCount}")
+            .d("Server bookmark: Updated user bookmarksCount: ${appUser.bookmarksCount}")
 
         // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
             Timber.tag("UserViewModel")
-                .d("updateBookmark: Saving user to cache with bookmarksCount: ${updatedUser.bookmarksCount}")
-            TweetCacheManager.saveUser(updatedUser)
+                .d("updateBookmark: Saving user to cache with bookmarksCount: ${appUser.bookmarksCount}")
+            TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
         }
     }
@@ -440,57 +494,55 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Update in-memory favorite data for display.
-     * This method performs optimistic updates to provide immediate UI feedback.
+     * This method now uses server data instead of optimistic updates.
      *
      * @param tweet The tweet to favorite or unfavorite
      * @param isFavorite True to add favorite, false to remove favorite
      */
     fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
-        // Get current favorite count and user state for logging
-        val currentCount = user.value.favoritesCount
+        // Get current user state for logging
         val currentUser = user.value
 
         // Log the operation details for debugging
         Timber.tag("UserViewModel")
-            .d("updateFavorite: Current favorites count before update: $currentCount")
+            .d("updateFavorite: Current favorites count: ${currentUser.favoritesCount}")
         Timber.tag("UserViewModel").d("updateFavorite: Current user ID: ${currentUser.mid}")
         Timber.tag("UserViewModel").d("updateFavorite: Tweet author ID: ${tweet.authorId}")
         Timber.tag("UserViewModel").d("updateFavorite: Is favorite action: $isFavorite")
 
-        // Calculate new favorite count (ensure it doesn't go below 0)
-        val newCount = if (isFavorite) currentCount + 1 else max(currentCount - 1, 0)
+        // Use the server's updated user data (appUser) instead of calculating locally
+        val serverFavoritesCount = appUser.favoritesCount
+        
+        // Update the user state with server data
+        _user.value = appUser
 
-        // Create updated user object with new favorite count
-        val updatedUser = currentUser.copy(favoritesCount = newCount)
+        // Update the public favorites count for UI with server count
+        _favoritesCount.value = serverFavoritesCount
 
-        // Update the user state immediately for UI responsiveness
-        _user.value = updatedUser
-
-        // Update the public favorites count for UI
-        _favoritesCount.value = newCount
-
-        // Update the favorites list optimistically
+        // Update the favorites list based on server response
         if (isFavorite) {
-            // Add tweet to the beginning of favorites list
-            _favorites.update { bs -> listOf(tweet) + bs }
+            // Add tweet to the beginning of favorites list if not already present
+            _favorites.update { bs -> 
+                if (bs.any { it.mid == tweet.mid }) bs else listOf(tweet) + bs 
+            }
             Timber.tag("UserViewModel")
-                .d("Optimistic favorite: User favorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
+                .d("Server favorite: User favorited tweet ${tweet.mid}, server favorites count: $serverFavoritesCount")
         } else {
             // Remove tweet from favorites list
             _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
             Timber.tag("UserViewModel")
-                .d("Optimistic favorite: User unfavorited tweet ${tweet.mid}, updated favorites count from $currentCount to: $newCount")
+                .d("Server favorite: User unfavorited tweet ${tweet.mid}, server favorites count: $serverFavoritesCount")
         }
 
         // Log the final updated favorite count
         Timber.tag("UserViewModel")
-            .d("Optimistic favorite: Updated user favoritesCount: ${updatedUser.favoritesCount}")
+            .d("Server favorite: Updated user favoritesCount: ${appUser.favoritesCount}")
 
         // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
             Timber.tag("UserViewModel")
-                .d("updateFavorite: Saving user to cache with favoritesCount: ${updatedUser.favoritesCount}")
-            TweetCacheManager.saveUser(updatedUser)
+                .d("updateFavorite: Saving user to cache with favoritesCount: ${appUser.favoritesCount}")
+            TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateFavorite: User saved to cache successfully")
         }
     }
@@ -843,20 +895,24 @@ class UserViewModel @AssistedInject constructor(
              * Register a new user. Check username and password first.
              * */
             if (username.value.isNullOrEmpty()) {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.username_required),
-                    Toast.LENGTH_SHORT
-                ).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.username_required),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
                 isLoading.value = false
                 return
             }
             if (password.value.isEmpty()) {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.password_required),
-                    Toast.LENGTH_SHORT
-                ).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.password_required),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
                 isLoading.value = false
                 return
             }
@@ -865,11 +921,13 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
             } ?: run {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.node_not_found),
-                    Toast.LENGTH_SHORT
-                ).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.node_not_found),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
                 isLoading.value = false
                 return
             }
@@ -882,41 +940,193 @@ class UserViewModel @AssistedInject constructor(
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
-                val gson = Gson()
-                val userType = object : TypeToken<User>() {}.type
-                if (appUser.isGuest()) {
-                    val newUser: User = gson.fromJson(ret["user"].toString(), userType)
-                    /**
-                     * Set the newly created user as followers of admin users.
-                     * */
-                    HproseInstance.getAlphaIds().forEach {
-                        HproseInstance.toggleFollower(it, true, newUser.mid)
+                try {
+                    // Pre-process the user data to handle timestamp conversion
+                    val userData = ret["user"] as? Map<String, Any>
+                    if (userData != null) {
+                        val processedUserData = userData.toMutableMap()
+                        
+                        // Handle timestamp conversion from decimal to long
+                        processedUserData["timestamp"]?.let { value ->
+                            when (value) {
+                                is Number -> processedUserData["timestamp"] = value.toLong()
+                                is String -> {
+                                    try {
+                                        processedUserData["timestamp"] = value.toDouble().toLong()
+                                    } catch (e: NumberFormatException) {
+                                        Timber.w("Failed to parse timestamp: $value")
+                                        processedUserData["timestamp"] = System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Handle lastLogin conversion from decimal to long
+                        processedUserData["lastLogin"]?.let { value ->
+                            when (value) {
+                                is Number -> processedUserData["lastLogin"] = value.toLong()
+                                is String -> {
+                                    try {
+                                        processedUserData["lastLogin"] = value.toDouble().toLong()
+                                    } catch (e: NumberFormatException) {
+                                        Timber.w("Failed to parse lastLogin: $value")
+                                        processedUserData["lastLogin"] = System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (appUser.isGuest()) {
+                            // Create new user from processed data
+                            val newUser = User.from(processedUserData)
+                            /**
+                             * Set the newly created user as followers of admin users.
+                             * */
+                            HproseInstance.getAlphaIds().forEach {
+                                HproseInstance.toggleFollower(it, true, newUser.mid)
+                            }
+                            password.value = ""     // clear the password
+                            popBack()
+                        } else {
+                            // Update existing user profile
+                            appUser.from(processedUserData)
+                            _user.value = appUser
+                            
+                            // Update the shared appUserViewModel if this is the current user's profile
+                            if (userId == appUser.mid) {
+                                // Update all the count variables in this ViewModel to match the updated appUser
+                                _bookmarksCount.value = appUser.bookmarksCount
+                                _favoritesCount.value = appUser.favoritesCount
+                                _followersCount.value = appUser.followersCount
+                                _followingsCount.value = appUser.followingCount
+                                _tweetCount.value = appUser.tweetCount
+                                
+                                // Also update the user state to reflect the new profile data
+                                _user.value = appUser
+                                
+                                // Save the updated user to cache
+                                TweetCacheManager.saveUser(appUser)
+                                
+
+                                
+                                // Force refresh of the shared appUserViewModel by updating its user state
+                                // This ensures that all components using the shared ViewModel get updated
+                                viewModelScope.launch {
+                                    // Small delay to ensure the update is processed
+                                    delay(100)
+                                    _user.value = appUser
+                                }
+                            }
+                            
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.profile_update_ok),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    } else {
+                        // Fallback to custom Gson parsing with timestamp handling
+                        try {
+                            val jsonString = ret["user"].toString()
+                            
+                            // Pre-process JSON string to fix timestamp issues
+                            val processedJson = jsonString.replace(
+                            Regex("\"timestamp\":\\s*([0-9]+\\.[0-9]+)"),
+                            "\"timestamp\": $1"
+                        ).replace(
+                            Regex("\"lastLogin\":\\s*([0-9]+\\.[0-9]+)"),
+                            "\"lastLogin\": $1"
+                        ).replace(
+                                Regex("\"timestamp\":\\s*([0-9]+)\\.([0-9]+)"),
+                                "\"timestamp\": $1"
+                            ).replace(
+                                Regex("\"lastLogin\":\\s*([0-9]+)\\.([0-9]+)"),
+                                "\"lastLogin\": $1"
+                            )
+                            
+                            val gson = Gson()
+                            val userType = object : TypeToken<User>() {}.type
+                            
+                            if (appUser.isGuest()) {
+                                val newUser: User = gson.fromJson(processedJson, userType)
+                                HproseInstance.getAlphaIds().forEach {
+                                    HproseInstance.toggleFollower(it, true, newUser.mid)
+                                }
+                                password.value = ""
+                                popBack()
+                            } else {
+                                updatedUser = gson.fromJson(processedJson, userType)
+                                appUser = appUser.copy(
+                                    name = updatedUser.name, profile = updatedUser.profile,
+                                    username = updatedUser.username, hostIds = updatedUser.hostIds,
+                                )
+                                _user.value = appUser
+                                
+                                // Update the shared appUserViewModel if this is the current user's profile
+                                if (userId == appUser.mid) {
+                                    // Update all the count variables in this ViewModel to match the updated appUser
+                                    _bookmarksCount.value = appUser.bookmarksCount
+                                    _favoritesCount.value = appUser.favoritesCount
+                                    _followersCount.value = appUser.followersCount
+                                    _followingsCount.value = appUser.followingCount
+                                    _tweetCount.value = appUser.tweetCount
+                                    
+                                    // Also update the user state to reflect the new profile data
+                                    _user.value = appUser
+                                    
+                                    // Save the updated user to cache
+                                    TweetCacheManager.saveUser(appUser)
+                                    
+
+                                    
+                                    // Force refresh of the shared appUserViewModel by updating its user state
+                                    // This ensures that all components using the shared ViewModel get updated
+                                    viewModelScope.launch {
+                                        // Small delay to ensure the update is processed
+                                        delay(100)
+                                        _user.value = appUser
+                                    }
+                                }
+                                
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.profile_update_ok),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Error in fallback Gson parsing")
+                            throw e // Re-throw to be caught by outer catch block
+                        }
                     }
-                    password.value = ""     // clear the password
-                    popBack()
-                } else {
-                    // update user profile
-                    updatedUser = gson.fromJson(ret["user"].toString(), userType)
-                    appUser = appUser.copy(
-                        name = updatedUser.name, profile = updatedUser.profile,
-                        username = updatedUser.username, hostIds = updatedUser.hostIds,
-                    )
-                    _user.value = appUser
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.profile_update_ok),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                } catch (e: Exception) {
+                    Timber.e(e, "Error processing user data during ${if (appUser.isGuest()) "registration" else "profile update"}")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            if (appUser.isGuest()) context.getString(R.string.registration_failed)
+                            else context.getString(R.string.profile_update_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             } else {
-                Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
+                }
             }
         } ?: run {
-            Toast.makeText(
-                context,
-                context.getString(R.string.registration_failed),
-                Toast.LENGTH_SHORT
-            ).show()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.registration_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
         isLoading.value = false
     }

@@ -15,10 +15,10 @@ import java.io.File
 
 /**
  * Simplified Video Cache Manager
- * 
+ *
  * This manager leverages ExoPlayer's built-in caching for both progressive and HLS videos.
  * No custom segment caching needed - ExoPlayer handles everything automatically.
- * 
+ *
  * Key Benefits:
  * - Uses ExoPlayer's native HLS support
  * - Automatic segment caching via CacheDataSource

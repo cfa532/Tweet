@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,6 +73,7 @@ fun ProfileScreen(
     }
 
     val initState by viewModel.initState.collectAsState()
+    val user by viewModel.user.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -93,6 +94,24 @@ fun ProfileScreen(
         }
     }
 
+    // Refresh user data when returning to ProfileScreen (e.g., after editing profile)
+    LaunchedEffect(Unit) {
+        // Refresh user data to ensure it's up to date
+        withContext(Dispatchers.IO) {
+            viewModel.refreshUserData()
+        }
+    }
+
+    // Additional refresh when the screen becomes active again
+    LaunchedEffect(navController.currentBackStackEntryAsState().value?.destination?.route) {
+        // Refresh user data when navigation changes (e.g., returning from EditProfileScreen)
+        withContext(Dispatchers.IO) {
+            viewModel.refreshUserData()
+        }
+    }
+
+
+
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
@@ -108,16 +127,14 @@ fun ProfileScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
             ) {
-                // Profile content with TweetListView - use key to prevent recreation
-                key(userId) {
-                    ProfileContentWithTweetListView(
-                        viewModel = viewModel,
-                        navController = navController,
-                        parentEntry = parentEntry,
-                        scrollBehavior = scrollBehavior,
-                        initState = initState,
-                        userId = userId, // Pass userId directly
-                        onScrollStateChange = { newScrollState ->
+                ProfileContentWithTweetListView(
+                    viewModel = viewModel,
+                    navController = navController,
+                    parentEntry = parentEntry,
+                    scrollBehavior = scrollBehavior,
+                    initState = initState,
+                    userId = userId,
+                    onScrollStateChange = { newScrollState ->
                             scrollState = newScrollState
 
                             // Update bottom bar transparency based on scroll direction
@@ -144,10 +161,8 @@ fun ProfileScreen(
                                     // Only restore when user starts scrolling up
                                 }
                             }
-                        },
-
+                        }
                     )
-                }
             }
         }
 
@@ -187,14 +202,10 @@ private fun ProfileContentWithTweetListView(
     val headerContent: @Composable () -> Unit = remember {
         {
             Column {
-                // Profile details section - use key to force recomposition only when user changes
-                key(user.mid) {
-                    ProfileDetail(viewModel, navController)
-                }
+                ProfileDetail(viewModel, navController)
 
-                // Pinned tweets section (if any) - use key to force recomposition only when pinnedTweets change
-                key(pinnedTweets.size, pinnedTweets.firstOrNull()?.mid) {
-                    if (pinnedTweets.isNotEmpty()) {
+                // Pinned tweets section (if any)
+                if (pinnedTweets.isNotEmpty()) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             tonalElevation = 100.dp,
@@ -220,7 +231,6 @@ private fun ProfileContentWithTweetListView(
                             color = MaterialTheme.colorScheme.primaryContainer
                         )
                     }
-                }
             }
         }
     }
@@ -237,9 +247,7 @@ private fun ProfileContentWithTweetListView(
             .pullRefresh(pullRefreshState)
     ) {
         // Use TweetListView with header content for unified scrolling
-        // Use key to prevent recreation unless essential parameters change
-        key(userId, tweets.size, pinnedTweets.size) {
-            TweetListView(
+        TweetListView(
                 tweets = tweets,
                 fetchTweets = { pageNumber ->
                     viewModel.fetchTweets(pageNumber)
@@ -257,7 +265,6 @@ private fun ProfileContentWithTweetListView(
                 headerContent = headerContent,
                 restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
             )
-        }
 
         // Show pull-to-refresh style indicator during initial load
         if (initState) {

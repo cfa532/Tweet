@@ -13,6 +13,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             TweetCacheManager.saveUser(appUser)
         fetchTweets(pageNumber)
     }
+
+    private var followingTweetsJob: Job? = null
 
     /**
      * Simple function to fetch tweets for a specific page number.
@@ -140,31 +143,60 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
             /**
              * Check for new tweets of followings when page number is 0
+             * Run in separate coroutine to avoid blocking main tweet loading
+             * Use applicationScope to ensure it continues even if composable leaves scope
+             * Added request deduplication to prevent multiple simultaneous requests
+             * 
+             * PERFORMANCE OPTIMIZATION NOTE:
+             * Consider combining this with the main tweet feed call for better performance:
+             * 
+             * // Option 1: Backend modification (recommended)
+             * val combinedResponse = HproseInstance.getCombinedTweetFeed(appUser, pageNumber, pageSize)
+             * // Process both mainTweets and followingTweets from single response
+             * 
+             * // Option 2: Client-side concurrent calls
+             * val deferredMain = async { HproseInstance.getTweetFeed(...) }
+             * val deferredFollowing = async { HproseInstance.getTweetFeed(..., "update_following_tweets") }
+             * val mainTweets = deferredMain.await()
+             * val followingTweets = deferredFollowing.await()
+             * // Process both results together
              * */
-            if (pageNumber == 0) {
-                val followingTweetsWithNulls = HproseInstance.getTweetFeed(
-                    appUser,
-                    pageNumber,
-                    pageSize,
-                    "update_following_tweets"
-                )
+            if (pageNumber == 0 && followingTweetsJob?.isActive != true) {
+                followingTweetsJob = applicationScope.launch(Dispatchers.IO) {
+                    try {
+                        val followingTweetsWithNulls = HproseInstance.getTweetFeed(
+                            appUser,
+                            pageNumber,
+                            pageSize,
+                            "update_following_tweets"
+                        )
 
-                // Filter out null elements and get valid tweets
-                val followingTweets = followingTweetsWithNulls.filterNotNull()
+                        // Filter out null elements and get valid tweets
+                        val followingTweets = followingTweetsWithNulls.filterNotNull()
 
-                // Always merge following tweets with existing ones
-                _tweets.update { currentTweets ->
-                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                    val trulyNewFollowingTweets =
-                        followingTweets.filter { it.mid !in currentTweetIds }
+                        // Always merge following tweets with existing ones
+                        withContext(Dispatchers.Main) {
+                            _tweets.update { currentTweets ->
+                                // Use Set for O(1) lookup performance
+                                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                                val trulyNewFollowingTweets =
+                                    followingTweets.filter { it.mid !in currentTweetIds }
 
-                    if (trulyNewFollowingTweets.isNotEmpty()) {
-                        val mergedTweets = (currentTweets + trulyNewFollowingTweets)
-                            .distinctBy { tweet: Tweet -> tweet.mid }
-                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                        mergedTweets
-                    } else {
-                        currentTweets
+                                if (trulyNewFollowingTweets.isNotEmpty()) {
+                                    val mergedTweets = (currentTweets + trulyNewFollowingTweets)
+                                        .distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp }
+                                    mergedTweets
+                                } else {
+                                    currentTweets
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
+                        // Consider implementing retry logic here
+                    } finally {
+                        followingTweetsJob = null
                     }
                 }
             }

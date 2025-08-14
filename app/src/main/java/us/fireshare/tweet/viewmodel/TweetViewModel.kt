@@ -274,11 +274,33 @@ class TweetViewModel @AssistedInject constructor(
             favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
             else tweetState.value.favoriteCount + 1,
         )
-        updateAppUser(tweetState.value, !isFavorite)
+
         /**
-         * Overwrite in-memory favorites with result from database call that persists the change.
+         * Get the actual server response and update with real data.
          * */
-        _tweetState.value = HproseInstance.toggleFavorite(tweetState.value)
+        val updatedTweet = HproseInstance.toggleFavorite(tweetState.value)
+
+        // Check if the operation failed (if the tweet state didn't change)
+        if (updatedTweet.isFavorite == isFavorite) {
+            // Revert optimistic changes on failure
+            _tweetState.value.isFavorite = isFavorite
+            _tweetState.value = tweetState.value.copy(
+                favoriteCount = if (isFavorite) tweetState.value.favoriteCount + 1
+                else max(0, tweetState.value.favoriteCount - 1),
+            )
+            // Show error toast
+            notificationContextRef?.get()?.let { context ->
+                android.widget.Toast.makeText(
+                    context,
+                    "Failed to update favorite",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } else {
+            _tweetState.value = updatedTweet
+            // Update UserViewModel with the updated appUser data from server
+            updateAppUser(updatedTweet, updatedTweet.isFavorite)
+        }
     }
 
     /**
@@ -291,13 +313,34 @@ class TweetViewModel @AssistedInject constructor(
             bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
             else tweetState.value.bookmarkCount + 1,
         )
-        updateAppUser(tweetState.value, !hasBookmarked)
 
         /**
-         * Overwrite in-memory bookmark with result from database call that persists the change.
+         * Get the actual server response and update with real data.
          * If backend fails, the original value will be restored.
          * */
-        _tweetState.value = HproseInstance.toggleBookmark(tweetState.value)
+        val updatedTweet = HproseInstance.toggleBookmark(tweetState.value)
+
+        // Check if the operation failed (if the tweet state didn't change)
+        if (updatedTweet.isBookmarked == hasBookmarked) {
+            // Revert optimistic changes on failure
+            _tweetState.value.isBookmarked = hasBookmarked
+            _tweetState.value = tweetState.value.copy(
+                bookmarkCount = if (hasBookmarked) tweetState.value.bookmarkCount + 1
+                else max(0, tweetState.value.bookmarkCount - 1),
+            )
+            // Show error toast
+            notificationContextRef?.get()?.let { context ->
+                android.widget.Toast.makeText(
+                    context,
+                    "Failed to update bookmark",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } else {
+            _tweetState.value = updatedTweet
+            // Update UserViewModel with the updated appUser data from server
+            updateAppUser(updatedTweet, updatedTweet.isBookmarked)
+        }
     }
 
     /**

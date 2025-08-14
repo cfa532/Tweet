@@ -8,11 +8,13 @@ import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -47,6 +49,7 @@ class TweetActivity : ComponentActivity() {
     private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
 
+    @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
 //        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -98,7 +101,7 @@ class TweetActivity : ComponentActivity() {
             // Add a small delay to ensure the app is fully loaded
             lifecycleScope.launch {
                 delay(2000) // 2 second delay
-                
+
                 if (NotificationPermissionManager.isNotificationPermissionGranted(this@TweetActivity)) {
                     // Permission already granted, just mark as asked
                     NotificationPermissionManager.markNotificationPermissionAsked(this@TweetActivity)

@@ -1,9 +1,11 @@
 package us.fireshare.tweet.navigation
 
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -56,6 +58,7 @@ val LocalNavController = compositionLocalOf<NavController> {
     error("NavController must be provided in a CompositionLocalProvider")
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetNavGraph(
     appLinkIntent: Intent,
@@ -66,7 +69,7 @@ fun TweetNavGraph(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            LocalActivity.current as ComponentActivity, key = appUser.mid
+            LocalActivity.current as ComponentActivity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
         ) { factory ->
             factory.create(appUser.mid)
         }
@@ -142,7 +145,7 @@ fun TweetNavGraph(
                 // a different username.
                 sharedViewModel.appUserViewModel =
                     hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-                        LocalActivity.current as ComponentActivity, key = appUser.mid
+                        LocalActivity.current as ComponentActivity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
                     ) { factory ->
                         factory.create(appUser.mid)
                     }

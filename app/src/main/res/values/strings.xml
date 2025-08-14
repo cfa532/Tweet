@@ -11,6 +11,11 @@
     <string name="profile">Profile</string>
     <string name="key_phrase">Key phrase</string>
     <string name="save">Save</string>
+    <string name="saving">Saving...</string>
+    <string name="registering">Registering...</string>
+    <string name="updating_avatar">Updating avatar...</string>
+    <string name="avatar_update_success">Avatar updated successfully</string>
+    <string name="avatar_update_failed">Failed to update avatar</string>
     <string name="delete_account">Delete account</string>
     <string name="edit_tweet">Edit tweet</string>
     <string name="comment">Comment</string>
@@ -40,6 +45,7 @@
     <string name="logout">Logout</string>
     <string name="login_failed">Login failed. Please retry later.</string>
     <string name="profile_update_ok">User profile updated successfully</string>
+    <string name="profile_update_failed">Update user data failed</string>
     <string name="registration_ok">Registration is successful. Please wait a few minutes before login.</string>
     <string name="username_required">Username is required</string>
     <string name="password_required">Password is required</string>
@@ -120,6 +126,9 @@
     <!-- Notification Messages -->
     <string name="notification_new_message_title">New message from %s</string>
     <string name="notification_new_messages_title" formatted="false">%d new messages from %s</string>
+    <string name="notification_new_chat_message_simple">New chat message</string>
+    <string name="notification_new_chat_messages_simple" formatted="false">%d new chat messages</string>
+    <string name="notification_tap_to_view">Tap to view</string>
     <string name="notification_new_tweets_title">%d new tweets</string>
     <string name="notification_new_tweets_single_user">New tweet from %s</string>
     <string name="notification_new_tweets_multiple_users">New tweets from %s</string>
@@ -212,4 +221,11 @@
     
     <!-- Clipboard/Share -->
     <string name="shared_text">Shared Text</string>
+    
+    <!-- Edit Profile Dialog -->
+    <string name="save_changes_title">Save Changes?</string>
+    <string name="unsaved_changes_message">You have unsaved changes. Would you like to save them before leaving?</string>
+    <string name="dont_save">Don\'t Save</string>
+    <string name="save_and_continue">Save &amp; Continue</string>
+    <string name="avatar_upload_failed">Failed to upload avatar: %s</string>
 </resources>

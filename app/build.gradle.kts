@@ -20,14 +20,14 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 40    // Google Play store version code
+        versionCode = 41    // Google Play store version code
         versionName = "35"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
-        
+
         // Enable 16 KB page size compatibility
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
@@ -163,7 +163,7 @@ dependencies {
     
     // ShortcutBadger for launcher badge support
     implementation(libs.shortcutbadger)
-    
+
     // Subsampling Scale Image View for efficient large image handling
     implementation(libs.subsampling.scale.image.view)
 
@@ -180,7 +180,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
-    
+
     // WorkManager testing dependencies
     androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.androidx.core)

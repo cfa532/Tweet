@@ -1,5 +1,7 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,7 +68,6 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
-import us.fireshare.tweet.share.ShareScreenshotButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.SelectableText
@@ -226,7 +227,7 @@ fun TweetDetailBody(
                         CommentButton(viewModel, onExpandReply = onExpandReply)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
-                        ShareScreenshotButton(viewModel)
+                        ShareButton(viewModel)
                     }
                 }
             }
@@ -234,6 +235,7 @@ fun TweetDetailBody(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun MediaGrid(
     mediaItems: List<MimeiFileType>,

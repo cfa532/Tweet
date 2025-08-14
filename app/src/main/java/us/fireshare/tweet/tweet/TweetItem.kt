@@ -1,5 +1,7 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,14 +54,19 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
-import java.util.concurrent.TimeUnit
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     onTweetUnavailable: ((MimeiId) -> Unit)? = null // callback when tweet becomes unavailable
 ) {
+    // Optimize: Use derivedStateOf to avoid unnecessary recomposition
+    val isTweetValid by remember(tweet, tweet.author) {
+        derivedStateOf { tweet.author != null }
+    }
+    
     // Check if tweet or author is null and remove the item if so
     LaunchedEffect(tweet, tweet.author) {
         if (tweet.author == null) {
@@ -69,7 +76,7 @@ fun TweetItem(
     }
 
     // If tweet or author is null, return empty content to effectively hide this item
-    if (tweet.author == null) {
+    if (!isTweetValid) {
         Box(modifier = Modifier.size(0.dp))
         return
     }
@@ -79,11 +86,27 @@ fun TweetItem(
     ) { factory ->
         factory.create(tweet)
     }
+    
+    // Optimize: Use remember for visibility state to reduce recomposition
     var isVisible by remember { mutableStateOf(false) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
     val debounceMs = 100L // 100ms debounce for visibility detection
     
-    // TweetRefreshHandler removed - refresh is now handled at the screen level
+    // Optimize: Pre-compute derived values to avoid recalculation
+    val isRetweet by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
+        derivedStateOf { 
+            tweet.originalTweetId != null && 
+            tweet.content.isNullOrEmpty() && 
+            tweet.attachments.isNullOrEmpty() 
+        }
+    }
+    
+    val isRetweetWithContent by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
+        derivedStateOf { 
+            tweet.originalTweetId != null && 
+            (tweet.content?.isNotEmpty() == true || tweet.attachments?.isNotEmpty() == true)
+        }
+    }
 
     Surface(
         modifier = Modifier
@@ -97,359 +120,392 @@ fun TweetItem(
                 }
             }
     ) {
-        if (tweet.originalTweetId != null) {
-            if (tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
-                // this is a retweet of another tweet.
-                Surface {
-                    // Load original tweet dynamically
-                    var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-                    var isLoadingOriginal by remember { mutableStateOf(true) }
-
-                    val currentTweet by viewModel.tweetState.collectAsState()
-
-                    LaunchedEffect(tweet.originalTweetId, isVisible) {
-                        withContext(IO) {
-                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
-                                Timber.tag("TweetItem")
-                                    .d("Loading original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
-                                try {
-                                    // Store IDs in local variables to avoid smart cast issues
-                                    val originalTweetId = tweet.originalTweetId ?: ""
-                                    val originalAuthorId = tweet.originalAuthorId ?: ""
-
-                                    // Use fetchTweet to get the original tweet from cache or network
-                                    Timber.tag("TweetItem")
-                                        .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
-                                    originalTweet = HproseInstance.fetchTweet(
-                                        originalTweetId,
-                                        originalAuthorId,
-                                        shouldCache = true
-                                    )
-                                    if (originalTweet != null) {
-                                        Timber.tag("TweetItem")
-                                            .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
-                                    } else {
-                                        Timber.tag("TweetItem")
-                                            .w("Original tweet not found: $originalTweetId")
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.tag("TweetItem").e(e, "Failed to load original tweet")
-                                    originalTweet = null
-                                } finally {
-                                    isLoadingOriginal = false
-                                }
-                            }
-                        }
-                    }
-
-                    if (isLoadingOriginal) {
-                        // Show loading state with spinner
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = androidx.compose.ui.Alignment.Center
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    } else if (originalTweet != null) {
-                        // Store in local variable to avoid smart cast issues
-                        val originalTweetNonNull = originalTweet!!
-
-                        // Privacy check at rendering stage
-                        if (originalTweetNonNull.isPrivate && originalTweetNonNull.authorId != appUser.mid) {
-                            // Original tweet is private and not owned by current user - hide this item
-                            LaunchedEffect(Unit) {
-                                onTweetUnavailable?.invoke(tweet.mid)
-                            }
-                            Box(modifier = Modifier.size(0.dp))
-                        } else {
-                            // The tweet area with 'Forwarded by' label above
-                            val originalTweetViewModel =
-                                hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                    parentEntry, key = tweet.originalTweetId
-                                ) { factory -> factory.create(originalTweetNonNull) }
-
-                            Column(modifier = Modifier.padding(top = 0.dp)) {
-                                // Label: Forward by user, above the quoted tweet
-                                val forwardBy = if (tweet.authorId == appUser.mid)
-                                    stringResource(R.string.forward_by)
-                                else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
-                                Text(
-                                    text = forwardBy,
-                                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier
-                                        .offset(y = 12.dp)
-                                        .zIndex(1f)
-                                        .padding(start = 24.dp),
-
-                                    )
-                                // The quoted/original tweet card
-                                TweetItemBody(
-                                    originalTweetViewModel,
-                                    parentEntry = parentEntry,
-                                    parentTweet = tweet
-                                )
-                            }
-                        }
-                    } else {
-                        // Original tweet not available - this retweet should be removed from the list
-                        LaunchedEffect(Unit) {
-                            onTweetUnavailable?.invoke(tweet.mid)
-                        }
-                        // Return empty content to effectively hide this item
-                        Box(modifier = Modifier.size(0.dp))
-                    }
-                }
-            } else {
-                // retweet with comments. Either text or media files.
-                val navController = LocalNavController.current
-                Surface {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = {
-                                navController.navigate(
-                                    NavTweet.TweetDetail(
-                                        tweet.authorId,
-                                        tweet.mid
-                                    )
-                                )
-                            })
-                    ) {
-                        // Left column: Avatar
-                        Column(
-//                            modifier = Modifier.padding(top = 4.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                                },
-                                modifier = Modifier.width(44.dp)
-                            ) {
-                                tweet.author?.let { UserAvatar(user = it, size = 32) }
-                            }
-                        }
-
-                        // Right column: User info, content, and actions
-                        Column(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .fillMaxWidth()
-                        ) {
-                            // Top row: User info and dropdown menu
-                            Row(
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                // User info text
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = tweet.author?.name ?: "No One",
-                                        modifier = Modifier.padding(start = 2.dp),
-                                        style = MaterialTheme.typography.labelLarge
-                                    )
-                                    Text(
-                                        text = "@${tweet.author?.username}",
-                                        modifier = Modifier.padding(horizontal = 0.dp),
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                    Text(text = " • ", fontSize = 12.sp)
-                                    Text(
-                                        text = localizedTimeDifference(tweet.timestamp),
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-
-                                // Dropdown menu
-                                TweetDropdownMenu(tweet, parentEntry, null)
-                            }
-
-                            // Tweet content
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                modifier = Modifier
-                                    .offset(y = (-20).dp)
-                                    .padding(start = 4.dp)
-                                    .fillMaxWidth()
-                            ) {
-                                Column {
-                                    // Text content of the tweet
-                                    tweet.content?.let {
-                                        SelectableText(
-                                            text = it,
-                                            maxLines = 10,
-                                        ) { username ->
-                                            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                                withContext(Dispatchers.Main) {
-                                                    navController.navigate(
-                                                        NavTweet.UserProfile(
-                                                            tweet.authorId
-                                                        )
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Media files
-                                    if (!tweet.attachments.isNullOrEmpty()) {
-                                        Surface(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 4.dp)
-                                                .heightIn(min = 20.dp, max = 400.dp),
-                                            tonalElevation = 4.dp,
-                                            shape = RoundedCornerShape(size = 8.dp)
-                                        ) {
-                                            MediaPreviewGrid(
-                                                tweet.attachments!!,
-                                                viewModel
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Load and display original tweet
-                            var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-                            var isLoadingOriginal by remember { mutableStateOf(true) }
-
-                            LaunchedEffect(tweet.originalTweetId) {
-                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                    try {
-                                        withContext(IO) {
-                                            // Use fetchTweet to get the original tweet from cache or network
-                                            Timber.tag("TweetItem")
-                                                .d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
-                                            originalTweet = HproseInstance.fetchTweet(
-                                                tweet.originalTweetId!!,
-                                                tweet.originalAuthorId!!,
-                                                shouldCache = true
-                                            )
-                                            if (originalTweet != null) {
-                                                Timber.tag("TweetItem")
-                                                    .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
-                                            } else {
-                                                Timber.tag("TweetItem")
-                                                    .w("Quoted original tweet not found: ${tweet.originalTweetId}")
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Timber.tag("TweetItem").e(
-                                            e,
-                                            "Error loading original tweet: ${tweet.originalTweetId}"
-                                        )
-                                    } finally {
-                                        isLoadingOriginal = false
-                                    }
-                                } else {
-                                    isLoadingOriginal = false
-                                }
-                            }
-
-                            if (isLoadingOriginal) {
-                                // Show loading state for quoted tweet with spinner
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    tonalElevation = 8.dp,
-                                    modifier = Modifier.padding(
-                                        start = 4.dp,
-                                        top = 8.dp,
-                                        end = 8.dp
-                                    )
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        contentAlignment = androidx.compose.ui.Alignment.Center
-                                    ) {
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    }
-                                }
-                            } else if (originalTweet != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    tonalElevation = 8.dp,
-                                ) {
-                                    // quoted tweet
-                                    TweetItemBody(
-                                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                            parentEntry, key = tweet.originalTweetId
-                                        ) { factory ->
-                                            factory.create(originalTweet!!)
-                                        },
-                                        isQuoted = true,
-                                        parentEntry = parentEntry
-                                    )
-                                }
-                            } else {
-                                // Original tweet not available - this quoted tweet should be removed from the list
-                                LaunchedEffect(Unit) {
-                                    onTweetUnavailable?.invoke(tweet.mid)
-                                }
-                                // Return empty content to effectively hide this item
-                                Box(modifier = Modifier.size(0.dp))
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 0.dp),
-                                horizontalArrangement = Arrangement.SpaceAround
-                            ) {
-                                // State hoist
-                                LikeButton(viewModel)
-                                BookmarkButton(viewModel)
-                                CommentButton(viewModel)
-                                RetweetButton(viewModel)
-                                Spacer(modifier = Modifier.width(40.dp))
-                                ShareButton(viewModel)
-                            }
-                        }
-                    }
-                }
+        when {
+            isRetweet -> {
+                // Pure retweet - load original tweet
+                RetweetContent(
+                    tweet = tweet,
+                    isVisible = isVisible,
+                    parentEntry = parentEntry,
+                    onTweetUnavailable = onTweetUnavailable
+                )
             }
-        } else {
-            // original tweet by user.
-            TweetItemBody(viewModel, parentEntry = parentEntry)
+            isRetweetWithContent -> {
+                // Retweet with content
+                RetweetWithContent(
+                    tweet = tweet,
+                    parentEntry = parentEntry,
+                    onTweetUnavailable = onTweetUnavailable
+                )
+            }
+            else -> {
+                // Original tweet
+                TweetItemBody(viewModel, parentEntry = parentEntry)
+            }
         }
     }
 }
 
 @Composable
-fun localizedTimeDifference(timestamp: Long): String {
-    val currentTime = System.currentTimeMillis()
-    val diffInMillis = currentTime - timestamp
+private fun RetweetContent(
+    tweet: Tweet,
+    isVisible: Boolean,
+    parentEntry: NavBackStackEntry,
+    onTweetUnavailable: ((MimeiId) -> Unit)?
+) {
+    Surface {
+        // Load original tweet dynamically
+        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+        var isLoadingOriginal by remember { mutableStateOf(true) }
 
-    val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
-    val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
-    val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
-    val weeks = days / 7
-    val months = days / 30
-    val years = days / 365
+        LaunchedEffect(tweet.originalTweetId, isVisible) {
+            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+                withContext(IO) {
+                    try {
+                        val originalTweetId = tweet.originalTweetId ?: ""
+                        val originalAuthorId = tweet.originalAuthorId ?: ""
 
-    return when {
-        seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
-        minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
-        hours < 24 -> stringResource(id = R.string.hours_ago, hours)
-        days < 7 -> stringResource(id = R.string.days_ago, days)
-        weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
-        months < 12 -> stringResource(id = R.string.months_ago, months + 1)
-        else -> stringResource(id = R.string.years_ago, years)
+                        Timber.tag("TweetItem")
+                            .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
+                        originalTweet = HproseInstance.fetchTweet(
+                            originalTweetId,
+                            originalAuthorId,
+                            shouldCache = true
+                        )
+                        if (originalTweet != null) {
+                            Timber.tag("TweetItem")
+                                .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
+                        } else {
+                            Timber.tag("TweetItem")
+                                .w("Original tweet not found: $originalTweetId")
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("TweetItem").e(e, "Failed to load original tweet")
+                        originalTweet = null
+                    } finally {
+                        isLoadingOriginal = false
+                    }
+                }
+            }
+        }
+
+        when {
+            isLoadingOriginal -> {
+                // Show loading state with spinner
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            }
+            originalTweet != null -> {
+                val originalTweetNonNull = originalTweet!!
+
+                // Privacy check at rendering stage
+                if (originalTweetNonNull.isPrivate && originalTweetNonNull.authorId != appUser.mid) {
+                    LaunchedEffect(Unit) {
+                        onTweetUnavailable?.invoke(tweet.mid)
+                    }
+                    Box(modifier = Modifier.size(0.dp))
+                } else {
+                    // The tweet area with 'Forwarded by' label above
+                    val originalTweetViewModel =
+                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                            parentEntry, key = tweet.originalTweetId
+                        ) { factory -> factory.create(originalTweetNonNull) }
+
+                    Column(modifier = Modifier.padding(top = 0.dp)) {
+                        // Label: Forward by user, above the quoted tweet
+                        val forwardBy = if (tweet.authorId == appUser.mid)
+                            stringResource(R.string.forward_by)
+                        else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
+                        Text(
+                            text = forwardBy,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier
+                                .offset(y = 12.dp)
+                                .zIndex(1f)
+                                .padding(start = 24.dp),
+                        )
+                        // The quoted/original tweet card
+                        TweetItemBody(
+                            originalTweetViewModel,
+                            parentEntry = parentEntry,
+                            parentTweet = tweet
+                        )
+                    }
+                }
+            }
+            else -> {
+                // Original tweet not available - this retweet should be removed from the list
+                LaunchedEffect(Unit) {
+                    onTweetUnavailable?.invoke(tweet.mid)
+                }
+                Box(modifier = Modifier.size(0.dp))
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.R)
+@Composable
+private fun RetweetWithContent(
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry,
+    onTweetUnavailable: ((MimeiId) -> Unit)?
+) {
+    val navController = LocalNavController.current
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry, key = tweet.mid
+    ) { factory ->
+        factory.create(tweet)
+    }
+    
+    // Optimize: Pre-compute derived values
+    val author by remember(tweet.author) {
+        derivedStateOf { tweet.author }
+    }
+    
+    val hasContent by remember(tweet.content) {
+        derivedStateOf { !tweet.content.isNullOrEmpty() }
+    }
+    
+    val hasAttachments by remember(tweet.attachments) {
+        derivedStateOf { !tweet.attachments.isNullOrEmpty() }
+    }
+
+    Surface {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = {
+                    navController.navigate(
+                        NavTweet.TweetDetail(
+                            tweet.authorId,
+                            tweet.mid
+                        )
+                    )
+                })
+        ) {
+            // Left column: Avatar
+            Column {
+                IconButton(
+                    onClick = {
+                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                    },
+                    modifier = Modifier.width(44.dp)
+                ) {
+                    author?.let { UserAvatar(user = it, size = 32) }
+                }
+            }
+
+            // Right column: User info, content, and actions
+            Column(
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .fillMaxWidth()
+            ) {
+                // Top row: User info and dropdown menu
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // User info text
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = author?.name ?: "No One",
+                            modifier = Modifier.padding(start = 2.dp),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = "@${author?.username}",
+                            modifier = Modifier.padding(horizontal = 0.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(text = " • ", fontSize = 12.sp)
+                        Text(
+                            text = localizedTimeDifference(tweet.timestamp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
+                    // Dropdown menu
+                    TweetDropdownMenu(tweet, parentEntry, null)
+                }
+
+                // Tweet content
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .offset(y = (-20).dp)
+                        .padding(start = 4.dp)
+                        .fillMaxWidth()
+                ) {
+                    Column {
+                        // Text content of the tweet
+                        if (hasContent) {
+                            SelectableText(
+                                text = tweet.content!!,
+                                maxLines = 10,
+                            ) { username ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(
+                                            NavTweet.UserProfile(
+                                                tweet.authorId
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Media files
+                        if (hasAttachments) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                                    .heightIn(min = 20.dp, max = 400.dp),
+                                tonalElevation = 4.dp,
+                                shape = RoundedCornerShape(size = 8.dp)
+                            ) {
+                                MediaPreviewGrid(
+                                    tweet.attachments!!,
+                                    viewModel
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Load and display original tweet
+                QuotedTweetContent(
+                    tweet = tweet,
+                    parentEntry = parentEntry,
+                    onTweetUnavailable = onTweetUnavailable
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 0.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    // State hoist
+                    LikeButton(viewModel)
+                    BookmarkButton(viewModel)
+                    CommentButton(viewModel)
+                    RetweetButton(viewModel)
+                    Spacer(modifier = Modifier.width(40.dp))
+                    ShareButton(viewModel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuotedTweetContent(
+    tweet: Tweet,
+    parentEntry: NavBackStackEntry,
+    onTweetUnavailable: ((MimeiId) -> Unit)?
+) {
+    var originalTweet by remember { mutableStateOf<Tweet?>(null) }
+    var isLoadingOriginal by remember { mutableStateOf(true) }
+
+    LaunchedEffect(tweet.originalTweetId) {
+        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+            try {
+                withContext(IO) {
+                    Timber.tag("TweetItem")
+                        .d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
+                    originalTweet = HproseInstance.fetchTweet(
+                        tweet.originalTweetId!!,
+                        tweet.originalAuthorId!!,
+                        shouldCache = true
+                    )
+                    if (originalTweet != null) {
+                        Timber.tag("TweetItem")
+                            .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
+                    } else {
+                        Timber.tag("TweetItem")
+                            .w("Quoted original tweet not found: ${tweet.originalTweetId}")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("TweetItem").e(
+                    e,
+                    "Error loading original tweet: ${tweet.originalTweetId}"
+                )
+            } finally {
+                isLoadingOriginal = false
+            }
+        } else {
+            isLoadingOriginal = false
+        }
+    }
+
+    when {
+        isLoadingOriginal -> {
+            // Show loading state for quoted tweet with spinner
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier.padding(
+                    start = 4.dp,
+                    top = 8.dp,
+                    end = 8.dp
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            }
+        }
+        originalTweet != null -> {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 8.dp,
+            ) {
+                // quoted tweet
+                TweetItemBody(
+                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+                        parentEntry, key = tweet.originalTweetId
+                    ) { factory ->
+                        factory.create(originalTweet!!)
+                    },
+                    isQuoted = true,
+                    parentEntry = parentEntry
+                )
+            }
+        }
+        else -> {
+            // Original tweet not available - this quoted tweet should be removed from the list
+            LaunchedEffect(Unit) {
+                onTweetUnavailable?.invoke(tweet.mid)
+            }
+            Box(modifier = Modifier.size(0.dp))
+        }
     }
 }

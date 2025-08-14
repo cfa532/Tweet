@@ -19,9 +19,9 @@ import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
-import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager

@@ -12,6 +12,11 @@
     <string name="profile">简介</string>
     <string name="key_phrase">口令</string>
     <string name="save">保存</string>
+    <string name="saving">保存中...</string>
+    <string name="registering">注册中...</string>
+    <string name="updating_avatar">更新头像中...</string>
+    <string name="avatar_update_success">头像更新成功</string>
+    <string name="avatar_update_failed">头像更新失败</string>
     <string name="delete_account">注销</string>
     <string name="edit_tweet">发帖</string>
     <string name="comment">评论</string>
@@ -41,6 +46,7 @@
     <string name="logout">登出</string>
     <string name="login_failed">登录失败，请稍后重试。</string>
     <string name="profile_update_ok">用户数据更新成功。</string>
+    <string name="profile_update_failed">更新用户数据失败</string>
     <string name="registration_ok">注册成功，请等几分钟再登录。</string>
     <string name="username_required">用户名必填</string>
     <string name="password_required">密码必填</string>
@@ -120,6 +126,9 @@
     <!-- Notification Messages -->
     <string name="notification_new_message_title">来自 %s 的新消息</string>
     <string name="notification_new_messages_title" formatted="false">来自 %2$s 的 %1$d 条新消息</string>
+    <string name="notification_new_chat_message_simple">新聊天消息</string>
+    <string name="notification_new_chat_messages_simple" formatted="false">%d 条新聊天消息</string>
+    <string name="notification_tap_to_view">点击查看</string>
     <string name="notification_new_tweets_title">%d 条新推文</string>
     <string name="notification_new_tweets_single_user">来自 %s 的新推文</string>
     <string name="notification_new_tweets_multiple_users">来自 %s 的新推文</string>
@@ -213,4 +222,11 @@
     
     <!-- Clipboard/Share -->
     <string name="shared_text">共享文本</string>
+    
+    <!-- Edit Profile Dialog -->
+    <string name="save_changes_title">保存更改？</string>
+    <string name="unsaved_changes_message">您有未保存的更改。是否要在离开前保存？</string>
+    <string name="dont_save">不保存</string>
+    <string name="save_and_continue">保存并继续</string>
+    <string name="avatar_upload_failed">头像上传失败：%s</string>
 </resources>

@@ -13,7 +13,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import timber.log.Timber
-import us.fireshare.tweet.R
 
 object NotificationPermissionManager {
     private const val PREF_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"

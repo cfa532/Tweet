@@ -1,5 +1,7 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,7 @@ import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 import java.util.concurrent.TimeUnit
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetItemBody(
     viewModel: TweetViewModel,
@@ -51,7 +54,23 @@ fun TweetItemBody(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
-    val author by remember { derivedStateOf { tweet.author } }
+    
+    // Optimize: Use derivedStateOf to avoid unnecessary recomposition
+    val author by remember(tweet.author) {
+        derivedStateOf { tweet.author }
+    }
+    
+    val hasContent by remember(tweet.content) {
+        derivedStateOf { !tweet.content.isNullOrEmpty() }
+    }
+    
+    val hasAttachments by remember(tweet.attachments) {
+        derivedStateOf { !tweet.attachments.isNullOrEmpty() }
+    }
+    
+    val canNavigate by remember(tweet.authorId, tweet.mid) {
+        derivedStateOf { tweet.authorId != null && tweet.mid != null }
+    }
 
     // fold text content up to 9 lines. Open it upon user click.
     Surface(
@@ -59,10 +78,11 @@ fun TweetItemBody(
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
             .padding(start = 0.dp, end = 8.dp)
-            .clickable(onClick = {
+            .clickable(enabled = canNavigate, onClick = {
                 // necessary to deal with corrupted data.
-                if (tweet.authorId != null && tweet.mid != null)
-                    navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                if (canNavigate) {
+                    navController.navigate(NavTweet.TweetDetail(tweet.authorId!!, tweet.mid!!))
+                }
             })
     ) {
         Row(
@@ -80,30 +100,6 @@ fun TweetItemBody(
                     modifier = Modifier.width(44.dp)
                 ) {
                     author?.let { UserAvatar(user = it, size = 32) }
-                }
-            }
-
-            @Composable
-            fun localizedTimeDifference(timestamp: Long): String {
-                val currentTime = System.currentTimeMillis()
-                val diffInMillis = currentTime - timestamp
-
-                val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
-                val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
-                val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
-                val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
-                val weeks = days / 7
-                val months = days / 30
-                val years = days / 365
-
-                return when {
-                    seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
-                    minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
-                    hours < 24 -> stringResource(id = R.string.hours_ago, hours)
-                    days < 7 -> stringResource(id = R.string.days_ago, days)
-                    weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
-                    months < 12 -> stringResource(id = R.string.months_ago, months + 1)
-                    else -> stringResource(id = R.string.years_ago, years)
                 }
             }
 
@@ -154,9 +150,9 @@ fun TweetItemBody(
                 ) {
                     Column {
                         // Text content of the tweet
-                        tweet.content?.let {
+                        if (hasContent) {
                             SelectableText(
-                                text = it,
+                                text = tweet.content!!,
                                 maxLines = 10,
                             ) { username ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -170,7 +166,7 @@ fun TweetItemBody(
                         }
 
                         // Media files
-                        if (!tweet.attachments.isNullOrEmpty()) {
+                        if (hasAttachments) {
                             Surface(
                                 modifier = Modifier.fillMaxWidth()
                                     .padding(top = 4.dp)
@@ -202,5 +198,29 @@ fun TweetItemBody(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun localizedTimeDifference(timestamp: Long): String {
+    val currentTime = System.currentTimeMillis()
+    val diffInMillis = currentTime - timestamp
+
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
+    val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
+    val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
+    val weeks = days / 7
+    val months = days / 30
+    val years = days / 365
+
+    return when {
+        seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
+        minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
+        hours < 24 -> stringResource(id = R.string.hours_ago, hours)
+        days < 7 -> stringResource(id = R.string.days_ago, days)
+        weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
+        months < 12 -> stringResource(id = R.string.months_ago, months + 1)
+        else -> stringResource(id = R.string.years_ago, years)
     }
 }

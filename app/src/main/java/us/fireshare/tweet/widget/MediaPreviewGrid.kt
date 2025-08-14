@@ -1,6 +1,8 @@
 package us.fireshare.tweet.widget
 
+import android.os.Build
 import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -26,6 +29,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
@@ -36,6 +43,7 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.MediaItemView
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
+@RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
 @Composable
 fun MediaPreviewGrid(
@@ -44,12 +52,21 @@ fun MediaPreviewGrid(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
-    val maxItems = when (mediaItems.size) {
-        1 -> 1
-        2, 3 -> mediaItems.size
-        else -> 4
+    
+    // Optimize: Pre-compute derived values to avoid recalculation
+    val maxItems by remember(mediaItems.size) {
+        derivedStateOf {
+            when (mediaItems.size) {
+                1 -> 1
+                2, 3 -> mediaItems.size
+                else -> 4
+            }
+        }
     }
-    val limitedMediaList = mediaItems.take(maxItems)
+    
+    val limitedMediaList by remember(mediaItems, maxItems) {
+        derivedStateOf { mediaItems.take(maxItems) }
+    }
 
     // Helper: get aspect ratio for an item, using Compose state for images
     @OptIn(UnstableApi::class)
@@ -84,21 +101,26 @@ fun MediaPreviewGrid(
     }
 
     // Track which video should autoplay (only the first video in the grid)
-    val firstVideoIndex = remember {
-        limitedMediaList.indexOfFirst { 
-            inferMediaTypeFromAttachment(it) == MediaType.Video
-        }.takeIf { it >= 0 } ?: -1
+    val firstVideoIndex by remember(limitedMediaList) {
+        derivedStateOf {
+            limitedMediaList.indexOfFirst { 
+                inferMediaTypeFromAttachment(it) == MediaType.Video
+            }.takeIf { it >= 0 } ?: -1
+        }
     }
     
     val context = LocalContext.current
     
     // Set up sequential playback for multiple videos
-    val videoMids = remember {
-        limitedMediaList.mapIndexedNotNull { index, item ->
-            if (inferMediaTypeFromAttachment(item) == MediaType.Video) item.mid else null
+    val videoMids by remember(limitedMediaList) {
+        derivedStateOf {
+            limitedMediaList.mapIndexedNotNull { index, item ->
+                if (inferMediaTypeFromAttachment(item) == MediaType.Video) item.mid else null
+            }
         }
     }
     
+    // Optimize: Use LaunchedEffect with proper keys to avoid unnecessary video setup
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
             VideoManager.setupSequentialPlayback(videoMids)
@@ -107,13 +129,21 @@ fun MediaPreviewGrid(
             VideoManager.stopSequentialPlayback()
         }
         
-        // Preload all videos in the grid
+        // Preload all videos in the grid asynchronously to avoid blocking UI
         videoMids.forEach { videoMid ->
             val mediaItem = limitedMediaList.find { it.mid == videoMid }
             mediaItem?.let { item ->
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                 if (!VideoManager.isVideoPreloaded(videoMid)) {
-                    VideoManager.preloadVideo(context, videoMid, mediaUrl)
+                    // Use application scope to avoid blocking the UI thread
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            VideoManager.preloadVideo(context, videoMid, mediaUrl)
+                        } catch (e: Exception) {
+                            // Log error but don't block UI
+                            Timber.tag("MediaPreviewGrid").e(e, "Failed to preload video: $videoMid")
+                        }
+                    }
                 }
             }
         }

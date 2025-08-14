@@ -61,7 +61,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,17 +82,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
-import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoManager
-import us.fireshare.tweet.widget.VideoPreview
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -159,6 +157,24 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
         
+        // Preload videos from recent messages for better performance
+        val recentMessages = chatMessages.takeLast(10) // Preload videos from last 10 messages
+        recentMessages.forEach { message ->
+            message.attachments?.forEach { attachment ->
+                if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+                    !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+                    val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+                    coroutineScope.launch(Dispatchers.IO) {
+                        try {
+                            us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                        } catch (e: Exception) {
+                            Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
+                        }
+                    }
+                }
+            }
+        }
+        
         while (true) {
             withContext(Dispatchers.IO) {
                 viewModel.fetchNewMessage()
@@ -167,12 +183,30 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to bottom when messages are first loaded
+    // Scroll to bottom when messages are first loaded and preload videos
     LaunchedEffect(chatMessages.isNotEmpty()) {
         if (chatMessages.isNotEmpty()) {
             // Add a small delay to ensure the LazyColumn is properly laid out
             delay(100)
             scrollToBottom()
+            
+            // Preload videos from new messages for better performance
+            val newMessages = chatMessages.takeLast(5) // Preload videos from last 5 messages
+            newMessages.forEach { message ->
+                message.attachments?.forEach { attachment ->
+                    if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+                        !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+                        val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                            } catch (e: Exception) {
+                                Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -862,6 +896,27 @@ fun ChatMediaPreview(
 
     // State to track loading
     var isLoading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+
+    // Preload video if it's a video attachment and not already preloaded
+    LaunchedEffect(attachment.mid, attachment.type) {
+        if (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+            // Preload video in background similar to MediaPreviewGrid
+            withContext(Dispatchers.IO) {
+                try {
+                    us.fireshare.tweet.widget.VideoManager.preloadVideo(
+                        context,
+                        attachment.mid,
+                        mediaUrl
+                    )
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("ChatMediaPreview")
+                        .e(e, "Failed to preload video: ${attachment.mid}")
+                }
+            }
+        }
+    }
 
     // Helper function to apply aspect ratio rule: use 0.8 if aspect ratio is smaller than 0.8, otherwise use original value
     fun applyAspectRatioRule(originalAspectRatio: Float?): Float {
@@ -881,8 +936,9 @@ fun ChatMediaPreview(
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
     ) {
-        // Show loading spinner initially
-        if (isLoading) {
+        // Show loading spinner only if video is not preloaded
+        if (isLoading && attachment.type == us.fireshare.tweet.datamodel.MediaType.Video && 
+            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -910,7 +966,7 @@ fun ChatMediaPreview(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     // Use VideoPreview with shared player that can transition to full-screen
-                    VideoPreview(
+                    us.fireshare.tweet.widget.VideoPreview(
                         url = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
@@ -954,7 +1010,7 @@ fun ChatMediaPreview(
             }
 
             us.fireshare.tweet.datamodel.MediaType.Audio -> {
-                AudioPlayer(
+                us.fireshare.tweet.widget.AudioPlayer(
                     attachments,
                     0,
                 )

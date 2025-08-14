@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +46,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -78,12 +84,42 @@ fun EditProfileScreen(
     val hostId by viewModel.hostId
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading.collectAsState()
+    val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
+    val isUploading = remember { mutableStateOf(false) }
+    val uploadError = remember { mutableStateOf<String?>(null) }
+    
+    // Simple check for unsaved changes (excluding avatar and username which can't be changed)
+    val hasUnsavedChanges = remember {
+        derivedStateOf {
+            name != appUser.name || 
+            profile != appUser.profile || 
+            password.isNotEmpty()
+        }
+    }
+    
+    // Dialog state for unsaved changes warning
+    val showUnsavedChangesDialog = remember { mutableStateOf(false) }
+    
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
+            selectedImageUri.value = it
+            isUploading.value = true
+            uploadError.value = null // Clear any previous error
+            
+            // Upload the image
             viewModel.viewModelScope.launch(Dispatchers.IO) {
-                viewModel.updateAvatar(context, uri)
+                try {
+                    viewModel.updateAvatar(context, it)
+                    // Upload successful, keep the selected image displayed
+                    // Don't clear selectedImageUri - let it stay as the new avatar
+                } catch (e: Exception) {
+                    // Upload failed, show error message
+                    uploadError.value = context.getString(R.string.avatar_upload_failed, e.message ?: "Unknown error")
+                } finally {
+                    isUploading.value = false
+                }
             }
         }
     }
@@ -115,7 +151,15 @@ fun EditProfileScreen(
                 .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-            IconButton(onClick = { navController.popBackStack() }) {
+            IconButton(
+                onClick = { 
+                    if (hasUnsavedChanges.value) {
+                        showUnsavedChangesDialog.value = true
+                    } else {
+                        navController.popBackStack()
+                    }
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Default.Clear,
                     contentDescription = stringResource(R.string.cancel)
@@ -123,7 +167,13 @@ fun EditProfileScreen(
             }
             // AppUser avatar
             if (!appUser.isGuest()) {
-                AppUserAvatar(launcher, viewModel)
+                AppUserAvatar(
+                    launcher = launcher,
+                    viewModel = viewModel,
+                    selectedImageUri = selectedImageUri.value,
+                    isUploading = isUploading.value,
+                    uploadError = uploadError.value
+                )
             } else {
                 Text(
                     text = stringResource(R.string.register),
@@ -246,6 +296,82 @@ fun EditProfileScreen(
             )
         }
     }
+    
+    // Unsaved changes warning dialog
+    if (showUnsavedChangesDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog.value = false },
+            title = { 
+                Text(
+                    text = stringResource(R.string.save_changes_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                ) 
+            },
+            text = { 
+                Text(
+                    text = stringResource(R.string.unsaved_changes_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                ) 
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog.value = false
+                        navController.popBackStack()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.outline
+                    )
+                ) {
+                    Text(stringResource(R.string.dont_save))
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showUnsavedChangesDialog.value = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(stringResource(R.string.save_and_continue))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SelectedImageDisplay(uri: Uri) {
+    val context = LocalContext.current
+    val bitmap = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    
+    LaunchedEffect(uri) {
+        try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            bitmap.value = android.graphics.BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+        } catch (e: Exception) {
+            // Handle error
+        }
+    }
+    
+    if (bitmap.value != null) {
+        Image(
+            bitmap = bitmap.value!!.asImageBitmap(),
+            contentDescription = stringResource(R.string.user_avatar),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+    } else {
+        // Show placeholder while loading
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+    }
 }
 
 @Composable
@@ -266,29 +392,43 @@ fun EyeSlashButton(
 @Composable
 fun AppUserAvatar(
     launcher: ManagedActivityResultLauncher<String, Uri?>,
-    viewModel: UserViewModel
+    viewModel: UserViewModel,
+    selectedImageUri: Uri?,
+    isUploading: Boolean,
+    uploadError: String?
 ) {
     val user by viewModel.user.collectAsState()
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
-            modifier = Modifier.size(120.dp) // Set a fixed size for the avatar area
+            modifier = Modifier.size(120.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .matchParentSize() // Ensure the avatar fills the parent Box
+                    .matchParentSize()
                     .clip(CircleShape)
                     .clickable(onClick = { launcher.launch("image/*") })
             ) {
-                UserAvatar(user = user, size = 120)
+                // Show selected image if available, otherwise show current avatar
+                if (selectedImageUri != null) {
+                    // Show the selected image immediately
+                    SelectedImageDisplay(uri = selectedImageUri)
+                } else {
+                    // Show current avatar from server
+                    UserAvatar(user = user, size = 120)
+                }
+                
+                // No loading indicator - keep selected image visible during upload
             }
+            
             IconButton(
                 onClick = { launcher.launch("image/*") },
                 modifier = Modifier
-                    .align(Alignment.TopEnd) // Align the IconButton to the bottom end
-                    .offset(x = (40).dp, y = (-8).dp) // Adjust offset to position it outside the avatar
+                    .align(Alignment.TopEnd)
+                    .offset(x = (40).dp, y = (-8).dp)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_photo_plus),
@@ -297,6 +437,16 @@ fun AppUserAvatar(
                     modifier = Modifier.size(32.dp)
                 )
             }
+        }
+        
+        // Show error message if upload failed
+        uploadError?.let { error ->
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }

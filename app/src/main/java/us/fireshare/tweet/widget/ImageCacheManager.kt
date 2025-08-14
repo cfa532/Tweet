@@ -275,6 +275,26 @@ object ImageCacheManager {
     }
 
     /**
+     * Clear a specific cached image by mid
+     */
+    suspend fun clearCachedImage(context: Context, mid: String) = withContext(Dispatchers.IO) {
+        try {
+            // Remove from memory cache
+            memoryCache.remove(mid)
+            
+            // Remove from disk cache
+            val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
+            if (file.exists()) {
+                file.delete()
+            }
+            
+            Timber.tag("ImageCacheManager").d("Cleared cached image for mid: $mid")
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").e("Error clearing cached image for mid $mid: $e")
+        }
+    }
+
+    /**
      * Clear all cached images
      */
     suspend fun clearAllCachedImages(context: Context) = withContext(Dispatchers.IO) {

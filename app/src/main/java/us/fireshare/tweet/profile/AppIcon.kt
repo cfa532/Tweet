@@ -71,9 +71,10 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val mid = user.avatar ?: ""
-    var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
+    // Use a more specific key that includes both user ID and avatar ID to ensure proper recomposition
+    var loadState by remember("${user.mid}_${mid}") { mutableStateOf(AvatarLoadState()) }
 
-    LaunchedEffect(key1 = user.avatar) {
+    LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
         loadState = loadState.copy(avatarUrl = newAvatarUrl)
 
@@ -101,6 +102,9 @@ fun UserAvatar(
                 loadState = loadState.copy(isLoading = false, hasError = true)
                 Timber.e("UserAvatar - Error loading avatar: $e")
             }
+        } else {
+            // Reset state when no avatar
+            loadState = AvatarLoadState()
         }
     }
 

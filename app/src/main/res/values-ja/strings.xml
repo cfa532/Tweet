@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Edit Profile Dialog -->
+    <string name="save_changes_title">変更を保存しますか？</string>
+    <string name="unsaved_changes_message">未保存の変更があります。終了前に保存しますか？</string>
+    <string name="dont_save">保存しない</string>
+    <string name="save_and_continue">保存して続行</string>
+    <string name="avatar_upload_failed">アバターのアップロードに失敗しました：%s</string>
+</resources>

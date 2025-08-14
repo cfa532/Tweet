@@ -44,8 +44,9 @@ fun ProfileDetail(
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
 
-    // Use appUser data when viewing own profile, otherwise use profile user data
-    val displayUser = if (user.mid == appUser.mid) appUser else user
+    // Use the ViewModel's user data directly for display, as it's more reliable
+    // The ViewModel's user state is updated when profile changes
+    val displayUser = user
     val profile by remember { derivedStateOf { displayUser.profile } }
 
     // Use ViewModel's public count variables - collect them efficiently
@@ -61,6 +62,8 @@ fun ProfileDetail(
             viewModel.refreshFollowingsAndFans()
         }
     }
+    
+
 
     // go to list of followings of the user
     Surface(

@@ -1,5 +1,6 @@
 package us.fireshare.tweet
 
+
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -24,8 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-
-
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
@@ -41,10 +40,9 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
-import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.UserContentType
+import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
-import us.fireshare.tweet.widget.Gadget.getAccessibleIP2
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
@@ -355,20 +353,12 @@ object HproseInstance {
      * Find IP addresses of given node.
      * */
     suspend fun getHostIP(nodeId: MimeiId): String? {
-        val url = "${appUser.baseUrl}/getvar?name=ips&arg0=$nodeId"
+        val entry = "get_node_ip"
+        val params = mapOf("aid" to appId, "ver" to "last", "nodeid" to nodeId)
         try {
-            val response = httpClient.get(url)
-            if (response.status == HttpStatusCode.OK) {
-                response.bodyAsText().trim().trim('"').trim(',')
-                    .split(',').let { ips ->
-                        if (ips.isNotEmpty()) {
-                            val accessibleIp = getAccessibleIP2(ips)
-                            return accessibleIp
-                        }
-                    }
-            }
+            return appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("getHostIP").e("$e $url")
+            Timber.tag("getHostIP").e("$e $nodeId")
         }
         return null
     }
@@ -394,7 +384,6 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "entry" to entry,
             "user" to Json.encodeToString(user)
         )
         return try {
@@ -405,17 +394,19 @@ object HproseInstance {
         }
     }
 
-    suspend fun setUserAvatar(user: User, avatar: MimeiId) {
+    suspend fun setUserAvatar(user: User, avatar: MimeiId): MimeiId? {
         val entry = "set_user_avatar"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
         """.trimIndent()
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
-        try {
-            appUser.uploadService?.runMApp<Any>(entry, request)
+        return try {
+            val response = appUser.uploadService?.runMApp<MimeiId>(entry, request)
+            response
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e)
+            null
         }
     }
 
@@ -473,7 +464,7 @@ object HproseInstance {
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
     ): List<Tweet?> {
-        val params = mapOf(
+        val params = mutableMapOf(
             "aid" to appId,
             "ver" to "last",
             "pn" to pageNumber,
@@ -481,7 +472,11 @@ object HproseInstance {
             "userid" to if (!user.isGuest()) user.mid else getAlphaIds().first(),
             "appuserid" to appUser.mid
         )
-
+        if (entry == "update_following_tweets") {
+            appUser.hostIds?.first()?.let { hostId ->
+                params["hostid"] = hostId
+            }
+        }
         return try {
             val response =
                 user.hproseService?.runMApp<Map<String, Any>>(entry, params)
@@ -974,6 +969,15 @@ object HproseInstance {
     }
 
     /**
+     * Result class for toggle operations
+     */
+    data class ToggleResult(
+        val tweet: Tweet,
+        val isSuccess: Boolean,
+        val errorMessage: String? = null
+    )
+
+    /**
      * Load favorite status of the tweet by appUser.
      * */
     suspend fun toggleFavorite(tweet: Tweet): Tweet {
@@ -990,19 +994,32 @@ object HproseInstance {
             val response =
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            val isFavorite = response?.get("isFavorite") as? Boolean
-            val favoriteCount = response?.get("count") as? Int
-            if (isFavorite != null && favoriteCount != null) {
-                val favorites =
-                    tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
-                favorites[UserActions.FAVORITE] = isFavorite
-                val ret = tweet.copy(
-                    favorites = favorites,
-                    favoriteCount = favoriteCount
-                )
-                updateCachedTweet(tweet)
-                ret
-            } else tweet
+            val success = response?.get("success") as? Boolean
+            if (success == true) {
+                // Handle successful response with updated user and tweet data
+                val updatedUserData = response["user"] as? Map<String, Any>
+                val updatedTweetData = response["tweet"] as? Map<String, Any>
+                
+                if (updatedUserData != null) {
+                    // Update appUser with new data from server
+                    appUser.from(updatedUserData)
+                }
+                
+                if (updatedTweetData != null) {
+                    // Create updated tweet from server response
+                    val updatedTweet = Tweet.from(updatedTweetData)
+                    updatedTweet.author = getUser(updatedTweet.authorId)
+                    updateCachedTweet(updatedTweet)
+                    return updatedTweet
+                }
+            } else {
+                // Handle error response
+                val error = response?.get("error") as? String
+                Timber.tag("toggleFavorite").e("Favorite toggle failed: $error")
+            }
+            
+            // Fallback to original tweet if parsing fails
+            tweet
         } catch (e: Exception) {
             Timber.tag("toggleFavorite").e(e)
             tweet
@@ -1026,19 +1043,32 @@ object HproseInstance {
             val response =
                 tweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            val hasBookmarked = response?.get("hasBookmarked") as? Boolean
-            val bookmarkCount = response?.get("count") as? Int
-            if (hasBookmarked != null && bookmarkCount != null) {
-                val favorites =
-                    tweet.favorites?.toMutableList() ?: mutableListOf(false, false, false)
-                favorites[UserActions.BOOKMARK] = hasBookmarked
-                val ret = tweet.copy(
-                    favorites = favorites,
-                    bookmarkCount = bookmarkCount
-                )
-                updateCachedTweet(tweet)
-                ret
-            } else tweet
+            val success = response?.get("success") as? Boolean
+            if (success == true) {
+                // Handle successful response with updated user and tweet data
+                val updatedUserData = response["user"] as? Map<String, Any>
+                val updatedTweetData = response["tweet"] as? Map<String, Any>
+                
+                if (updatedUserData != null) {
+                    // Update appUser with new data from server
+                    appUser.from(updatedUserData)
+                }
+                
+                if (updatedTweetData != null) {
+                    // Create updated tweet from server response
+                    val updatedTweet = Tweet.from(updatedTweetData)
+                    updatedTweet.author = getUser(updatedTweet.authorId)
+                    updateCachedTweet(updatedTweet)
+                    return updatedTweet
+                }
+            } else {
+                // Handle error response
+                val error = response?.get("error") as? String
+                Timber.tag("toggleBookmark").e("Bookmark toggle failed: $error")
+            }
+            
+            // Fallback to original tweet if parsing fails
+            tweet
         } catch (e: Exception) {
             Timber.tag("toggleBookmark").e(e)
             tweet
@@ -1306,7 +1336,7 @@ object HproseInstance {
      * Get provider IP for a user using "get_provider" entry
      */
     suspend fun getProviderIP(userId: MimeiId): String? {
-        val entry = "get_provider"
+        val entry = "get_provider_ip"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -1393,19 +1423,9 @@ object HproseInstance {
     suspend fun uploadToIPFS(
         context: Context,
         uri: Uri,
-        referenceId: MimeiId? = null
-    ): MimeiFileType? {
-        return uploadToIPFS(context, uri, referenceId, false)
-    }
-
-    suspend fun uploadToIPFS(
-        context: Context,
-        uri: Uri,
         referenceId: MimeiId? = null,
         noResample: Boolean = false
     ): MimeiFileType? {
-        Timber.tag("uploadToIPFS").d("Starting upload for URI: $uri")
-        Timber.tag("uploadToIPFS").d("Reference ID: $referenceId")
         // Get file name
         var fileName: String? = null
         try {
@@ -1454,7 +1474,7 @@ object HproseInstance {
             else -> {
                 // Fallback: try to determine type from file extension
                 val extension = fileName?.substringAfterLast('.', "")?.lowercase()
-                when (extension) {
+                val extensionType = when (extension) {
                     "jpg", "jpeg", "png", "gif", "webp" -> us.fireshare.tweet.datamodel.MediaType.Image
                     "mp4", "avi", "mov", "mkv" -> us.fireshare.tweet.datamodel.MediaType.Video
                     "mp3", "wav", "aac" -> us.fireshare.tweet.datamodel.MediaType.Audio
@@ -1462,6 +1482,14 @@ object HproseInstance {
                     "zip" -> us.fireshare.tweet.datamodel.MediaType.Zip
                     "doc", "docx" -> us.fireshare.tweet.datamodel.MediaType.Word
                     else -> us.fireshare.tweet.datamodel.MediaType.Unknown
+                }
+                
+                // If extension detection failed, use FileTypeDetector for magic bytes detection
+                if (extensionType == us.fireshare.tweet.datamodel.MediaType.Unknown) {
+                    Timber.tag("uploadToIPFS").d("Extension detection failed, using FileTypeDetector for magic bytes detection")
+                    FileTypeDetector.detectFileType(context, uri, fileName)
+                } else {
+                    extensionType
                 }
             }
         }
@@ -1610,10 +1638,11 @@ object HproseInstance {
     }
 
     /**
-     * Determine video content type based on file extension
+     * Determine video content type based on file extension and magic bytes
      */
     private fun determineVideoContentType(fileName: String?): String {
-        return when (fileName?.lowercase()?.substringAfterLast('.', "")) {
+        // First try extension-based detection
+        val extensionType = when (fileName?.lowercase()?.substringAfterLast('.', "")) {
             "mp4" -> "video/mp4"
             "mov" -> "video/quicktime"
             "avi" -> "video/x-msvideo"
@@ -1623,8 +1652,10 @@ object HproseInstance {
             "flv" -> "video/x-flv"
             "wmv" -> "video/x-ms-wmv"
             "m4v" -> "video/x-m4v"
-            else -> "video/mp4" // Default fallback
+            else -> null
         }
+        
+        return extensionType ?: "video/mp4" // Default fallback
     }
 
     /**
