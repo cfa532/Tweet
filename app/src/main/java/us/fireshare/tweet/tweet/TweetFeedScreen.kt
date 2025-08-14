@@ -143,11 +143,13 @@ fun TweetFeedScreen(
                     exit = fadeOut(animationSpec = tween(durationMillis = 150))
                 ) {
                     TabRow(
+                        modifier = Modifier.padding(bottom = 8.dp),
                         selectedTabIndex = selectedTabIndex,
                     ) {
                         tabs.forEachIndexed { index, item ->
                             Tab(
-                                modifier = Modifier.height(36.dp), // Original height
+                                modifier = Modifier
+                                    .height(36.dp),
                                 selected = index == selectedTabIndex,
                                 onClick = { selectedTabIndex = index },
                                 text = {
