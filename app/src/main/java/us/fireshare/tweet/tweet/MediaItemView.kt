@@ -67,7 +67,8 @@ fun MediaItemView(
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
-    viewModel: TweetViewModel
+    viewModel: TweetViewModel,
+    onVideoCompleted: (() -> Unit)? = null
 ) {
     // State for full-screen video and image
     var showFullScreenVideo by remember { mutableStateOf(false) }
@@ -169,7 +170,8 @@ fun MediaItemView(
                     inPreviewGrid = inPreviewGrid,
                     aspectRatio = mediaItems[index].aspectRatio,
                     callback = { goto(index) },
-                    videoMid = mediaItems[index].mid
+                    videoMid = mediaItems[index].mid,
+                    onVideoCompleted = onVideoCompleted
                 )
             }
             MediaType.Audio -> {

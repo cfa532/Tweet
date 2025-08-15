@@ -61,7 +61,8 @@ fun VideoPreview(
     aspectRatio: Float?,
     callback: (Int) -> Unit,
     videoMid: MimeiId? = null,
-    onLoadComplete: (() -> Unit)? = null
+    onLoadComplete: (() -> Unit)? = null,
+    onVideoCompleted: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var isVideoVisible by remember { mutableStateOf(false) }
@@ -210,6 +211,8 @@ fun VideoPreview(
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)
                         }
+                        // Call the completion callback for sequential playback
+                        onVideoCompleted?.invoke()
                     }
 
                     androidx.media3.common.Player.STATE_IDLE -> {

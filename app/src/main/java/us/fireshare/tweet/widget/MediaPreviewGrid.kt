@@ -22,7 +22,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
@@ -100,6 +103,8 @@ fun MediaPreviewGrid(
         return 1.618f
     }
 
+    val context = LocalContext.current
+    
     // Track which video should autoplay (only the first video in the grid)
     val firstVideoIndex by remember(limitedMediaList) {
         derivedStateOf {
@@ -109,8 +114,6 @@ fun MediaPreviewGrid(
             }.takeIf { it >= 0 } ?: -1
         }
     }
-    
-    val context = LocalContext.current
     
     // Set up sequential playback for multiple videos
     val videoMids by remember(limitedMediaList) {
@@ -122,12 +125,21 @@ fun MediaPreviewGrid(
         }
     }
     
+    // Track current playing video for sequential playback
+    var currentPlayingVideoIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+    
     // Optimize: Use LaunchedEffect with proper keys to avoid unnecessary video setup
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
+            // For multiple videos, only the first one should autoplay initially
+            currentPlayingVideoIndex = 0
             VideoManager.setupSequentialPlayback(videoMids)
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
+            currentPlayingVideoIndex = 0
+            VideoManager.stopSequentialPlayback()
+        } else {
+            currentPlayingVideoIndex = -1
             VideoManager.stopSequentialPlayback()
         }
         
@@ -151,10 +163,38 @@ fun MediaPreviewGrid(
         }
     }
     
+    // Handle sequential video completion
+    LaunchedEffect(currentPlayingVideoIndex) {
+        if (videoMids.size > 1 && currentPlayingVideoIndex >= 0) {
+            // Set up completion listener for current video
+            val currentVideoMid = videoMids[currentPlayingVideoIndex]
+            currentVideoMid?.let { mid ->
+                // Wait for video to complete and then move to next
+                delay(100) // Small delay to ensure video is loaded
+                // The actual completion handling will be done in VideoPreview
+            }
+        }
+    }
+    
     // Clean up sequential playback when component is disposed
     DisposableEffect(Unit) {
         onDispose {
             VideoManager.stopSequentialPlayback()
+        }
+    }
+    
+    // Function to handle video completion and move to next
+    fun onVideoCompleted(videoIndex: Int) {
+        if (videoMids.size > 1 && videoIndex == currentPlayingVideoIndex) {
+            // Move to next video
+            val nextIndex = (videoIndex + 1) % videoMids.size
+            currentPlayingVideoIndex = nextIndex
+            
+            // Notify VideoManager about completion
+            val completedVideoMid = videoMids[videoIndex]
+            completedVideoMid?.let { mid ->
+                VideoManager.onVideoCompleted(mid)
+            }
         }
     }
 
@@ -193,9 +233,10 @@ fun MediaPreviewGrid(
                         },
                     index = 0,
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
-                    autoPlay = firstVideoIndex == 0,
+                    autoPlay = currentPlayingVideoIndex == 0,
                     inPreviewGrid = true,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onVideoCompleted = { onVideoCompleted(0) }
                 )
             }
             2 -> {
@@ -226,40 +267,42 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = idx,
-                                    autoPlay = firstVideoIndex == idx,
+                                    autoPlay = currentPlayingVideoIndex == idx,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(idx) }
                                 )
                             }
                         }
                     }
-                } else if (isPortrait0 && isPortrait1) {
-                    // Both portrait: set grid's aspectRatio to 1 and align them horizontally
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        horizontalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        for (idx in 0..1) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
+                                    } else if (isPortrait0 && isPortrait1) {
+                        // Both portrait: set grid's aspectRatio to 1 and align them horizontally
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f),
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            for (idx in 0..1) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = idx,
-                                    autoPlay = firstVideoIndex == idx,
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel
-                                )
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier
+                                            .fillMaxSize(),
+                                        index = idx,
+                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        onVideoCompleted = { onVideoCompleted(idx) }
+                                    )
+                                }
                             }
                         }
-                    }
                 } else {
                     // Mixed orientations: set grid's ratio to 4:3 and let landscape item takes wider space
                     Row(
@@ -281,9 +324,10 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = firstVideoIndex == 0,
+                                    autoPlay = currentPlayingVideoIndex == 0,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(0) }
                                 )
                             }
                             Box(
@@ -297,9 +341,10 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = firstVideoIndex == 1,
+                                    autoPlay = currentPlayingVideoIndex == 1,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
                                 )
                             }
                         } else {
@@ -315,9 +360,10 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = firstVideoIndex == 0,
+                                    autoPlay = currentPlayingVideoIndex == 0,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(0) }
                                 )
                             }
                             Box(
@@ -331,9 +377,10 @@ fun MediaPreviewGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = firstVideoIndex == 1,
+                                    autoPlay = currentPlayingVideoIndex == 1,
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
                                 )
                             }
                         }
@@ -372,9 +419,10 @@ fun MediaPreviewGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = firstVideoIndex == 0,
+                                autoPlay = currentPlayingVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: right 38.2%, stacked vertically
@@ -395,9 +443,10 @@ fun MediaPreviewGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = firstVideoIndex == idx,
+                                        autoPlay = currentPlayingVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel
+                                        viewModel = viewModel,
+                                        onVideoCompleted = { onVideoCompleted(idx) }
                                     )
                                 }
                             }
@@ -423,9 +472,10 @@ fun MediaPreviewGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = firstVideoIndex == 0,
+                                autoPlay = currentPlayingVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: bottom 38.2%, side by side
@@ -448,9 +498,10 @@ fun MediaPreviewGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = firstVideoIndex == idx,
+                                        autoPlay = currentPlayingVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel
+                                        viewModel = viewModel,
+                                        onVideoCompleted = { onVideoCompleted(idx) }
                                     )
                                 }
                             }
@@ -475,9 +526,10 @@ fun MediaPreviewGrid(
                                 modifier = Modifier
                                     .fillMaxSize(),
                                 index = 0,
-                                autoPlay = firstVideoIndex == 0,
+                                autoPlay = currentPlayingVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: right 38.2%, stacked vertically
@@ -498,9 +550,10 @@ fun MediaPreviewGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = firstVideoIndex == idx,
+                                        autoPlay = currentPlayingVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel
+                                        viewModel = viewModel,
+                                        onVideoCompleted = { onVideoCompleted(idx) }
                                     )
                                 }
                             }
@@ -526,9 +579,10 @@ fun MediaPreviewGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = firstVideoIndex == 0,
+                                autoPlay = currentPlayingVideoIndex == 0,
                                 inPreviewGrid = true,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: bottom 38.2%, side by side
@@ -551,9 +605,10 @@ fun MediaPreviewGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = firstVideoIndex == idx,
+                                        autoPlay = currentPlayingVideoIndex == idx,
                                         inPreviewGrid = true,
-                                        viewModel = viewModel
+                                        viewModel = viewModel,
+                                        onVideoCompleted = { onVideoCompleted(idx) }
                                     )
                                 }
                             }
@@ -595,9 +650,10 @@ fun MediaPreviewGrid(
                             index = index,
                             numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                                 mediaItems.size - maxItems else 0,
-                            autoPlay = firstVideoIndex == index,
+                            autoPlay = currentPlayingVideoIndex == index,
                             inPreviewGrid = true,
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            onVideoCompleted = { onVideoCompleted(index) }
                         )
                     }
                 }
