@@ -356,7 +356,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                        .padding(horizontal = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     TextButton(
