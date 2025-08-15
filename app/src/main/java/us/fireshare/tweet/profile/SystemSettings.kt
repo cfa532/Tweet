@@ -181,29 +181,29 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 Text(stringResource(R.string.clear_all_cached_data))
                 Button(
                     onClick = {
-                        appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                                    // Clear all tweet cache (memory + database)
-                        TweetCacheManager.clearAllCachedTweets()
-                        
+                        appUserViewModel.viewModelScope.launch(Dispatchers.IO)
+                        {
+                            // Clear all tweet cache (memory + database)
+                            TweetCacheManager.clearAllCachedTweets()
                             // Clear video cache
                             SimplifiedVideoCacheManager.clearVideoCache(context)
 
-                                                                            // Clear all user cache
-                        TweetCacheManager.clearAllCachedUsers()
-                        
-                        // Clear tweet instances from memory
-                        Tweet.clearAllInstances()
-                        
-                        // Release all video players on main thread
-                        withContext(Dispatchers.Main) {
-                            VideoManager.releaseAllVideos()
-                        }
-                        
-                        // Clear image cache
-                        ImageCacheManager.clearAllCachedImages(context)
+                            // Clear all user cache
+                            TweetCacheManager.clearAllCachedUsers()
 
-                        @Suppress("UnsafeOptInUsageError")
-                        isCachedCleared = true
+                            // Clear tweet instances from memory
+                            Tweet.clearAllInstances()
+
+                            // Release all video players on main thread
+                            withContext(Dispatchers.Main) {
+                                VideoManager.releaseAllVideos()
+                            }
+
+                            // Clear image cache
+                            ImageCacheManager.clearAllCachedImages(context)
+
+                            @Suppress("UnsafeOptInUsageError")
+                            isCachedCleared = true
                         }
                     },
                     enabled = !isCachedCleared
