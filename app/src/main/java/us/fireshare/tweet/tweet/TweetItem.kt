@@ -366,11 +366,12 @@ private fun RetweetWithContent(
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier
-                        .offset(y = (-20).dp)
-                        .padding(start = 4.dp)
                         .fillMaxWidth()
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .padding(top = 4.dp, bottom = 8.dp)
+                    ) {
                         // Text content of the tweet
                         if (hasContent) {
                             SelectableText(
@@ -512,6 +513,7 @@ private fun QuotedTweetContent(
                     ) { factory ->
                         factory.create(originalTweet!!)
                     },
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     isQuoted = true,
                     parentEntry = parentEntry
                 )

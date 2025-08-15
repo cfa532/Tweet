@@ -76,7 +76,7 @@ fun TweetItemBody(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
-            .padding(start = 4.dp, end = 8.dp)
+            .padding(start = 4.dp, end = 4.dp)
             .clickable(enabled = canNavigate, onClick = {
                 // necessary to deal with corrupted data.
                 if (canNavigate) {

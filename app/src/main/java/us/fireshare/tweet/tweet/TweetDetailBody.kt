@@ -179,13 +179,13 @@ fun TweetDetailBody(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 2.dp,
-                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
+                                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(16.dp),
-                                    contentAlignment = androidx.compose.ui.Alignment.Center
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     androidx.compose.material3.CircularProgressIndicator(
                                         modifier = Modifier.size(24.dp),
@@ -197,7 +197,7 @@ fun TweetDetailBody(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 2.dp,
-                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 0.dp)
+                                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
                             ) {
                                 TweetItemBody(
                                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
