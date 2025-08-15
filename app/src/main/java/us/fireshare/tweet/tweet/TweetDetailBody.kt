@@ -312,16 +312,14 @@ fun TweetDropdownMenu(
     ) {
         IconButton(
             modifier = Modifier
-                .height(48.dp)
-                .alpha(0.7f)
-                .offset(x = 16.dp, y = (-8).dp)
-                .rotate(-90f),
+                .size(24.dp)
+                .alpha(0.7f),
             onClick = { expanded = !expanded }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.more),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
+            Text(
+                text = "•••",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
         DropdownMenu(

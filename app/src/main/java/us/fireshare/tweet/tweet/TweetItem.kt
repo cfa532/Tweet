@@ -401,8 +401,7 @@ private fun RetweetWithContent(
 
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 0.dp),
+                        .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
                     // State hoist

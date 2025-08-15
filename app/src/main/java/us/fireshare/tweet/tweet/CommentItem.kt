@@ -1,6 +1,8 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +63,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaPreviewGrid
 import us.fireshare.tweet.widget.SelectableText
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun CommentItem(
     comment: Tweet,
@@ -104,7 +107,7 @@ fun CommentItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier.padding(bottom = 0.dp),
+                        modifier = Modifier.padding(bottom = 0.dp, top = 2.dp),
                     ) {
                         Text(
                             text = author.name ?: "No One",
@@ -179,18 +182,20 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
         expanded = false
     }
 
-    Box {
+    Box (
+        modifier = Modifier.padding(end = 0.dp)
+    ) {
         // the 3 dots button on the right
         IconButton(
             modifier = Modifier
                 .size(24.dp)
-                .alpha(0.9f)
-                .rotate(-90f),
+                .alpha(0.9f),
             onClick = { expanded = !expanded }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.more),
-                tint = Color.Gray
+            Text(
+                text = "•••",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 2.dp)
             )
         }
         DropdownMenu(

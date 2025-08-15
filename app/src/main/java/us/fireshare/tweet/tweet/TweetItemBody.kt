@@ -113,10 +113,11 @@ fun TweetItemBody(
                         .padding(vertical = 0.dp)
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-//                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.Top
                 ) {
                     // User info text
                     Row(
+                        modifier = Modifier.padding(top = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -137,7 +138,7 @@ fun TweetItemBody(
                     }
 
                     // Dropdown menu
-//                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
+                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
                 }
 
                 // Text content of the tweet
@@ -174,8 +175,7 @@ fun TweetItemBody(
                 if (!isQuoted) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 0.dp),
+                            .fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         LikeButton(viewModel)

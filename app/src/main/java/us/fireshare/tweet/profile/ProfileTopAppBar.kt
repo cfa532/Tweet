@@ -155,9 +155,11 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 }
                 Box {
                     IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
+                        Text(
+                            text = "•••",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         )
                     }
                     DropdownMenu(

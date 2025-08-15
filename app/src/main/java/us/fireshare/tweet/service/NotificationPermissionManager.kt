@@ -56,27 +56,19 @@ object NotificationPermissionManager {
     }
 
     /**
-     * Request notification permission using the new permission launcher
+     * Request notification permission using the provided permission launcher
      */
     fun requestNotificationPermission(
-        activity: ComponentActivity,
+        permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>,
         onPermissionResult: (Boolean) -> Unit
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Use the new permission launcher for Android 13+
-            val permissionLauncher = activity.registerForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                Timber.d("Notification permission result: $isGranted")
-                markNotificationPermissionAsked(activity)
-                onPermissionResult(isGranted)
-            }
-            
+            // Use the provided permission launcher for Android 13+
             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            onPermissionResult(true) // Will be updated when launcher callback is called
         } else {
             // For older versions, just mark as asked and don't open settings
             // Let users enable notifications manually if they want
-            markNotificationPermissionAsked(activity)
             onPermissionResult(false)
         }
     }

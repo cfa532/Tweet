@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Environment
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,14 @@ import java.util.concurrent.TimeUnit
 class TweetActivity : ComponentActivity() {
     private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
+    
+    // Register activity result launcher for notification permission
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        Timber.d("Notification permission result: $isGranted")
+        NotificationPermissionManager.markNotificationPermissionAsked(this)
+    }
 
     @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,7 +118,7 @@ class TweetActivity : ComponentActivity() {
                 } else {
                     // Request permission
                     NotificationPermissionManager.requestNotificationPermission(
-                        this@TweetActivity
+                        notificationPermissionLauncher
                     ) { isGranted ->
                         Timber.d("Notification permission request completed: $isGranted")
                     }
