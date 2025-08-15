@@ -78,6 +78,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.tweet.CommentButton
@@ -290,7 +291,7 @@ fun MediaBrowser(
                                 VideoManager.returnFromFullScreen(videoMid)
                                 navController.popBackStack()
                             },
-                            enableImmersiveMode = false // MediaBrowser already handles immersive mode
+                            enableImmersiveMode = true // Enable immersive mode for orientation control
                         )
                     } else {
                         // Fallback to creating new player
@@ -300,7 +301,7 @@ fun MediaBrowser(
                                 Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
                                 navController.popBackStack()
                             },
-                            enableImmersiveMode = false, // MediaBrowser already handles immersive mode
+                            enableImmersiveMode = true, // Enable immersive mode for orientation control
                             onHorizontalSwipe = { direction ->
                                 Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
                                 animationScope.launch {
@@ -455,8 +456,7 @@ fun MediaBrowser(
                 ) {
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation =
-                                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            activity?.let { OrientationManager.lockToPortrait(it) }
                             navController.popBackStack()
                         },
                         modifier = Modifier
@@ -478,10 +478,12 @@ fun MediaBrowser(
                     }
                     IconButton(
                         onClick = {
-                            activity?.requestedOrientation = when (configuration.orientation) {
-                                Configuration.ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                Configuration.ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                                else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            activity?.let { act ->
+                                when (configuration.orientation) {
+                                    Configuration.ORIENTATION_LANDSCAPE -> OrientationManager.lockToPortrait(act)
+                                    Configuration.ORIENTATION_PORTRAIT -> OrientationManager.lockToLandscape(act)
+                                    else -> OrientationManager.allowRotation(act)
+                                }
                             }
                         },
                         modifier = Modifier

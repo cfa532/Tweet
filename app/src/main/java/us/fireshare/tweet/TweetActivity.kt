@@ -42,6 +42,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
+import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.TweetTheme
 import java.util.concurrent.TimeUnit
 
@@ -62,6 +63,9 @@ class TweetActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 //        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Lock the app to portrait orientation by default
+        OrientationManager.lockToPortrait(this)
 
 //        setTheme(R.style.Theme_Tweet)
         installSplashScreen().apply {

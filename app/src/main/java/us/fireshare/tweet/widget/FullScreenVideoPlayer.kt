@@ -44,9 +44,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
+import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.service.OrientationManager
 import kotlin.math.abs
 
 /**
@@ -87,7 +89,8 @@ fun FullScreenVideoPlayer(
                     }
 
                     Player.STATE_BUFFERING -> {
-                        TODO()
+                        // Video is buffering, this is normal - no action needed
+                        Timber.d("FullScreenVideoPlayer: Video is buffering")
                     }
                 }
             }
@@ -110,8 +113,9 @@ fun FullScreenVideoPlayer(
         // Hide system bars on enter
         if (enableImmersiveMode) {
             activity?.let { act ->
-                // Prevent activity recreation on configuration changes (like rotation)
-                act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                // Allow rotation in full-screen mode
+                Timber.d("FullScreenVideoPlayer: Entering full-screen, allowing rotation")
+                OrientationManager.allowRotation(act)
                 
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
@@ -124,11 +128,12 @@ fun FullScreenVideoPlayer(
         }
 
         onDispose {
-            // Show system bars on exit and restore normal orientation
+            // Show system bars on exit and restore portrait orientation
             if (enableImmersiveMode) {
                 activity?.let { act ->
-                    // Restore normal orientation handling
-                    act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    // Restore portrait orientation
+                    Timber.d("FullScreenVideoPlayer: Exiting full-screen, locking to portrait")
+                    OrientationManager.lockToPortrait(act)
                     
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
@@ -306,8 +311,9 @@ fun FullScreenVideoPlayer(
         // Hide system bars on enter
         if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             activity?.let { act ->
-                // Prevent activity recreation on configuration changes (like rotation)
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                // Allow rotation in full-screen mode
+                Timber.d("FullScreenVideoPlayer (API 30+): Entering full-screen, allowing rotation")
+                OrientationManager.allowRotation(act)
                 
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
@@ -318,11 +324,12 @@ fun FullScreenVideoPlayer(
         }
 
         onDispose {
-            // Show system bars on exit and restore normal orientation
+            // Show system bars on exit and restore portrait orientation
             if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity?.let { act ->
-                    // Restore normal orientation handling
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    // Restore portrait orientation
+                    Timber.d("FullScreenVideoPlayer (API 30+): Exiting full-screen, locking to portrait")
+                    OrientationManager.lockToPortrait(act)
                     
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())

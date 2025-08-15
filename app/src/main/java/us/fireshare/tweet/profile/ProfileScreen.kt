@@ -48,6 +48,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
@@ -85,7 +86,7 @@ fun ProfileScreen(
     var bottomBarTransparency by remember { mutableStateOf(0.98f) }
 
     val activity = context as? Activity
-    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    activity?.let { OrientationManager.lockToPortrait(it) }
 
     LaunchedEffect(Unit) {
         // load tweets only when user profile screen is opened.
