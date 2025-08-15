@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,14 +187,13 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
         // the 3 dots button on the right
         IconButton(
             modifier = Modifier
-                .size(24.dp)
-                .alpha(0.9f),
+                .size(16.dp)
+                .alpha(0.7f),
             onClick = { expanded = !expanded }) {
-            Text(
-                text = "•••",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
-                modifier = Modifier.padding(horizontal = 2.dp)
+            Icon(
+                painter = painterResource(R.drawable.ellipsis),
+                contentDescription = "More options",
+                tint = MaterialTheme.colorScheme.primary
             )
         }
         DropdownMenu(

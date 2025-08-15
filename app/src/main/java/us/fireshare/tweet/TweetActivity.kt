@@ -82,7 +82,7 @@ class TweetActivity : ComponentActivity() {
             requestNotificationPermissionIfNeeded()
 
             launch {
-                delay(60000)
+                delay(15000)
                 activityViewModel.checkForUpgrade(this@TweetActivity)
             }
 

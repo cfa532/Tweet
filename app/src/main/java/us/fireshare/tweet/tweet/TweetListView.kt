@@ -546,7 +546,7 @@ fun TweetListView(
                     if (tweets.indexOf(tweet) < tweets.size - 1) {
                         HorizontalDivider(
                             modifier = Modifier
-                                .padding(bottom = 4.dp)
+                                .padding(bottom = 8.dp)
                                 .padding(horizontal = 1.dp),
                             thickness = 1.dp,
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)

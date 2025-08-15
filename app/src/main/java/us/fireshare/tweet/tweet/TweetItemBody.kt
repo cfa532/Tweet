@@ -53,20 +53,20 @@ fun TweetItemBody(
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
-    
+
     // Optimize: Use derivedStateOf to avoid unnecessary recomposition
     val author by remember(tweet.author) {
         derivedStateOf { tweet.author }
     }
-    
+
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }
     }
-    
+
     val hasAttachments by remember(tweet.attachments) {
         derivedStateOf { !tweet.attachments.isNullOrEmpty() }
     }
-    
+
     val canNavigate by remember(tweet.authorId, tweet.mid) {
         derivedStateOf { tweet.authorId != null && tweet.mid != null }
     }
@@ -160,8 +160,8 @@ fun TweetItemBody(
                 // Media files
                 if (hasAttachments) {
                     // Stabilize attachments to prevent video recomposition
-                    val stableAttachments = remember(tweet.attachments?.map { it.mid }) { 
-                        tweet.attachments!! 
+                    val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
+                        tweet.attachments!!
                     }
                     Surface(
                         modifier = Modifier.fillMaxWidth()

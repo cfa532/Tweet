@@ -198,14 +198,6 @@ fun ReplyEditorBox(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
-
-                // Expand icon
-                Text(
-                    text = "•••",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
             }
         } else {
             // Expanded state - full editor
