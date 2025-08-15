@@ -3,9 +3,6 @@ package us.fireshare.tweet
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
-import android.app.job.JobInfo
-import android.app.job.JobScheduler
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -44,7 +41,6 @@ import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.TweetTheme
-import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -139,7 +135,7 @@ class ActivityViewModel: ViewModel() {
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(IO) {
             try {
-                delay(30000)
+                delay(15000)    // delay 15s before checking for upgrade.
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
                 val currentVersion =
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName

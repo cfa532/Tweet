@@ -1,7 +1,8 @@
 package us.fireshare.tweet.profile
 
 import android.app.Activity
-import android.content.pm.ActivityInfo
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +56,7 @@ import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
+@RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun ProfileScreen(
@@ -74,7 +76,6 @@ fun ProfileScreen(
     }
 
     val initState by viewModel.initState.collectAsState()
-    val user by viewModel.user.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -182,6 +183,7 @@ fun ProfileScreen(
  * Custom composable that combines profile details, pinned tweets, and regular tweets
  * using the proper TweetListView component for pagination.
  */
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 private fun ProfileContentWithTweetListView(
@@ -196,7 +198,6 @@ private fun ProfileContentWithTweetListView(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
-    val user by viewModel.user.collectAsState()
 
     // Create header content with profile details and pinned tweets - make it stable
     // Use remember with no dependencies to create a stable reference that doesn't change

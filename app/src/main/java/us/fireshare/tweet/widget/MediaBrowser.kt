@@ -1,7 +1,6 @@
 package us.fireshare.tweet.widget
 
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.view.WindowInsets
@@ -80,7 +79,6 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
-import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.tweet.CommentButton
 import us.fireshare.tweet.tweet.LikeButton
 import us.fireshare.tweet.tweet.RetweetButton
@@ -221,9 +219,7 @@ fun MediaBrowser(
             // Show system bars when exiting full screen
             activity?.window?.let { window ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.insetsController?.let { controller ->
-                        controller.show(WindowInsets.Type.systemBars())
-                    }
+                    window.insetsController?.show(WindowInsets.Type.systemBars())
                 } else {
                     // Fallback for older versions
                     val controller = WindowInsetsControllerCompat(window, window.decorView)
@@ -390,10 +386,6 @@ fun MediaBrowser(
                 }
                 // image view with enhanced drag effects
                 else -> {
-                    // Get the preview URL for this image to use as placeholder
-                    val previewUrl =
-                        mediaItem.url // The same URL is used for both preview and full-size
-
                     AdvancedImageViewer(
                         imageUrl = mediaItem.url,
                         onClose = { navController.popBackStack() },

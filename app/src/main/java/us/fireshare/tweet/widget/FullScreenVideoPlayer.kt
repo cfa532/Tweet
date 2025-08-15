@@ -1,12 +1,10 @@
 package us.fireshare.tweet.widget
 
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,7 +44,6 @@ import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
-import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.service.OrientationManager
 import kotlin.math.abs
 
