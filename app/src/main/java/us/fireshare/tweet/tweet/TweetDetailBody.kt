@@ -331,9 +331,9 @@ fun TweetDropdownMenu(
                 ),
         ) {
             if (parentTweet != null) {
-                // this is a retweet. Allow the author to delete it.
-                if (parentTweet.authorId == appUser.mid) {
-                    TweetDropdownMenuItems(parentTweet, parentEntry) {
+                // this is a retweet. Show menu for the retweet if current user is the retweet author
+                if (tweet.authorId == appUser.mid) {
+                    TweetDropdownMenuItems(tweet, parentEntry) {
                         expanded = false
                     }
                 }
