@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
@@ -107,10 +108,19 @@ fun TweetDetailBody(
                     }
                     Text(
                         text = author?.name ?: "No One",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 2.dp)
+                        modifier = Modifier.padding(start = 2.dp),
+                        style = MaterialTheme.typography.labelLarge
                     )
-                    Text(text = "@${author?.username}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "@${author?.username}",
+                        modifier = Modifier.padding(horizontal = 0.dp),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(text = " • ", fontSize = 12.sp)
+                    Text(
+                        text = localizedTimeDifference(tweet.timestamp),
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
                 // the 3 dots at the right end
                 TweetDropdownMenu(tweet, parentEntry)
