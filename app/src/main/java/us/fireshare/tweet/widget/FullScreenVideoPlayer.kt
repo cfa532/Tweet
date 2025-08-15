@@ -1,6 +1,7 @@
 package us.fireshare.tweet.widget
 
 import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
@@ -104,11 +105,14 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Immersive full screen
+    // Immersive full screen and orientation handling
     DisposableEffect(Unit) {
         // Hide system bars on enter
         if (enableImmersiveMode) {
             activity?.let { act ->
+                // Prevent activity recreation on configuration changes (like rotation)
+                act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
                     // Hide system bars
@@ -120,9 +124,12 @@ fun FullScreenVideoPlayer(
         }
 
         onDispose {
-            // Show system bars on exit
+            // Show system bars on exit and restore normal orientation
             if (enableImmersiveMode) {
                 activity?.let { act ->
+                    // Restore normal orientation handling
+                    act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
@@ -294,11 +301,14 @@ fun FullScreenVideoPlayer(
         exoPlayer.playWhenReady = true
     }
 
-    // Immersive full screen and audio control
+    // Immersive full screen and orientation handling
     DisposableEffect(Unit) {
         // Hide system bars on enter
         if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             activity?.let { act ->
+                // Prevent activity recreation on configuration changes (like rotation)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
                     controller.hide(android.view.WindowInsets.Type.systemBars())
@@ -308,9 +318,12 @@ fun FullScreenVideoPlayer(
         }
 
         onDispose {
-            // Show system bars on exit
+            // Show system bars on exit and restore normal orientation
             if (enableImmersiveMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 activity?.let { act ->
+                    // Restore normal orientation handling
+                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }

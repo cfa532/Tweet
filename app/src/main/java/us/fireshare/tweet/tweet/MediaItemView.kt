@@ -48,13 +48,12 @@ import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.AudioPreview
-import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.ImageViewer
-import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
@@ -70,9 +69,7 @@ fun MediaItemView(
     viewModel: TweetViewModel,
     onVideoCompleted: (() -> Unit)? = null
 ) {
-    // State for full-screen video and image
-    var showFullScreenVideo by remember { mutableStateOf(false) }
-    var fullScreenVideoMid by remember { mutableStateOf<String?>(null) }
+    // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
@@ -103,9 +100,16 @@ fun MediaItemView(
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
-                // Show full-screen video directly
-                fullScreenVideoMid = mediaItems[idx].mid
-                showFullScreenVideo = true
+                // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
+                val params = MediaViewerParams(
+                    mediaItems.map {
+                        MediaItem(
+                            getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                            it.type
+                        )
+                    }, idx, tweet.mid, tweet.authorId
+                )
+                navController.navigate(NavTweet.MediaViewer(params))
             }
             else -> {
                 // Open other media types with appropriate apps
@@ -228,57 +232,7 @@ fun MediaItemView(
         }
     }
     
-    // Full-screen video overlay
-    if (showFullScreenVideo && fullScreenVideoMid != null) {
-        val videoMid = fullScreenVideoMid!!
-        val mediaUrl = getMediaUrl(videoMid, tweet.author?.baseUrl.orEmpty()).toString()
-        
-        // Try to get existing player for seamless transition
-        val existingPlayer = VideoManager.transferToFullScreen(videoMid)
-        
-        Dialog(
-            onDismissRequest = { 
-                showFullScreenVideo = false
-                // Return player back to VideoManager when dialog is dismissed
-                existingPlayer?.let { player ->
-                    VideoManager.returnFromFullScreen(videoMid)
-                }
-            },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
-                if (existingPlayer != null) {
-                    // Use existing player for seamless transition - create a simple full-screen wrapper
-                    FullScreenVideoPlayer(
-                        existingPlayer = existingPlayer,
-                        videoItem = mediaItems.find { it.mid == videoMid } ?: mediaItems.first(),
-                        onClose = {
-                            showFullScreenVideo = false
-                            // Return player back to VideoManager when closed
-                            VideoManager.returnFromFullScreen(videoMid)
-                        },
-                        enableImmersiveMode = true
-                    )
-                } else {
-                    // Fallback to regular full-screen player
-                    FullScreenVideoPlayer(
-                        videoUrl = mediaUrl,
-                        onClose = { showFullScreenVideo = false },
-                        enableImmersiveMode = true,
-                        autoReplay = true
-                    )
-                }
-            }
-        }
-    }
+
     
     // Full-screen image overlay
     if (showFullScreenImage && fullScreenImageMid != null) {

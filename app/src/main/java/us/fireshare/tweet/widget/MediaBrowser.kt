@@ -8,6 +8,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -78,6 +79,7 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.tweet.BookmarkButton
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.tweet.CommentButton
 import us.fireshare.tweet.tweet.LikeButton
 import us.fireshare.tweet.tweet.RetweetButton
@@ -85,6 +87,7 @@ import us.fireshare.tweet.tweet.ShareButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import kotlin.math.roundToInt
 
+@RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
 @Composable
 fun MediaBrowser(
@@ -265,45 +268,57 @@ fun MediaBrowser(
         ) { page ->
             val mediaItem = mediaItems[page]
             when (mediaItem.type) {
-                // video preview - use new FullScreenVideoPlayer
+                // video preview - use existing player from VideoManager
                 MediaType.Video, MediaType.HLS_VIDEO -> {
                     Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
                     // Extract video mid from URL for VideoManager using the same method as VideoPreview
                     val videoMid = mediaItem.url.getMimeiKeyFromUrl()
-                    Timber.d("MediaBrowser - Video URL: ${mediaItem.url}, extracted videoMid: $videoMid")
 
-                    // Add more debugging
-                    Timber.d("MediaBrowser - Creating FullScreenVideoPlayer for video: $videoMid")
-                    Timber.d("MediaBrowser - Video type: ${mediaItem.type}")
-                    Timber.d("MediaBrowser - Current page: ${pagerState.currentPage}, Video page: $page")
-
-                    // Only activate video if it's the current page
-                    val isCurrentPage = pagerState.currentPage == page
-
-                    FullScreenVideoPlayer(
-                        videoUrl = mediaItem.url,
-                        onClose = {
-                            Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
-                            navController.popBackStack()
-                        },
-                        enableImmersiveMode = false, // MediaBrowser already handles immersive mode
-                        onHorizontalSwipe = { direction ->
-                            Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
-                            animationScope.launch {
-                                if (direction > 0) {
-                                    // Swipe right, go to next page
-                                    pagerState.animateScrollToPage(
-                                        pagerState.currentPage + 1
-                                    )
-                                } else {
-                                    // Swipe left, go to previous page
-                                    pagerState.animateScrollToPage(
-                                        pagerState.currentPage - 1
-                                    )
+                    // Try to get existing player for seamless transition
+                    val existingPlayer = VideoManager.transferToFullScreen(videoMid)
+                    val attachments = tweetAttachments // Store in local variable for smart casting
+                    
+                    if (existingPlayer != null && attachments != null) {
+                        // Use existing player for seamless transition
+                        val videoItem = attachments.find { it.mid == videoMid } ?: attachments.first()
+                        FullScreenVideoPlayer(
+                            existingPlayer = existingPlayer,
+                            videoItem = videoItem,
+                            onClose = {
+                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
+                                // Return player back to VideoManager when closed
+                                VideoManager.returnFromFullScreen(videoMid)
+                                navController.popBackStack()
+                            },
+                            enableImmersiveMode = false // MediaBrowser already handles immersive mode
+                        )
+                    } else {
+                        // Fallback to creating new player
+                        FullScreenVideoPlayer(
+                            videoUrl = mediaItem.url,
+                            onClose = {
+                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
+                                navController.popBackStack()
+                            },
+                            enableImmersiveMode = false, // MediaBrowser already handles immersive mode
+                            onHorizontalSwipe = { direction ->
+                                Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
+                                animationScope.launch {
+                                    if (direction > 0) {
+                                        // Swipe right, go to next page
+                                        pagerState.animateScrollToPage(
+                                            pagerState.currentPage + 1
+                                        )
+                                    } else {
+                                        // Swipe left, go to previous page
+                                        pagerState.animateScrollToPage(
+                                            pagerState.currentPage - 1
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
                 // audio preview - keep existing implementation
                 MediaType.Audio -> {
