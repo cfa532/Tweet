@@ -123,8 +123,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     Text(if (showCacheInfo) stringResource(R.string.hide) else stringResource(R.string.show))
                 }
             }
-            
-
 
             // Show cache information when expanded
             if (showCacheInfo) {
@@ -272,39 +270,36 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
             }
 
-            Row(
+            // Spacer to push bottom elements down
+            Spacer(modifier = Modifier.weight(1f))
+            
+            // Bottom section with version, user ID, and privacy policy
+            Column(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("") // Empty text to take up space
+                TextButton(
+                    onClick = { showDialog = true },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Privacy Policy")
+                }
+                SelectableText(
+                    text = appUser.mid,
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Text(
-                    "Privacy policy",
-                    modifier = Modifier
-                        .clickable { showDialog = true }
-                        .background(
-                            MaterialTheme.colorScheme.onTertiary,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                        .width(intrinsicSize = IntrinsicSize.Max),
-                    color = MaterialTheme.colorScheme.primary
+                    "Version: ${BuildConfig.VERSION_NAME}",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
-            Text(
-                "Version: ${BuildConfig.VERSION_NAME}",
-                color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            SelectableText(
-                modifier = Modifier.padding(top = 8.dp),
-                text = appUser.mid,
-                color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodyMedium
-            )
         }
         if (showDialog) {
             BasicAlertDialog(
