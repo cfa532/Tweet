@@ -159,6 +159,10 @@ fun TweetItemBody(
 
                 // Media files
                 if (hasAttachments) {
+                    // Stabilize attachments to prevent video recomposition
+                    val stableAttachments = remember(tweet.attachments?.map { it.mid }) { 
+                        tweet.attachments!! 
+                    }
                     Surface(
                         modifier = Modifier.fillMaxWidth()
                             .padding(top = 4.dp, end = 4.dp)
@@ -166,7 +170,7 @@ fun TweetItemBody(
                         tonalElevation = 4.dp,
                         shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaPreviewGrid(tweet.attachments!!, viewModel)
+                        MediaPreviewGrid(stableAttachments, viewModel)
                     }
                 }
 

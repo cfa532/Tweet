@@ -53,6 +53,7 @@ fun MediaPreviewGrid(
     mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel
 ) {
+    Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
     

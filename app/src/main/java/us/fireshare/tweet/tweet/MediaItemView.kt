@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -147,7 +148,10 @@ fun MediaItemView(
             .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
-        Timber.d("MediaItemView: Processing attachment with type: ${attachment.type}")
+            // Log only when processing video attachments
+    if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+        Timber.d("MediaItemView: Processing video attachment for index: $index")
+    }
         when (attachment.type) {
             MediaType.Image -> {
                 // Use a Box with clickable modifier to handle image clicks
@@ -166,17 +170,25 @@ fun MediaItemView(
                 }
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
-                VideoPreview(
-                    url = attachment.url,
-                    modifier = modifier,
-                    index = index,
-                    autoPlay = autoPlay,
-                    inPreviewGrid = inPreviewGrid,
-                    aspectRatio = mediaItems[index].aspectRatio,
-                    callback = { goto(index) },
-                    videoMid = mediaItems[index].mid,
-                    onVideoCompleted = onVideoCompleted
-                )
+                // Use a completely stable approach with key
+                val videoMid = mediaItems[index].mid
+                val videoUrl = attachment.url
+                val videoAspectRatio = mediaItems[index].aspectRatio
+                
+                // Use key with a stable identifier to prevent recreation
+                key("video_${videoMid}_${index}") {
+                    VideoPreview(
+                        url = videoUrl,
+                        modifier = modifier,
+                        index = index,
+                        autoPlay = autoPlay,
+                        inPreviewGrid = inPreviewGrid,
+                        aspectRatio = videoAspectRatio,
+                        callback = { goto(index) },
+                        videoMid = videoMid,
+                        onVideoCompleted = onVideoCompleted
+                    )
+                }
             }
             MediaType.Audio -> {
                 val backgroundModifier = if (index % 2 != 0) { // Check if index is odd

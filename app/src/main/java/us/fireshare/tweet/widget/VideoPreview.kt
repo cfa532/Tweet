@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,15 +66,19 @@ fun VideoPreview(
     onVideoCompleted: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var isVideoVisible by remember { mutableStateOf(false) }
-    var isMuted by remember { mutableStateOf(preferenceHelper.getSpeakerMute()) }
-    var isLoading by remember {
+
+    // Use completely stable state that doesn't change during recompositions
+    var isVideoVisible by remember(videoMid) { mutableStateOf(false) }
+    var isMuted by remember(videoMid) { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    var isLoading by remember(videoMid) {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
-    var showTimeLabel by remember { mutableStateOf(false) }
-    var remainingTime by remember { mutableLongStateOf(0L) }
+    var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
+    var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
 
-    val exoPlayer = remember(url, videoMid) {
+    // Use videoMid as the only key to prevent ExoPlayer recreation
+    val exoPlayer = remember(videoMid) {
+        Timber.d("VideoPreview: Creating new ExoPlayer for videoMid: $videoMid")
         val player = if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url)
         } else {
@@ -252,7 +257,11 @@ fun VideoPreview(
             .clipToBounds()
             .background(MaterialTheme.colorScheme.surfaceVariant) // Material3 surface variant for loading background
             .onGloballyPositioned { layoutCoordinates ->
-                isVideoVisible = isElementVisible(layoutCoordinates)
+                val newVisibility = isElementVisible(layoutCoordinates)
+                if (isVideoVisible != newVisibility) {
+                    Timber.d("VideoPreview: Visibility changed for videoMid: $videoMid, isVideoVisible: $isVideoVisible -> $newVisibility")
+                    isVideoVisible = newVisibility
+                }
             }
             .clickable {
                 // Auto-start video in full screen
