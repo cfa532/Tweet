@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -226,20 +230,33 @@ private fun RetweetContent(
                         val forwardBy = if (tweet.authorId == appUser.mid)
                             stringResource(R.string.forward_by)
                         else "@${tweet.author?.username} " + stringResource(R.string.forwarded)
-                        Text(
-                            text = forwardBy,
-                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                            color = MaterialTheme.colorScheme.tertiary,
+
+                        Row(
                             modifier = Modifier
-                                .offset(y = 12.dp)
+                                .offset(y = 0.dp)
                                 .zIndex(1f)
-                                .padding(start = 24.dp),
-                        )
+                                .padding(start = 40.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Repeat,
+                                contentDescription = stringResource(R.string.forwarded),
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = forwardBy,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
                         // The quoted/original tweet card
                         TweetItemBody(
                             originalTweetViewModel,
                             parentEntry = parentEntry,
-                            parentTweet = tweet
+                            parentTweet = tweet,
+                            modifier = Modifier.offset(y = (-8).dp)
                         )
                     }
                 }
