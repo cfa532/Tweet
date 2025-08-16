@@ -63,60 +63,58 @@ fun TweetDropdownMenuItems(
     val context = LocalContext.current
 
     // Only author can delete a tweet
-    if (tweet.authorId == appUser.mid) {
-        DropdownMenuItem(
-            modifier = Modifier.alpha(0.8f),
-            onClick = {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.delete_tweet),
-                    Toast.LENGTH_SHORT
-                ).show()
-                // Dismiss popup immediately for better UX
-                onDismissRequest()
+    DropdownMenuItem(
+        modifier = Modifier.alpha(0.8f),
+        onClick = {
+            Toast.makeText(
+                context,
+                context.getString(R.string.delete_tweet),
+                Toast.LENGTH_SHORT
+            ).show()
+            // Dismiss popup immediately for better UX
+            onDismissRequest()
 
-                tweetFeedViewModel.viewModelScope.launch(IO) {
-                    try {
-                        tweetFeedViewModel.delTweet(navController, tweet.mid, {
-                            applicationScope.launch(IO) {
-                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                    val originalTweet = HproseInstance.fetchTweet(
-                                        tweet.originalTweetId!!,
-                                        tweet.originalAuthorId!!,
-                                        shouldCache = false
+            tweetFeedViewModel.viewModelScope.launch(IO) {
+                try {
+                    tweetFeedViewModel.delTweet(navController, tweet.mid, {
+                        applicationScope.launch(IO) {
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                val originalTweet = HproseInstance.fetchTweet(
+                                    tweet.originalTweetId!!,
+                                    tweet.originalAuthorId!!,
+                                    shouldCache = false
+                                )
+                                originalTweet?.let {
+                                    originTweetViewModel?.updateRetweetCount(
+                                        it,      // original tweet
+                                        tweet.mid,      // retweet Id
+                                        -1
                                     )
-                                    originalTweet?.let {
-                                        originTweetViewModel?.updateRetweetCount(
-                                            it,      // original tweet
-                                            tweet.mid,      // retweet Id
-                                            -1
-                                        )
-                                    }
                                 }
                             }
-                        }, appUserViewModel)
-                    } catch (e: Exception) {
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Error deleting tweet: ${e.message}")
-                    }
-                }
-            },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = stringResource(R.string.delete),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                    Text(
-                        text = stringResource(R.string.delete),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        }
+                    }, appUserViewModel)
+                } catch (e: Exception) {
+                    Timber.tag("TweetDropdownMenuItems")
+                        .e(e, "Error deleting tweet: ${e.message}")
                 }
             }
-        )
-    }
+        },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = stringResource(R.string.delete),
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                Text(
+                    text = stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    )
     // Only author can pin the current Tweet to top list
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(

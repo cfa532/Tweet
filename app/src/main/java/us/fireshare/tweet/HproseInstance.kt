@@ -1129,7 +1129,7 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "authorid" to appUser.mid,
+            "userid" to appUser.mid,
             "tweetid" to tweetId
         )
         return try {
