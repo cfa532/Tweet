@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -154,11 +155,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 }
                 Box {
                     IconButton(onClick = { expanded = !expanded }) {
-                        Text(
-                            text = "•••",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More"
                         )
                     }
                     DropdownMenu(
