@@ -1,6 +1,7 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -120,14 +121,30 @@ fun ProfileTopBarButton(
                 }
             }
         },
-        textColor = MaterialTheme.colorScheme.tertiary,
+        textColor = if (buttonText == context.getString(R.string.unfollow)) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
         textStyle = MaterialTheme.typography.labelLarge,
         modifier = Modifier
-            .border(
-                width = 1.dp,
-                color = Color.DarkGray,
-                shape = RoundedCornerShape(12.dp)
+            .background(
+                color = if (buttonText == context.getString(R.string.unfollow)) {
+                    MaterialTheme.colorScheme.errorContainer
+                } else {
+                    MaterialTheme.colorScheme.primaryContainer
+                },
+                shape = RoundedCornerShape(20.dp)
             )
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .border(
+                width = 0.5.dp,
+                color = if (buttonText == context.getString(R.string.unfollow)) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     )
 }
