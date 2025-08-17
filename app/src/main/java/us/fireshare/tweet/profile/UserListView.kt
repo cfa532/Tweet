@@ -280,29 +280,3 @@ fun UserListView(
         )
     }
 }
-
-/**
- * A simplified version of UserListView for basic user list display without advanced features.
- * 
- * @param users The list of user IDs to display
- * @param userItem Composable for rendering each user item
- * @param modifier Additional modifier for the component
- */
-@Composable
-fun SimpleUserListView(
-    users: List<MimeiId>,
-    userItem: @Composable (MimeiId) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 60.dp)
-    ) {
-        items(
-            items = users,
-            key = { it }
-        ) { userId ->
-            userItem(userId)
-        }
-    }
-}
