@@ -62,8 +62,6 @@ fun ProfileDetail(
             viewModel.refreshFollowingsAndFans()
         }
     }
-    
-
 
     // go to list of followings of the user
     Surface(
@@ -81,7 +79,7 @@ fun ProfileDetail(
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .padding(
-                        start = 0.dp,
+                        start = 0.dp, top = 4.dp,
                         end = if (displayUser.mid == appUser.mid) 20.dp else 120.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceBetween
