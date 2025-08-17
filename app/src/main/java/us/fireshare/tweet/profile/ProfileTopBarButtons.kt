@@ -122,22 +122,13 @@ fun ProfileTopBarButton(
             }
         },
         textColor = if (buttonText == context.getString(R.string.unfollow)) {
-            MaterialTheme.colorScheme.error
+            MaterialTheme.colorScheme.onError
         } else {
-            MaterialTheme.colorScheme.primary
+            MaterialTheme.colorScheme.onPrimary
         },
         textStyle = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .background(
-                color = if (buttonText == context.getString(R.string.unfollow)) {
-                    MaterialTheme.colorScheme.errorContainer
-                } else {
-                    MaterialTheme.colorScheme.primaryContainer
-                },
-                shape = RoundedCornerShape(20.dp)
-            )
-            .border(
-                width = 0.5.dp,
                 color = if (buttonText == context.getString(R.string.unfollow)) {
                     MaterialTheme.colorScheme.error
                 } else {
