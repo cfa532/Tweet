@@ -911,34 +911,7 @@ object HproseInstance {
         }
     }
 
-    /**
-     * @param isFollowing indicates if the appUser is following @param userId. Passing
-     * an argument instead of toggling the status of a follower, because toggling
-     * following/follower status happens on two different hosts.
-     * */
-    suspend fun toggleFollower(
-        userId: MimeiId,
-        isFollowing: Boolean,
-        followerId: MimeiId = appUser.mid
-    ) {
-        try {
-            val user = getUser(userId)
-            if (user != null) {
-                val entry = "toggle_follower"
-                val params = mapOf(
-                    "aid" to appId,
-                    "ver" to "last",
-                    "entry" to entry,
-                    "otherid" to followerId,
-                    "userid" to userId,
-                    "isfollower" to isFollowing
-                )
-                user.hproseService?.runMApp<Any>(entry, params)
-            }
-        } catch (e: Exception) {
-            Timber.tag("toggleFollower()").e(e)
-        }
-    }
+
 
     /**
      * Send a retweet request to backend and get a new tweet object back.

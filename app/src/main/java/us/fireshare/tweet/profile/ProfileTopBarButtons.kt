@@ -82,7 +82,6 @@ fun ProfileTopBarButton(
                                 // Attempt the actual toggle operation
                                 val result = appUserViewModel.toggleFollowingWithResult(user.mid) { isFollowingResult ->
                                     viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                        viewModel.toggleFollower(user.mid, isFollowingResult, appUser.mid)
                                         tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
                                     }
                                 }

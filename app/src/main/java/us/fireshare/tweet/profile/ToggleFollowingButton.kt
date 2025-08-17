@@ -69,7 +69,6 @@ fun ToggleFollowingButton(
                         appUser.mid
                     ) { isFollowingResult ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            viewModel.toggleFollower(userId, isFollowingResult, appUser.mid)
                             tweetFeedViewModel.updateFollowingsTweets(
                                 userId,
                                 isFollowingResult

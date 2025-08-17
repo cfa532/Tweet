@@ -211,24 +211,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * @param userId calls this function to update its follower list
-     * @param isFollower indicates if followerId is a follower or not.
-     * */
-    suspend fun toggleFollower(
-        userId: MimeiId,
-        isFollower: Boolean,
-        followerId: MimeiId
-    ) {
-        HproseInstance.toggleFollower(userId, isFollower, followerId)
-        _followers.update { list ->
-            if (isFollower)
-                (listOf(followerId) + list).toSet().toList()
-            else
-                list.filterNot { it == followerId }
-        }
-        _user.value = user.value.copy(followersCount = followers.value.size)
-    }
+
 
     /**
      * @param subjectUserId to add/remove it to/from the following list
@@ -979,12 +962,7 @@ class UserViewModel @AssistedInject constructor(
                         if (appUser.isGuest()) {
                             // Create new user from processed data
                             val newUser = User.from(processedUserData)
-                            /**
-                             * Set the newly created user as followers of admin users.
-                             * */
-                            HproseInstance.getAlphaIds().forEach {
-                                HproseInstance.toggleFollower(it, true, newUser.mid)
-                            }
+
                             password.value = ""     // clear the password
                             popBack()
                         } else {
@@ -1051,9 +1029,6 @@ class UserViewModel @AssistedInject constructor(
                             
                             if (appUser.isGuest()) {
                                 val newUser: User = gson.fromJson(processedJson, userType)
-                                HproseInstance.getAlphaIds().forEach {
-                                    HproseInstance.toggleFollower(it, true, newUser.mid)
-                                }
                                 password.value = ""
                                 popBack()
                             } else {
