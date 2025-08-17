@@ -248,7 +248,7 @@ class UserViewModel @AssistedInject constructor(
                     list.filterNot { it == subjectUserId }
             }
             _user.value = user.value.copy(followingCount = followings.value.size)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            withContext(IO) {
                 TweetCacheManager.saveUser(appUser)
             }
             // callback to update tweet feed. Load or remove tweets of the others.
