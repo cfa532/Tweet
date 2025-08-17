@@ -228,7 +228,9 @@ private fun ProfileContentWithTweetListView(
                         }
 
                         HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 2.dp),
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .padding(horizontal = 0.dp),
                             thickness = 2.dp,
                             color = MaterialTheme.colorScheme.primaryContainer
                         )

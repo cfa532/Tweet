@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -74,12 +75,14 @@ fun ProfileDetail(
         ) {
             Text(
                 text = profile ?: "Profile",
-                style = MaterialTheme.typography.titleSmall
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
             )
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .padding(
-                        start = 0.dp, top = 4.dp,
+                        start = 0.dp, top = 8.dp,
                         end = if (displayUser.mid == appUser.mid) 20.dp else 120.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceBetween

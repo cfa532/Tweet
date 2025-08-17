@@ -109,7 +109,7 @@ fun TweetItemBody(
                 // Top row: User info and dropdown menu
                 Row(
                     modifier = Modifier
-                        .padding(vertical = 0.dp)
+                        .padding(bottom = 4.dp)
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
@@ -145,7 +145,7 @@ fun TweetItemBody(
                     SelectableText(
                         text = tweet.content!!,
                         maxLines = 10,
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     ) { username ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {

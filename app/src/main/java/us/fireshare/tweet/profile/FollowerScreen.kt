@@ -147,7 +147,8 @@ fun FollowerItem(
     )
     Row(
         modifier = Modifier
-            .padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .padding(vertical = 8.dp)
+            .padding(start = 4.dp, end = 8.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .fillMaxWidth()
     ) {
@@ -162,7 +163,7 @@ fun FollowerItem(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
