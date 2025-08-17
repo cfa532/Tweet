@@ -12,6 +12,7 @@ object BadgeStateManager {
     
     // Store application context for launcher badge updates
     private var applicationContext: Context? = null
+    private var badgeSupported: Boolean = false
     
     /**
      * Initialize the BadgeStateManager with application context
@@ -19,13 +20,19 @@ object BadgeStateManager {
      */
     fun initialize(context: Context) {
         applicationContext = context.applicationContext
-        Timber.tag("BadgeStateManager").d("Initialized with context: ${context.packageName}")
+        badgeSupported = LauncherBadgeManager.isBadgeSupported(context.applicationContext)
+        Timber.tag("BadgeStateManager").d("Initialized with context: ${context.packageName}, badge supported: $badgeSupported")
     }
     
     fun updateBadgeCount(count: Int) {
         val previousCount = _badgeCount.value
         _badgeCount.value = count
-        updateLauncherBadge(count)
+        
+        if (badgeSupported) {
+            updateLauncherBadge(count)
+        } else {
+            Timber.tag("BadgeStateManager").d("Skipping launcher badge update - not supported on this device")
+        }
         
         val formattedText = LauncherBadgeManager.formatBadgeText(count)
         Timber.tag("BadgeStateManager").d("Badge updated: $previousCount -> $count (display: '$formattedText')")
@@ -34,14 +41,25 @@ object BadgeStateManager {
     fun clearBadge() {
         val previousCount = _badgeCount.value
         _badgeCount.value = 0
-        updateLauncherBadge(0)
+        
+        if (badgeSupported) {
+            updateLauncherBadge(0)
+        } else {
+            Timber.tag("BadgeStateManager").d("Skipping launcher badge clear - not supported on this device")
+        }
+        
         Timber.tag("BadgeStateManager").d("Badge cleared: $previousCount -> 0")
     }
     
     fun incrementBadge() {
         val newCount = _badgeCount.value + 1
         _badgeCount.value = newCount
-        updateLauncherBadge(newCount)
+        
+        if (badgeSupported) {
+            updateLauncherBadge(newCount)
+        } else {
+            Timber.tag("BadgeStateManager").d("Skipping launcher badge increment - not supported on this device")
+        }
         
         val formattedText = LauncherBadgeManager.formatBadgeText(newCount)
         Timber.tag("BadgeStateManager").d("Badge incremented: ${newCount - 1} -> $newCount (display: '$formattedText')")
@@ -61,13 +79,5 @@ object BadgeStateManager {
         } ?: run {
             Timber.tag("BadgeStateManager").w("Application context not available for launcher badge update")
         }
-    }
-    
-    /**
-     * Get the formatted badge text for display
-     * @return Formatted text: "1"-"9" for counts 1-9, "n" for 10+, empty string for 0
-     */
-    fun getFormattedBadgeText(): String {
-        return LauncherBadgeManager.formatBadgeText(_badgeCount.value)
     }
 } 
