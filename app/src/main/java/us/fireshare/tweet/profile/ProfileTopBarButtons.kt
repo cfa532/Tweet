@@ -113,7 +113,7 @@ fun ProfileTopBarButton(
                         Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
                         // Navigate to login after a short delay
                         viewModel.viewModelScope.launch {
-                            kotlinx.coroutines.delay(1000)
+                            kotlinx.coroutines.delay(500)
                             navController.navigate(NavTweet.Login)
                         }
                     }

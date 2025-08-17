@@ -98,6 +98,7 @@
     <string name="video_players_stats">视频播放器：%s</string>
     <string name="video_memory_stats">视频内存：%s</string>
     <string name="image_cache_stats">图片缓存：%s</string>
+    <string name="joined">加入于</string>
     <string name="clear_all_cached_data">清除所有缓存数据</string>
     <string name="clear_again">再次清除</string>
     <string name="cloud_port">云端端口</string>

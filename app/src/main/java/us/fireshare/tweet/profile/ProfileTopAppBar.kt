@@ -42,6 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -80,7 +83,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(end = 16.dp),
+                    .padding(end = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -94,7 +97,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         size = (80 - (scrollFraction * 20)).toInt(),
                         onClick = { showDialog = true }
                     )
-                    Column(modifier = Modifier.padding(start = 8.dp)
+                    Column(
+                        modifier = Modifier.padding(start = 8.dp, top = 8.dp),
                     ) {
                         Text(
                             text = user.name ?: "No one",
@@ -105,6 +109,15 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.padding(start = 0.dp)
+                        )
+                        // Show registration date
+                        val date = Date(user.timestamp)
+                        val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+                        Text(
+                            text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 0.dp, top = 2.dp)
                         )
                     }
                 }
