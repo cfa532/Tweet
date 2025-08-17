@@ -115,7 +115,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
                         Text(
                             text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 0.dp, top = 2.dp)
                         )
