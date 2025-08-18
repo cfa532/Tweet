@@ -117,7 +117,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
         var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
         var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
         var showDialog by remember { mutableStateOf(false) }
-        
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -133,7 +133,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 item {
                     // Theme settings section
                     var expanded by remember { mutableStateOf(false) }
-                    
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -154,7 +154,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
-                        
+
                         ExposedDropdownMenuBox(
                             expanded = expanded,
                             onExpandedChange = { expanded = it }
@@ -174,7 +174,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     .menuAnchor(),
                                 shape = RoundedCornerShape(12.dp)
                             )
-                            
+
                             ExposedDropdownMenu(
                                 expanded = expanded,
                                 onDismissRequest = { expanded = false }
@@ -204,11 +204,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         }
                     }
                 }
-                
+
                 item {
                     // Cloud port section
                     val focusRequester = remember { FocusRequester() }
-                    
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -229,7 +229,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
-                        
+
                         OutlinedTextField(
                             value = cloudPort ?: "",
                             onValueChange = { cloudPort = it },
@@ -242,11 +242,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         )
                     }
                 }
-                
+
                 item {
                     // Cache information section
                     var showCacheInfo by remember { mutableStateOf(false) }
-                    
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -276,7 +276,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 onCheckedChange = { showCacheInfo = it }
                             )
                         }
-                        
+
                         // Show cache information when expanded
                         if (showCacheInfo) {
                             HorizontalDivider(
@@ -284,7 +284,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 thickness = DividerDefaults.Thickness,
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                             )
-                            
+
                             var tweetCacheStats by remember {
                                 mutableStateOf(
                                     TweetCacheManager.CacheStats(
@@ -359,11 +359,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         }
                     }
                 }
-                
+
                 item {
                     // Clear cache section
                     var isCachedCleared by remember { mutableStateOf(false) }
-                    
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -435,7 +435,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         }
                     }
                 }
-                
+
                 item {
                     // Save button section
                     Button(
@@ -443,7 +443,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             // Save theme mode
                             HproseInstance.preferenceHelper.setThemeMode(currentThemeMode)
                             ThemeManager.updateThemeMode(currentThemeMode)
-                            
+
                             // Save cloud port
                             HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                             if (!appUser.isGuest()) {
@@ -504,7 +504,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 )
             }
         }
-        
+
         if (showDialog) {
             BasicAlertDialog(
                 onDismissRequest = { showDialog = false }

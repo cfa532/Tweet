@@ -208,32 +208,36 @@ private fun ProfileContentWithTweetListView(
 
                 // Pinned tweets section (if any)
                 if (pinnedTweets.isNotEmpty()) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.pinToTop),
-                                modifier = Modifier.padding(
-                                    start = 16.dp,
-                                    top = 4.dp,
-                                    bottom = 0.dp
-                                ),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-
-                                        pinnedTweets.forEach { tweet ->
-                    TweetItem(tweet, parentEntry, context = if (userId == appUser.mid) "appUserProfile" else "default")
-                }
-
-                        HorizontalDivider(
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .padding(horizontal = 0.dp),
-                            thickness = 2.dp,
-                            color = MaterialTheme.colorScheme.primaryContainer
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pinToTop),
+                            modifier = Modifier.padding(
+                                start = 16.dp,
+                                top = 4.dp,
+                                bottom = 0.dp
+                            ),
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
+
+                    pinnedTweets.forEach { tweet ->
+                        TweetItem(
+                            tweet,
+                            parentEntry,
+                            context = if (userId == appUser.mid) "appUserProfile" else "default"
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            .padding(horizontal = 0.dp),
+                        thickness = 2.dp,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    )
+                }
             }
         }
     }
@@ -251,24 +255,24 @@ private fun ProfileContentWithTweetListView(
     ) {
         // Use TweetListView with header content for unified scrolling
         TweetListView(
-                tweets = tweets,
-                fetchTweets = { pageNumber ->
-                    viewModel.fetchTweets(pageNumber)
-                },
-                modifier = Modifier.fillMaxSize(),
-                scrollBehavior = scrollBehavior,
-                contentPadding = PaddingValues(bottom = 60.dp),
-                showPrivateTweets = true, // Show private tweets in profile
-                parentEntry = parentEntry,
-                onScrollStateChange = onScrollStateChange,
-                currentUserId = userId, // Use userId directly
-                onTweetUnavailable = { tweetId ->
-                    viewModel.removeTweetFromAllLists(tweetId)
-                },
-                headerContent = headerContent,
-                restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
-                context = if (userId == appUser.mid) "appUserProfile" else "default"
-            )
+            tweets = tweets,
+            fetchTweets = { pageNumber ->
+                viewModel.fetchTweets(pageNumber)
+            },
+            modifier = Modifier.fillMaxSize(),
+            scrollBehavior = scrollBehavior,
+            contentPadding = PaddingValues(bottom = 60.dp),
+            showPrivateTweets = true, // Show private tweets in profile
+            parentEntry = parentEntry,
+            onScrollStateChange = onScrollStateChange,
+            currentUserId = userId, // Use userId directly
+            onTweetUnavailable = { tweetId ->
+                viewModel.removeTweetFromAllLists(tweetId)
+            },
+            headerContent = headerContent,
+            restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
+            context = if (userId == appUser.mid) "appUserProfile" else "default"
+        )
 
         // Show pull-to-refresh style indicator during initial load
         if (initState) {
