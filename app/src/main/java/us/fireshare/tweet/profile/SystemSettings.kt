@@ -1,6 +1,7 @@
 package us.fireshare.tweet.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -111,38 +112,35 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             )
         },
     ) { innerPadding ->
-        Column(
-            modifier = Modifier.fillMaxWidth()
+        // Shared state variables for save functionality
+        var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
+        var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
+        var showDialog by remember { mutableStateOf(false) }
+        
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
                 .padding(innerPadding)
-                .padding(horizontal = 8.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            var showCacheInfo by remember { mutableStateOf(false) }
-            var isCachedCleared by remember { mutableStateOf(false) }
-
-            // Cache information section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(16.dp)
-            ) {
+            item {
                 // Theme settings section
-                var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
                 var expanded by remember { mutableStateOf(false) }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(vertical = 8.dp, horizontal = 4.dp)
+                
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(12.dp)
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(16.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.theme_settings),
@@ -150,7 +148,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
-
+                    
                     ExposedDropdownMenuBox(
                         expanded = expanded,
                         onExpandedChange = { expanded = it }
@@ -168,57 +166,56 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor(),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
-
+                        
                         ExposedDropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
-                                                         DropdownMenuItem(
-                                 text = { Text(stringResource(R.string.theme_system)) },
-                                 onClick = {
-                                     currentThemeMode = "system"
-                                     expanded = false
-                                 }
-                             )
-                             DropdownMenuItem(
-                                 text = { Text(stringResource(R.string.theme_light)) },
-                                 onClick = {
-                                     currentThemeMode = "light"
-                                     expanded = false
-                                 }
-                             )
-                             DropdownMenuItem(
-                                 text = { Text(stringResource(R.string.theme_dark)) },
-                                 onClick = {
-                                     currentThemeMode = "dark"
-                                     expanded = false
-                                 }
-                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_system)) },
+                                onClick = {
+                                    currentThemeMode = "system"
+                                    expanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_light)) },
+                                onClick = {
+                                    currentThemeMode = "light"
+                                    expanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_dark)) },
+                                onClick = {
+                                    currentThemeMode = "dark"
+                                    expanded = false
+                                }
+                            )
                         }
                     }
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    thickness = DividerDefaults.Thickness,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-
+            }
+            
+            item {
                 // Cloud port section
-                var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
                 val focusRequester = remember { FocusRequester() }
-
-                Row(
+                
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(12.dp)
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(16.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.cloud_port),
@@ -226,126 +223,160 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
+                    
                     OutlinedTextField(
                         value = cloudPort ?: "",
                         onValueChange = { cloudPort = it },
                         placeholder = { Text("8010") },
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .focusRequester(focusRequester),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    thickness = DividerDefaults.Thickness,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.cache_information),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    androidx.compose.material3.Switch(
-                        checked = showCacheInfo,
-                        onCheckedChange = { showCacheInfo = it }
-                    )
-                }
-
-                // Show cache information when expanded
-                if (showCacheInfo) {
-                    var tweetCacheStats by remember {
-                        mutableStateOf(
-                            TweetCacheManager.CacheStats(
-                                0,
-                                0,
-                                0
-                            )
-                        )
-                    }
-                    var userCacheStats by remember {
-                        mutableStateOf(
-                            TweetCacheManager.UserCacheStats(
-                                0,
-                                0,
-                                0,
-                                0
-                            )
-                        )
-                    }
-                    var videoCacheStats by remember { mutableStateOf("") }
-                    var videoManagerStats by remember { mutableStateOf("") }
-                    var videoMemoryStats by remember { mutableStateOf("") }
-
-                    LaunchedEffect(Unit) {
-                        tweetCacheStats = TweetCacheManager.getCacheStats()
-                        userCacheStats = TweetCacheManager.getUserCacheStats()
-                        videoCacheStats = SimplifiedVideoCacheManager.getCacheStats(context)
-                        videoManagerStats = VideoManager.getCacheStats()
-                        videoMemoryStats = VideoManager.getMemoryStats()
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Text(
-                            stringResource(
-                                R.string.tweet_cache_stats,
-                                tweetCacheStats.memoryCacheSize,
-                                tweetCacheStats.databaseCacheSize
-                            )
-                        )
-                        Text(
-                            stringResource(
-                                R.string.user_cache_stats,
-                                userCacheStats.totalUsers,
-                                userCacheStats.validUsers
-                            )
-                        )
-                        Text(stringResource(R.string.video_cache_stats, videoCacheStats))
-                        Text(stringResource(R.string.video_players_stats, videoManagerStats))
-                        Text(stringResource(R.string.video_memory_stats, videoMemoryStats))
-                        Text(
-                            stringResource(
-                                R.string.image_cache_stats,
-                                ImageCacheManager.getMemoryCacheStats()
-                            )
-                        )
-                    }
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 0.dp),
-                    thickness = DividerDefaults.Thickness,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-
-                // Clear cache section
+            }
+            
+            item {
+                // Cache information section
+                var showCacheInfo by remember { mutableStateOf(false) }
+                
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset(x = (-12).dp)
-                        .padding(vertical = 16.dp)
                         .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(12.dp)
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(16.dp)
                         )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cache_information),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        androidx.compose.material3.Switch(
+                            checked = showCacheInfo,
+                            onCheckedChange = { showCacheInfo = it }
+                        )
+                    }
+                    
+                    // Show cache information when expanded
+                    if (showCacheInfo) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                        
+                        var tweetCacheStats by remember {
+                            mutableStateOf(
+                                TweetCacheManager.CacheStats(
+                                    0,
+                                    0,
+                                    0
+                                )
+                            )
+                        }
+                        var userCacheStats by remember {
+                            mutableStateOf(
+                                TweetCacheManager.UserCacheStats(
+                                    0,
+                                    0,
+                                    0,
+                                    0
+                                )
+                            )
+                        }
+                        var videoCacheStats by remember { mutableStateOf("") }
+                        var videoManagerStats by remember { mutableStateOf("") }
+                        var videoMemoryStats by remember { mutableStateOf("") }
+
+                        LaunchedEffect(Unit) {
+                            tweetCacheStats = TweetCacheManager.getCacheStats()
+                            userCacheStats = TweetCacheManager.getUserCacheStats()
+                            videoCacheStats = SimplifiedVideoCacheManager.getCacheStats(context)
+                            videoManagerStats = VideoManager.getCacheStats()
+                            videoMemoryStats = VideoManager.getMemoryStats()
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.tweet_cache_stats,
+                                    tweetCacheStats.memoryCacheSize,
+                                    tweetCacheStats.databaseCacheSize
+                                ),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.user_cache_stats,
+                                    userCacheStats.totalUsers,
+                                    userCacheStats.validUsers
+                                ),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                stringResource(R.string.video_cache_stats, videoCacheStats),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                stringResource(R.string.video_players_stats, videoManagerStats),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                stringResource(R.string.video_memory_stats, videoMemoryStats),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.image_cache_stats,
+                                    ImageCacheManager.getMemoryCacheStats()
+                                ),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            }
+            
+            item {
+                // Clear cache section
+                var isCachedCleared by remember { mutableStateOf(false) }
+                
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(16.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp)
                 ) {
                     if (isCachedCleared) {
                         Text(
                             stringResource(R.string.cache_cleared_success),
                             color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
@@ -382,11 +413,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 }
                             }
                         },
-                        modifier = Modifier.padding(start = 16.dp),
-                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                             containerColor = if (isCachedCleared) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
+                            contentColor = if (isCachedCleared) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onError
                         )
                     ) {
                         Text(
@@ -397,13 +428,10 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         )
                     }
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    thickness = DividerDefaults.Thickness,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-
+            }
+            
+            item {
+                // Save button section
                 Button(
                     onClick = {
                         // Save theme mode
@@ -427,7 +455,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             }
                         }
                     },
-                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -438,15 +467,14 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         fontWeight = FontWeight.Medium
                     )
                 }
-
-                // Spacer to push bottom elements down
-                Spacer(modifier = Modifier.weight(1f))
-
+            }
+            
+            item {
                 // Bottom section with version, user ID, and privacy policy
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     TextButton(
@@ -466,72 +494,73 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         "Version: ${BuildConfig.VERSION_NAME}",
                         color = MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
             }
-            if (showDialog) {
-                BasicAlertDialog(
-                    onDismissRequest = { showDialog = false }
+        }
+        
+        if (showDialog) {
+            BasicAlertDialog(
+                onDismissRequest = { showDialog = false }
+            ) {
+                ConstraintLayout(
+                    modifier = Modifier
+                        .width(500.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White),
                 ) {
-                    ConstraintLayout(
+                    val (_, button) = createRefs()
+                    LazyColumn(
                         modifier = Modifier
-                            .width(500.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White),
+                            .padding(8.dp)
+                            .height(800.dp)
                     ) {
-                        val (_, button) = createRefs()
-                        LazyColumn(
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .height(800.dp)
-                        ) {
-                            item {
+                        item {
+                            Text(
+                                "\nPrivacy Policy\n" +
+                                        "\n" +
+                                        "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
+                                        "\n" +
+                                        "Information Collection and Use\n" +
+                                        "\n" +
+                                        "We collect several types of information for various purposes to provide and improve our App for you.\n" +
+                                        "\n" +
+                                        "Types of Data Collected\n" +
+                                        "\n" +
+                                        "Personal Data: While using our App, we may ask you to provide us with certain personally identifiable information, such as your name, email address.\n" +
+                                        "\n" +
+                                        "Usage Data: We may collect information on how the App is accessed and used, such as your device's Internet Protocol address (e.g., IP address), browser type, browser version, the pages of our App that you visit, the time and date of your visit, and other diagnostic data.\n" +
+                                        "\n" +
+                                        "Cookies and Tracking Technologies: We use cookies and similar tracking technologies to track the activity on our App and hold certain information.\n" +
+                                        "\n" +
+                                        "Use of Data\n" +
+                                        "\n" +
+                                        "We use the collected data for various purposes:\n" +
+                                        "\n" +
+                                        "To provide and maintain our App\n" +
+                                        "To notify you about changes to our App\n" +
+                                        "To allow you to participate in interactive features of our App when you choose to do so\n" +
+                                        "To provide customer support\n" +
+                                        "To gather analysis or valuable information so that we can improve our App\n" +
+                                        "To monitor the usage of our App\n" +
+                                        "To detect, prevent, and address technical issues\n" +
+                                        "Data Security\n" +
+                                        "\n" +
+                                        "The security of your data is important to us, but remember that no method of transmission over the Internet is 100% secure. While we try our best to protect you data, there is always potential leakholes. Do not disclose sensitive personal information on this App.",
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            TextButton(
+                                onClick = { showDialog = false },
+                                modifier = Modifier.constrainAs(button) {
+                                    bottom.linkTo(parent.bottom)
+                                    centerHorizontallyTo(parent)
+                                },
+                            ) {
                                 Text(
-                                    "\nPrivacy Policy\n" +
-                                            "\n" +
-                                            "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
-                                            "\n" +
-                                            "Information Collection and Use\n" +
-                                            "\n" +
-                                            "We collect several types of information for various purposes to provide and improve our App for you.\n" +
-                                            "\n" +
-                                            "Types of Data Collected\n" +
-                                            "\n" +
-                                            "Personal Data: While using our App, we may ask you to provide us with certain personally identifiable information, such as your name, email address.\n" +
-                                            "\n" +
-                                            "Usage Data: We may collect information on how the App is accessed and used, such as your device's Internet Protocol address (e.g., IP address), browser type, browser version, the pages of our App that you visit, the time and date of your visit, and other diagnostic data.\n" +
-                                            "\n" +
-                                            "Cookies and Tracking Technologies: We use cookies and similar tracking technologies to track the activity on our App and hold certain information.\n" +
-                                            "\n" +
-                                            "Use of Data\n" +
-                                            "\n" +
-                                            "We use the collected data for various purposes:\n" +
-                                            "\n" +
-                                            "To provide and maintain our App\n" +
-                                            "To notify you about changes to our App\n" +
-                                            "To allow you to participate in interactive features of our App when you choose to do so\n" +
-                                            "To provide customer support\n" +
-                                            "To gather analysis or valuable information so that we can improve our App\n" +
-                                            "To monitor the usage of our App\n" +
-                                            "To detect, prevent, and address technical issues\n" +
-                                            "Data Security\n" +
-                                            "\n" +
-                                            "The security of your data is important to us, but remember that no method of transmission over the Internet is 100% secure. While we try our best to protect you data, there is always potential leakholes. Do not disclose sensitive personal information on this App.",
+                                    "Confirm",
+                                    fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.height(24.dp))
-                                TextButton(
-                                    onClick = { showDialog = false },
-                                    modifier = Modifier.constrainAs(button) {
-                                        bottom.linkTo(parent.bottom)
-                                        centerHorizontallyTo(parent)
-                                    },
-                                ) {
-                                    Text(
-                                        "Confirm",
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
                             }
                         }
                     }
