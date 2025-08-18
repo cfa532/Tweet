@@ -7,6 +7,7 @@
     <string name="save_and_continue">保存して続行</string>
     <string name="avatar_upload_failed">アバターのアップロードに失敗しました：%s</string>
     <string name="joined">参加日</string>
+    <string name="cache_cleared_success">キャッシュをすべて削除しました！</string>
     
     <!-- Theme Settings -->
     <string name="theme_settings">テーマ設定</string>

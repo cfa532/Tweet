@@ -100,6 +100,7 @@
     <string name="clear_all_cached_data">Clear all cached data</string>
     <string name="joined">Joined</string>
     <string name="clear_again">Clear Again</string>
+    <string name="cache_cleared_success">All cache cleared successfully!</string>
     <string name="cloud_port">Cloud Port</string>
     <string name="failed_to_load_image">Failed to load image</string>
     <string name="loading">Loading...</string>

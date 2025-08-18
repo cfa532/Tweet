@@ -26,7 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -175,33 +175,27 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.theme_system)) },
-                                onClick = {
-                                    currentThemeMode = "system"
-                                    HproseInstance.preferenceHelper.setThemeMode("system")
-                                    ThemeManager.updateThemeMode("system")
-                                    expanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.theme_light)) },
-                                onClick = {
-                                    currentThemeMode = "light"
-                                    HproseInstance.preferenceHelper.setThemeMode("light")
-                                    ThemeManager.updateThemeMode("light")
-                                    expanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.theme_dark)) },
-                                onClick = {
-                                    currentThemeMode = "dark"
-                                    HproseInstance.preferenceHelper.setThemeMode("dark")
-                                    ThemeManager.updateThemeMode("dark")
-                                    expanded = false
-                                }
-                            )
+                                                         DropdownMenuItem(
+                                 text = { Text(stringResource(R.string.theme_system)) },
+                                 onClick = {
+                                     currentThemeMode = "system"
+                                     expanded = false
+                                 }
+                             )
+                             DropdownMenuItem(
+                                 text = { Text(stringResource(R.string.theme_light)) },
+                                 onClick = {
+                                     currentThemeMode = "light"
+                                     expanded = false
+                                 }
+                             )
+                             DropdownMenuItem(
+                                 text = { Text(stringResource(R.string.theme_dark)) },
+                                 onClick = {
+                                     currentThemeMode = "dark"
+                                     expanded = false
+                                 }
+                             )
                         }
                     }
                 }
@@ -349,7 +343,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 ) {
                     if (isCachedCleared) {
                         Text(
-                            "All cache cleared successfully!",
+                            stringResource(R.string.cache_cleared_success),
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
@@ -359,32 +353,35 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
 
                     Button(
                         onClick = {
-                            appUserViewModel.viewModelScope.launch(Dispatchers.IO)
-                            {
-                                // Clear all tweet cache (memory + database)
-                                TweetCacheManager.clearAllCachedTweets()
-                                // Clear video cache
-                                SimplifiedVideoCacheManager.clearVideoCache(context)
+                            if (isCachedCleared) {
+                                isCachedCleared = false
+                            } else {
+                                appUserViewModel.viewModelScope.launch(Dispatchers.IO)
+                                {
+                                    // Clear all tweet cache (memory + database)
+                                    TweetCacheManager.clearAllCachedTweets()
+                                    // Clear video cache
+                                    SimplifiedVideoCacheManager.clearVideoCache(context)
 
-                                // Clear all user cache
-                                TweetCacheManager.clearAllCachedUsers()
+                                    // Clear all user cache
+                                    TweetCacheManager.clearAllCachedUsers()
 
-                                // Clear tweet instances from memory
-                                Tweet.clearAllInstances()
+                                    // Clear tweet instances from memory
+                                    Tweet.clearAllInstances()
 
-                                // Release all video players on main thread
-                                withContext(Dispatchers.Main) {
-                                    VideoManager.releaseAllVideos()
+                                    // Release all video players on main thread
+                                    withContext(Dispatchers.Main) {
+                                        VideoManager.releaseAllVideos()
+                                    }
+
+                                    // Clear image cache
+                                    ImageCacheManager.clearAllCachedImages(context)
+
+                                    @Suppress("UnsafeOptInUsageError")
+                                    isCachedCleared = true
                                 }
-
-                                // Clear image cache
-                                ImageCacheManager.clearAllCachedImages(context)
-
-                                @Suppress("UnsafeOptInUsageError")
-                                isCachedCleared = true
                             }
                         },
-                        enabled = !isCachedCleared,
                         modifier = Modifier.padding(start = 16.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
@@ -393,25 +390,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         )
                     ) {
                         Text(
-                            if (isCachedCleared) stringResource(R.string.cleared) else stringResource(
+                            if (isCachedCleared) stringResource(R.string.close) else stringResource(
                                 R.string.clear_all_cached_data
                             ),
                             fontWeight = FontWeight.Medium
                         )
-                    }
-
-                    if (isCachedCleared) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { isCachedCleared = false },
-                            modifier = Modifier.padding(start = 16.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                stringResource(R.string.clear_again),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
                     }
                 }
 
@@ -423,6 +406,11 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
 
                 Button(
                     onClick = {
+                        // Save theme mode
+                        HproseInstance.preferenceHelper.setThemeMode(currentThemeMode)
+                        ThemeManager.updateThemeMode(currentThemeMode)
+                        
+                        // Save cloud port
                         HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                         if (!appUser.isGuest()) {
                             try {
