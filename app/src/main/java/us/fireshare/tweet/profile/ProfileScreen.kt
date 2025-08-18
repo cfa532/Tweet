@@ -210,14 +210,13 @@ private fun ProfileContentWithTweetListView(
                 if (pinnedTweets.isNotEmpty()) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            tonalElevation = 100.dp,
                         ) {
                             Text(
                                 text = stringResource(R.string.pinToTop),
                                 modifier = Modifier.padding(
                                     start = 16.dp,
-                                    top = 0.dp,
-                                    bottom = 4.dp
+                                    top = 4.dp,
+                                    bottom = 0.dp
                                 ),
                                 style = MaterialTheme.typography.titleMedium
                             )
