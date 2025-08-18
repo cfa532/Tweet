@@ -229,4 +229,11 @@
     <string name="dont_save">Don\'t Save</string>
     <string name="save_and_continue">Save &amp; Continue</string>
     <string name="avatar_upload_failed">Failed to upload avatar: %s</string>
+    
+    <!-- Theme Settings -->
+    <string name="theme_settings">Theme Settings</string>
+    <string name="theme_mode">Theme Mode</string>
+    <string name="theme_system">System Default</string>
+    <string name="theme_light">Light Mode</string>
+    <string name="theme_dark">Dark Mode</string>
 </resources>

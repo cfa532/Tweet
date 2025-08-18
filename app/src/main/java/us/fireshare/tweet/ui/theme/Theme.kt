@@ -8,6 +8,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
@@ -32,13 +35,32 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+// Theme state manager for reactive theme changes
+object ThemeManager {
+    var currentThemeMode by mutableStateOf("light")
+        private set
+    
+    fun updateThemeMode(mode: String) {
+        currentThemeMode = mode
+    }
+}
+
 @Composable
 fun TweetTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: String = "light",
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    // Update the theme manager with the current mode
+    ThemeManager.updateThemeMode(themeMode)
+    
+    val darkTheme = when (ThemeManager.currentThemeMode) {
+        "light" -> false
+        "dark" -> true
+        else -> isSystemInDarkTheme() // "system" or default
+    }
+    
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current

@@ -50,4 +50,12 @@ class PreferenceHelper(context: Context) {
             sharedPreferences.edit { putString("cloudPort", it) }
         }
     }
+
+    // Theme preference methods
+    fun getThemeMode(): String {
+        return sharedPreferences.getString("theme_mode", "light") ?: "light"
+    }
+    fun setThemeMode(mode: String) {
+        sharedPreferences.edit { putString("theme_mode", mode) }
+    }
 }

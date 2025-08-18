@@ -7,4 +7,11 @@
     <string name="save_and_continue">保存して続行</string>
     <string name="avatar_upload_failed">アバターのアップロードに失敗しました：%s</string>
     <string name="joined">参加日</string>
+    
+    <!-- Theme Settings -->
+    <string name="theme_settings">テーマ設定</string>
+    <string name="theme_mode">テーマモード</string>
+    <string name="theme_system">システム設定に従う</string>
+    <string name="theme_light">ライトモード</string>
+    <string name="theme_dark">ダークモード</string>
 </resources>

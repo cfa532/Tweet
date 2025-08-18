@@ -41,6 +41,7 @@ import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.TweetTheme
+import us.fireshare.tweet.ui.theme.ThemeManager
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -87,7 +88,11 @@ class TweetActivity : ComponentActivity() {
             }
 
             setContent {
-                TweetTheme {
+                // Initialize theme manager with current preference
+                val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
+                ThemeManager.updateThemeMode(initialThemeMode)
+                
+                TweetTheme(themeMode = ThemeManager.currentThemeMode) {
                     Scaffold(
                         modifier = Modifier.fillMaxWidth()
                     ) { innerPadding ->

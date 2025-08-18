@@ -32,6 +32,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +72,7 @@ import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.widget.VideoManager
+import us.fireshare.tweet.ui.theme.ThemeManager
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -125,6 +130,126 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     )
                     .padding(16.dp)
             ) {
+                // Theme settings section
+                var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
+                var expanded by remember { mutableStateOf(false) }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(vertical = 8.dp, horizontal = 4.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            RoundedCornerShape(12.dp)
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.theme_settings),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = when (currentThemeMode) {
+                                "system" -> stringResource(R.string.theme_system)
+                                "light" -> stringResource(R.string.theme_light)
+                                "dark" -> stringResource(R.string.theme_dark)
+                                else -> stringResource(R.string.theme_light)
+                            },
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_system)) },
+                                onClick = {
+                                    currentThemeMode = "system"
+                                    HproseInstance.preferenceHelper.setThemeMode("system")
+                                    ThemeManager.updateThemeMode("system")
+                                    expanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_light)) },
+                                onClick = {
+                                    currentThemeMode = "light"
+                                    HproseInstance.preferenceHelper.setThemeMode("light")
+                                    ThemeManager.updateThemeMode("light")
+                                    expanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.theme_dark)) },
+                                onClick = {
+                                    currentThemeMode = "dark"
+                                    HproseInstance.preferenceHelper.setThemeMode("dark")
+                                    ThemeManager.updateThemeMode("dark")
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+
+                // Cloud port section
+                var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
+                val focusRequester = remember { FocusRequester() }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            RoundedCornerShape(12.dp)
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.cloud_port),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    OutlinedTextField(
+                        value = cloudPort ?: "",
+                        onValueChange = { cloudPort = it },
+                        placeholder = { Text("8010") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -140,8 +265,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         onCheckedChange = { showCacheInfo = it }
                     )
                 }
-                
-
 
                 // Show cache information when expanded
                 if (showCacheInfo) {
@@ -208,8 +331,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
 
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    thickness = DividerDefaults.Thickness, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    modifier = Modifier.padding(vertical = 0.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                 )
 
                 // Clear cache section
@@ -269,7 +393,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         )
                     ) {
                         Text(
-                            if (isCachedCleared) stringResource(R.string.cleared) else stringResource(R.string.clear_all_cached_data),
+                            if (isCachedCleared) stringResource(R.string.cleared) else stringResource(
+                                R.string.clear_all_cached_data
+                            ),
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -289,64 +415,40 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     }
                 }
 
+                HorizontalDivider(
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    thickness = DividerDefaults.Thickness,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
 
-                // Cloud port section
-                var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
-                val focusRequester = remember { FocusRequester() }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(12.dp)
-                        )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = cloudPort ?: "",
-                            onValueChange = { cloudPort = it },
-                            placeholder = { Text(stringResource(R.string.cloud_port)) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(focusRequester),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        Button(
-                            onClick = {
-                                HproseInstance.preferenceHelper.setCloudPort(cloudPort)
-                                if (!appUser.isGuest()) {
-                                    try {
-                                        appUser.cloudDrivePort = cloudPort?.toInt() ?: 8010
-                                        applicationScope.launch(Dispatchers.IO) {
-                                            HproseInstance.setUserData(appUser)
-                                        }
-                                    } catch (e: NumberFormatException) {
-                                        Timber.tag("SystemSettings")
-                                            .e("Invalid cloudPort value: $cloudPort - ${e.message}")
-                                    } catch (e: Exception) {
-                                        Timber.tag("SystemSettings")
-                                            .e("An unexpected error occurred: $e")
-                                    }
+                Button(
+                    onClick = {
+                        HproseInstance.preferenceHelper.setCloudPort(cloudPort)
+                        if (!appUser.isGuest()) {
+                            try {
+                                appUser.cloudDrivePort = cloudPort?.toInt() ?: 8010
+                                applicationScope.launch(Dispatchers.IO) {
+                                    HproseInstance.setUserData(appUser)
                                 }
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text(
-                                stringResource(R.string.save),
-                                fontWeight = FontWeight.Medium
-                            )
+                            } catch (e: NumberFormatException) {
+                                Timber.tag("SystemSettings")
+                                    .e("Invalid cloudPort value: $cloudPort - ${e.message}")
+                            } catch (e: Exception) {
+                                Timber.tag("SystemSettings")
+                                    .e("An unexpected error occurred: $e")
+                            }
                         }
-                    }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text(
+                        stringResource(R.string.save),
+                        fontWeight = FontWeight.Medium
+                    )
                 }
 
                 // Spacer to push bottom elements down

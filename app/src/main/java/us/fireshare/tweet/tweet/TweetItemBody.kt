@@ -127,12 +127,14 @@ fun TweetItemBody(
                         Text(
                             text = "@${author?.username}",
                             modifier = Modifier.padding(horizontal = 0.dp),
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary
                         )
                         Text(text = " • ", fontSize = 12.sp)
                         Text(
                             text = localizedTimeDifference(tweet.timestamp),
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
 
