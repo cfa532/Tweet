@@ -50,6 +50,7 @@ fun TweetItemBody(
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
+    context: String = "default"
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -139,7 +140,7 @@ fun TweetItemBody(
                     }
 
                     // Dropdown menu
-                    TweetDropdownMenu(tweet, parentEntry, parentTweet)
+                    TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
                 }
 
                 // Text content of the tweet

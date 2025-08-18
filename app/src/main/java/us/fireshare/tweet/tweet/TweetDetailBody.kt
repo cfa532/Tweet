@@ -123,7 +123,7 @@ fun TweetDetailBody(
                     )
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, parentEntry)
+                TweetDropdownMenu(tweet, parentEntry, context = "default")
             }
             // Tweet detail's content
             Surface(
@@ -304,6 +304,7 @@ fun TweetDropdownMenu(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,
+    context: String = "default"
 ) {
     // Use tweet.mid as key to ensure state is reset when tweet changes
     var expanded by remember(tweet.mid) { mutableStateOf(false) }
@@ -343,14 +344,14 @@ fun TweetDropdownMenu(
             if (parentTweet != null) {
                 // this is a retweet. Show menu for the retweet if current user is the retweet author
                 if (tweet.authorId == appUser.mid) {
-                    TweetDropdownMenuItems(tweet, parentEntry) {
+                    TweetDropdownMenuItems(tweet, parentEntry, {
                         expanded = false
-                    }
+                    }, context)
                 }
             } else {
-                TweetDropdownMenuItems(tweet, parentEntry) {
+                TweetDropdownMenuItems(tweet, parentEntry, {
                     expanded = false
-                }
+                }, context)
             }
         }
     }

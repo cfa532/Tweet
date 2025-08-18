@@ -222,9 +222,9 @@ private fun ProfileContentWithTweetListView(
                             )
                         }
 
-                        pinnedTweets.forEach { tweet ->
-                            TweetItem(tweet, parentEntry)
-                        }
+                                        pinnedTweets.forEach { tweet ->
+                    TweetItem(tweet, parentEntry, context = if (userId == appUser.mid) "appUserProfile" else "default")
+                }
 
                         HorizontalDivider(
                             modifier = Modifier
@@ -266,7 +266,8 @@ private fun ProfileContentWithTweetListView(
                     viewModel.removeTweetFromAllLists(tweetId)
                 },
                 headerContent = headerContent,
-                restoreScrollPosition = false // Disable scroll position restoration to prevent jumping back
+                restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
+                context = if (userId == appUser.mid) "appUserProfile" else "default"
             )
 
         // Show pull-to-refresh style indicator during initial load

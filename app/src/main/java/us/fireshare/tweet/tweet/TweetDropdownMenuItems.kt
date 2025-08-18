@@ -40,6 +40,7 @@ fun TweetDropdownMenuItems(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
+    contextType: String = "default" // Context to determine where this dropdown is shown
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
@@ -62,59 +63,67 @@ fun TweetDropdownMenuItems(
         } else null
     val context = LocalContext.current
 
-    // Only author can delete a tweet
-    DropdownMenuItem(
-        modifier = Modifier.alpha(0.8f),
-        onClick = {
-            Toast.makeText(
-                context,
-                context.getString(R.string.delete_tweet),
-                Toast.LENGTH_SHORT
-            ).show()
-            // Dismiss popup immediately for better UX
-            onDismissRequest()
+    // Only show delete button if tweet author is current user AND we're in allowed contexts
+    val shouldShowDeleteButton = when (contextType) {
+        "followingsTweet" -> true // Show delete for all tweets in main feed
+        "appUserProfile" -> tweet.authorId == appUser.mid // Show delete only for app user's tweets in profile
+        else -> false // Don't show delete in other contexts
+    }
+    
+    if (shouldShowDeleteButton) {
+        DropdownMenuItem(
+            modifier = Modifier.alpha(0.8f),
+            onClick = {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.delete_tweet),
+                    Toast.LENGTH_SHORT
+                ).show()
+                // Dismiss popup immediately for better UX
+                onDismissRequest()
 
-            tweetFeedViewModel.viewModelScope.launch(IO) {
-                try {
-                    tweetFeedViewModel.delTweet(navController, tweet.mid, {
-                        applicationScope.launch(IO) {
-                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                val originalTweet = HproseInstance.fetchTweet(
-                                    tweet.originalTweetId!!,
-                                    tweet.originalAuthorId!!,
-                                    shouldCache = false
-                                )
-                                originalTweet?.let {
-                                    originTweetViewModel?.updateRetweetCount(
-                                        it,      // original tweet
-                                        tweet.mid,      // retweet Id
-                                        -1
+                tweetFeedViewModel.viewModelScope.launch(IO) {
+                    try {
+                        tweetFeedViewModel.delTweet(navController, tweet.mid, {
+                            applicationScope.launch(IO) {
+                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                    val originalTweet = HproseInstance.fetchTweet(
+                                        tweet.originalTweetId!!,
+                                        tweet.originalAuthorId!!,
+                                        shouldCache = false
                                     )
+                                    originalTweet?.let {
+                                        originTweetViewModel?.updateRetweetCount(
+                                            it,      // original tweet
+                                            tweet.mid,      // retweet Id
+                                            -1
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    }, appUserViewModel)
-                } catch (e: Exception) {
-                    Timber.tag("TweetDropdownMenuItems")
-                        .e(e, "Error deleting tweet: ${e.message}")
+                        }, appUserViewModel)
+                    } catch (e: Exception) {
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Error deleting tweet: ${e.message}")
+                    }
+                }
+            },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.delete),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
-        },
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.delete),
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.width(8.dp)) // Add some space between the icon and the text
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    )
+        )
+    }
     // Only author can pin the current Tweet to top list
     if (tweet.authorId == appUser.mid) {
         DropdownMenuItem(

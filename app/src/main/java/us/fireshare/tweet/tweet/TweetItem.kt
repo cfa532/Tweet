@@ -63,7 +63,8 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
-    onTweetUnavailable: ((MimeiId) -> Unit)? = null // callback when tweet becomes unavailable
+    onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
+    context: String = "default"
 ) {
     // Optimize: Use derivedStateOf to avoid unnecessary recomposition
     val isTweetValid by remember(tweet, tweet.author) {
@@ -130,7 +131,8 @@ fun TweetItem(
                     tweet = tweet,
                     isVisible = isVisible,
                     parentEntry = parentEntry,
-                    onTweetUnavailable = onTweetUnavailable
+                    onTweetUnavailable = onTweetUnavailable,
+                    context = context
                 )
             }
             isRetweetWithContent -> {
@@ -138,12 +140,13 @@ fun TweetItem(
                 RetweetWithContent(
                     tweet = tweet,
                     parentEntry = parentEntry,
-                    onTweetUnavailable = onTweetUnavailable
+                    onTweetUnavailable = onTweetUnavailable,
+                    context = context
                 )
             }
             else -> {
                 // Original tweet
-                TweetItemBody(viewModel, parentEntry = parentEntry)
+                TweetItemBody(viewModel, parentEntry = parentEntry, context = context)
             }
         }
     }
@@ -155,7 +158,8 @@ private fun RetweetContent(
     tweet: Tweet,
     isVisible: Boolean,
     parentEntry: NavBackStackEntry,
-    onTweetUnavailable: ((MimeiId) -> Unit)?
+    onTweetUnavailable: ((MimeiId) -> Unit)?,
+    context: String = "default"
 ) {
     Surface {
         // Load original tweet dynamically
@@ -255,7 +259,8 @@ private fun RetweetContent(
                             originalTweetViewModel,
                             parentEntry = parentEntry,
                             parentTweet = tweet,
-                            modifier = Modifier.offset(y = (-8).dp)
+                            modifier = Modifier.offset(y = (-8).dp),
+                            context = context
                         )
                     }
                 }
@@ -276,7 +281,8 @@ private fun RetweetContent(
 private fun RetweetWithContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
-    onTweetUnavailable: ((MimeiId) -> Unit)?
+    onTweetUnavailable: ((MimeiId) -> Unit)?,
+    context: String = "default"
 ) {
     val navController = LocalNavController.current
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
@@ -359,7 +365,7 @@ private fun RetweetWithContent(
                     }
 
                     // Dropdown menu
-                    TweetDropdownMenu(tweet, parentEntry, null)
+                    TweetDropdownMenu(tweet, parentEntry, null, context)
                 }
 
                 // Tweet content
@@ -413,7 +419,8 @@ private fun RetweetWithContent(
                 QuotedTweetContent(
                     tweet = tweet,
                     parentEntry = parentEntry,
-                    onTweetUnavailable = onTweetUnavailable
+                    onTweetUnavailable = onTweetUnavailable,
+                    context = context
                 )
 
                 Row(
@@ -439,7 +446,8 @@ private fun RetweetWithContent(
 private fun QuotedTweetContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
-    onTweetUnavailable: ((MimeiId) -> Unit)?
+    onTweetUnavailable: ((MimeiId) -> Unit)?,
+    context: String = "default"
 ) {
     var originalTweet by remember { mutableStateOf<Tweet?>(null) }
     var isLoadingOriginal by remember { mutableStateOf(true) }
@@ -515,7 +523,8 @@ private fun QuotedTweetContent(
                     },
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     isQuoted = true,
-                    parentEntry = parentEntry
+                    parentEntry = parentEntry,
+                    context = context
                 )
             }
         }

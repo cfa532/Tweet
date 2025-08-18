@@ -111,7 +111,8 @@ fun FollowingsTweet(
                 Timber.tag("FollowingsTweet").d("isAtLastTweet changed to: $isAtLast")
                 isAtLastTweet = isAtLast
             },
-            onTriggerLoadMore = triggerLoadMore
+            onTriggerLoadMore = triggerLoadMore,
+            context = "followingsTweet"
         )
     }
     
