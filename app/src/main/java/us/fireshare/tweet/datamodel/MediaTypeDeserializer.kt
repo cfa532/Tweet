@@ -22,7 +22,6 @@ class MediaTypeDeserializer : JsonDeserializer<MediaType> {
         }
 
         val typeString = json.asString.lowercase()
-        Timber.d("MediaTypeDeserializer: deserializing '$typeString'")
 
         val result = when {
             // Handle exact enum matches
@@ -41,47 +40,36 @@ class MediaTypeDeserializer : JsonDeserializer<MediaType> {
             
             // Handle backend-specific string values
             typeString.contains("hls") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.HLS_VIDEO")
                 MediaType.HLS_VIDEO
             }
             typeString.contains("video") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Video")
                 MediaType.Video
             }
             typeString.contains("image") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Image")
                 MediaType.Image
             }
             typeString.contains("audio") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Audio")
                 MediaType.Audio
             }
             typeString.contains("pdf") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.PDF")
                 MediaType.PDF
             }
             typeString.contains("word") || typeString.contains("doc") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Word")
                 MediaType.Word
             }
             typeString.contains("excel") || typeString.contains("xls") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Excel")
                 MediaType.Excel
             }
             typeString.contains("ppt") || typeString.contains("powerpoint") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.PPT")
                 MediaType.PPT
             }
             typeString.contains("zip") || typeString.contains("rar") || typeString.contains("7z") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Zip")
                 MediaType.Zip
             }
             typeString.contains("txt") || typeString.contains("text") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Txt")
                 MediaType.Txt
             }
             typeString.contains("html") || typeString.contains("htm") -> {
-                Timber.d("Converting backend type '$typeString' to MediaType.Html")
                 MediaType.Html
             }
             else -> {
@@ -89,8 +77,6 @@ class MediaTypeDeserializer : JsonDeserializer<MediaType> {
                 MediaType.Unknown
             }
         }
-        
-        Timber.d("MediaTypeDeserializer: converted '$typeString' to $result")
         return result
     }
 }
