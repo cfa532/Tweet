@@ -1,32 +1,24 @@
 package us.fireshare.tweet.widget
 
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,35 +35,6 @@ import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
-
-/**
- * Helper function to save image and show toast
- */
-private fun saveImageToGallery(context: android.content.Context, bitmap: android.graphics.Bitmap): Boolean {
-    return try {
-        val filename = "image_${System.currentTimeMillis()}.jpg"
-        val contentValues = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
-            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Tweet")
-        }
-        
-        val uri = context.contentResolver.insert(
-            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            contentValues
-        )
-        
-        uri?.let { imageUri ->
-            context.contentResolver.openOutputStream(imageUri)?.use { outputStream ->
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, outputStream)
-            }
-        }
-        true
-    } catch (e: Exception) {
-        Timber.e("Failed to save image: $e")
-        false
-    }
-}
 
 /**
  * State object for image loading to reduce recomposition
@@ -98,6 +61,7 @@ fun AdvancedImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
     var imageFile by remember { mutableStateOf<File?>(null) }
@@ -166,7 +130,6 @@ fun AdvancedImageViewer(
     }
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    var isDragging by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -182,11 +145,9 @@ fun AdvancedImageViewer(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { 
-                        isDragging = true
                         dragOffset = 0f
                     },
                     onDragEnd = { 
-                        isDragging = false
                         // If dragged down more than 100f, close the image viewer
                         if (dragOffset > 100f) {
                             onClose?.invoke()
@@ -212,6 +173,12 @@ fun AdvancedImageViewer(
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
+                        
+                        // Add long press listener for the third-party view
+                        setOnLongClickListener {
+                            showMenu = true
+                            true
+                        }
                     }
                 },
                 update = { imageView ->
@@ -312,27 +279,128 @@ fun AdvancedImageViewer(
             }
         }
 
-        // Long press menu
+        // Custom long press menu
         if (enableLongPress && showMenu) {
-            DropdownMenu(
-                expanded = true,
-                onDismissRequest = { showMenu = false }
+            // Semi-transparent overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable { showMenu = false }
             ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.download)) },
-                    onClick = {
-                        // Download image to gallery
-                        loadState.bitmap?.let { bitmap ->
-                            val success = saveImageToGallery(context, bitmap)
-                            if (success) {
-                                Toast.makeText(context, "Image saved to gallery", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Failed to save image", Toast.LENGTH_SHORT).show()
-                            }
+                // Custom menu card
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp)
+                        .width(200.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White
+                    ),
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = 6.dp
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Menu title
+                        Text(
+                            text = "Image Options",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.Black,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        // Reload option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    loadState = loadState.copy(
+                                        isLoading = true,
+                                        hasError = false,
+                                        retryCount = loadState.retryCount + 1
+                                    )
+                                    showMenu = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 12.dp)
+                                .background(
+                                    color = Color(0xFFF5F5F5),
+                                    shape = RoundedCornerShape(6.dp)
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = Color(0xFF2196F3),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Reload Image",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Black
+                            )
                         }
-                        showMenu = false
+                        
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        // Download option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    loadState.bitmap?.let { bitmap ->
+                                        val success = saveImageToGallery(context, bitmap)
+                                        if (success) {
+                                            Toast.makeText(context, "Image saved to gallery", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to save image", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    showMenu = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 12.dp)
+                                .background(
+                                    color = Color(0xFFF5F5F5),
+                                    shape = RoundedCornerShape(6.dp)
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Save to Gallery",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Black
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Cancel button
+                        TextButton(
+                            onClick = { showMenu = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
                     }
-                )
+                }
             }
         }
     }
@@ -360,6 +428,7 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
@@ -547,5 +616,34 @@ fun ImageViewer(
                 )
             }
         }
+    }
+}
+
+/**
+ * Helper function to save image and show toast
+ */
+private fun saveImageToGallery(context: android.content.Context, bitmap: android.graphics.Bitmap): Boolean {
+    return try {
+        val filename = "image_${System.currentTimeMillis()}.jpg"
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Tweet")
+        }
+        
+        val uri = context.contentResolver.insert(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        )
+        
+        uri?.let { imageUri ->
+            context.contentResolver.openOutputStream(imageUri)?.use { outputStream ->
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, outputStream)
+            }
+        }
+        true
+    } catch (e: Exception) {
+        Timber.e("Failed to save image: $e")
+        false
     }
 }
