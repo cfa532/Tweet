@@ -49,7 +49,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
 @Composable
-fun MediaPreviewGrid(
+fun MediaGrid(
     mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel
 ) {
@@ -218,9 +218,6 @@ fun MediaPreviewGrid(
                         .aspectRatio(aspectRatio)
                         .clipToBounds()
                         .clickable {
-                            Timber.d("MediaPreviewGrid: TAP DETECTED for single item")
-                            Timber.d("MediaPreviewGrid: Creating MediaViewerParams for single item")
-                            Timber.d("MediaPreviewGrid: mediaItems types: ${mediaItems.map { it.type }}")
                             val params = MediaViewerParams(
                                 mediaItems.map {
                                     Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
@@ -634,12 +631,8 @@ fun MediaPreviewGrid(
                                 .aspectRatio(1f)
                                 .clipToBounds()
                                 .clickable {
-                                    Timber.d("MediaPreviewGrid: TAP DETECTED for index $index")
-                                    Timber.d("MediaPreviewGrid: Creating MediaViewerParams for index $index")
-                                    Timber.d("MediaPreviewGrid: mediaItems types: ${mediaItems.map { it.type }}")
                                     val params = MediaViewerParams(
                                         mediaItems.map {
-                                            Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
                                             MediaItem(
                                                 getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                                 it.type
@@ -724,7 +717,5 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
         
         else -> MediaType.Unknown
     }
-    
-    Timber.d("MediaPreviewGrid: Inferred type from filename '$fileName': $inferredType")
     return inferredType
 }

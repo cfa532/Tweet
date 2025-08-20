@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -59,7 +58,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import us.fireshare.tweet.widget.MediaPreviewGrid
+import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -146,7 +145,7 @@ fun CommentItem(
                             .wrapContentHeight()
                             .heightIn(max = 600.dp) // Max height for media grid in comments
                     ) {
-                        MediaPreviewGrid(it, viewModel)
+                        MediaGrid(it, viewModel)
                     }
                 }
             }

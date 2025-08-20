@@ -38,7 +38,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import us.fireshare.tweet.widget.MediaPreviewGrid
+import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
 import java.util.concurrent.TimeUnit
 
@@ -173,7 +173,7 @@ fun TweetItemBody(
                         tonalElevation = 4.dp,
                         shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaPreviewGrid(stableAttachments, viewModel)
+                        MediaGrid(stableAttachments, viewModel)
                     }
                 }
 
