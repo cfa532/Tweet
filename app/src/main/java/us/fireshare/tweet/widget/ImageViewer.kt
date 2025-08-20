@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
@@ -77,7 +79,9 @@ private fun saveImageToGallery(context: android.content.Context, bitmap: android
 data class ImageLoadState(
     val bitmap: android.graphics.Bitmap? = null,
     val isLoading: Boolean = false,
-    val hasError: Boolean = false
+    val hasError: Boolean = false,
+    val retryCount: Int = 0,
+    val isVisible: Boolean = false
 )
 
 /**
@@ -98,8 +102,8 @@ fun AdvancedImageViewer(
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
     var imageFile by remember { mutableStateOf<File?>(null) }
 
-    // Load image using ImageCacheManager
-    LaunchedEffect(mid, imageUrl) {
+    // Load image using ImageCacheManager with retry mechanism
+    LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
             
@@ -107,12 +111,36 @@ fun AdvancedImageViewer(
             val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
             
             if (cachedBitmap == null) {
-                // If not cached, download and cache
-                val downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                // If not cached, download and cache with retry logic
+                var downloadedBitmap: android.graphics.Bitmap? = null
+                var attempt = 0
+                val maxAttempts = 3
+                
+                while (downloadedBitmap == null && attempt < maxAttempts) {
+                    attempt++
+                    try {
+                        downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                        if (downloadedBitmap == null) {
+                            Timber.tag("AdvancedImageViewer").w("Attempt $attempt failed to load image: $imageUrl")
+                            if (attempt < maxAttempts) {
+                                delay(1000L * attempt) // Exponential backoff
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("AdvancedImageViewer").e(e, "Attempt $attempt failed to load image: $imageUrl")
+                        if (attempt < maxAttempts) {
+                            delay(1000L * attempt) // Exponential backoff
+                        }
+                    }
+                }
                 
                 if (downloadedBitmap == null) {
-                    loadState = loadState.copy(isLoading = false, hasError = true)
-                    Timber.tag("AdvancedImageViewer").e("Failed to load image: $imageUrl")
+                    loadState = loadState.copy(
+                        isLoading = false, 
+                        hasError = true,
+                        retryCount = loadState.retryCount + 1
+                    )
+                    Timber.tag("AdvancedImageViewer").e("All attempts failed to load image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     onLoadComplete?.invoke()
@@ -128,7 +156,11 @@ fun AdvancedImageViewer(
                 imageFile = cachedFile
             }
         } catch (e: Exception) {
-            loadState = loadState.copy(isLoading = false, hasError = true)
+            loadState = loadState.copy(
+                isLoading = false, 
+                hasError = true,
+                retryCount = loadState.retryCount + 1
+            )
             Timber.tag("AdvancedImageViewer").e("Error loading image: $e")
         }
     }
@@ -222,15 +254,31 @@ fun AdvancedImageViewer(
                     }
             )
         } else if (loadState.hasError) {
-            // Show error state
+            // Show error state with retry option
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = stringResource(R.string.failed_to_load_image),
-                    color = Color.White
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.failed_to_load_image),
+                        color = Color.White
+                    )
+                    if (loadState.retryCount < 3) {
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                loadState = loadState.copy(
+                                    hasError = false,
+                                    retryCount = loadState.retryCount + 1
+                                )
+                            }
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                }
             }
         } else if (loadState.isLoading) {
             // Show loading state
@@ -315,21 +363,45 @@ fun ImageViewer(
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
-    // Load image using ImageCacheManager
-    LaunchedEffect(mid, imageUrl) {
+    // Load image using ImageCacheManager with retry mechanism
+    LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
 
             // Try to load from cache first
             val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
 
-            // If not cached, download and cache
+            // If not cached, download and cache with retry logic
             if (cachedBitmap == null) {
-                val downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                var downloadedBitmap: android.graphics.Bitmap? = null
+                var attempt = 0
+                val maxAttempts = 2 // Fewer retries for preview images
+                
+                while (downloadedBitmap == null && attempt < maxAttempts) {
+                    attempt++
+                    try {
+                        downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                        if (downloadedBitmap == null) {
+                            Timber.tag("ImageViewer").w("Attempt $attempt failed to load image: $imageUrl")
+                            if (attempt < maxAttempts) {
+                                delay(500L * attempt) // Shorter backoff for preview images
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("ImageViewer").e(e, "Attempt $attempt failed to load image: $imageUrl")
+                        if (attempt < maxAttempts) {
+                            delay(500L * attempt) // Shorter backoff for preview images
+                        }
+                    }
+                }
 
                 if (downloadedBitmap == null) {
-                    loadState = loadState.copy(isLoading = false, hasError = true)
-                    Timber.tag("ImageViewer").e("Failed to load image: $imageUrl")
+                    loadState = loadState.copy(
+                        isLoading = false, 
+                        hasError = true,
+                        retryCount = loadState.retryCount + 1
+                    )
+                    Timber.tag("ImageViewer").e("All attempts failed to load image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     onLoadComplete?.invoke()
@@ -339,7 +411,11 @@ fun ImageViewer(
                 onLoadComplete?.invoke()
             }
         } catch (e: Exception) {
-            loadState = loadState.copy(isLoading = false, hasError = true)
+            loadState = loadState.copy(
+                isLoading = false, 
+                hasError = true,
+                retryCount = loadState.retryCount + 1
+            )
             Timber.tag("ImageViewer").e("Error loading image: $e")
         }
     }
@@ -378,15 +454,38 @@ fun ImageViewer(
                 modifier = Modifier.fillMaxSize()
             )
         } else if (loadState.hasError) {
-            // Show error state
+            // Show error state with retry option for full screen
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = stringResource(R.string.failed_to_load_image),
-                    color = if (isFullScreen) Color.White else Color.Unspecified
-                )
+                if (isFullScreen) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.failed_to_load_image),
+                            color = Color.White
+                        )
+                        if (loadState.retryCount < 2) {
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    loadState = loadState.copy(
+                                        hasError = false,
+                                        retryCount = loadState.retryCount + 1
+                                    )
+                                }
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.failed_to_load_image),
+                        color = Color.Unspecified
+                    )
+                }
             }
         } else if (loadState.isLoading) {
             // Show loading state

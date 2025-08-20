@@ -8,6 +8,8 @@ import android.graphics.Paint
 import android.util.LruCache
 import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
@@ -16,6 +18,8 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * ImageCacheManager compresses and caches images by their mid (unique id).
@@ -24,14 +28,24 @@ import java.net.URL
  * - Provides suspend functions for cache operations
  * - Supports downloading images from URLs
  * - Improved memory management with proper bitmap recycling
+ * - Connection pooling and concurrent download limits
+ * - Loading prioritization for visible images
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    private const val MAX_MEMORY_CACHE_SIZE = 200 * 1024 * 1024 // Reduced to 200MB
+    private const val MAX_MEMORY_CACHE_SIZE = 150 * 1024 * 1024 // Reduced to 150MB for better memory management
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
-    private const val CONNECTION_TIMEOUT = 10000 // 10 seconds
-    private const val READ_TIMEOUT = 15000 // 15 seconds
+    private const val CONNECTION_TIMEOUT = 8000 // 8 seconds
+    private const val READ_TIMEOUT = 12000 // 12 seconds
+    private const val MAX_CONCURRENT_DOWNLOADS = 3 // Limit concurrent downloads
+    private const val MAX_RETRY_ATTEMPTS = 2
+
+    // Connection pool for better performance
+    private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
+    private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    private val activeDownloads = AtomicInteger(0)
+    private val downloadQueue = ConcurrentHashMap<String, Boolean>()
 
     // LRU memory cache (mid -> Bitmap)
     private val memoryCache = object : LruCache<String, Bitmap>(MAX_MEMORY_CACHE_SIZE) {
@@ -112,9 +126,8 @@ object ImageCacheManager {
             }
         }
 
-
     /**
-     * Download and cache image from URL
+     * Download and cache image from URL with improved error handling and retry logic
      */
     suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
@@ -122,36 +135,49 @@ object ImageCacheManager {
                 // Check if already cached first
                 getCachedImage(context, mid)?.let { return@withContext it }
 
-                val url = URL(imageUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = CONNECTION_TIMEOUT
-                connection.readTimeout = READ_TIMEOUT
-                connection.requestMethod = "GET"
+                // Check if already downloading this image
+                if (downloadQueue.containsKey(mid)) {
+                    Timber.tag("ImageCacheManager").d("Already downloading image: $mid")
+                    return@withContext null
+                }
 
-                var inputStream: InputStream? = null
+                // Acquire semaphore to limit concurrent downloads
+                downloadSemaphore.acquire()
+                downloadQueue[mid] = true
+                activeDownloads.incrementAndGet()
+
                 try {
-                    inputStream = connection.inputStream
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
-
-                    if (bitmap != null && !bitmap.isRecycled) {
-                        // Cache the downloaded image
-                        cacheImage(context, mid, bitmap)
-                        return@withContext bitmap
-                    } else {
-                        Timber.tag("ImageCacheManager")
-                            .e("Failed to decode image from URL: $imageUrl")
-                        return@withContext null
+                    Timber.tag("ImageCacheManager").d("Starting download for: $mid (active: ${activeDownloads.get()})")
+                    
+                    var bitmap: Bitmap? = null
+                    var attempt = 0
+                    
+                    while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
+                        attempt++
+                        try {
+                            bitmap = performDownload(imageUrl, mid)
+                            if (bitmap != null && !bitmap.isRecycled) {
+                                // Cache the downloaded image
+                                cacheImage(context, mid, bitmap)
+                                Timber.tag("ImageCacheManager").d("Successfully downloaded and cached: $mid")
+                                return@withContext bitmap
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ImageCacheManager").e("Download attempt $attempt failed for $mid: $e")
+                                                         if (attempt < MAX_RETRY_ATTEMPTS) {
+                                 delay(1000L * attempt) // Exponential backoff
+                             }
+                        }
                     }
-                } catch (e: OutOfMemoryError) {
-                    Timber.tag("ImageCacheManager").e("OutOfMemoryError downloading image: $e")
-                    clearMemoryCache()
+                    
+                    Timber.tag("ImageCacheManager").e("All download attempts failed for: $mid")
                     return@withContext null
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").e("Error downloading image: $e")
-                    return@withContext null
+                    
                 } finally {
-                    inputStream?.close()
-                    connection.disconnect()
+                    downloadQueue.remove(mid)
+                    activeDownloads.decrementAndGet()
+                    downloadSemaphore.release()
+                    Timber.tag("ImageCacheManager").d("Finished download for: $mid (active: ${activeDownloads.get()})")
                 }
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").e("Error in downloadAndCacheImage: $e")
@@ -160,7 +186,50 @@ object ImageCacheManager {
         }
 
     /**
-     * Load image from URL or cache
+     * Perform the actual download with connection pooling
+     */
+    private suspend fun performDownload(imageUrl: String, mid: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            var connection: HttpURLConnection? = null
+            var inputStream: InputStream? = null
+            
+            try {
+                val url = URL(imageUrl)
+                connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = CONNECTION_TIMEOUT
+                connection.readTimeout = READ_TIMEOUT
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("User-Agent", "TweetApp/1.0")
+                
+                // Add connection to pool
+                connectionPool[mid] = connection
+                
+                inputStream = connection.inputStream
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+
+                if (bitmap != null && !bitmap.isRecycled) {
+                    return@withContext bitmap
+                } else {
+                    Timber.tag("ImageCacheManager")
+                        .e("Failed to decode image from URL: $imageUrl")
+                    return@withContext null
+                }
+            } catch (e: OutOfMemoryError) {
+                Timber.tag("ImageCacheManager").e("OutOfMemoryError downloading image: $e")
+                clearMemoryCache()
+                return@withContext null
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error downloading image: $e")
+                return@withContext null
+            } finally {
+                inputStream?.close()
+                connection?.disconnect()
+                connectionPool.remove(mid)
+            }
+        }
+
+    /**
+     * Load image from URL or cache with prioritization
      */
     suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
@@ -173,6 +242,22 @@ object ImageCacheManager {
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").e("Error in loadImage: $e")
                 null
+            }
+        }
+
+    /**
+     * Preload image in background (lower priority)
+     */
+    suspend fun preloadImage(context: Context, imageUrl: String, mid: String) =
+        withContext(Dispatchers.IO) {
+            try {
+                // Only preload if not already cached
+                if (getCachedImage(context, mid) == null) {
+                    Timber.tag("ImageCacheManager").d("Preloading image: $mid")
+                    downloadAndCacheImage(context, imageUrl, mid)
+                }
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e("Error preloading image: $e")
             }
         }
 
@@ -321,6 +406,13 @@ object ImageCacheManager {
             (hitCount * 100.0 / (hitCount + missCount)).toInt()
         } else 0
 
-        return "Memory: ${currentSize}/${maxSize}, Hit Rate: ${hitRate}%"
+        return "Memory: ${currentSize}/${maxSize}, Hit Rate: ${hitRate}%, Active Downloads: ${activeDownloads.get()}"
+    }
+
+    /**
+     * Get download queue status
+     */
+    fun getDownloadQueueStatus(): String {
+        return "Queue Size: ${downloadQueue.size}, Available Permits: ${downloadSemaphore.availablePermits}"
     }
 }

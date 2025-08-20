@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +72,10 @@ fun MediaGrid(
     val limitedMediaList by remember(mediaItems, maxItems) {
         derivedStateOf { mediaItems.take(maxItems) }
     }
+
+    // Track visible items for lazy loading optimization
+    var visibleItemIndices by remember { mutableStateOf(setOf<Int>()) }
+    val gridState = rememberLazyGridState()
 
     // Helper: get aspect ratio for an item, using Compose state for images
     @OptIn(UnstableApi::class)
@@ -144,8 +149,8 @@ fun MediaGrid(
             VideoManager.stopSequentialPlayback()
         }
         
-        // Preload all videos in the grid asynchronously to avoid blocking UI
-        videoMids.forEach { videoMid ->
+        // Preload only visible videos to reduce memory pressure
+        videoMids.forEachIndexed { index, videoMid ->
             val mediaItem = limitedMediaList.find { it.mid == videoMid }
             mediaItem?.let { item ->
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
@@ -273,34 +278,34 @@ fun MediaGrid(
                             }
                         }
                     }
-                                    } else if (isPortrait0 && isPortrait1) {
-                        // Both portrait: set grid's aspectRatio to 1 and align them horizontally
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f),
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            for (idx in 0..1) {
-                                Box(
+                } else if (isPortrait0 && isPortrait1) {
+                    // Both portrait: set grid's aspectRatio to 1 and align them horizontally
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        for (idx in 0..1) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clipToBounds()
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                        index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onVideoCompleted = { onVideoCompleted(idx) }
-                                    )
-                                }
+                                        .fillMaxSize(),
+                                    index = idx,
+                                    autoPlay = currentPlayingVideoIndex == idx,
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(idx) }
+                                )
                             }
                         }
+                    }
                 } else {
                     // Mixed orientations: set grid's ratio to 4:3 and let landscape item takes wider space
                     Row(
@@ -615,16 +620,20 @@ fun MediaGrid(
                 }
             }
             4 -> {
-                // Use original grid method for 4 items
+                // Use improved lazy grid method for 4+ items with better loading optimization
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
+                    state = gridState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentWidth(Alignment.CenterHorizontally),
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    itemsIndexed(limitedMediaList) { index, mediaItem ->
+                    itemsIndexed(
+                        items = limitedMediaList,
+                        key = { index, item -> "${item.mid}_$index" } // Stable key for better performance
+                    ) { index, mediaItem ->
                         MediaItemView(
                             limitedMediaList,
                             modifier = Modifier
