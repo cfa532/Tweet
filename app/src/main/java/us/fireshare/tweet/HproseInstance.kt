@@ -1130,7 +1130,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("deleteTweet").e(e)
-            null
+            throw Exception(e.message)
         }
     }
 
