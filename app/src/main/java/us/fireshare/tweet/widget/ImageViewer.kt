@@ -186,7 +186,7 @@ fun AdvancedImageViewer(
                         try {
                             imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(file.toUri()))
                         } catch (e: Exception) {
-                            Timber.tag("AdvancedImageViewer").e("Failed to load image in SubsamplingScaleImageView: $e")
+                            Timber.tag("AdvancedImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
                             // Fallback to regular Image if SubsamplingScaleImageView fails
                             loadState = loadState.copy(hasError = true)
                         }
@@ -457,7 +457,7 @@ fun ImageViewer(
                             }
                         }
                     } catch (e: Exception) {
-                        Timber.tag("ImageViewer").e(e, "Attempt $attempt failed to load image: $imageUrl")
+                        Timber.tag("ImageViewer").d(e, "Attempt $attempt failed to load image: $imageUrl")
                         if (attempt < maxAttempts) {
                             delay(500L * attempt) // Shorter backoff for preview images
                         }
@@ -470,7 +470,7 @@ fun ImageViewer(
                         hasError = true,
                         retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("ImageViewer").e("All attempts failed to load image: $imageUrl")
+                    Timber.tag("ImageViewer").d("All attempts failed to load image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     onLoadComplete?.invoke()
@@ -485,7 +485,7 @@ fun ImageViewer(
                 hasError = true,
                 retryCount = loadState.retryCount + 1
             )
-            Timber.tag("ImageViewer").e("Error loading image: $e")
+            Timber.tag("ImageViewer").d("Error loading image: $e")
         }
     }
 

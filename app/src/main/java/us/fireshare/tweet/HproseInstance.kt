@@ -1338,8 +1338,7 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<Boolean>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId")
-            Timber.tag("togglePinnedTweet").e("Exception: $e")
+            Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId $e")
             null
         }
     }

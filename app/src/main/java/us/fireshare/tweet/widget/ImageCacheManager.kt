@@ -65,7 +65,7 @@ object ImageCacheManager {
                 try {
                     oldValue.recycle()
                 } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").e("Error recycling bitmap: $e")
+                    Timber.tag("ImageCacheManager").d("Error recycling bitmap: $e")
                 }
             }
         }
@@ -80,7 +80,7 @@ object ImageCacheManager {
                 val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
                 return@withContext if (file.exists()) file else null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error in getCachedImageFile: $e")
+                Timber.tag("ImageCacheManager").d("Error in getCachedImageFile: $e")
                 null
             }
         }
@@ -112,16 +112,16 @@ object ImageCacheManager {
                         }
                     } catch (e: OutOfMemoryError) {
                         Timber.tag("ImageCacheManager")
-                            .e("OutOfMemoryError loading cached image: $e")
+                            .d("OutOfMemoryError loading cached image: $e")
                         clearMemoryCache()
                         return@withContext null
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").e("Error loading cached image: $e")
+                        Timber.tag("ImageCacheManager").d("Error loading cached image: $e")
                     }
                 }
                 null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error in getCachedImage: $e")
+                Timber.tag("ImageCacheManager").d("Error in getCachedImage: $e")
                 null
             }
         }
@@ -137,7 +137,6 @@ object ImageCacheManager {
 
                 // Check if already downloading this image
                 if (downloadQueue.containsKey(mid)) {
-                    Timber.tag("ImageCacheManager").d("Already downloading image: $mid")
                     return@withContext null
                 }
 
@@ -147,8 +146,6 @@ object ImageCacheManager {
                 activeDownloads.incrementAndGet()
 
                 try {
-                    Timber.tag("ImageCacheManager").d("Starting download for: $mid (active: ${activeDownloads.get()})")
-                    
                     var bitmap: Bitmap? = null
                     var attempt = 0
                     
@@ -159,28 +156,26 @@ object ImageCacheManager {
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
-                                Timber.tag("ImageCacheManager").d("Successfully downloaded and cached: $mid")
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
-                            Timber.tag("ImageCacheManager").e("Download attempt $attempt failed for $mid: $e")
-                                                         if (attempt < MAX_RETRY_ATTEMPTS) {
-                                 delay(1000L * attempt) // Exponential backoff
-                             }
+                            Timber.tag("ImageCacheManager")
+                                .d("Download attempt $attempt failed for $mid: $e")
+                            if (attempt < MAX_RETRY_ATTEMPTS) {
+                                delay(1000L * attempt) // Exponential backoff
+                            }
                         }
                     }
                     
-                    Timber.tag("ImageCacheManager").e("All download attempts failed for: $mid")
                     return@withContext null
                     
                 } finally {
                     downloadQueue.remove(mid)
                     activeDownloads.decrementAndGet()
                     downloadSemaphore.release()
-                    Timber.tag("ImageCacheManager").d("Finished download for: $mid (active: ${activeDownloads.get()})")
                 }
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error in downloadAndCacheImage: $e")
+                Timber.tag("ImageCacheManager").d("Error in downloadAndCacheImage: $e")
                 null
             }
         }
@@ -211,15 +206,15 @@ object ImageCacheManager {
                     return@withContext bitmap
                 } else {
                     Timber.tag("ImageCacheManager")
-                        .e("Failed to decode image from URL: $imageUrl")
+                        .d("Failed to decode image from URL: $imageUrl")
                     return@withContext null
                 }
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").e("OutOfMemoryError downloading image: $e")
+                Timber.tag("ImageCacheManager").d("OutOfMemoryError downloading image: $e")
                 clearMemoryCache()
                 return@withContext null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error downloading image: $e")
+                Timber.tag("ImageCacheManager").d("Error downloading image: $e")
                 return@withContext null
             } finally {
                 inputStream?.close()
@@ -240,7 +235,7 @@ object ImageCacheManager {
                 // If not in cache, download and cache
                 downloadAndCacheImage(context, imageUrl, mid)
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error in loadImage: $e")
+                Timber.tag("ImageCacheManager").d("Error in loadImage: $e")
                 null
             }
         }
@@ -253,11 +248,10 @@ object ImageCacheManager {
             try {
                 // Only preload if not already cached
                 if (getCachedImage(context, mid) == null) {
-                    Timber.tag("ImageCacheManager").d("Preloading image: $mid")
                     downloadAndCacheImage(context, imageUrl, mid)
                 }
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error preloading image: $e")
+                Timber.tag("ImageCacheManager").d("Error preloading image: $e")
             }
         }
 
@@ -298,14 +292,14 @@ object ImageCacheManager {
                             out.write(byteArray)
                         }
                     } catch (e: IOException) {
-                        Timber.tag("ImageCacheManager").e("Error saving image to disk: $e")
+                        Timber.tag("ImageCacheManager").d("Error saving image to disk: $e")
                     }
                 }
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").e("OutOfMemoryError caching image: $e")
+                Timber.tag("ImageCacheManager").d("OutOfMemoryError caching image: $e")
                 clearMemoryCache()
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e("Error caching image: $e")
+                Timber.tag("ImageCacheManager").d("Error caching image: $e")
             }
         }
 
@@ -339,11 +333,11 @@ object ImageCacheManager {
 
             return resized
         } catch (e: OutOfMemoryError) {
-            Timber.tag("ImageCacheManager").e("OutOfMemoryError compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").d("OutOfMemoryError compressing bitmap: $e")
             clearMemoryCache()
             return null
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").e("Error compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").d("Error compressing bitmap: $e")
             return null
         }
     }
@@ -355,7 +349,7 @@ object ImageCacheManager {
         try {
             memoryCache.evictAll()
         } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error clearing memory cache: $e")
+            Timber.d("ImageCacheManager - Error clearing memory cache: $e")
         }
     }
 
@@ -372,10 +366,8 @@ object ImageCacheManager {
             if (file.exists()) {
                 file.delete()
             }
-            
-            Timber.tag("ImageCacheManager").d("Cleared cached image for mid: $mid")
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").e("Error clearing cached image for mid $mid: $e")
+            Timber.tag("ImageCacheManager").d("Error clearing cached image for mid $mid: $e")
         }
     }
 
@@ -390,7 +382,7 @@ object ImageCacheManager {
                 dir.deleteRecursively()
             }
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").e("Error clearing all cached images: $e")
+            Timber.tag("ImageCacheManager").d("Error clearing all cached images: $e")
         }
     }
 
@@ -407,12 +399,5 @@ object ImageCacheManager {
         } else 0
 
         return "Memory: ${currentSize}/${maxSize}, Hit Rate: ${hitRate}%, Active Downloads: ${activeDownloads.get()}"
-    }
-
-    /**
-     * Get download queue status
-     */
-    fun getDownloadQueueStatus(): String {
-        return "Queue Size: ${downloadQueue.size}, Available Permits: ${downloadSemaphore.availablePermits}"
     }
 }

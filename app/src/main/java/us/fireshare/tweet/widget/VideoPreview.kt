@@ -78,7 +78,6 @@ fun VideoPreview(
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
-        Timber.d("VideoPreview: Creating new ExoPlayer for videoMid: $videoMid")
         val player = if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url)
         } else {
@@ -231,13 +230,8 @@ fun VideoPreview(
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isLoading = false
-                Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
-                Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
-                Timber.tag("VideoPreview").e("Error code: ${error.errorCode}")
-
-                // Let the SimplifiedVideoCacheManager handle the fallback logic
-                // It will mark the video as failed only after all attempts are exhausted
-                // We just log the error here and let the fallback mechanism work
+                Timber.tag("VideoPreview").d(error, "Player error for video: $videoMid")
+                Timber.tag("VideoPreview").d("Error cause: ${error.cause}")
             }
         }
     }

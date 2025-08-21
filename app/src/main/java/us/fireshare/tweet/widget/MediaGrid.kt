@@ -161,7 +161,7 @@ fun MediaGrid(
                             VideoManager.preloadVideo(context, videoMid, mediaUrl)
                         } catch (e: Exception) {
                             // Log error but don't block UI
-                            Timber.tag("MediaPreviewGrid").e(e, "Failed to preload video: $videoMid")
+                            Timber.tag("MediaGrid").e(e, "Failed to preload video: $videoMid")
                         }
                     }
                 }
@@ -225,7 +225,6 @@ fun MediaGrid(
                         .clickable {
                             val params = MediaViewerParams(
                                 mediaItems.map {
-                                    Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
                                     MediaItem(
                                         getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                         it.type
@@ -671,17 +670,13 @@ fun MediaGrid(
 fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     // Check if type is provided and valid
     if (attachment.type != null && attachment.type != MediaType.Unknown) {
-        Timber.d("MediaPreviewGrid: Using provided type: ${attachment.type}")
         return attachment.type
     }
     
     // If type is Unknown but we have a valid type, try to infer from other properties
     if (attachment.type == MediaType.Unknown) {
-        Timber.d("MediaPreviewGrid: Type is Unknown, checking for video indicators")
-        
         // Check if it has aspect ratio (indicates video)
         if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
-            Timber.d("MediaPreviewGrid: Found aspect ratio ${attachment.aspectRatio}, treating as video")
             return MediaType.Video
         }
     }
