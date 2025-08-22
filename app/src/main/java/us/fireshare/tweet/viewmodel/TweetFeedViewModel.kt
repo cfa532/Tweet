@@ -319,11 +319,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         userViewModel?.removeTweetFromAllLists(tweetId)
 
         // Navigate back immediately for better UX
-//        applicationScope.launch(Main) {
-//            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-//                navController.popBackStack()
-//            }
-//        }
+        applicationScope.launch(Main) {
+            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+                navController.popBackStack()
+            }
+        }
 
         // Perform actual deletion in background
         try {

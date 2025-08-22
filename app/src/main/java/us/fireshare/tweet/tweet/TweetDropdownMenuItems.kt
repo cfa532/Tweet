@@ -67,6 +67,7 @@ fun TweetDropdownMenuItems(
     val shouldShowDeleteButton = when (contextType) {
         "followingsTweet" -> true // Show delete for all tweets in main feed
         "appUserProfile" -> tweet.authorId == appUser.mid // Show delete only for app user's tweets in profile
+        "tweetDetail" -> tweet.authorId == appUser.mid // Show delete for user's own tweets in detail view
         else -> false // Don't show delete in other contexts
     }
     
@@ -82,10 +83,10 @@ fun TweetDropdownMenuItems(
                 onDismissRequest()
 
                 try {
-                    tweetFeedViewModel.viewModelScope.launch(IO) {
+                    applicationScope.launch(IO) {
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
                             // callback code after deletion
-                            tweetFeedViewModel.viewModelScope.launch(IO) {
+                            applicationScope.launch(IO) {
                                 if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
                                     val originalTweet = HproseInstance.fetchTweet(
                                         tweet.originalTweetId!!,
