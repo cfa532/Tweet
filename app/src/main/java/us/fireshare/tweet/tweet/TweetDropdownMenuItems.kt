@@ -84,6 +84,7 @@ fun TweetDropdownMenuItems(
                 try {
                     tweetFeedViewModel.viewModelScope.launch(IO) {
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
+                            // callback code after deletion
                             tweetFeedViewModel.viewModelScope.launch(IO) {
                                 if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
                                     val originalTweet = HproseInstance.fetchTweet(

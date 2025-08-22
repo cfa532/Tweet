@@ -288,7 +288,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     ) {
         // Check if this is a retweet and get original tweet info
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
-        val isRetweet = tweetToDelete?.originalTweetId != null
         val originalTweetId = tweetToDelete?.originalTweetId
 
         // OPTIMISTIC UPDATE: Remove tweet immediately
@@ -298,29 +297,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (tweetToDelete?.authorId == appUser.mid) {
             appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
             TweetCacheManager.saveUser(appUser)
-            Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
         }
 
-        // Optimistically decrease retweet count if this is a retweet
-        if (isRetweet && originalTweetId != null) {
+        // Optimistically decrease retweet count if this is a retweet and in the current list
+        if (originalTweetId != null) {
             _tweets.value = _tweets.value.map { tweet ->
                 if (tweet.mid == originalTweetId) {
-                    val newRetweetCount = max(0, tweet.retweetCount - 1)
-                    Timber.tag("TweetFeedViewModel")
-                        .d("Optimistically decreased retweet count for ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
-                    tweet.copy(retweetCount = newRetweetCount)
+                    val updatedOriginalTweet = tweet.copy(retweetCount = max(0, tweet.retweetCount - 1))
+                    applicationScope.launch {
+                        // Post TweetUpdated notification to update individual TweetViewModel instances
+                        TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
+                    }
+                    updatedOriginalTweet
                 } else {
                     tweet
-                }
-            }
-
-            // Post TweetUpdated notification to update individual TweetViewModel instances
-            val updatedOriginalTweet = _tweets.value.find { it.mid == originalTweetId }
-            if (updatedOriginalTweet != null) {
-                applicationScope.launch {
-                    TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
-                    Timber.tag("TweetFeedViewModel")
-                        .d("Posted TweetUpdated notification for optimistically updated original tweet ${originalTweetId}")
                 }
             }
         }
@@ -329,11 +319,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         userViewModel?.removeTweetFromAllLists(tweetId)
 
         // Navigate back immediately for better UX
-        applicationScope.launch(Main) {
-            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                navController.popBackStack()
-            }
-        }
+//        applicationScope.launch(Main) {
+//            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
+//                navController.popBackStack()
+//            }
+//        }
 
         // Perform actual deletion in background
         try {
