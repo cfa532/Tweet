@@ -22,8 +22,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -75,6 +78,7 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
+                // inform user the tweet is being deleted.
                 Toast.makeText(
                     context,
                     context.getString(R.string.delete_tweet),
@@ -82,8 +86,8 @@ fun TweetDropdownMenuItems(
                 ).show()
                 onDismissRequest()
 
-                try {
-                    applicationScope.launch(IO) {
+                applicationScope.launch(IO) {
+                    try {
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
                             // callback code after deletion
                             applicationScope.launch(IO) {
@@ -103,10 +107,18 @@ fun TweetDropdownMenuItems(
                                 }
                             }
                         }
+                    } catch (e: Exception) {
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Error deleting tweet: ${e.message}")
+                        // Show error toast for any exceptions
+                        withContext(Main) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.delete_failed),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
-                } catch (e: Exception) {
-                    Timber.tag("TweetDropdownMenuItems")
-                        .e(e, "Error deleting tweet: ${e.message}")
                 }
             },
             text = {

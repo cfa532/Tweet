@@ -326,30 +326,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         // Perform actual deletion in background
-        try {
-            // Delete from local cache first
-            dao.deleteCachedTweet(tweetId)
+        // Delete from local cache first
+        dao.deleteCachedTweet(tweetId)
 
-            // Delete from backend
-            HproseInstance.deleteTweet(tweetId)
-            callback()
-        } catch (e: Exception) {
-            // If backend deletion fails, log the error and show toast
-            Timber.tag("TweetFeedViewModel")
-                .e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
-            
-            // Show error toast to user
-            withContext(Main) {
-                val context = notificationContextRef?.get()
-                if (context != null) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.delete_failed),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
+        // Delete from backend
+        HproseInstance.deleteTweet(tweetId)
+        callback()
     }
 
     /**
