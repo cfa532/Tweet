@@ -283,8 +283,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     suspend fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
+        userViewModel: UserViewModel? = null,
         callback: () -> Unit,
-        userViewModel: us.fireshare.tweet.viewmodel.UserViewModel? = null
     ) {
         // Check if this is a retweet and get original tweet info
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
@@ -336,26 +336,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         // Perform actual deletion in background
-        applicationScope.launch(IO) {
-            try {
-                // Delete from local cache first
-                dao.deleteCachedTweet(tweetId)
+        try {
+            // Delete from local cache first
+            dao.deleteCachedTweet(tweetId)
 
-                // Delete from backend
-                HproseInstance.deleteTweet(tweetId)
-
-                // Call callback on main thread
-                withContext(Main) {
-                    callback()
-                }
-            } catch (e: Exception) {
-                // If backend deletion fails, just log the error
-                Timber.tag("TweetFeedViewModel")
-                    .e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
-
-                // Call callback on main thread
-                withContext(Main) {
-                    callback()
+            // Delete from backend
+            HproseInstance.deleteTweet(tweetId)
+            callback()
+        } catch (e: Exception) {
+            // If backend deletion fails, log the error and show toast
+            Timber.tag("TweetFeedViewModel")
+                .e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
+            
+            // Show error toast to user
+            withContext(Main) {
+                val context = notificationContextRef?.get()
+                if (context != null) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.delete_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }

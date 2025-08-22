@@ -79,13 +79,12 @@ fun TweetDropdownMenuItems(
                     context.getString(R.string.delete_tweet),
                     Toast.LENGTH_SHORT
                 ).show()
-                // Dismiss popup immediately for better UX
                 onDismissRequest()
 
-                tweetFeedViewModel.viewModelScope.launch(IO) {
-                    try {
-                        tweetFeedViewModel.delTweet(navController, tweet.mid, {
-                            applicationScope.launch(IO) {
+                try {
+                    tweetFeedViewModel.viewModelScope.launch(IO) {
+                        tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
+                            tweetFeedViewModel.viewModelScope.launch(IO) {
                                 if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
                                     val originalTweet = HproseInstance.fetchTweet(
                                         tweet.originalTweetId!!,
@@ -101,11 +100,11 @@ fun TweetDropdownMenuItems(
                                     }
                                 }
                             }
-                        }, appUserViewModel)
-                    } catch (e: Exception) {
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Error deleting tweet: ${e.message}")
+                        }
                     }
+                } catch (e: Exception) {
+                    Timber.tag("TweetDropdownMenuItems")
+                        .e(e, "Error deleting tweet: ${e.message}")
                 }
             },
             text = {

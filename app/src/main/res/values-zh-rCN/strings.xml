@@ -72,6 +72,7 @@
     <string name="comment_failed">评论失败</string>
     <string name="comment_uploaded">评论发布成功</string>
     <string name="comment_delete_failed">评论删除失败，请重试。</string>
+    <string name="delete_failed">推文删除失败，请重试。</string>
     <string name="confirm_pwd">请确认密码</string>
     <string name="use_current_pswd">保持现有密码</string>
     <string name="user_bookmarks">书签</string>

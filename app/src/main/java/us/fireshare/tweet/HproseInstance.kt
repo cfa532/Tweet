@@ -1097,7 +1097,7 @@ object HproseInstance {
     /**
      * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
      */
-    suspend fun deleteTweet(tweetId: String): String? {
+    suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
         val entry = "delete_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1110,7 +1110,7 @@ object HproseInstance {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
             if (response?.get("success") == true) {
-                val deletedTweetId = response["tweetid"] as? String
+                val deletedTweetId = response["tweetid"] as? MimeiId
 
                 // Post notification for successful deletion
                 if (deletedTweetId != null) {
@@ -1121,7 +1121,6 @@ object HproseInstance {
                         )
                     )
                 }
-
                 deletedTweetId
             } else {
                 val errorMessage =
