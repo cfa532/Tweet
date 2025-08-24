@@ -51,6 +51,7 @@ firebaseAnalytics = "23.0.0"
 ksp = "2.1.21-2.0.2"
 uiGraphics = "1.9.0"
 workTesting = "2.10.3"
+exifinterface = "1.4.1"
 
 [libraries]
 accompanist-systemuicontroller = { module = "com.google.accompanist:accompanist-systemuicontroller", version.ref = "accompanistSystemuicontroller" }
@@ -117,6 +118,7 @@ androidx-constraintlayout-compose = { group = "androidx.constraintlayout", name 
 androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

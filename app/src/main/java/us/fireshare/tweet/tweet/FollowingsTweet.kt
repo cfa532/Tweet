@@ -33,7 +33,6 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
  * Uses the self-contained TweetListView for displaying tweets with built-in pagination and refresh.
  * Includes external gesture detection for manual loadmore when at the last tweet.
  */
-@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun FollowingsTweet(
