@@ -102,7 +102,10 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() })
+                    IconButton(onClick = { 
+                        // Navigate back to the start destination (TweetFeed) to ensure proper navigation
+                        navController.popBackStack(navController.graph.startDestinationId, false)
+                    })
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
