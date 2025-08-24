@@ -66,16 +66,69 @@ fun AdvancedImageViewer(
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
     var imageFile by remember { mutableStateOf<File?>(null) }
 
-    // Load image using ImageCacheManager with retry mechanism
+    // Load image using ImageCacheManager with placeholder functionality
     LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
             
-            // Try to load from cache first
+            // Try to load from cache first as placeholder
             val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
             
-            if (cachedBitmap == null) {
-                // If not cached, download and cache with retry logic
+            if (cachedBitmap != null) {
+                // Show cached image immediately as placeholder
+                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
+                
+                // Get the cached file for SubsamplingScaleImageView
+                val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                if (cachedFile != null && cachedFile.exists()) {
+                    imageFile = cachedFile
+                }
+                
+                // Load original high-resolution image in background
+                try {
+                    var downloadedBitmap: android.graphics.Bitmap? = null
+                    var attempt = 0
+                    val maxAttempts = 3
+                    
+                    while (downloadedBitmap == null && attempt < maxAttempts) {
+                        attempt++
+                        try {
+                            downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                            if (downloadedBitmap == null) {
+                                Timber.tag("AdvancedImageViewer").w("Background load attempt $attempt failed to load image: $imageUrl")
+                                if (attempt < maxAttempts) {
+                                    delay(1000L * attempt) // Exponential backoff
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("AdvancedImageViewer").e(e, "Background load attempt $attempt failed to load image: $imageUrl")
+                            if (attempt < maxAttempts) {
+                                delay(1000L * attempt) // Exponential backoff
+                            }
+                        }
+                    }
+                    
+                    if (downloadedBitmap != null) {
+                        // Update with original high-resolution image
+                        loadState = loadState.copy(bitmap = downloadedBitmap)
+                        
+                        // Update file for SubsamplingScaleImageView
+                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
+                            imageFile = updatedCachedFile
+                        }
+                        
+                        onLoadComplete?.invoke()
+                        Timber.tag("AdvancedImageViewer").d("Successfully loaded original high-resolution image: $imageUrl")
+                    } else {
+                        Timber.tag("AdvancedImageViewer").w("Failed to load original image, keeping cached version: $imageUrl")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("AdvancedImageViewer").e(e, "Error loading original image in background: $imageUrl")
+                    // Keep the cached version if original loading fails
+                }
+            } else {
+                // No cached image available, load directly with retry logic
                 var downloadedBitmap: android.graphics.Bitmap? = null
                 var attempt = 0
                 val maxAttempts = 3
@@ -107,17 +160,15 @@ fun AdvancedImageViewer(
                     Timber.tag("AdvancedImageViewer").e("All attempts failed to load image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                    
+                    // Get the cached file for SubsamplingScaleImageView
+                    val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                    if (cachedFile != null && cachedFile.exists()) {
+                        imageFile = cachedFile
+                    }
+                    
                     onLoadComplete?.invoke()
                 }
-            } else {
-                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
-                onLoadComplete?.invoke()
-            }
-            
-            // Get the cached file for SubsamplingScaleImageView
-            val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
-            if (cachedFile != null && cachedFile.exists()) {
-                imageFile = cachedFile
             }
         } catch (e: Exception) {
             loadState = loadState.copy(
