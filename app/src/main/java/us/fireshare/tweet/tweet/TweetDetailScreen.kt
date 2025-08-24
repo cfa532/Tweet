@@ -2,6 +2,8 @@ package us.fireshare.tweet.tweet
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -110,6 +112,36 @@ fun TweetDetailScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
+    // Scroll-based top app bar visibility
+    var previousScrollOffset by remember { mutableStateOf(0) }
+    var showTopAppBar by remember { mutableStateOf(true) }
+    
+    // Animate top app bar visibility
+    val topAppBarAlpha by animateFloatAsState(
+        targetValue = if (showTopAppBar) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "topAppBarAlpha"
+    )
+
+    // Track scroll direction with improved logic
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemScrollOffset }
+            .collect { currentOffset ->
+                val scrollDelta = currentOffset - previousScrollOffset
+                
+                // Only change state if there's significant scroll movement
+                if (scrollDelta > 5) { // Scrolling down - hide top bar
+                    showTopAppBar = false
+                } else if (scrollDelta < -5) { // Scrolling up - show top bar
+                    showTopAppBar = true
+                }
+                // If scrollDelta is small (between -5 and 5), maintain current state
+                // This prevents the top bar from popping back when scrolling stops
+                
+                previousScrollOffset = currentOffset
+            }
+    }
+
     // Pull-to-refresh state
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
@@ -216,22 +248,27 @@ fun TweetDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                modifier = Modifier.offset(y = (-56 * (1 - topAppBarAlpha)).dp),
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
+                    titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
                 ),
                 title = {
                     Text(
                         text = "Tweet",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha)
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() })
-                    {
+                    IconButton(
+                        onClick = { navController.popBackStack() },
+                        enabled = topAppBarAlpha > 0.5f
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha)
                         )
                     }
                 },
