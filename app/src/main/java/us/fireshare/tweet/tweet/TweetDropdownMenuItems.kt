@@ -33,6 +33,8 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -50,20 +52,6 @@ fun TweetDropdownMenuItems(
     val navController = LocalNavController.current
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val originTweetViewModel =
-        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                parentEntry, key = tweet.originalTweetId
-            ) { factory ->
-                // Create a temporary tweet for the ViewModel, the actual tweet will be loaded by the ViewModel
-                factory.create(
-                    Tweet(
-                        mid = tweet.originalTweetId!!,
-                        authorId = tweet.originalAuthorId!!
-                    )
-                )
-            }
-        } else null
     val context = LocalContext.current
 
     // Only show delete button if tweet author is current user AND we're in allowed contexts
@@ -89,20 +77,26 @@ fun TweetDropdownMenuItems(
                 applicationScope.launch(IO) {
                     try {
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
-                            // callback code after deletion
-                            applicationScope.launch(IO) {
-                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                    val originalTweet = HproseInstance.fetchTweet(
-                                        tweet.originalTweetId!!,
-                                        tweet.originalAuthorId!!,
-                                        shouldCache = false
-                                    )
-                                    originalTweet?.let {
-                                        originTweetViewModel?.updateRetweetCount(
-                                            it,      // original tweet
-                                            tweet.mid,      // retweet Id
-                                            -1
+                            // Deletion completed successfully
+                            Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
+                            
+                            // Update retweet count of original tweet if this is a retweet
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                applicationScope.launch(IO) {
+                                    try {
+                                        val originalTweet = HproseInstance.fetchTweet(
+                                            tweet.originalTweetId!!,
+                                            tweet.originalAuthorId!!,
+                                            shouldCache = false
                                         )
+                                        originalTweet?.let { original ->
+                                            HproseInstance.updateRetweetCount(original, tweet.mid, -1)?.let { updatedTweet ->
+                                                // Post notification to update UI
+                                                TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedTweet))
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Timber.tag("TweetDropdownMenuItems").e(e, "Error updating retweet count")
                                     }
                                 }
                             }

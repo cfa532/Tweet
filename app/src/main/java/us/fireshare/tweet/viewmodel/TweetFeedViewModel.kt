@@ -288,7 +288,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     ) {
         // Check if this is a retweet and get original tweet info
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
-        val originalTweetId = tweetToDelete?.originalTweetId
 
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
@@ -297,22 +296,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (tweetToDelete?.authorId == appUser.mid) {
             appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
             TweetCacheManager.saveUser(appUser)
-        }
-
-        // Optimistically decrease retweet count if this is a retweet and in the current list
-        if (originalTweetId != null) {
-            _tweets.value = _tweets.value.map { tweet ->
-                if (tweet.mid == originalTweetId) {
-                    val updatedOriginalTweet = tweet.copy(retweetCount = max(0, tweet.retweetCount - 1))
-                    applicationScope.launch {
-                        // Post TweetUpdated notification to update individual TweetViewModel instances
-                        TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
-                    }
-                    updatedOriginalTweet
-                } else {
-                    tweet
-                }
-            }
         }
 
         // Also remove from UserViewModel lists if provided (for profile screen)
