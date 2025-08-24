@@ -1,6 +1,5 @@
 package us.fireshare.tweet
 
-
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -49,7 +48,6 @@ import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstanc
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
     lateinit var preferenceHelper: PreferenceHelper
@@ -1240,7 +1238,7 @@ object HproseInstance {
 
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
-        if (cachedUser != null) {
+        if (cachedUser != null && cachedUser.baseUrl != null) {
             return cachedUser
         }
 
