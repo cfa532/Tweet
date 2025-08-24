@@ -54,7 +54,7 @@ fun TweetDropdownMenuItems(
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val context = LocalContext.current
 
-    // Only show delete button if tweet author is current user AND we're in allowed contexts
+    // Show delete button based on context
     val shouldShowDeleteButton = when (contextType) {
         "followingsTweet" -> true // Show delete for all tweets in main feed
         "appUserProfile" -> tweet.authorId == appUser.mid // Show delete only for app user's tweets in profile

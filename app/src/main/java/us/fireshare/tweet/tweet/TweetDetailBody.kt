@@ -346,12 +346,12 @@ fun TweetDropdownMenu(
                 if (parentTweet.authorId == appUser.mid) {
                     TweetDropdownMenuItems(parentTweet, parentEntry, {
                         expanded = false
-                    }, "tweetDetail")
+                    }, context)
                 }
             } else {
                 TweetDropdownMenuItems(tweet, parentEntry, {
                     expanded = false
-                }, "tweetDetail")
+                }, context)
             }
         }
     }
