@@ -68,6 +68,7 @@ import us.fireshare.tweet.viewmodel.UserViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,13 +107,25 @@ fun ChatListScreen(
             userViewModel.refreshFollowingsAndFans()
         }
         
+        // Initial message preview
         withContext(Dispatchers.IO) {
             viewModel.previewMessages()
         }
+        
+        // Add a small delay before starting periodic fetching to avoid immediate recompositions
+        delay(2000)
+        
         while (true) {
-            delay(60_000)
-            withContext(Dispatchers.IO) {
-                viewModel.previewMessages()
+            try {
+                delay(60_000)
+                withContext(Dispatchers.IO) {
+                    viewModel.previewMessages()
+                }
+            } catch (e: Exception) {
+                // Log error but don't let it break the periodic fetching
+                Timber.e("ChatListScreen - Error in periodic message preview: ${e.message}")
+                // Add longer delay on error to prevent rapid retries
+                delay(30_000)
             }
         }
     }

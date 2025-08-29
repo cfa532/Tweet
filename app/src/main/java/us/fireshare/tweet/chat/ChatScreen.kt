@@ -182,9 +182,19 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
         
+        // Add a small delay before starting periodic fetching to avoid immediate recompositions
+        delay(1000)
+        
         while (true) {
-            withContext(Dispatchers.IO) {
-                viewModel.fetchNewMessage()
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.fetchNewMessage()
+                }
+            } catch (e: Exception) {
+                // Log error but don't let it break the periodic fetching
+                Timber.e("ChatScreen - Error fetching new messages: ${e.message}")
+                // Add longer delay on error to prevent rapid retries
+                delay(5000)
             }
             delay(15_000)
         }

@@ -62,8 +62,8 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(true) } // Start with controls visible
-    var showCloseButton by remember { mutableStateOf(true) } // Start with close button visible
+    var showControls by remember { mutableStateOf(false) } // Start with controls hidden
+    var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
     // Add player listener to handle state changes
@@ -325,8 +325,8 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(true) } // Start with controls visible
-    var showCloseButton by remember { mutableStateOf(true) } // Start with close button visible
+    var showControls by remember { mutableStateOf(false) } // Start with controls hidden
+    var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
     // Get the dedicated full screen player

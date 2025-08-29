@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,7 +84,7 @@ fun VideoPreview(
     var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
-    var recoveryAttempts by remember(videoMid) { mutableStateOf(0) }
+    var recoveryAttempts by remember(videoMid) { mutableIntStateOf(0) }
     val MAX_RECOVERY_ATTEMPTS = 5 // Increased from 3 to 5 for more lenient retry
 
     // Use VideoLoadingManager to track visibility and manage loading
@@ -217,7 +218,7 @@ fun VideoPreview(
             if (isMuted != globalMuteState) {
                 isMuted = globalMuteState
             }
-            kotlinx.coroutines.delay(100) // Check every 100ms
+            delay(100) // Check every 100ms
         }
     }
 
@@ -225,7 +226,7 @@ fun VideoPreview(
     LaunchedEffect(exoPlayer.isPlaying) {
         if (exoPlayer.isPlaying) {
             showTimeLabel = true
-            kotlinx.coroutines.delay(3000)
+            delay(3000)
             showTimeLabel = false
         }
     }
@@ -234,7 +235,7 @@ fun VideoPreview(
     LaunchedEffect(showTimeLabel) {
         while (showTimeLabel) {
             remainingTime = exoPlayer.duration - exoPlayer.currentPosition
-            kotlinx.coroutines.delay(1000)
+            delay(1000)
         }
     }
 
@@ -359,7 +360,7 @@ fun VideoPreview(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
@@ -374,10 +375,10 @@ fun VideoPreview(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                contentAlignment = Alignment.Center
             ) {
                 Column(
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
                 ) {
                     Icon(
@@ -472,7 +473,7 @@ fun VideoPreview(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp),
-                contentAlignment = androidx.compose.ui.Alignment.BottomStart
+                contentAlignment = Alignment.BottomStart
             ) {
                 Box(
                     modifier = Modifier

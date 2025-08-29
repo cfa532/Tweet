@@ -26,45 +26,43 @@ object BadgeStateManager {
     
     fun updateBadgeCount(count: Int) {
         val previousCount = _badgeCount.value
-        _badgeCount.value = count
         
-        if (badgeSupported) {
-            updateLauncherBadge(count)
+        // Only update if the count actually changed to prevent unnecessary recompositions
+        if (previousCount != count) {
+            _badgeCount.value = count
+            
+            if (badgeSupported) {
+                updateLauncherBadge(count)
+            } else {
+                Timber.tag("BadgeStateManager").d("Skipping launcher badge update - not supported on this device")
+            }
+            
+            val formattedText = LauncherBadgeManager.formatBadgeText(count)
+            Timber.tag("BadgeStateManager").d("Badge updated: $previousCount -> $count (display: '$formattedText')")
         } else {
-            Timber.tag("BadgeStateManager").d("Skipping launcher badge update - not supported on this device")
+            Timber.tag("BadgeStateManager").d("Badge count unchanged: $count, skipping update")
         }
-        
-        val formattedText = LauncherBadgeManager.formatBadgeText(count)
-        Timber.tag("BadgeStateManager").d("Badge updated: $previousCount -> $count (display: '$formattedText')")
     }
     
     fun clearBadge() {
         val previousCount = _badgeCount.value
-        _badgeCount.value = 0
         
-        if (badgeSupported) {
-            updateLauncherBadge(0)
+        // Only update if the badge is not already cleared
+        if (previousCount != 0) {
+            _badgeCount.value = 0
+            
+            if (badgeSupported) {
+                updateLauncherBadge(0)
+            } else {
+                Timber.tag("BadgeStateManager").d("Skipping launcher badge clear - not supported on this device")
+            }
+            
+            Timber.tag("BadgeStateManager").d("Badge cleared: $previousCount -> 0")
         } else {
-            Timber.tag("BadgeStateManager").d("Skipping launcher badge clear - not supported on this device")
+            Timber.tag("BadgeStateManager").d("Badge already cleared, skipping update")
         }
-        
-        Timber.tag("BadgeStateManager").d("Badge cleared: $previousCount -> 0")
     }
-    
-    fun incrementBadge() {
-        val newCount = _badgeCount.value + 1
-        _badgeCount.value = newCount
-        
-        if (badgeSupported) {
-            updateLauncherBadge(newCount)
-        } else {
-            Timber.tag("BadgeStateManager").d("Skipping launcher badge increment - not supported on this device")
-        }
-        
-        val formattedText = LauncherBadgeManager.formatBadgeText(newCount)
-        Timber.tag("BadgeStateManager").d("Badge incremented: ${newCount - 1} -> $newCount (display: '$formattedText')")
-    }
-    
+
     /**
      * Update launcher badge count on device icon
      * @param count Badge count to display
