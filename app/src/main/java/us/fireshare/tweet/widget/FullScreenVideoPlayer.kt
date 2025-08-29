@@ -62,8 +62,6 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(false) } // Start with controls hidden
-    var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
     // Add player listener to handle state changes
@@ -188,7 +186,7 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Full screen video player UI
+    // Full screen video player UI - let ExoPlayer handle its own controls completely
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -213,37 +211,22 @@ fun FullScreenVideoPlayer(
                     }
                 )
             }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { 
-                        Timber.d("FullScreenVideoPlayer: Screen tapped, toggling controls")
-                        showControls = !showControls
-                        showCloseButton = !showCloseButton
-                    }
-                )
-            }
     ) {
-        // Video player view with native controls
+        // Video player view with native controls - NO interference
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = existingPlayer
-                    useController = true // Re-enable native controls
+                    useController = true // Use native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Let ExoPlayer handle its own control visibility
+                    controllerShowTimeoutMs = 2000 // Auto-hide after 2 seconds
+                    controllerHideOnTouch = true // Hide when tapping outside controls
                 }
             },
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { 
-                            Timber.d("FullScreenVideoPlayer: AndroidView tapped, toggling controls")
-                            showControls = !showControls
-                            showCloseButton = !showCloseButton
-                        }
-                    )
-                }
                 .graphicsLayer {
                     translationY = dragOffset
                     // Add some scaling effect as the video is dragged down
@@ -251,64 +234,30 @@ fun FullScreenVideoPlayer(
                     scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
                     // Add alpha effect for fade out
                     alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                },
-            update = { playerView ->
-                // Control the visibility of the native controller
-                if (showControls) {
-                    playerView.showController()
-                } else {
-                    playerView.hideController()
                 }
-            }
         )
 
-        // Auto-hide controls and close button after 2 seconds
-        LaunchedEffect(showControls, showCloseButton) {
-            if (showControls || showCloseButton) {
-                delay(2000)
-                showControls = false
-                showCloseButton = false
-            }
-        }
-
-        // Transparent overlay for tap detection (above video player)
+        // Close button overlay (always visible for easy access)
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { 
-                            Timber.d("FullScreenVideoPlayer: Overlay tapped, toggling controls")
-                            showControls = !showControls
-                            showCloseButton = !showCloseButton
-                        }
+            modifier = Modifier.fillMaxSize()
+        ) {
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
                     )
-                }
-        )
-
-        // Close button overlay (since native controls don't have a close button)
-        if (showCloseButton) {
-            Box(
-                modifier = Modifier.fillMaxSize()
             ) {
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.close),
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
@@ -539,8 +488,10 @@ fun FullScreenVideoPlayer(
                 showControls = false
                 showCloseButton = false
             }
+
         }
     }
 }
+
 
 
