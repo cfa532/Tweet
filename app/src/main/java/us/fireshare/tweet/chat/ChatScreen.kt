@@ -970,8 +970,8 @@ fun ChatMediaPreview(
                 val videoUrl = mediaUrl
                 val videoAspectRatio = adjustedAspectRatio
                 
-                // Use key with a stable identifier to prevent recreation
-                key("chat_video_${videoMid}_0") {
+                // Use key with timestamp to handle same video sent multiple times
+                key("chat_video_${videoMid}_${System.currentTimeMillis()}") {
                     us.fireshare.tweet.widget.VideoPreview(
                         url = videoUrl,
                         modifier = Modifier.fillMaxSize(),
