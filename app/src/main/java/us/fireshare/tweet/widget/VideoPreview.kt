@@ -322,7 +322,6 @@ fun VideoPreview(
             .onGloballyPositioned { layoutCoordinates ->
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
-                    Timber.d("VideoPreview: Visibility changed for videoMid: $videoMid, isVideoVisible: $isVideoVisible -> $newVisibility")
                     isVideoVisible = newVisibility
                 }
             }

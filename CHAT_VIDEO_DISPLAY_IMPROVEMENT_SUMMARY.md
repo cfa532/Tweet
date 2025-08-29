@@ -29,11 +29,12 @@ if (videoMid != null) {
 ```
 
 ### **2. Visibility-Based Video Loading in ChatScreen**
-- **Added VideoLoadingManager import**: `import us.fireshare.tweet.widget.VideoLoadingManager`
 - **Added LocalContext import**: `import androidx.compose.ui.platform.LocalContext`
 - **Implemented visibility tracking**: Added logic to track which messages are currently visible
 - **Selective video preloading**: Only preload videos for messages that are currently visible on screen
 - **Optimized state management**: Used `derivedStateOf` to prevent fast-changing variable warnings
+- **Added debouncing**: 0.3-second debounce to prevent excessive video loading during rapid scrolling
+- **Fixed MediaType consistency**: Standardized all MediaType references to use the imported alias
 
 **Implementation:**
 ```kotlin
@@ -48,8 +49,9 @@ val visibleMessages by remember(listState, chatMessages) {
     }
 }
 
-// Preload videos for visible messages
+// Preload videos for visible messages with debouncing
 LaunchedEffect(visibleMessages, chatMessages.size) {
+    delay(300) // 0.3 second debounce
     visibleMessages.forEach { message ->
         message.attachments?.forEach { attachment ->
             if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
@@ -75,6 +77,7 @@ LaunchedEffect(visibleMessages, chatMessages.size) {
 - **Reduced memory usage**: Only visible videos are loaded, preventing memory congestion
 - **Better scrolling performance**: Videos outside the visible area don't consume resources
 - **Faster initial load**: ChatScreen loads faster by not preloading all videos at once
+- **Debounced loading**: 0.3-second debounce prevents excessive video loading during rapid scrolling
 
 ### **User Experience Improvements**
 - **Simplified retry**: Users can retry failed videos without worrying about attempt limits

@@ -111,7 +111,7 @@ fun ChatScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     
-    // Use VideoLoadingManager to manage video loading based on visibility
+    // Use visibility-based video loading with debouncing
     val visibleMessages by remember(listState, chatMessages) {
         derivedStateOf {
             val currentVisibleIndex = listState.firstVisibleItemIndex
@@ -122,8 +122,9 @@ fun ChatScreen(
         }
     }
     
-    // Preload videos for visible messages
+    // Preload videos for visible messages with debouncing
     LaunchedEffect(visibleMessages, chatMessages.size) {
+        delay(300) // 0.3 second debounce
         visibleMessages.forEach { message ->
             message.attachments?.forEach { attachment ->
                 if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
@@ -185,12 +186,12 @@ fun ChatScreen(
         val recentMessages = chatMessages.takeLast(10) // Preload videos from last 10 messages
         recentMessages.forEach { message ->
             message.attachments?.forEach { attachment ->
-                if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-                    !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+                if ((attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
+                    !VideoManager.isVideoPreloaded(attachment.mid)) {
                     val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
                     coroutineScope.launch(Dispatchers.IO) {
                         try {
-                            us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                            VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
                         } catch (e: Exception) {
                             Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
                         }
@@ -218,12 +219,12 @@ fun ChatScreen(
             val newMessages = chatMessages.takeLast(5) // Preload videos from last 5 messages
             newMessages.forEach { message ->
                 message.attachments?.forEach { attachment ->
-                    if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-                        !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+                    if ((attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
+                        !VideoManager.isVideoPreloaded(attachment.mid)) {
                         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
                         coroutineScope.launch(Dispatchers.IO) {
                             try {
-                                us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                                VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
                             } catch (e: Exception) {
                                 Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
                             }
@@ -281,22 +282,23 @@ fun ChatScreen(
 //        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    // Hide keyboard when tapping outside
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        // Hide keyboard when tapping outside
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        // Removed .pullRefresh(pullRefreshState)
+                    // Removed .pullRefresh(pullRefreshState)
                 ) {
                     LazyColumn(
                         modifier = Modifier
@@ -332,7 +334,7 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        
+
                         // Show "No more messages" indicator at the top if no more messages
                         if (!hasMoreMessages && chatMessages.isNotEmpty() && !isLoadingOlderMessages) {
                             item {
@@ -350,14 +352,14 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        
+
                         itemsIndexed(chatMessages) { index, msg ->
                             // Add time divider if more than 1 hour difference from previous message
                             if (index > 0) {
                                 val previousMessage = chatMessages[index - 1]
                                 val timeDifference = msg.timestamp - previousMessage.timestamp
                                 val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
-                                
+
                                 if (timeDifference > oneHourInMillis) {
                                     // Time divider
                                     Box(
@@ -380,7 +382,9 @@ fun ChatScreen(
                                             Text(
                                                 text = formatTimestamp(msg.timestamp),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(
+                                                    alpha = 0.6f
+                                                ),
                                                 modifier = Modifier.padding(horizontal = 12.dp)
                                             )
                                             HorizontalDivider(
@@ -394,10 +398,10 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            
+
                             ChatItem(
-                                viewModel = viewModel, 
-                                message = msg, 
+                                viewModel = viewModel,
+                                message = msg,
                                 messages = chatMessages,
                                 onImageClick = { attachment ->
                                     fullScreenAttachment = attachment
@@ -410,7 +414,7 @@ fun ChatScreen(
                             )
                         }
                     }
-                    
+
                     // Removed PullRefreshIndicator
                 }
                 ChatInput(
@@ -430,7 +434,7 @@ fun ChatScreen(
         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
         
         when (attachment.type) {
-            us.fireshare.tweet.datamodel.MediaType.Image -> {
+            MediaType.Image -> {
                 us.fireshare.tweet.widget.AdvancedImageViewer(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
@@ -438,7 +442,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Try to get existing player for seamless transition
                 val existingPlayer = VideoManager.transferToFullScreen(attachment.mid)
                 
@@ -450,7 +454,7 @@ fun ChatScreen(
                         onClose = {
                             showFullScreen = false
                             // Return player back to VideoManager when closed
-                            us.fireshare.tweet.widget.VideoManager.returnFromFullScreen(attachment.mid)
+                            VideoManager.returnFromFullScreen(attachment.mid)
                         },
                         enableImmersiveMode = true
                     )
@@ -962,7 +966,7 @@ fun ChatMediaPreview(
             .clip(RoundedCornerShape(8.dp))
     ) {
         // Show loading spinner only if video is not preloaded
-        if (isLoading && (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
+        if (isLoading && (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
             !VideoManager.isVideoPreloaded(attachment.mid)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
