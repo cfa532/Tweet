@@ -46,6 +46,7 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.widget.rememberTweetVideoPreloader
 
 enum class ScrollDirection {
     UP, DOWN, NONE
@@ -240,6 +241,19 @@ fun TweetListView(
                 onScrollStateChange?.invoke(scrollState)
             }
     }
+
+    // Use VideoLoadingManager to preload videos from upcoming tweets
+    val currentVisibleIndex = listState.firstVisibleItemIndex
+    val baseUrl = if (tweets.isNotEmpty() && currentVisibleIndex >= 0 && currentVisibleIndex < tweets.size) {
+        tweets[currentVisibleIndex].author?.baseUrl ?: ""
+    } else {
+        ""
+    }
+    rememberTweetVideoPreloader(
+        tweets = tweets,
+        currentVisibleIndex = currentVisibleIndex,
+        baseUrl = baseUrl
+    )
 
     // Check if we're at the last tweet for gesture detection
     val isAtLastTweet by remember(listState, tweets) {

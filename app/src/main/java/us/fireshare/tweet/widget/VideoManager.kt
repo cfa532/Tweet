@@ -38,7 +38,9 @@ object VideoManager {
     private val preloadQueue = mutableListOf<MimeiId>()
 
     // Memory management
-    private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB
+    private const val MEMORY_THRESHOLD_BYTES = 512L * 1024 * 1024 // Reduced from 1GB to 512MB for more aggressive cleanup
+    private const val MAX_VIDEO_PLAYERS = 30 // Maximum number of video players to keep in memory
+    private const val CLEANUP_RATIO = 0.6 // Release 60% of inactive videos when memory pressure is high
 
     /**
      * Get or create an ExoPlayer instance for a video
@@ -225,6 +227,68 @@ object VideoManager {
     fun getVideoActiveCount(videoMid: MimeiId): Int = activeVideos.getOrDefault(videoMid, 0)
 
     /**
+     * Force cleanup of all inactive videos
+     * This can be called when videos stop loading to recover from congestion
+     */
+    fun forceCleanupInactiveVideos() {
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        if (inactiveVideos.isNotEmpty()) {
+            Timber.w("VideoManager - Force cleaning up ${inactiveVideos.size} inactive videos")
+            inactiveVideos.forEach { videoMid ->
+                releaseVideo(videoMid)
+            }
+        }
+    }
+
+    /**
+     * Check if a video player is in a recoverable state
+     * @param videoMid Video's unique identifier
+     * @return true if the video can be recovered, false otherwise
+     */
+    fun isVideoRecoverable(videoMid: MimeiId): Boolean {
+        val player = videoPlayers[videoMid] ?: return false
+        return when (player.playbackState) {
+            androidx.media3.common.Player.STATE_IDLE -> true
+            androidx.media3.common.Player.STATE_ENDED -> true
+            androidx.media3.common.Player.STATE_READY -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Attempt to recover a video that has stopped loading
+     * @param context Android context
+     * @param videoMid Video's unique identifier
+     * @param videoUrl Video URL
+     * @return true if recovery was attempted, false if video doesn't exist
+     */
+    fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
+        val player = videoPlayers[videoMid] ?: return false
+        
+        Timber.d("VideoManager - Attempting recovery for video: $videoMid")
+        
+        try {
+            // Stop and reset the player
+            player.stop()
+            player.seekTo(0)
+            
+            // Create a new media source and prepare
+            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context)
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+            val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+            
+            player.setMediaSource(mediaSource)
+            player.prepare()
+            
+            Timber.d("VideoManager - Recovery attempted for video: $videoMid")
+            return true
+        } catch (e: Exception) {
+            Timber.e("VideoManager - Recovery failed for video: $videoMid, error: ${e.message}")
+            return false
+        }
+    }
+
+    /**
      * Get cache statistics
      */
     fun getCacheStats(): String {
@@ -256,6 +320,20 @@ object VideoManager {
      * Monitor memory usage and release videos if needed
      */
     private fun checkMemoryAndReleaseVideos() {
+        // Check if we have too many video players regardless of memory usage
+        if (videoPlayers.size > MAX_VIDEO_PLAYERS) {
+            Timber.w("VideoManager - Too many video players (${videoPlayers.size}), releasing inactive videos")
+            val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+            if (inactiveVideos.isNotEmpty()) {
+                val videosToRelease = inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt())
+                videosToRelease.forEach { videoMid ->
+                    releaseVideo(videoMid)
+                }
+                Timber.d("VideoManager - Released ${videosToRelease.size} videos due to player count limit")
+            }
+        }
+
+        // Check memory usage
         if (!isMemoryUsageHigh()) {
             return
         }
@@ -268,7 +346,7 @@ object VideoManager {
         if (inactiveVideos.isNotEmpty()) {
             // Release oldest inactive videos first
             val videosToRelease =
-                inactiveVideos.take(inactiveVideos.size / 2) // Release half of inactive videos
+                inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt()) // Release 60% of inactive videos
 
             videosToRelease.forEach { videoMid ->
                 releaseVideo(videoMid)
@@ -347,7 +425,7 @@ object VideoManager {
                     withContext(Dispatchers.Main) {
                         checkMemoryAndReleaseVideos()
                     }
-                    kotlinx.coroutines.delay(30000) // Check every 30 seconds
+                    kotlinx.coroutines.delay(15000) // Check every 15 seconds for more responsive cleanup
                 } catch (e: Exception) {
                     Timber.e("VideoManager - Error in memory monitoring: ${e.message}")
                     kotlinx.coroutines.delay(60000) // Wait longer on error

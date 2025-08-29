@@ -72,19 +72,23 @@ fun FullScreenVideoPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_IDLE -> {
-                        // If player becomes idle, prepare it again
-                        existingPlayer.prepare()
+                        // Only prepare if not already preparing and no error occurred
+                        if (!existingPlayer.isLoading) {
+                            Timber.d("FullScreenVideoPlayer: Player idle, preparing")
+                            existingPlayer.prepare()
+                        }
                     }
                     Player.STATE_READY -> {
                         // When ready, start playback
+                        Timber.d("FullScreenVideoPlayer: Player ready, starting playback")
                         existingPlayer.playWhenReady = true
                     }
                     Player.STATE_ENDED -> {
                         // If video ends, restart it
+                        Timber.d("FullScreenVideoPlayer: Video ended, restarting")
                         existingPlayer.seekTo(0)
                         existingPlayer.playWhenReady = true
                     }
-
                     Player.STATE_BUFFERING -> {
                         // Video is buffering, this is normal - no action needed
                         Timber.d("FullScreenVideoPlayer: Video is buffering")
@@ -93,8 +97,9 @@ fun FullScreenVideoPlayer(
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // If there's an error, try to prepare again
-                existingPlayer.prepare()
+                Timber.e("FullScreenVideoPlayer: Player error: ${error.message}")
+                // Don't automatically retry on error - let user handle it
+                // This prevents endless retry loops
             }
         }
         
@@ -144,12 +149,8 @@ fun FullScreenVideoPlayer(
         val configurationChangeListener = object : android.content.ComponentCallbacks2 {
             override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
                 Timber.d("FullScreenVideoPlayer: Configuration changed, ensuring video continues playing")
-                // Ensure video continues playing after configuration change
+                // Only resume if player is ready and was playing before
                 if (existingPlayer.playbackState == Player.STATE_READY) {
-                    existingPlayer.playWhenReady = true
-                } else if (existingPlayer.playbackState == Player.STATE_IDLE) {
-                    // If player is idle, prepare it again
-                    existingPlayer.prepare()
                     existingPlayer.playWhenReady = true
                 }
             }
@@ -170,47 +171,19 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Additional LaunchedEffect to handle rotation more aggressively
+    // Start playback and unmute when entering full screen - only run once
     LaunchedEffect(Unit) {
-        // Check player state periodically and ensure it's playing
-        while (true) {
-            delay(1000) // Check every second
-            if (existingPlayer.playbackState == Player.STATE_READY && !existingPlayer.isPlaying) {
-                Timber.d("FullScreenVideoPlayer: Player ready but not playing, resuming playback")
-                existingPlayer.playWhenReady = true
-            }
-        }
-    }
-
-    // Start playback and unmute when entering full screen
-    LaunchedEffect(Unit) {
-        // More aggressive player state handling
-        when (existingPlayer.playbackState) {
-            Player.STATE_IDLE -> {
-                // If player is idle, prepare it
-                existingPlayer.prepare()
-            }
-            Player.STATE_ENDED -> {
-                // If player has ended, seek to beginning and prepare
-                existingPlayer.seekTo(0)
-                existingPlayer.prepare()
-            }
-            else -> {
-                // For other states, just ensure it's ready to play
-                if (!existingPlayer.playWhenReady) {
-                    existingPlayer.playWhenReady = true
-                }
-            }
-        }
-        
         // Set volume and start playback
         existingPlayer.volume = 1.0f // Unmute video
-        existingPlayer.playWhenReady = true
         
-        // Add a retry mechanism - if player is still not ready after 1 second, try again
-        delay(1000)
-        if (existingPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+        // Only prepare if player is idle and not already loading
+        if (existingPlayer.playbackState == Player.STATE_IDLE && !existingPlayer.isLoading) {
+            Timber.d("FullScreenVideoPlayer: Initial preparation")
             existingPlayer.prepare()
+        }
+        
+        // Start playback if ready
+        if (existingPlayer.playbackState == Player.STATE_READY) {
             existingPlayer.playWhenReady = true
         }
     }
@@ -438,18 +411,6 @@ fun FullScreenVideoPlayer(
         
         onDispose {
             context.unregisterComponentCallbacks(configurationChangeListener)
-        }
-    }
-
-    // Additional LaunchedEffect to handle rotation more aggressively
-    LaunchedEffect(Unit) {
-        // Check player state periodically and ensure it's playing
-        while (true) {
-            delay(1000) // Check every second
-            if (exoPlayer.playbackState == Player.STATE_READY && !exoPlayer.isPlaying) {
-                Timber.d("FullScreenVideoPlayer (API 30+): Player ready but not playing, resuming playback")
-                exoPlayer.playWhenReady = true
-            }
         }
     }
 

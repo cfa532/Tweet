@@ -5,14 +5,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +46,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.datamodel.MediaType
@@ -75,8 +81,19 @@ fun VideoPreview(
     var isLoading by remember(videoMid) {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
+    var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
+    var recoveryAttempts by remember(videoMid) { mutableStateOf(0) }
+    val MAX_RECOVERY_ATTEMPTS = 3
+
+    // Use VideoLoadingManager to track visibility and manage loading
+    videoMid?.let { mid ->
+        rememberVideoLoadingManager(
+            videoMid = mid,
+            isVisible = isVideoVisible
+        )
+    }
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
@@ -172,6 +189,18 @@ fun VideoPreview(
         }
     }
 
+    // Monitor for video loading issues and trigger cleanup if needed
+    LaunchedEffect(hasError, isLoading) {
+        if (hasError && videoMid != null) {
+            // Check if we have too many video players and force cleanup
+            val cachedCount = VideoManager.getCachedVideoCount()
+            if (cachedCount > 8) { // If we have more than 8 cached videos, force cleanup
+                Timber.w("VideoPreview - Too many cached videos ($cachedCount), forcing cleanup")
+                VideoManager.forceCleanupInactiveVideos()
+            }
+        }
+    }
+
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
         // Persist mute state to preferences
@@ -246,8 +275,18 @@ fun VideoPreview(
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isLoading = false
-                Timber.tag("VideoPreview").d(error, "Player error for video: $videoMid")
-                Timber.tag("VideoPreview").d("Error cause: ${error.cause}")
+                hasError = true
+                Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
+                Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
+                
+                // Attempt recovery if we haven't exceeded max attempts
+                if (recoveryAttempts < MAX_RECOVERY_ATTEMPTS && videoMid != null) {
+                    recoveryAttempts++
+                    Timber.tag("VideoPreview").d("Attempting recovery for video: $videoMid (attempt $recoveryAttempts)")
+                    
+                    // Note: Recovery will be handled by VideoManager's recovery mechanism
+                    // The error state will be cleared when the video is successfully loaded
+                }
             }
         }
     }
@@ -309,6 +348,53 @@ fun VideoPreview(
                     modifier = Modifier.size(32.dp),
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+        }
+        
+        // Show error state when video fails to load
+        if (hasError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BrokenImage,
+                        contentDescription = "Video Error",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Video unavailable",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    // Show retry button if we haven't exceeded max attempts
+                    if (recoveryAttempts < MAX_RECOVERY_ATTEMPTS && videoMid != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                recoveryAttempts++
+                                hasError = false
+                                isLoading = true
+                                VideoManager.attemptVideoRecovery(context, videoMid, url)
+                            },
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = "Retry",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
             }
         }
 
