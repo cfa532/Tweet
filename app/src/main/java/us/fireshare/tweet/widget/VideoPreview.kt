@@ -25,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +66,6 @@ fun VideoPreview(
     index: Int,
     autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
-    aspectRatio: Float?,
     callback: (Int) -> Unit,
     videoMid: MimeiId? = null,
     onLoadComplete: (() -> Unit)? = null,
@@ -317,7 +315,6 @@ fun VideoPreview(
     }
 
     // When previewing a single video, limit its height to show more content.
-//    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
     Box(
         modifier = modifier
             .clipToBounds()
@@ -393,8 +390,8 @@ fun VideoPreview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    // Show retry button if we haven't exceeded max attempts
-                    if (recoveryAttempts < MAX_RECOVERY_ATTEMPTS && videoMid != null) {
+                    // Show retry button
+                    if (videoMid != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
@@ -426,7 +423,7 @@ fun VideoPreview(
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "Retry (${recoveryAttempts + 1}/${MAX_RECOVERY_ATTEMPTS})",
+                                text = "Retry",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -111,6 +110,29 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+    
+    // Use VideoLoadingManager to manage video loading based on visibility
+    val visibleMessages by remember(listState, chatMessages) {
+        derivedStateOf {
+            val currentVisibleIndex = listState.firstVisibleItemIndex
+            val visibleItemCount = listState.layoutInfo.visibleItemsInfo.size
+            chatMessages.filterIndexed { index, _ ->
+                index >= currentVisibleIndex && index < currentVisibleIndex + visibleItemCount
+            }
+        }
+    }
+    
+    // Preload videos for visible messages
+    LaunchedEffect(visibleMessages, chatMessages.size) {
+        visibleMessages.forEach { message ->
+            message.attachments?.forEach { attachment ->
+                if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                    val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                }
+            }
+        }
+    }
     val shouldScrollToBottom by viewModel.shouldScrollToBottom.collectAsState()
     
     // Pull-to-refresh state
@@ -978,7 +1000,6 @@ fun ChatMediaPreview(
                         index = 0,
                         autoPlay = true,
                         inPreviewGrid = true,
-                        aspectRatio = videoAspectRatio,
                         callback = { index ->
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
