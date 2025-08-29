@@ -35,6 +35,7 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.R)
 fun FollowingsTweet(
     parentEntry: NavBackStackEntry,
     scrollBehavior: TopAppBarScrollBehavior,

@@ -350,9 +350,9 @@ object HproseInstance {
      * @param nodeId
      * Find IP addresses of given node.
      * */
-    suspend fun getHostIP(nodeId: MimeiId): String? {
+    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = "false"): String? {
         val entry = "get_node_ip"
-        val params = mapOf("aid" to appId, "ver" to "last", "nodeid" to nodeId)
+        val params = mapOf("aid" to appId, "ver" to "last", "nodeid" to nodeId, "v4only" to v4Only)
         try {
             return appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {

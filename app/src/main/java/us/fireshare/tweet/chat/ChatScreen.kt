@@ -238,6 +238,7 @@ fun ChatScreen(
                         Text(
                             text = "${receipt.name} @${receipt.username}",
                             style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                         Spacer(modifier = Modifier.fillMaxWidth())
                     }
@@ -931,7 +932,7 @@ fun ChatMediaPreview(
 
     Box(
         modifier = Modifier
-            .fillMaxWidth(0.7f)
+            .fillMaxWidth(0.8f)
             .aspectRatio(adjustedAspectRatio)
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
@@ -970,7 +971,7 @@ fun ChatMediaPreview(
                         url = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
-                        autoPlay = false,
+                        autoPlay = true,
                         inPreviewGrid = true,
                         aspectRatio = adjustedAspectRatio,
                         callback = { index ->
