@@ -57,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -963,50 +964,26 @@ fun ChatMediaPreview(
             }
 
             us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
-                Box(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    // Use VideoPreview with shared player that can transition to full-screen
+                // Use a completely stable approach with key (same as MediaCell)
+                val videoMid = attachment.mid
+                val videoUrl = mediaUrl
+                val videoAspectRatio = adjustedAspectRatio
+                
+                // Use key with a stable identifier to prevent recreation
+                key("chat_video_${videoMid}_0") {
                     us.fireshare.tweet.widget.VideoPreview(
-                        url = mediaUrl,
+                        url = videoUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
                         autoPlay = true,
                         inPreviewGrid = true,
-                        aspectRatio = adjustedAspectRatio,
+                        aspectRatio = videoAspectRatio,
                         callback = { index ->
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
                         },
-                        videoMid = attachment.mid,
-                        onLoadComplete = { isLoading = false }
+                        videoMid = videoMid
                     )
-                    
-                    // Play button overlay
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { onVideoClick?.invoke() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = stringResource(R.string.play),
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
