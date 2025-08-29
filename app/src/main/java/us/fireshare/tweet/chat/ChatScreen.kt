@@ -93,7 +93,6 @@ import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoManager
-
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
