@@ -108,15 +108,8 @@ fun VideoPreview(
         player
     }
 
-    // Preload video if not already cached (with small delay to avoid conflicts)
-    LaunchedEffect(videoMid, url) {
-        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-            delay(50) // Small delay to let ChatScreen preloading complete first
-            if (!VideoManager.isVideoPreloaded(videoMid)) { // Check again after delay
-                VideoManager.preloadVideo(context, videoMid, url)
-            }
-        }
-    }
+    // Video preloading is handled by parent components (ChatScreen, MediaItemView, etc.)
+    // This prevents conflicts and race conditions
 
     /**
      * Stop playing when screen is locked or closed. Resume play when unlocked.

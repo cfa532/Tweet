@@ -42,6 +42,7 @@ if (videoMid != null) {
 - **Fixed key stability**: Changed from `System.currentTimeMillis()` to stable key to prevent VideoPreview recreation
 - **Eliminated duplicate preloading**: Removed redundant video preloading from ChatMediaPreview component
 - **Removed duplicate loading states**: Eliminated conflicting loading spinner and state management
+- **Eliminated VideoPreview preloading conflicts**: Removed VideoPreview's own preloading to prevent race conditions
 
 **Implementation:**
 ```kotlin
@@ -88,6 +89,7 @@ LaunchedEffect(visibleMessages, chatMessages.size) {
 - **Conflict prevention**: Eliminated race conditions between multiple preloading mechanisms
 - **Video content display**: Fixed loading state management to show video content when ready
 - **Single source of truth**: Only one component handles video preloading and loading states
+- **No race conditions**: VideoPreview no longer conflicts with parent component preloading
 
 ### **User Experience Improvements**
 - **Simplified retry**: Users can retry failed videos without worrying about attempt limits
