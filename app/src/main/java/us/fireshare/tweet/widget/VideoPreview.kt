@@ -3,6 +3,7 @@ package us.fireshare.tweet.widget
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -295,13 +297,13 @@ fun VideoPreview(
                 )
             }
         }
-        
+
         // Mute button in lower right corner
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(8.dp),
-            contentAlignment = androidx.compose.ui.Alignment.BottomEnd
+            contentAlignment = Alignment.BottomEnd
         ) {
             Box(
                 modifier = Modifier
@@ -310,8 +312,13 @@ fun VideoPreview(
                         color = Color.Black.copy(alpha = 0.2f),
                         shape = CircleShape
                     )
-                    .clickable { isMuted = !isMuted },
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        isMuted = !isMuted
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isMuted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
@@ -321,7 +328,7 @@ fun VideoPreview(
                 )
             }
         }
-        
+
         // Time label in lower left corner
         if (showTimeLabel) {
             Box(
