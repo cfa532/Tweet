@@ -56,6 +56,15 @@
 - **More lenient retry limits**: Increased max recovery attempts from 3 to 5
 - **Better error messaging**: Retry button shows attempt count (e.g., "Retry (2/5)")
 
+### 7. **Excessive Error Logging During Trial Attempts**
+**Problem**: The system was printing error messages for every trial attempt, creating noise in the logs and making it difficult to identify actual failures.
+
+**Solution**:
+- **Reduced error logging noise**: Only log final failures as errors, not intermediate trial attempts
+- **Debug-level logging for trials**: Trial failures are logged at debug level instead of error level
+- **Clear final error reporting**: Final failures are clearly marked and logged with full error details
+- **Cleaner log output**: Much less noise in production logs while maintaining debugging capability
+
 ## Code Changes Made
 
 ### FullScreenVideoPlayer.kt
@@ -73,6 +82,7 @@
 6. **Retry button**: Added user-controlled retry button for failed videos
 7. **Network error handling**: Better detection and automatic retry for network-related errors
 8. **Extended retry limits**: Increased MAX_RECOVERY_ATTEMPTS from 3 to 5
+9. **Reduced error logging noise**: Only log final errors, not intermediate trial errors
 
 ### VideoManager.kt
 1. **Memory threshold reduction**: Lowered from 1GB to 512MB for more aggressive cleanup
@@ -82,6 +92,7 @@
 5. **Recovery methods**: Added `isVideoRecoverable()` and `attemptVideoRecovery()`
 6. **Faster monitoring**: Memory checks every 15 seconds instead of 30 seconds
 7. **Extended timeouts**: Added 30-second timeouts for connection and read operations
+8. **Reduced error logging noise**: Recovery failures logged at debug level instead of error level
 
 ### CreateExoPlayer.kt
 1. **Extended timeouts**: Added 30-second connection and read timeouts
@@ -89,6 +100,7 @@
 3. **Automatic retry**: Network errors trigger automatic retry with 2-second delay
 4. **Improved logging**: Added detailed logging for player state changes
 5. **Better error handling**: More robust error handling with fallback mechanisms
+6. **Reduced error logging noise**: Only log final failures as errors, not intermediate trial attempts
 
 ### VideoLoadingManager.kt (New)
 1. **Intelligent video loading**: Stops videos that are scrolled past
@@ -141,6 +153,12 @@
 - Automatic stopping of scrolled-past videos
 - Smart preloading of upcoming videos
 - Better resource management
+
+### 9. **Clean Logging System**
+- Reduced error logging noise during trial attempts
+- Only final failures logged as errors
+- Trial failures logged at debug level
+- Cleaner production logs while maintaining debugging capability
 
 ## Testing Recommendations
 
