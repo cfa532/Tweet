@@ -87,6 +87,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
@@ -940,7 +941,7 @@ fun ChatMediaPreview(
     ) {
         // Show loading spinner only if video is not preloaded
         if (isLoading && (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
+            !VideoManager.isVideoPreloaded(attachment.mid)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -952,7 +953,7 @@ fun ChatMediaPreview(
         }
 
         when (attachment.type) {
-            us.fireshare.tweet.datamodel.MediaType.Image -> {
+            MediaType.Image -> {
                 us.fireshare.tweet.widget.ImageViewer(
                     imageUrl = mediaUrl,
                     modifier = Modifier
@@ -963,7 +964,7 @@ fun ChatMediaPreview(
                 )
             }
 
-            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Use a completely stable approach with key (same as MediaCell)
                 val videoMid = attachment.mid
                 val videoUrl = mediaUrl
@@ -987,7 +988,7 @@ fun ChatMediaPreview(
                 }
             }
 
-            us.fireshare.tweet.datamodel.MediaType.Audio -> {
+            MediaType.Audio -> {
                 us.fireshare.tweet.widget.AudioPlayer(
                     attachments,
                     0,
