@@ -389,7 +389,15 @@ fun ChatSession(
                 )
             }
             Text(
-                text = chatMessage.content ?: "",
+                text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
+                    if (chatMessage.authorId == appUser.mid) {
+                        "Attachment sent"
+                    } else {
+                        "Attachment received"
+                    }
+                } else {
+                    chatMessage.content ?: ""
+                },
                 style = MaterialTheme.typography.bodyLarge
             )
         }
