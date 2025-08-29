@@ -48,9 +48,6 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 private val maxRetries = 2
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.tag("createExoPlayer").e("Player error: ${error.message}")
-                    Timber.tag("createExoPlayer").e("Error cause: ${error.cause}")
-
                     // Check if it's a network-related error
                     val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
                             error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
@@ -65,7 +62,8 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                             try {
                                 prepare()
                             } catch (e: Exception) {
-                                Timber.e("createExoPlayer - Retry failed: ${e.message}")
+                                // Only log retry failures at debug level to avoid noise
+                                Timber.tag("createExoPlayer").d("Retry failed: ${e.message}")
                             }
                         }, 2000) // Wait 2 seconds before retry
                         return
@@ -92,7 +90,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         setMediaSource(originalMediaSource)
                         prepare()
                     } else {
-                        Timber.e("createExoPlayer - All fallback attempts failed for URL: $url")
+                        // Only log the final failure as an error
+                        Timber.tag("createExoPlayer").e("All fallback attempts failed for URL: $url")
+                        Timber.tag("createExoPlayer").e("Final error: ${error.message}")
+                        Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
                     }
                 }
 

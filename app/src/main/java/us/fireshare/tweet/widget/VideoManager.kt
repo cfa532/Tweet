@@ -289,7 +289,8 @@ object VideoManager {
             Timber.d("VideoManager - Recovery attempted for video: $videoMid")
             return true
         } catch (e: Exception) {
-            Timber.e("VideoManager - Recovery failed for video: $videoMid, error: ${e.message}")
+            // Only log recovery failures at debug level to avoid noise during trials
+            Timber.d("VideoManager - Recovery failed for video: $videoMid, error: ${e.message}")
             return false
         }
     }

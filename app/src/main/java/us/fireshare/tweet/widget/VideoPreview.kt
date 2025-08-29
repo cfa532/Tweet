@@ -274,9 +274,6 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
-                Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
-                
                 // Check if it's a network-related error that might be temporary
                 val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
                         error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
@@ -303,6 +300,8 @@ fun VideoPreview(
                     // For non-network errors or after max attempts, show error state
                     isLoading = false
                     hasError = true
+                    // Only log the final error, not intermediate trial errors
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
                     Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
                 }
             }
@@ -415,7 +414,8 @@ fun VideoPreview(
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        Timber.e("VideoPreview - Retry failed: ${e.message}")
+                                        // Only log retry failures at debug level to avoid noise
+                                        Timber.d("VideoPreview - Retry failed: ${e.message}")
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             hasError = true
                                             isLoading = false
