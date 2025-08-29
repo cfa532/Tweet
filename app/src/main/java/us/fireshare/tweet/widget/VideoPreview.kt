@@ -85,7 +85,7 @@ fun VideoPreview(
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
     var recoveryAttempts by remember(videoMid) { mutableStateOf(0) }
-    val MAX_RECOVERY_ATTEMPTS = 3
+    val MAX_RECOVERY_ATTEMPTS = 5 // Increased from 3 to 5 for more lenient retry
 
     // Use VideoLoadingManager to track visibility and manage loading
     videoMid?.let { mid ->
@@ -274,18 +274,36 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                isLoading = false
-                hasError = true
                 Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
                 Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
                 
-                // Attempt recovery if we haven't exceeded max attempts
-                if (recoveryAttempts < MAX_RECOVERY_ATTEMPTS && videoMid != null) {
+                // Check if it's a network-related error that might be temporary
+                val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("unable to resolve", ignoreCase = true) == true
+                
+                // For network errors, be more lenient and don't immediately show error state
+                if (isNetworkError && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
                     recoveryAttempts++
-                    Timber.tag("VideoPreview").d("Attempting recovery for video: $videoMid (attempt $recoveryAttempts)")
+                    Timber.tag("VideoPreview").d("Network error detected, will retry automatically (attempt $recoveryAttempts)")
                     
-                    // Note: Recovery will be handled by VideoManager's recovery mechanism
-                    // The error state will be cleared when the video is successfully loaded
+                    // Keep loading state for network errors to allow automatic retry
+                    isLoading = true
+                    hasError = false
+                    
+                    // Auto-retry after a delay for network errors
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        kotlinx.coroutines.delay(3000) // Wait 3 seconds before auto-retry
+                        if (isLoading && !hasError && videoMid != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url)
+                        }
+                    }
+                } else {
+                    // For non-network errors or after max attempts, show error state
+                    isLoading = false
+                    hasError = true
+                    Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
                 }
             }
         }
@@ -384,12 +402,31 @@ fun VideoPreview(
                                 recoveryAttempts++
                                 hasError = false
                                 isLoading = true
-                                VideoManager.attemptVideoRecovery(context, videoMid, url)
+                                
+                                // Attempt recovery in background
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                    try {
+                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
+                                        if (!success) {
+                                            // If recovery failed, show error again
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                hasError = true
+                                                isLoading = false
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Timber.e("VideoPreview - Retry failed: ${e.message}")
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            hasError = true
+                                            isLoading = false
+                                        }
+                                    }
+                                }
                             },
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "Retry",
+                                text = "Retry (${recoveryAttempts + 1}/${MAX_RECOVERY_ATTEMPTS})",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

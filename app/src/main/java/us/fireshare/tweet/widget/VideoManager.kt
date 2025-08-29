@@ -272,8 +272,14 @@ object VideoManager {
             player.stop()
             player.seekTo(0)
             
-            // Create a new media source and prepare
-            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context)
+            // Create a new media source with extended timeouts for network congestion
+            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(30000) // 30 seconds connection timeout
+                .setReadTimeoutMs(30000)    // 30 seconds read timeout
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("TweetApp/1.0")
+            
+            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
             val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
             
