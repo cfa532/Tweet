@@ -223,6 +223,8 @@ fun FullScreenVideoPlayer(
                     // Let ExoPlayer handle its own control visibility
                     controllerShowTimeoutMs = 2000 // Auto-hide after 2 seconds
                     controllerHideOnTouch = true // Hide when tapping outside controls
+                    // Start with controls hidden
+                    hideController()
                 }
             },
             modifier = Modifier
@@ -237,29 +239,7 @@ fun FullScreenVideoPlayer(
                 }
         )
 
-        // Close button overlay (always visible for easy access)
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
+        // No close button overlay - let native controls handle everything
     }
 }
 
