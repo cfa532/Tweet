@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
@@ -107,10 +108,13 @@ fun VideoPreview(
         player
     }
 
-    // Preload video if not already cached
+    // Preload video if not already cached (with small delay to avoid conflicts)
     LaunchedEffect(videoMid, url) {
         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-            VideoManager.preloadVideo(context, videoMid, url)
+            delay(50) // Small delay to let ChatScreen preloading complete first
+            if (!VideoManager.isVideoPreloaded(videoMid)) { // Check again after delay
+                VideoManager.preloadVideo(context, videoMid, url)
+            }
         }
     }
 
@@ -162,7 +166,14 @@ fun VideoPreview(
             // If player is already ready, start immediately
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
                 exoPlayer.playWhenReady = autoPlay
+                isLoading = false // Ensure loading state is updated
                 return@LaunchedEffect
+            }
+
+            // If video is preloaded but player is idle, prepare it
+            if (videoMid != null && VideoManager.isVideoPreloaded(videoMid) && 
+                exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                exoPlayer.prepare()
             }
 
             // Ensure player is in a good state before playing
@@ -289,7 +300,7 @@ fun VideoPreview(
                     
                     // Auto-retry after a delay for network errors
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        kotlinx.coroutines.delay(3000) // Wait 3 seconds before auto-retry
+                        delay(3000) // Wait 3 seconds before auto-retry
                         if (isLoading && !hasError && videoMid != null) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url)
                         }

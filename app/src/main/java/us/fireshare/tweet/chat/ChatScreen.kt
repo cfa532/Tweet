@@ -122,9 +122,9 @@ fun ChatScreen(
         }
     }
     
-    // Preload videos for visible messages with debouncing
+    // Preload videos for visible messages with shorter debouncing for LAN
     LaunchedEffect(visibleMessages, chatMessages.size) {
-        delay(300) // 0.3 second debounce
+        delay(100) // 0.1 second debounce for faster LAN response
         visibleMessages.forEach { message ->
             message.attachments?.forEach { attachment ->
                 if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
@@ -182,24 +182,6 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
         
-        // Preload videos from recent messages for better performance
-        val recentMessages = chatMessages.takeLast(10) // Preload videos from last 10 messages
-        recentMessages.forEach { message ->
-            message.attachments?.forEach { attachment ->
-                if ((attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
-                    !VideoManager.isVideoPreloaded(attachment.mid)) {
-                    val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
-                        } catch (e: Exception) {
-                            Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
-                        }
-                    }
-                }
-            }
-        }
-        
         while (true) {
             withContext(Dispatchers.IO) {
                 viewModel.fetchNewMessage()
@@ -208,30 +190,12 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to bottom when messages are first loaded and preload videos
+    // Scroll to bottom when messages are first loaded
     LaunchedEffect(chatMessages.isNotEmpty()) {
         if (chatMessages.isNotEmpty()) {
             // Add a small delay to ensure the LazyColumn is properly laid out
             delay(100)
             scrollToBottom()
-            
-            // Preload videos from new messages for better performance
-            val newMessages = chatMessages.takeLast(5) // Preload videos from last 5 messages
-            newMessages.forEach { message ->
-                message.attachments?.forEach { attachment ->
-                    if ((attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
-                        !VideoManager.isVideoPreloaded(attachment.mid)) {
-                        val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                        coroutineScope.launch(Dispatchers.IO) {
-                            try {
-                                VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
-                            } catch (e: Exception) {
-                                Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
     
@@ -923,29 +887,9 @@ fun ChatMediaPreview(
     val mediaUrl =
         us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
 
-    // State to track loading
-    var isLoading by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
-    // Preload video if it's a video attachment and not already preloaded
-    LaunchedEffect(attachment.mid, attachment.type) {
-        if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
-            // Preload video in background similar to MediaPreviewGrid
-            withContext(Dispatchers.IO) {
-                try {
-                    us.fireshare.tweet.widget.VideoManager.preloadVideo(
-                        context,
-                        attachment.mid,
-                        mediaUrl
-                    )
-                } catch (e: Exception) {
-                    timber.log.Timber.tag("ChatMediaPreview")
-                        .e(e, "Failed to preload video: ${attachment.mid}")
-                }
-            }
-        }
-    }
+    // Video preloading is handled by the main ChatScreen component with debouncing
 
     // Helper function to apply aspect ratio rule: use 0.8 if aspect ratio is smaller than 0.8, otherwise use original value
     fun applyAspectRatioRule(originalAspectRatio: Float?): Float {
@@ -965,19 +909,6 @@ fun ChatMediaPreview(
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
     ) {
-        // Show loading spinner only if video is not preloaded
-        if (isLoading && (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) && 
-            !VideoManager.isVideoPreloaded(attachment.mid)) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
         when (attachment.type) {
             MediaType.Image -> {
                 us.fireshare.tweet.widget.ImageViewer(
@@ -985,8 +916,7 @@ fun ChatMediaPreview(
                     modifier = Modifier
                         .fillMaxSize()
                         .clickable { onImageClick?.invoke() },
-                    enableLongPress = false,
-                    onLoadComplete = { isLoading = false }
+                    enableLongPress = false
                 )
             }
 
@@ -994,10 +924,9 @@ fun ChatMediaPreview(
                 // Use a completely stable approach with key (same as MediaCell)
                 val videoMid = attachment.mid
                 val videoUrl = mediaUrl
-                val videoAspectRatio = adjustedAspectRatio
-                
-                // Use key with timestamp to handle same video sent multiple times
-                key("chat_video_${videoMid}_${System.currentTimeMillis()}") {
+
+                // Use key with stable identifier to prevent recreation (same as MediaItemView)
+                key("chat_video_${videoMid}_0") {
                     us.fireshare.tweet.widget.VideoPreview(
                         url = videoUrl,
                         modifier = Modifier.fillMaxSize(),

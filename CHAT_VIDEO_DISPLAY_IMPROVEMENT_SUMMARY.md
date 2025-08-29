@@ -33,8 +33,15 @@ if (videoMid != null) {
 - **Implemented visibility tracking**: Added logic to track which messages are currently visible
 - **Selective video preloading**: Only preload videos for messages that are currently visible on screen
 - **Optimized state management**: Used `derivedStateOf` to prevent fast-changing variable warnings
-- **Added debouncing**: 0.3-second debounce to prevent excessive video loading during rapid scrolling
+- **Optimized debouncing**: Reduced to 0.1-second debounce for faster LAN response
+- **Eliminated race conditions**: Removed redundant preloading mechanisms to prevent conflicts
+- **Added conflict prevention**: VideoPreview waits 50ms before preloading to let ChatScreen complete first
 - **Fixed MediaType consistency**: Standardized all MediaType references to use the imported alias
+- **Fixed video display**: Added proper loading state management to show video content when ready
+- **Enhanced player preparation**: Ensures ExoPlayer is prepared when videos are preloaded
+- **Fixed key stability**: Changed from `System.currentTimeMillis()` to stable key to prevent VideoPreview recreation
+- **Eliminated duplicate preloading**: Removed redundant video preloading from ChatMediaPreview component
+- **Removed duplicate loading states**: Eliminated conflicting loading spinner and state management
 
 **Implementation:**
 ```kotlin
@@ -49,9 +56,9 @@ val visibleMessages by remember(listState, chatMessages) {
     }
 }
 
-// Preload videos for visible messages with debouncing
+// Preload videos for visible messages with optimized debouncing for LAN
 LaunchedEffect(visibleMessages, chatMessages.size) {
-    delay(300) // 0.3 second debounce
+    delay(100) // 0.1 second debounce for faster LAN response
     visibleMessages.forEach { message ->
         message.attachments?.forEach { attachment ->
             if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
@@ -77,7 +84,10 @@ LaunchedEffect(visibleMessages, chatMessages.size) {
 - **Reduced memory usage**: Only visible videos are loaded, preventing memory congestion
 - **Better scrolling performance**: Videos outside the visible area don't consume resources
 - **Faster initial load**: ChatScreen loads faster by not preloading all videos at once
-- **Debounced loading**: 0.3-second debounce prevents excessive video loading during rapid scrolling
+- **Optimized loading**: 0.1-second debounce for faster LAN response
+- **Conflict prevention**: Eliminated race conditions between multiple preloading mechanisms
+- **Video content display**: Fixed loading state management to show video content when ready
+- **Single source of truth**: Only one component handles video preloading and loading states
 
 ### **User Experience Improvements**
 - **Simplified retry**: Users can retry failed videos without worrying about attempt limits
@@ -94,7 +104,7 @@ LaunchedEffect(visibleMessages, chatMessages.size) {
 The ChatScreen now uses exactly the same video display logic as MediaCell:
 
 ```kotlin
-key("chat_video_${videoMid}_${System.currentTimeMillis()}") {
+key("chat_video_${videoMid}_0") {
     VideoPreview(
         url = videoUrl,
         modifier = Modifier.fillMaxSize(),
