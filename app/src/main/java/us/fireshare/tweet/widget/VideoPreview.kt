@@ -174,6 +174,20 @@ fun VideoPreview(
 
     LaunchedEffect(isMuted) {
         exoPlayer.volume = if (isMuted) 0f else 1f
+        // Persist mute state to preferences
+        preferenceHelper.setSpeakerMute(isMuted)
+    }
+
+    // Watch for global mute state changes and update local state
+    LaunchedEffect(Unit) {
+        // Check global mute state periodically and update if changed
+        while (true) {
+            val globalMuteState = preferenceHelper.getSpeakerMute()
+            if (isMuted != globalMuteState) {
+                isMuted = globalMuteState
+            }
+            kotlinx.coroutines.delay(100) // Check every 100ms
+        }
     }
 
     // Show time label when video starts playing and auto-hide after 3 seconds
