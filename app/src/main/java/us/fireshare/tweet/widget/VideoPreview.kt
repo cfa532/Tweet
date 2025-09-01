@@ -348,8 +348,10 @@ fun VideoPreview(
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
-                    // Show buffering indicator
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    // Keep last frame to avoid black flashes when resetting/pausing
+                    setKeepContentOnPlayerReset(true)
+                    // Only show buffering indicator when playing and buffering
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }

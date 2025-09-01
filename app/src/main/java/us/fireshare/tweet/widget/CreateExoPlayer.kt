@@ -5,6 +5,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import timber.log.Timber
@@ -27,15 +28,20 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
         .setAllowCrossProtocolRedirects(true)
         .setUserAgent("TweetApp/1.0")
 
-    val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+    val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+    val cache = VideoManager.getCache(context)
+    val cacheDataSourceFactory = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(upstreamFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     // For data blobs, try HLS first, then fallback to original URL
     val baseUrl = if (url.endsWith("/")) url else "$url/"
     val masterUrl = "${baseUrl}master.m3u8"
     val playlistUrl = "${baseUrl}playlist.m3u8"
 
-    // Use DefaultMediaSourceFactory which automatically handles HLS and progressive
-    val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+    // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive
+    val mediaSourceFactory = DefaultMediaSourceFactory(cacheDataSourceFactory)
 
     val player = ExoPlayer.Builder(context)
         .build()
