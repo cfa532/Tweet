@@ -9,55 +9,37 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 
 /**
- * VideoLoadingManager handles intelligent video loading based on scroll position.
- * It stops loading videos that are scrolled past and preloads videos from upcoming tweets.
+ * VideoLoadingManager provides Compose hooks for video loading management.
+ * All actual functionality is delegated to the unified VideoManager.
+ * 
+ * This class serves as a bridge between Compose UI and VideoManager,
+ * providing convenient hooks for visibility tracking and preloading.
  */
 object VideoLoadingManager {
     
-    // Track which videos are currently visible
-    private val visibleVideos = mutableSetOf<MimeiId>()
-    
-    // Track which videos are being preloaded
-    private val preloadingVideos = mutableSetOf<MimeiId>()
-    
-    // Configuration
-    private const val PRELOAD_AHEAD_COUNT = 3 // Number of upcoming tweets to preload videos from
-    private const val PRELOAD_DELAY_MS = 500L // Delay before starting preload to avoid excessive loading
-    
     /**
      * Mark a video as visible (user is currently viewing it)
+     * Delegates to VideoManager.markVideoVisible()
      */
     fun markVideoVisible(videoMid: MimeiId) {
-        visibleVideos.add(videoMid)
-        Timber.d("VideoLoadingManager - Video marked visible: $videoMid")
+        VideoManager.markVideoVisible(videoMid)
     }
     
     /**
      * Mark a video as not visible (user has scrolled past it)
+     * Delegates to VideoManager.markVideoNotVisible()
      */
     fun markVideoNotVisible(videoMid: MimeiId) {
-        visibleVideos.remove(videoMid)
-        Timber.d("VideoLoadingManager - Video marked not visible: $videoMid")
-        
-        // Note: Video stopping will be handled by VideoManager's memory management
-        // when the video becomes inactive
+        VideoManager.markVideoNotVisible(videoMid)
     }
     
     /**
      * Preload videos from upcoming tweets
-     * @param context Android context
-     * @param currentTweetIndex Current tweet index in the list
-     * @param tweets List of all tweets
-     * @param baseUrl Base URL for media
+     * Delegates to VideoManager.preloadUpcomingVideos()
      */
     fun preloadUpcomingVideos(
         context: Context,
@@ -65,73 +47,35 @@ object VideoLoadingManager {
         tweets: List<us.fireshare.tweet.datamodel.Tweet>,
         baseUrl: String
     ) {
-        val coroutineScope = CoroutineScope(Dispatchers.IO)
-        
-        coroutineScope.launch {
-            // Add delay to avoid excessive preloading during rapid scrolling
-            delay(PRELOAD_DELAY_MS)
-            
-            // Calculate range of tweets to preload from
-            val startIndex = currentTweetIndex + 1
-            val endIndex = minOf(startIndex + PRELOAD_AHEAD_COUNT, tweets.size)
-            
-            for (i in startIndex until endIndex) {
-                val tweet = tweets[i]
-                val videoAttachments = tweet.attachments?.filter { 
-                    it.type == us.fireshare.tweet.datamodel.MediaType.Video || 
-                    it.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO 
-                } ?: emptyList()
-                
-                for (attachment in videoAttachments) {
-                    if (!VideoManager.isVideoPreloaded(attachment.mid) && 
-                        !preloadingVideos.contains(attachment.mid)) {
-                        
-                        preloadingVideos.add(attachment.mid)
-                        
-                        try {
-                            val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(
-                                attachment.mid, 
-                                baseUrl
-                            ).toString()
-                            
-                            VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
-                            Timber.d("VideoLoadingManager - Preloading video: ${attachment.mid} from tweet $i")
-                        } catch (e: Exception) {
-                            Timber.e("VideoLoadingManager - Failed to preload video: ${attachment.mid}, error: ${e.message}")
-                        } finally {
-                            preloadingVideos.remove(attachment.mid)
-                        }
-                    }
-                }
-            }
-        }
+        VideoManager.preloadUpcomingVideos(context, currentTweetIndex, tweets, baseUrl)
     }
     
     /**
      * Stop preloading all videos
+     * Delegates to VideoManager.stopAllPreloading()
      */
     fun stopAllPreloading() {
-        preloadingVideos.clear()
-        Timber.d("VideoLoadingManager - Stopped all preloading")
+        VideoManager.stopAllPreloading()
     }
     
     /**
      * Get currently visible videos
+     * Delegates to VideoManager.getVisibleVideos()
      */
-    fun getVisibleVideos(): Set<MimeiId> = visibleVideos.toSet()
+    fun getVisibleVideos(): Set<MimeiId> = VideoManager.getVisibleVideos()
     
     /**
      * Get currently preloading videos
+     * Delegates to VideoManager.getPreloadingVideos()
      */
-    fun getPreloadingVideos(): Set<MimeiId> = preloadingVideos.toSet()
+    fun getPreloadingVideos(): Set<MimeiId> = VideoManager.getPreloadingVideos()
     
     /**
-     * Clear all tracking data (useful for testing or reset)
+     * Clear all tracking data
+     * Delegates to VideoManager.clear()
      */
     fun clear() {
-        visibleVideos.clear()
-        preloadingVideos.clear()
-        Timber.d("VideoLoadingManager - Cleared all tracking data")
+        VideoManager.clear()
     }
 }
 
@@ -147,8 +91,6 @@ fun rememberVideoLoadingManager(
     isVisible: Boolean,
     onVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
-    val context = LocalContext.current
-    
     // Track previous visibility state
     var wasVisible by remember { mutableStateOf(false) }
     

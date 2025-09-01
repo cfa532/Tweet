@@ -72,7 +72,6 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.SelectableText
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.ui.theme.ThemeManager
 
@@ -314,7 +313,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             LaunchedEffect(Unit) {
                                 tweetCacheStats = TweetCacheManager.getCacheStats()
                                 userCacheStats = TweetCacheManager.getUserCacheStats()
-                                videoCacheStats = SimplifiedVideoCacheManager.getCacheStats(context)
+                                videoCacheStats = VideoManager.getCacheStats(context)
                                 videoManagerStats = VideoManager.getCacheStats()
                                 videoMemoryStats = VideoManager.getMemoryStats()
                             }
@@ -401,7 +400,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                         // Clear all tweet cache (memory + database)
                                         TweetCacheManager.clearAllCachedTweets()
                                         // Clear video cache
-                                        SimplifiedVideoCacheManager.clearVideoCache(context)
+                                        VideoManager.clearVideoCache(context)
 
                                         // Clear all user cache
                                         TweetCacheManager.clearAllCachedUsers()

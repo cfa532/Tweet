@@ -48,7 +48,7 @@ import us.fireshare.tweet.service.OrientationManager
 import kotlin.math.abs
 
 /**
- * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
+ * Simple full-screen video player wrapper that uses the unified VideoManager
  * This prevents conflicts when multiple videos are opened in full-screen
  */
 @RequiresApi(Build.VERSION_CODES.R)
@@ -260,21 +260,21 @@ fun FullScreenVideoPlayer(
 
     // Get the dedicated full screen player
     val exoPlayer = remember {
-        FullScreenVideoManager.getFullScreenPlayer(context)
+        VideoManager.getFullScreenPlayer(context)
     }
 
     // Load video into the full screen player
     LaunchedEffect(videoUrl) {
-        FullScreenVideoManager.loadVideo(context, videoUrl)
+        VideoManager.loadVideo(context, videoUrl)
     }
 
     // Start playback when entering full screen
     LaunchedEffect(Unit) {
         // Set volume to 1f (unmuted) for full screen
-        FullScreenVideoManager.setVolume(1f)
+        exoPlayer.volume = 1f
 
         // Start playback with auto-replay
-        FullScreenVideoManager.startPlayback(autoReplay)
+        VideoManager.startPlayback(autoReplay)
         
         // Auto-play the video
         exoPlayer.playWhenReady = true

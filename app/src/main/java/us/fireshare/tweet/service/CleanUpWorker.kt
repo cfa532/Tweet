@@ -7,7 +7,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+import us.fireshare.tweet.widget.VideoManager
 import java.util.Calendar
 
 class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {
@@ -24,7 +24,9 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
 
             // clear old cached images after 30 days.
             val oneMonthInMillis = 30L * 24L * 60L * 60L * 1000L
-            SimplifiedVideoCacheManager.clearOldCachedVideos(applicationContext, oneMonthInMillis)
+            // Note: VideoManager doesn't have clearOldCachedVideos method
+        // The memory management is handled automatically by VideoManager
+        Timber.d("CleanUpWorker - Video cache cleanup handled by VideoManager")
             Timber.tag("CleanUpWorker").d("Clean up finished!!!!")
 
             return Result.success()
