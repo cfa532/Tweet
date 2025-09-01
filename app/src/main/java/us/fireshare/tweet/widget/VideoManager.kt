@@ -481,23 +481,6 @@ object VideoManager {
     }
 
     /**
-     * Use an existing player instance for full-screen mode
-     * This allows seamless transition from preview to full-screen without losing position
-     */
-    fun useExistingPlayer(existingPlayer: ExoPlayer, videoMid: MimeiId) {
-        Timber.d("VideoManager - Using existing player for: $videoMid")
-        
-        // Release current full-screen player if different
-        if (fullScreenPlayer != null && fullScreenPlayer != existingPlayer) {
-            fullScreenPlayer?.release()
-        }
-        
-        // Use the existing player
-        fullScreenPlayer = existingPlayer
-        currentVideoUrl = null // Not needed when using existing player
-    }
-
-    /**
      * Start playback with auto-replay
      */
     fun startPlayback(autoReplay: Boolean = true) {
@@ -860,15 +843,5 @@ object VideoManager {
             Timber.e("VideoManager - Error getting video aspect ratio: ${e.message}")
             16f / 9f // Default aspect ratio on error
         }
-    }
-
-    /**
-     * Clear old cached videos (moved from SimplifiedVideoCacheManager)
-     * This is now handled automatically by VideoManager's memory management
-     */
-    fun clearOldCachedVideos(context: Context, maxAgeInMillis: Long) {
-        // This functionality is now handled automatically by VideoManager's memory management
-        // and the ExoPlayer cache eviction policy
-        Timber.d("VideoManager - Old video cleanup handled automatically by memory management")
     }
 }
