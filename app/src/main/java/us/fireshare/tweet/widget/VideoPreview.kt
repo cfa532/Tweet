@@ -247,11 +247,6 @@ fun VideoPreview(
     // Create a single listener that will be properly managed
     val playerListener = remember {
         object : androidx.media3.common.Player.Listener {
-            override fun onVolumeChanged(volume: Float) {
-                // Handle volume changes safely
-                Timber.d("VideoPreview - Volume changed to: $volume")
-            }
-            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
