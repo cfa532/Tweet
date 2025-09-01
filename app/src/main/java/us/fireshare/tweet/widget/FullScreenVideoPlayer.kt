@@ -283,7 +283,7 @@ fun FullScreenVideoPlayer(
 
         // Start playback with auto-replay
         VideoManager.startPlayback(autoReplay)
-        
+
         // Auto-play the video
         exoPlayer.playWhenReady = true
     }
@@ -296,11 +296,12 @@ fun FullScreenVideoPlayer(
                 // Allow rotation in full-screen mode
                 Timber.d("FullScreenVideoPlayer (API 30+): Entering full-screen, allowing rotation")
                 OrientationManager.allowRotation(act)
-                
+
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
                     controller.hide(android.view.WindowInsets.Type.systemBars())
-                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.systemBarsBehavior =
+                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 }
             }
         }
@@ -312,7 +313,7 @@ fun FullScreenVideoPlayer(
                     // Restore portrait orientation
                     Timber.d("FullScreenVideoPlayer (API 30+): Exiting full-screen, locking to portrait")
                     OrientationManager.lockToPortrait(act)
-                    
+
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
@@ -334,18 +335,18 @@ fun FullScreenVideoPlayer(
                     exoPlayer.playWhenReady = true
                 }
             }
-            
+
             override fun onLowMemory() {
                 // Handle low memory if needed
             }
-            
+
             override fun onTrimMemory(level: Int) {
                 // Handle memory trimming if needed
             }
         }
-        
+
         context.registerComponentCallbacks(configurationChangeListener)
-        
+
         onDispose {
             context.unregisterComponentCallbacks(configurationChangeListener)
         }
@@ -389,18 +390,18 @@ fun FullScreenVideoPlayer(
         // Video player view
         AndroidView(
             factory = {
-                            PlayerView(context).apply {
-                player = exoPlayer
-                useController = false // We'll implement custom controls
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                setBackgroundColor(android.graphics.Color.BLACK)
-            }
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = false // We'll implement custom controls
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
             },
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { 
+                        onTap = {
                             Timber.d("FullScreenVideoPlayer (API 30+): AndroidView tapped, toggling controls")
                             showControls = !showControls
                             showCloseButton = !showCloseButton
@@ -416,7 +417,7 @@ fun FullScreenVideoPlayer(
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { 
+                            onTap = {
                                 Timber.d("FullScreenVideoPlayer (API 30+): Controls overlay tapped, toggling controls")
                                 showControls = !showControls
                                 showCloseButton = !showCloseButton
@@ -461,7 +462,9 @@ fun FullScreenVideoPlayer(
                 ) {
                     Icon(
                         imageVector = if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (exoPlayer.isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
+                        contentDescription = if (exoPlayer.isPlaying) stringResource(R.string.pause) else stringResource(
+                            R.string.play
+                        ),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )

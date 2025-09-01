@@ -672,7 +672,7 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     if (attachment.type != null && attachment.type != MediaType.Unknown) {
         return attachment.type
     }
-    
+
     // If type is Unknown but we have a valid type, try to infer from other properties
     if (attachment.type == MediaType.Unknown) {
         // Check if it has aspect ratio (indicates video)
@@ -680,10 +680,10 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
             return MediaType.Video
         }
     }
-    
+
     // Check filename extension
     val fileName = attachment.fileName?.lowercase() ?: ""
-    
+
     // Special case for .3gp files - check if they have aspect ratio (video) or not (audio)
     if (fileName.endsWith(".3gp")) {
         return if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
@@ -692,33 +692,35 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
             MediaType.Audio
         }
     }
-    
+
     val inferredType = when {
-        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || 
-        fileName.endsWith(".png") || fileName.endsWith(".gif") || 
-        fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
-        
-        fileName.endsWith(".mp4") || fileName.endsWith(".mov") || 
-        fileName.endsWith(".avi") || fileName.endsWith(".mkv") || 
-        fileName.endsWith(".webm") || fileName.endsWith(".m4v") || 
-        fileName.endsWith(".3gpp") -> MediaType.Video
+        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
+                fileName.endsWith(".png") || fileName.endsWith(".gif") ||
+                fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
+
+        fileName.endsWith(".mp4") || fileName.endsWith(".mov") ||
+                fileName.endsWith(".avi") || fileName.endsWith(".mkv") ||
+                fileName.endsWith(".webm") || fileName.endsWith(".m4v") ||
+                fileName.endsWith(".3gpp") -> MediaType.Video
+
         fileName.endsWith(".m3u8") -> MediaType.HLS_VIDEO
-        
-        fileName.endsWith(".mp3") || fileName.endsWith(".wav") || 
-        fileName.endsWith(".aac") || fileName.endsWith(".ogg") || 
-        fileName.endsWith(".flac") || fileName.endsWith(".m4a") ||
-        fileName.endsWith(".wma") || fileName.endsWith(".opus") ||
-        fileName.endsWith(".amr") -> MediaType.Audio
-        
+
+        fileName.endsWith(".mp3") || fileName.endsWith(".wav") ||
+                fileName.endsWith(".aac") || fileName.endsWith(".ogg") ||
+                fileName.endsWith(".flac") || fileName.endsWith(".m4a") ||
+                fileName.endsWith(".wma") || fileName.endsWith(".opus") ||
+                fileName.endsWith(".amr") -> MediaType.Audio
+
         fileName.endsWith(".pdf") -> MediaType.PDF
         fileName.endsWith(".doc") || fileName.endsWith(".docx") -> MediaType.Word
         fileName.endsWith(".xls") || fileName.endsWith(".xlsx") -> MediaType.Excel
         fileName.endsWith(".ppt") || fileName.endsWith(".pptx") -> MediaType.PPT
-        fileName.endsWith(".zip") || fileName.endsWith(".rar") || 
-        fileName.endsWith(".7z") -> MediaType.Zip
+        fileName.endsWith(".zip") || fileName.endsWith(".rar") ||
+                fileName.endsWith(".7z") -> MediaType.Zip
+
         fileName.endsWith(".txt") -> MediaType.Txt
         fileName.endsWith(".html") || fileName.endsWith(".htm") -> MediaType.Html
-        
+
         else -> MediaType.Unknown
     }
     return inferredType

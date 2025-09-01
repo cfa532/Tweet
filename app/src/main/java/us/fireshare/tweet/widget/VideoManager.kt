@@ -74,9 +74,11 @@ object VideoManager {
     // ===== CONFIGURATION =====
     private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB for memory threshold
     private const val MAX_VIDEO_PLAYERS = 50 // Maximum number of video players to keep in memory
-    private const val CLEANUP_RATIO = 0.6 // Release 60% of inactive videos when memory pressure is high
+    private const val CLEANUP_RATIO =
+        0.6 // Release 60% of inactive videos when memory pressure is high
     private const val PRELOAD_AHEAD_COUNT = 3 // Number of upcoming tweets to preload videos from
-    private const val PRELOAD_DELAY_MS = 500L // Delay before starting preload to avoid excessive loading
+    private const val PRELOAD_DELAY_MS =
+        500L // Delay before starting preload to avoid excessive loading
 
     // ===== MEMORY MONITORING =====
     private var memoryMonitoringJob: kotlinx.coroutines.Job? = null
@@ -148,7 +150,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
         Timber.d("VideoManager - Video marked not visible: $videoMid")
-        
+
         // Don't pause the video if it's currently in full-screen mode
         if (!isVideoInFullScreen(videoMid)) {
             pauseVideo(videoMid)
@@ -185,36 +187,37 @@ object VideoManager {
         baseUrl: String
     ) {
         val coroutineScope = CoroutineScope(Dispatchers.IO)
-        
+
         coroutineScope.launch {
             // Add delay to avoid excessive preloading during rapid scrolling
             delay(PRELOAD_DELAY_MS)
-            
+
             // Calculate range of tweets to preload from
             val startIndex = currentTweetIndex + 1
             val endIndex = kotlin.math.min(startIndex + PRELOAD_AHEAD_COUNT, tweets.size)
-            
+
             for (i in startIndex until endIndex) {
                 val tweet = tweets[i]
-                val videoAttachments = tweet.attachments?.filter { 
-                    it.type == us.fireshare.tweet.datamodel.MediaType.Video || 
-                    it.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO 
+                val videoAttachments = tweet.attachments?.filter {
+                    it.type == us.fireshare.tweet.datamodel.MediaType.Video ||
+                            it.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
                 } ?: emptyList()
-                
+
                 for (attachment in videoAttachments) {
                     // Only preload if not already cached, not visible, and not being preloaded
-                    if (!isVideoPreloaded(attachment.mid) && 
+                    if (!isVideoPreloaded(attachment.mid) &&
                         !isVideoVisible(attachment.mid) &&
-                        !preloadingVideos.contains(attachment.mid)) {
-                        
+                        !preloadingVideos.contains(attachment.mid)
+                    ) {
+
                         preloadingVideos.add(attachment.mid)
-                        
+
                         try {
                             val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(
-                                attachment.mid, 
+                                attachment.mid,
                                 baseUrl
                             ).toString()
-                            
+
                             preloadVideo(context, attachment.mid, mediaUrl)
                             Timber.d("VideoManager - Preloading video: ${attachment.mid} from tweet $i")
                         } catch (e: Exception) {
@@ -420,15 +423,15 @@ object VideoManager {
                 try {
                     val player = createExoPlayer(context, videoUrl, MediaType.Video)
                     // Add to cache on main thread
-                        // Check memory again before adding to cache
-                        checkMemoryAndReleaseVideos()
-                        videoPlayers[videoMid] = player
-                        preloadedVideos.add(videoMid)
-                        preloadQueue.remove(videoMid)
-                        Timber.tag("preloadVideo").d("Successfully preloaded $videoMid")
+                    // Check memory again before adding to cache
+                    checkMemoryAndReleaseVideos()
+                    videoPlayers[videoMid] = player
+                    preloadedVideos.add(videoMid)
+                    preloadQueue.remove(videoMid)
+                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid")
                 } catch (e: Exception) {
-                        preloadQueue.remove(videoMid)
-                        Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
+                    preloadQueue.remove(videoMid)
+                    Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
                 }
             }
         }
@@ -465,14 +468,17 @@ object VideoManager {
         currentVideoUrl = videoUrl
 
         val player = getFullScreenPlayer(context)
-        
+
         try {
             player.stop()
             // Create a simple media source - this is a placeholder
             // In practice, you'd want to use the same media source creation as VideoManager
             val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context)
-            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-            val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+            val mediaSourceFactory =
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+            val mediaSource = mediaSourceFactory.createMediaSource(
+                androidx.media3.common.MediaItem.fromUri(videoUrl)
+            )
             player.setMediaSource(mediaSource)
             player.prepare()
         } catch (e: Exception) {
@@ -552,45 +558,36 @@ object VideoManager {
     }
 
     /**
-     * Check if a video player is in a recoverable state
-     */
-    fun isVideoRecoverable(videoMid: MimeiId): Boolean {
-        val player = videoPlayers[videoMid] ?: return false
-        return when (player.playbackState) {
-            Player.STATE_IDLE -> true
-            Player.STATE_ENDED -> true
-            Player.STATE_READY -> true
-            else -> false
-        }
-    }
-
-    /**
      * Attempt to recover a video that has stopped loading
      */
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
         val player = videoPlayers[videoMid] ?: return false
-        
+
         Timber.d("VideoManager - Attempting recovery for video: $videoMid")
-        
+
         try {
             // Stop and reset the player
             player.stop()
             player.seekTo(0)
-            
+
             // Create a new media source with extended timeouts for network congestion
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(30000) // 30 seconds connection timeout
                 .setReadTimeoutMs(30000)    // 30 seconds read timeout
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("TweetApp/1.0")
-            
-            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
-            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-            val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
-            
+
+            val dataSourceFactory =
+                androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val mediaSourceFactory =
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+            val mediaSource = mediaSourceFactory.createMediaSource(
+                androidx.media3.common.MediaItem.fromUri(videoUrl)
+            )
+
             player.setMediaSource(mediaSource)
             player.prepare()
-            
+
             Timber.d("VideoManager - Recovery attempted for video: $videoMid")
             return true
         } catch (e: Exception) {
@@ -638,7 +635,8 @@ object VideoManager {
             Timber.w("VideoManager - Too many video players (${videoPlayers.size}), releasing inactive videos")
             val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
             if (inactiveVideos.isNotEmpty()) {
-                val videosToRelease = inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt())
+                val videosToRelease =
+                    inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt())
                 videosToRelease.forEach { videoMid ->
                     releaseVideo(videoMid)
                 }
@@ -828,12 +826,14 @@ object VideoManager {
         return try {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
-            
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-            
+
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull() ?: 0
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toIntOrNull() ?: 0
+
             retriever.release()
-            
+
             if (width > 0 && height > 0) {
                 width.toFloat() / height.toFloat()
             } else {

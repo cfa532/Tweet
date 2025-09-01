@@ -35,7 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    private const val MAX_MEMORY_CACHE_SIZE = 150 * 1024 * 1024 // Reduced to 150MB for better memory management
+    private const val MAX_MEMORY_CACHE_SIZE =
+        150 * 1024 * 1024 // Reduced to 150MB for better memory management
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 8000 // 8 seconds
@@ -150,7 +151,7 @@ object ImageCacheManager {
                 try {
                     var bitmap: Bitmap? = null
                     var attempt = 0
-                    
+
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
@@ -168,9 +169,9 @@ object ImageCacheManager {
                             }
                         }
                     }
-                    
+
                     return@withContext null
-                    
+
                 } finally {
                     downloadQueue.remove(mid)
                     activeDownloads.decrementAndGet()
@@ -189,7 +190,7 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
-            
+
             try {
                 val url = URL(imageUrl)
                 connection = url.openConnection() as HttpURLConnection
@@ -197,10 +198,10 @@ object ImageCacheManager {
                 connection.readTimeout = READ_TIMEOUT
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("User-Agent", "TweetApp/1.0")
-                
+
                 // Add connection to pool
                 connectionPool[mid] = connection
-                
+
                 inputStream = connection.inputStream
                 val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
 
@@ -362,7 +363,7 @@ object ImageCacheManager {
         try {
             // Remove from memory cache
             memoryCache.remove(mid)
-            
+
             // Remove from disk cache
             val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
             if (file.exists()) {
@@ -411,22 +412,22 @@ object ImageCacheManager {
             // Read the entire stream into a byte array to handle mark/reset issues
             val byteArray = inputStream.readBytes()
             val byteArrayInputStream = java.io.ByteArrayInputStream(byteArray)
-            
+
             // Create options to decode bounds first
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
-            
+
             // Mark the stream so we can reset it
             byteArrayInputStream.mark(byteArray.size)
             BitmapFactory.decodeStream(byteArrayInputStream, null, options)
             byteArrayInputStream.reset()
-            
+
             // Decode the actual bitmap
             val decodeOptions = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
             }
-            
+
             val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
             if (bitmap != null) {
                 // Apply EXIF orientation correction
@@ -435,7 +436,8 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager").d("Successfully decoded bitmap with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
+                Timber.tag("ImageCacheManager")
+                    .d("Successfully decoded bitmap with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
             }
             bitmap
@@ -453,7 +455,7 @@ object ImageCacheManager {
             val options = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
             }
-            
+
             val bitmap = BitmapFactory.decodeFile(filePath, options)
             if (bitmap != null) {
                 // Apply EXIF orientation correction
@@ -462,12 +464,14 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager").d("Successfully decoded bitmap from file with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
+                Timber.tag("ImageCacheManager")
+                    .d("Successfully decoded bitmap from file with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
             }
             bitmap
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error decoding bitmap from file with orientation: $e")
+            Timber.tag("ImageCacheManager")
+                .d("Error decoding bitmap from file with orientation: $e")
             null
         }
     }
@@ -480,16 +484,16 @@ object ImageCacheManager {
             // Create a temporary file to use with ExifInterface
             val tempFile = File.createTempFile("exif_temp", ".jpg")
             tempFile.writeBytes(byteArray)
-            
+
             val exif = ExifInterface(tempFile.absolutePath)
             val orientation = exif.getAttributeInt(
                 ExifInterface.TAG_ORIENTATION,
                 ExifInterface.ORIENTATION_NORMAL
             )
-            
+
             // Clean up temp file
             tempFile.delete()
-            
+
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from byte array: $e")
@@ -507,7 +511,7 @@ object ImageCacheManager {
                 ExifInterface.TAG_ORIENTATION,
                 ExifInterface.ORIENTATION_NORMAL
             )
-            
+
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from file: $e")
@@ -525,48 +529,55 @@ object ImageCacheManager {
                 matrix.postRotate(90f)
                 Timber.tag("ImageCacheManager").d("Applying 90 degree rotation")
             }
+
             ExifInterface.ORIENTATION_ROTATE_180 -> {
                 matrix.postRotate(180f)
                 Timber.tag("ImageCacheManager").d("Applying 180 degree rotation")
             }
+
             ExifInterface.ORIENTATION_ROTATE_270 -> {
                 matrix.postRotate(270f)
                 Timber.tag("ImageCacheManager").d("Applying 270 degree rotation")
             }
+
             ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
                 matrix.postScale(-1f, 1f)
                 Timber.tag("ImageCacheManager").d("Applying horizontal flip")
             }
+
             ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
                 matrix.postScale(1f, -1f)
                 Timber.tag("ImageCacheManager").d("Applying vertical flip")
             }
+
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.postRotate(90f)
                 matrix.postScale(-1f, 1f)
                 Timber.tag("ImageCacheManager").d("Applying transpose")
             }
+
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.postRotate(270f)
                 matrix.postScale(-1f, 1f)
                 Timber.tag("ImageCacheManager").d("Applying transverse")
             }
+
             else -> {
                 // No rotation needed
                 return bitmap
             }
         }
-        
+
         // Create new bitmap with applied transformation
         val rotatedBitmap = Bitmap.createBitmap(
             bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
         )
-        
+
         if (rotatedBitmap != bitmap) {
-            Timber.tag("ImageCacheManager").d("Created rotated bitmap: ${rotatedBitmap.width}x${rotatedBitmap.height}")
+            Timber.tag("ImageCacheManager")
+                .d("Created rotated bitmap: ${rotatedBitmap.width}x${rotatedBitmap.height}")
         }
-        
+
         return rotatedBitmap
     }
-
 }

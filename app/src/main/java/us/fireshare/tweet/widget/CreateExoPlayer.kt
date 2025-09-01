@@ -49,14 +49,22 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     // Check if it's a network-related error
-                    val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                            error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                            error.cause?.message?.contains("connection", ignoreCase = true) == true
+                    val isNetworkError =
+                        error.cause?.message?.contains("network", ignoreCase = true) == true ||
+                                error.cause?.message?.contains(
+                                    "timeout",
+                                    ignoreCase = true
+                                ) == true ||
+                                error.cause?.message?.contains(
+                                    "connection",
+                                    ignoreCase = true
+                                ) == true
 
                     if (isNetworkError && retryCount < maxRetries) {
                         retryCount++
-                        Timber.tag("createExoPlayer").d("Network error detected, retrying (attempt $retryCount)")
-                        
+                        Timber.tag("createExoPlayer")
+                            .d("Network error detected, retrying (attempt $retryCount)")
+
                         // Wait a bit before retrying to allow network to recover
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             try {
@@ -91,7 +99,8 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         prepare()
                     } else {
                         // Only log the final failure as an error
-                        Timber.tag("createExoPlayer").e("All fallback attempts failed for URL: $url")
+                        Timber.tag("createExoPlayer")
+                            .e("All fallback attempts failed for URL: $url")
                         Timber.tag("createExoPlayer").e("Final error: ${error.message}")
                         Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
                     }
@@ -102,12 +111,15 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         androidx.media3.common.Player.STATE_READY -> {
                             Timber.tag("createExoPlayer").d("Player ready for URL: $url")
                         }
+
                         androidx.media3.common.Player.STATE_BUFFERING -> {
                             Timber.tag("createExoPlayer").d("Player buffering for URL: $url")
                         }
+
                         androidx.media3.common.Player.STATE_IDLE -> {
                             Timber.tag("createExoPlayer").d("Player idle for URL: $url")
                         }
+
                         androidx.media3.common.Player.STATE_ENDED -> {
                             Timber.tag("createExoPlayer").d("Player ended for URL: $url")
                         }
@@ -115,17 +127,20 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Timber.tag("createExoPlayer").d("Player playing state changed: $isPlaying for URL: $url")
+                    Timber.tag("createExoPlayer")
+                        .d("Player playing state changed: $isPlaying for URL: $url")
                 }
 
                 override fun onIsLoadingChanged(isLoading: Boolean) {
-                    Timber.tag("createExoPlayer").d("Player loading state changed: $isLoading for URL: $url")
+                    Timber.tag("createExoPlayer")
+                        .d("Player loading state changed: $isLoading for URL: $url")
                 }
             })
         }
 
     // Start with master.m3u8 (try HLS first)
-    val mediaSource = mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+    val mediaSource =
+        mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
     player.setMediaSource(mediaSource)
 
     // Prepare the player immediately after setting up the listener

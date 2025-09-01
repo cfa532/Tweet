@@ -57,19 +57,7 @@ object VideoLoadingManager {
     fun stopAllPreloading() {
         VideoManager.stopAllPreloading()
     }
-    
-    /**
-     * Get currently visible videos
-     * Delegates to VideoManager.getVisibleVideos()
-     */
-    fun getVisibleVideos(): Set<MimeiId> = VideoManager.getVisibleVideos()
-    
-    /**
-     * Get currently preloading videos
-     * Delegates to VideoManager.getPreloadingVideos()
-     */
-    fun getPreloadingVideos(): Set<MimeiId> = VideoManager.getPreloadingVideos()
-    
+
     /**
      * Clear all tracking data
      * Delegates to VideoManager.clear()
@@ -93,7 +81,7 @@ fun rememberVideoLoadingManager(
 ) {
     // Track previous visibility state
     var wasVisible by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(isVisible) {
         if (isVisible != wasVisible) {
             if (isVisible) {
@@ -105,7 +93,7 @@ fun rememberVideoLoadingManager(
             wasVisible = isVisible
         }
     }
-    
+
     // Cleanup when component is disposed
     DisposableEffect(Unit) {
         onDispose {
@@ -127,7 +115,7 @@ fun rememberTweetVideoPreloader(
     baseUrl: String
 ) {
     val context = LocalContext.current
-    
+
     LaunchedEffect(currentVisibleIndex, tweets.size) {
         if (tweets.isNotEmpty() && currentVisibleIndex >= 0) {
             VideoLoadingManager.preloadUpcomingVideos(
@@ -138,7 +126,7 @@ fun rememberTweetVideoPreloader(
             )
         }
     }
-    
+
     // Stop preloading when component is disposed
     DisposableEffect(Unit) {
         onDispose {

@@ -681,12 +681,12 @@ private fun saveImageToGallery(context: android.content.Context, bitmap: android
             put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
             put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Tweet")
         }
-        
+
         val uri = context.contentResolver.insert(
             android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             contentValues
         )
-        
+
         uri?.let { imageUri ->
             context.contentResolver.openOutputStream(imageUri)?.use { outputStream ->
                 bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, outputStream)
