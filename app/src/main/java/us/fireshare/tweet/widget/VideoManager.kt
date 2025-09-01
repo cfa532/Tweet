@@ -337,15 +337,6 @@ object VideoManager {
     }
 
     /**
-     * Pause all videos
-     */
-    fun pauseAllVideos() {
-        videoPlayers.values.forEach { player ->
-            player.playWhenReady = false
-        }
-    }
-
-    /**
      * Release a specific video player
      * Note: This method must be called on the main thread
      */
@@ -420,23 +411,19 @@ object VideoManager {
             preloadQueue.add(videoMid)
 
             // Start preloading in background
-            GlobalScope.launch(Dispatchers.IO) {
+            GlobalScope.launch(Dispatchers.Main) {
                 try {
                     val player = createExoPlayer(context, videoUrl, MediaType.Video)
                     // Add to cache on main thread
-                    withContext(Dispatchers.Main) {
                         // Check memory again before adding to cache
                         checkMemoryAndReleaseVideos()
                         videoPlayers[videoMid] = player
                         preloadedVideos.add(videoMid)
                         preloadQueue.remove(videoMid)
                         Timber.tag("preloadVideo").d("Successfully preloaded $videoMid")
-                    }
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
                         preloadQueue.remove(videoMid)
                         Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
-                    }
                 }
             }
         }
@@ -536,25 +523,10 @@ object VideoManager {
     }
 
     /**
-     * Stop full screen playback
-     */
-    fun stopFullScreenPlayback() {
-        fullScreenPlayer?.let { player ->
-            player.playWhenReady = false
-            autoReplayListener?.let { listener ->
-                player.removeListener(listener)
-            }
-            autoReplayListener = null
-        }
-    }
-
-    /**
      * Release full screen player
      */
     fun releaseFullScreenPlayer() {
-        fullScreenPlayer?.let { player ->
-            player.release()
-        }
+        fullScreenPlayer?.release()
         fullScreenPlayer = null
         currentVideoUrl = null
         autoReplayListener = null
@@ -826,8 +798,6 @@ object VideoManager {
     fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
         return videoPlayers[videoMid]?.also { player ->
             Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
-            // Pause the player to prevent conflicts during transition
-            player.playWhenReady = false
         }
     }
 
@@ -837,8 +807,6 @@ object VideoManager {
     fun returnFromFullScreen(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let { player ->
             Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
-            // Resume normal preview behavior
-            player.playWhenReady = false
         }
     }
 

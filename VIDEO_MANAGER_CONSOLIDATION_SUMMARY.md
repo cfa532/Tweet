@@ -28,6 +28,8 @@ Successfully consolidated 5 separate video management classes into a single unif
 
 ### ✅ **Full-Screen Support**
 - **Seamless transitions**: Transfer existing players to full-screen without losing position
+- **Continuous playback**: Videos continue playing during full-screen transitions (no pause)
+- **Active count management**: Properly tracks video usage to prevent unwanted pausing
 - **Auto-replay**: Configurable auto-replay for full-screen videos
 - **Dedicated player**: Separate full-screen player instance
 
@@ -40,6 +42,7 @@ Successfully consolidated 5 separate video management classes into a single unif
 - **Network error handling**: Automatic retry for network-related errors
 - **Player recovery**: Attempt to recover failed video loads
 - **Error state management**: Graceful handling of playback errors
+- **Thread safety**: All ExoPlayer operations properly executed on main thread
 
 ## Architecture Benefits
 
@@ -56,6 +59,7 @@ Successfully consolidated 5 separate video management classes into a single unif
 - **Reduced overhead**: No inter-manager communication overhead
 - **Better coordination**: Unified memory and resource management
 - **Optimized loading**: Visibility-based loading prevents resource waste
+- **Thread safety**: Proper main thread execution prevents crashes
 
 ### 📱 **User Experience**
 - **Smoother scrolling**: Videos stop loading when scrolled past
