@@ -215,15 +215,15 @@ fun VideoPreview(
         }
     }
 
-    // Watch for global mute state changes and update local state
-    LaunchedEffect(Unit) {
-        // Check global mute state periodically and update if changed
-        while (true) {
+    // Watch for global mute state changes only when visible, at a relaxed cadence
+    LaunchedEffect(isVideoVisible) {
+        if (!isVideoVisible) return@LaunchedEffect
+        while (isVideoVisible) {
             val globalMuteState = preferenceHelper.getSpeakerMute()
             if (isMuted != globalMuteState) {
                 isMuted = globalMuteState
             }
-            delay(100) // Check every 100ms
+            delay(500) // Check every 500ms while visible
         }
     }
 
@@ -408,24 +408,25 @@ fun VideoPreview(
                                 hasError = false
                                 isLoading = true
                                 
-                                // Attempt recovery in background
-                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                // Attempt recovery on the main thread (required for ExoPlayer)
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                                     try {
                                         val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
                                         if (!success) {
                                             // If recovery failed, show error again
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                hasError = true
-                                                isLoading = false
+                                            hasError = true
+                                            isLoading = false
+                                        } else {
+                                            // Ensure playback resumes if visible and allowed
+                                            if (isVideoVisible && autoPlay) {
+                                                exoPlayer.playWhenReady = true
                                             }
                                         }
                                     } catch (e: Exception) {
                                         // Only log retry failures at debug level to avoid noise
                                         Timber.d("VideoPreview - Retry failed: ${e.message}")
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            hasError = true
-                                            isLoading = false
-                                        }
+                                        hasError = true
+                                        isLoading = false
                                     }
                                 }
                             },

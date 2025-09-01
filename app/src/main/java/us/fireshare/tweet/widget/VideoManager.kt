@@ -14,9 +14,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -73,15 +75,23 @@ object VideoManager {
 
     // ===== CONFIGURATION =====
     private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB for memory threshold
-    private const val MAX_VIDEO_PLAYERS = 50 // Maximum number of video players to keep in memory
+    private const val MAX_VIDEO_PLAYERS = 24 // Reduced to mitigate memory pressure and jank
     private const val CLEANUP_RATIO =
         0.6 // Release 60% of inactive videos when memory pressure is high
     private const val PRELOAD_AHEAD_COUNT = 3 // Number of upcoming tweets to preload videos from
     private const val PRELOAD_DELAY_MS =
         500L // Delay before starting preload to avoid excessive loading
+    private const val MAX_NEW_PRELOADS_PER_CYCLE = 2 // Cap how many new preloads per cycle
+    private const val MAX_CONCURRENT_PRELOADS = 3 // Allow up to 3 concurrent player creations
 
     // ===== MEMORY MONITORING =====
     private var memoryMonitoringJob: kotlinx.coroutines.Job? = null
+
+    // Concurrency control for preloading to avoid main-thread contention
+    private val preloadSemaphore: Semaphore = Semaphore(MAX_CONCURRENT_PRELOADS)
+
+    // Track active preload jobs by video mid for cancellation
+    private val preloadJobs = ConcurrentHashMap<MimeiId, Job>()
 
     // ===== CACHE MANAGEMENT =====
 
@@ -153,7 +163,17 @@ object VideoManager {
 
         // Don't pause the video if it's currently in full-screen mode
         if (!isVideoInFullScreen(videoMid)) {
-            pauseVideo(videoMid)
+            // Cancel any ongoing preload/network loading for this video
+            cancelPreload(videoMid)
+            // Stop buffering/loading to free up resources
+            videoPlayers[videoMid]?.let { player ->
+                try {
+                    player.playWhenReady = false
+                    player.stop()
+                } catch (e: Exception) {
+                    Timber.d("VideoManager - Error stopping non-visible video $videoMid: $e")
+                }
+            }
         } else {
             Timber.d("VideoManager - Not pausing video $videoMid because it's in full-screen mode")
         }
@@ -196,6 +216,8 @@ object VideoManager {
             val startIndex = currentTweetIndex + 1
             val endIndex = kotlin.math.min(startIndex + PRELOAD_AHEAD_COUNT, tweets.size)
 
+            var addedThisCycle = 0
+
             for (i in startIndex until endIndex) {
                 val tweet = tweets[i]
                 val videoAttachments = tweet.attachments?.filter {
@@ -204,6 +226,10 @@ object VideoManager {
                 } ?: emptyList()
 
                 for (attachment in videoAttachments) {
+                    if (addedThisCycle >= MAX_NEW_PRELOADS_PER_CYCLE) {
+                        // Reached per-cycle limit; stop adding more in this cycle
+                        continue
+                    }
                     // Only preload if not already cached, not visible, and not being preloaded
                     if (!isVideoPreloaded(attachment.mid) &&
                         !isVideoVisible(attachment.mid) &&
@@ -219,6 +245,7 @@ object VideoManager {
                             ).toString()
 
                             preloadVideo(context, attachment.mid, mediaUrl)
+                            addedThisCycle++
                             Timber.d("VideoManager - Preloading video: ${attachment.mid} from tweet $i")
                         } catch (e: Exception) {
                             Timber.e("VideoManager - Failed to preload video: ${attachment.mid}, error: ${e.message}")
@@ -235,6 +262,13 @@ object VideoManager {
      * Stop preloading all videos
      */
     fun stopAllPreloading() {
+        // Cancel all active preload jobs
+        preloadJobs.values.forEach { job ->
+            try {
+                job.cancel()
+            } catch (_: Exception) { }
+        }
+        preloadJobs.clear()
         preloadingVideos.clear()
         Timber.d("VideoManager - Stopped all preloading")
     }
@@ -419,12 +453,19 @@ object VideoManager {
             preloadQueue.add(videoMid)
 
             // Start preloading in background
-            GlobalScope.launch(Dispatchers.Main) {
+            val job = GlobalScope.launch(Dispatchers.Main) {
                 try {
+                    // Throttle concurrent player creation on main thread
+                    preloadSemaphore.acquire()
+                    if (!isActive) return@launch
                     val player = createExoPlayer(context, videoUrl, MediaType.Video)
                     // Add to cache on main thread
                     // Check memory again before adding to cache
                     checkMemoryAndReleaseVideos()
+                    if (!isActive) {
+                        try { player.release() } catch (_: Exception) {}
+                        return@launch
+                    }
                     videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
                     preloadQueue.remove(videoMid)
@@ -432,9 +473,26 @@ object VideoManager {
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
+                } finally {
+                    preloadSemaphore.release()
+                    preloadJobs.remove(videoMid)
                 }
             }
+            preloadJobs[videoMid] = job
         }
+    }
+
+    /**
+     * Cancel an active preload for a given video mid
+     */
+    private fun cancelPreload(videoMid: MimeiId) {
+        preloadJobs.remove(videoMid)?.let { job ->
+            try {
+                job.cancel()
+            } catch (_: Exception) { }
+        }
+        preloadingVideos.remove(videoMid)
+        preloadQueue.remove(videoMid)
     }
 
     /**
