@@ -40,11 +40,11 @@ Successfully consolidated 5 separate video management classes into a single unif
 - **Cache statistics**: Detailed cache usage reporting
 
 ### ✅ **Recovery Mechanisms**
-- **Network error handling**: Automatic retry for network-related errors
-- **Player recovery**: Attempt to recover failed video loads
-- **Error state management**: Graceful handling of playback errors
+- **HLS fallback sequence**: master.m3u8 → playlist.m3u8 → original URL (NO RETRIES)
+- **Graceful error handling**: HTTP 500/404 errors handled without retries
+- **Expected error logging**: Network errors logged at debug level to reduce noise
 - **Thread safety**: All ExoPlayer operations properly executed on main thread
-- **LiveEdit compatibility**: Safe volume handling to prevent crashes during development
+- **LiveEdit compatibility**: Safe volume handling and listener management to prevent crashes during development
 
 ## Architecture Benefits
 

@@ -245,8 +245,13 @@ fun VideoPreview(
     }
 
     // Create a single listener that will be properly managed
-    val playerListener = remember {
+    val playerListener = remember(videoMid) {
         object : androidx.media3.common.Player.Listener {
+            override fun onVolumeChanged(volume: Float) {
+                // Handle volume changes safely
+                Timber.d("VideoPreview - Volume changed to: $volume")
+            }
+            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
@@ -282,36 +287,33 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // Check if it's a network-related error that might be temporary
-                val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("unable to resolve", ignoreCase = true) == true
+                // Handle errors gracefully as per documentation (NO RETRIES)
+                // Network errors (500, 404, connection failures) are expected and handled gracefully
+                val errorMessage = error.cause?.message ?: ""
+                val isExpectedError = errorMessage.contains("Response code: 500", ignoreCase = true) ||
+                        errorMessage.contains("Response code: 404", ignoreCase = true) ||
+                        errorMessage.contains("Response code: 502", ignoreCase = true) ||
+                        errorMessage.contains("Response code: 503", ignoreCase = true) ||
+                        errorMessage.contains("Response code: 504", ignoreCase = true) ||
+                        errorMessage.contains("Source error", ignoreCase = true) ||
+                        errorMessage.contains("network", ignoreCase = true) ||
+                        errorMessage.contains("timeout", ignoreCase = true) ||
+                        errorMessage.contains("connection", ignoreCase = true) ||
+                        errorMessage.contains("unable to resolve", ignoreCase = true) ||
+                        error.cause is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
                 
-                // For network errors, be more lenient and don't immediately show error state
-                if (isNetworkError && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
-                    recoveryAttempts++
-                    Timber.tag("VideoPreview").d("Network error detected, will retry automatically (attempt $recoveryAttempts)")
-                    
-                    // Keep loading state for network errors to allow automatic retry
-                    isLoading = true
-                    hasError = false
-                    
-                    // Auto-retry after a delay for network errors
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        delay(3000) // Wait 3 seconds before auto-retry
-                        if (isLoading && !hasError && videoMid != null) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url)
-                        }
-                    }
+                // Show error state gracefully (NO RETRIES as per documentation)
+                isLoading = false
+                hasError = true
+                
+                if (isExpectedError) {
+                    // Log expected errors at debug level to avoid noise
+                    Timber.tag("VideoPreview").d("Expected error for video: $videoMid - ${error.message}")
                 } else {
-                    // For non-network errors or after max attempts, show error state
-                    isLoading = false
-                    hasError = true
-                    // Only log the final error, not intermediate trial errors
-                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
-                    Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
+                    // Log unexpected errors as errors
+                    Timber.tag("VideoPreview").e("Unexpected error for video: $videoMid - ${error.message}")
                 }
+                Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
             }
         }
     }

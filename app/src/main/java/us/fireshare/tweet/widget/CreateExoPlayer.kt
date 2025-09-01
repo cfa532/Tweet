@@ -40,35 +40,13 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     val player = ExoPlayer.Builder(context)
         .build()
         .apply {
-            // Add comprehensive listener for debugging and fallback
+            // Add listener for HLS fallback sequence (NO RETRIES)
             addListener(object : androidx.media3.common.Player.Listener {
                 private var hasTriedPlaylist = false
                 private var hasTriedOriginal = false
-                private var retryCount = 0
-                private val maxRetries = 2
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    // Check if it's a network-related error
-                    val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                            error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                            error.cause?.message?.contains("connection", ignoreCase = true) == true
-
-                    if (isNetworkError && retryCount < maxRetries) {
-                        retryCount++
-                        Timber.tag("createExoPlayer").d("Network error detected, retrying (attempt $retryCount)")
-                        
-                        // Wait a bit before retrying to allow network to recover
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            try {
-                                prepare()
-                            } catch (e: Exception) {
-                                // Only log retry failures at debug level to avoid noise
-                                Timber.tag("createExoPlayer").d("Retry failed: ${e.message}")
-                            }
-                        }, 2000) // Wait 2 seconds before retry
-                        return
-                    }
-
+                    // HLS Fallback Sequence: master.m3u8 -> playlist.m3u8 -> original URL (NO RETRIES)
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
                         Timber.tag("createExoPlayer").d("Trying playlist.m3u8 fallback")
@@ -90,10 +68,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         setMediaSource(originalMediaSource)
                         prepare()
                     } else {
-                        // Only log the final failure as an error
+                        // All fallback attempts failed, stop the player (NO RETRIES)
                         Timber.tag("createExoPlayer").e("All fallback attempts failed for URL: $url")
                         Timber.tag("createExoPlayer").e("Final error: ${error.message}")
-                        Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
+                        stop() // Stop player as per documentation
                     }
                 }
 
