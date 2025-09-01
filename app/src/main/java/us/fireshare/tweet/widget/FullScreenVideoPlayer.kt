@@ -172,7 +172,11 @@ fun FullScreenVideoPlayer(
     // Start playback and unmute when entering full screen - only run once
     LaunchedEffect(Unit) {
         // Set volume and start playback
-        existingPlayer.volume = 1.0f // Unmute video
+        try {
+            existingPlayer.volume = 1.0f // Unmute video
+        } catch (e: Exception) {
+            Timber.e("FullScreenVideoPlayer - Error setting volume: ${e.message}")
+        }
         
         // Only prepare if player is idle and not already loading
         if (existingPlayer.playbackState == Player.STATE_IDLE && !existingPlayer.isLoading) {
@@ -271,7 +275,11 @@ fun FullScreenVideoPlayer(
     // Start playback when entering full screen
     LaunchedEffect(Unit) {
         // Set volume to 1f (unmuted) for full screen
-        exoPlayer.volume = 1f
+        try {
+            exoPlayer.volume = 1f
+        } catch (e: Exception) {
+            Timber.e("FullScreenVideoPlayer - Error setting volume: ${e.message}")
+        }
 
         // Start playback with auto-replay
         VideoManager.startPlayback(autoReplay)

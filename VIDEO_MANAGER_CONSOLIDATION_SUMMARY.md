@@ -29,6 +29,7 @@ Successfully consolidated 5 separate video management classes into a single unif
 ### ✅ **Full-Screen Support**
 - **Seamless transitions**: Transfer existing players to full-screen without losing position
 - **Continuous playback**: Videos continue playing during full-screen transitions (no pause)
+- **Full-screen state tracking**: Prevents VideoPreview from pausing videos in full-screen mode
 - **Active count management**: Properly tracks video usage to prevent unwanted pausing
 - **Auto-replay**: Configurable auto-replay for full-screen videos
 - **Dedicated player**: Separate full-screen player instance
@@ -43,6 +44,7 @@ Successfully consolidated 5 separate video management classes into a single unif
 - **Player recovery**: Attempt to recover failed video loads
 - **Error state management**: Graceful handling of playback errors
 - **Thread safety**: All ExoPlayer operations properly executed on main thread
+- **LiveEdit compatibility**: Safe volume handling to prevent crashes during development
 
 ## Architecture Benefits
 

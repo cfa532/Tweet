@@ -182,7 +182,8 @@ fun VideoPreview(
             // Don't pause if the video is being used in full screen
             videoMid?.let { mid ->
                 val activeCount = VideoManager.getVideoActiveCount(mid)
-                if (activeCount <= 1) {
+                val isInFullScreen = VideoManager.isVideoInFullScreen(mid)
+                if (activeCount <= 1 && !isInFullScreen) {
                     exoPlayer.playWhenReady = false
                 }
             } ?: run {
@@ -205,9 +206,13 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
-        // Persist mute state to preferences
-        preferenceHelper.setSpeakerMute(isMuted)
+        try {
+            exoPlayer.volume = if (isMuted) 0f else 1f
+            // Persist mute state to preferences
+            preferenceHelper.setSpeakerMute(isMuted)
+        } catch (e: Exception) {
+            Timber.e("VideoPreview - Error setting volume: ${e.message}")
+        }
     }
 
     // Watch for global mute state changes and update local state
@@ -242,6 +247,11 @@ fun VideoPreview(
     // Create a single listener that will be properly managed
     val playerListener = remember {
         object : androidx.media3.common.Player.Listener {
+            override fun onVolumeChanged(volume: Float) {
+                // Handle volume changes safely
+                Timber.d("VideoPreview - Volume changed to: $volume")
+            }
+            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {

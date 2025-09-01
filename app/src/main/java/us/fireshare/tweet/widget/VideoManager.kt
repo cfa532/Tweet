@@ -55,6 +55,7 @@ object VideoManager {
     private var fullScreenPlayer: ExoPlayer? = null
     private var currentVideoUrl: String? = null
     private var autoReplayListener: Player.Listener? = null
+    private var currentFullScreenVideoMid: MimeiId? = null
 
     // ===== CACHE MANAGEMENT =====
     private var videoCache: SimpleCache? = null
@@ -148,8 +149,12 @@ object VideoManager {
         markVideoInactive(videoMid)
         Timber.d("VideoManager - Video marked not visible: $videoMid")
         
-        // Pause the video when it's no longer visible
-        pauseVideo(videoMid)
+        // Don't pause the video if it's currently in full-screen mode
+        if (!isVideoInFullScreen(videoMid)) {
+            pauseVideo(videoMid)
+        } else {
+            Timber.d("VideoManager - Not pausing video $videoMid because it's in full-screen mode")
+        }
     }
 
     /**
@@ -798,6 +803,7 @@ object VideoManager {
     fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
         return videoPlayers[videoMid]?.also { player ->
             Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
+            currentFullScreenVideoMid = videoMid
         }
     }
 
@@ -807,7 +813,15 @@ object VideoManager {
     fun returnFromFullScreen(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let { player ->
             Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
+            currentFullScreenVideoMid = null
         }
+    }
+
+    /**
+     * Check if a video is currently in full-screen mode
+     */
+    fun isVideoInFullScreen(videoMid: MimeiId): Boolean {
+        return currentFullScreenVideoMid == videoMid
     }
 
     /**
