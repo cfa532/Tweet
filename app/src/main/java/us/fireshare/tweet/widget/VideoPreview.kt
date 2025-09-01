@@ -193,6 +193,24 @@ fun VideoPreview(
         }
     }
 
+    // React to changes in autoPlay while visible (for sequential playback)
+    LaunchedEffect(autoPlay, isVideoVisible) {
+        if (!isVideoVisible) return@LaunchedEffect
+        try {
+            // Always keep repeat mode off for previews
+            exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
+            if (autoPlay) {
+                if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                    exoPlayer.prepare()
+                }
+                exoPlayer.playWhenReady = true
+            } else {
+                exoPlayer.playWhenReady = false
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     // Monitor for video loading issues and trigger cleanup if needed
     LaunchedEffect(hasError, isLoading) {
         if (hasError && videoMid != null) {

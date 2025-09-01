@@ -131,21 +131,37 @@ fun MediaGrid(
         }
     }
     
-    // Track current playing video for sequential playback
-    var currentPlayingVideoIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+    // Build mapping between video-only list and grid indices
+    val videoGridIndices by remember(limitedMediaList) {
+        derivedStateOf {
+            limitedMediaList.mapIndexedNotNull { index, item ->
+                val mediaType = inferMediaTypeFromAttachment(item)
+                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) index else null
+            }
+        }
+    }
+
+    // Track current playing video as index within videoGridIndices
+    var currentVideoListIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+
+    fun isAutoPlayForGridIndex(gridIndex: Int): Boolean {
+        return currentVideoListIndex >= 0 &&
+            currentVideoListIndex < videoGridIndices.size &&
+            videoGridIndices[currentVideoListIndex] == gridIndex
+    }
     
     // Optimize: Use LaunchedEffect with proper keys to avoid unnecessary video setup
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
             // For multiple videos, only the first one should autoplay initially
-            currentPlayingVideoIndex = 0
+            currentVideoListIndex = 0
             VideoManager.setupSequentialPlayback(videoMids)
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
-            currentPlayingVideoIndex = 0
+            currentVideoListIndex = 0
             VideoManager.stopSequentialPlayback()
         } else {
-            currentPlayingVideoIndex = -1
+            currentVideoListIndex = -1
             VideoManager.stopSequentialPlayback()
         }
         
@@ -170,10 +186,10 @@ fun MediaGrid(
     }
     
     // Handle sequential video completion
-    LaunchedEffect(currentPlayingVideoIndex) {
-        if (videoMids.size > 1 && currentPlayingVideoIndex >= 0) {
+    LaunchedEffect(currentVideoListIndex) {
+        if (videoMids.size > 1 && currentVideoListIndex >= 0) {
             // Set up completion listener for current video
-            val currentVideoMid = videoMids[currentPlayingVideoIndex]
+            val currentVideoMid = videoMids[currentVideoListIndex]
             currentVideoMid?.let { mid ->
                 // Wait for video to complete and then move to next
                 delay(100) // Small delay to ensure video is loaded
@@ -190,16 +206,23 @@ fun MediaGrid(
     }
     
     // Function to handle video completion and move to next
-    fun onVideoCompleted(videoIndex: Int) {
-        if (videoMids.size > 1 && videoIndex == currentPlayingVideoIndex) {
-            // Move to next video
-            val nextIndex = (videoIndex + 1) % videoMids.size
-            currentPlayingVideoIndex = nextIndex
-            
+    fun onVideoCompleted(gridIndex: Int) {
+        if (videoMids.isEmpty()) return
+        // Translate grid index to video list index
+        val completedVideoListIndex = videoGridIndices.indexOf(gridIndex)
+        if (completedVideoListIndex == -1) return
+        if (currentVideoListIndex == completedVideoListIndex) {
             // Notify VideoManager about completion
-            val completedVideoMid = videoMids[videoIndex]
+            val completedVideoMid = videoMids.getOrNull(completedVideoListIndex)
             completedVideoMid?.let { mid ->
                 VideoManager.onVideoCompleted(mid)
+            }
+
+            // Advance to next video without looping; stop after last
+            val nextListIndex = completedVideoListIndex + 1
+            currentVideoListIndex = if (nextListIndex < videoGridIndices.size) nextListIndex else -1
+            if (currentVideoListIndex == -1) {
+                VideoManager.stopSequentialPlayback()
             }
         }
     }
@@ -235,7 +258,7 @@ fun MediaGrid(
                         },
                     index = 0,
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
-                    autoPlay = currentPlayingVideoIndex == 0,
+                    autoPlay = isAutoPlayForGridIndex(0),
                     inPreviewGrid = true,
                     viewModel = viewModel,
                     onVideoCompleted = { onVideoCompleted(0) }
@@ -269,7 +292,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = idx,
-                                    autoPlay = currentPlayingVideoIndex == idx,
+                                    autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(idx) }
@@ -297,7 +320,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = idx,
-                                    autoPlay = currentPlayingVideoIndex == idx,
+                                    autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(idx) }
@@ -326,7 +349,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = currentPlayingVideoIndex == 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(0) }
@@ -343,7 +366,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = currentPlayingVideoIndex == 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(1) }
@@ -362,7 +385,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = currentPlayingVideoIndex == 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(0) }
@@ -379,7 +402,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = currentPlayingVideoIndex == 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(1) }
@@ -421,7 +444,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -445,7 +468,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -474,7 +497,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -500,7 +523,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -528,7 +551,7 @@ fun MediaGrid(
                                 modifier = Modifier
                                     .fillMaxSize(),
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -552,7 +575,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -581,7 +604,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -607,7 +630,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -652,7 +675,7 @@ fun MediaGrid(
                             index = index,
                             numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                                 mediaItems.size - maxItems else 0,
-                            autoPlay = currentPlayingVideoIndex == index,
+                            autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
                             onVideoCompleted = { onVideoCompleted(index) }
