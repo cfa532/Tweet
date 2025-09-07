@@ -183,11 +183,11 @@ object HproseInstance {
                         // Check if the response indicates success or failure
                         val success = receiptResponse?.get("success") as? Boolean ?: true
                         val errorMsg = receiptResponse?.get("error") as? String
-                        
-                        if (success) {
-                            return Pair(true, null)
+
+                        return if (success) {
+                            Pair(true, null)
                         } else {
-                            return Pair(false, errorMsg ?: "Unknown error")
+                            Pair(false, errorMsg ?: "Unknown error")
                         }
                     } catch (e: Exception) {
                         Timber.tag("sendMessage").e("Error sending to receipt: $e")
@@ -940,15 +940,6 @@ object HproseInstance {
     }
 
     /**
-     * Result class for toggle operations
-     */
-    data class ToggleResult(
-        val tweet: Tweet,
-        val isSuccess: Boolean,
-        val errorMessage: String? = null
-    )
-
-    /**
      * Load favorite status of the tweet by appUser.
      * */
     suspend fun toggleFavorite(tweet: Tweet): Tweet {
@@ -1378,13 +1369,6 @@ object HproseInstance {
     }
 
     /**
-     * Get blacklist statistics for monitoring and debugging
-     */
-    suspend fun getBlackListStats(): BlackList.BlackListStats {
-        return BlackList.getStats()
-    }
-
-    /**
      * Upload media file to node and return its IPFS cid with its media type.
      * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
      * */
@@ -1591,7 +1575,7 @@ object HproseInstance {
                 throw Exception(errorMessage)
             }
 
-            val jobId = uploadResponseData?.get("jobId") as? String
+            val jobId = uploadResponseData["jobId"] as? String
                 ?: throw Exception("No job ID in response")
             
             Timber.tag("uploadHLSVideo").d("Upload started, job ID: $jobId")
