@@ -116,15 +116,15 @@ fun AdvancedImageViewer(
                     while (downloadedBitmap == null && attempt < maxAttempts) {
                         attempt++
                         try {
-                            downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                            downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
                             if (downloadedBitmap == null) {
-                                Timber.tag("AdvancedImageViewer").w("Background load attempt $attempt failed to load image: $imageUrl")
+                                Timber.tag("AdvancedImageViewer").w("Background load attempt $attempt failed to load original image: $imageUrl")
                                 if (attempt < maxAttempts) {
                                     delay(1000L * attempt) // Exponential backoff
                                 }
                             }
                         } catch (e: Exception) {
-                            Timber.tag("AdvancedImageViewer").e(e, "Background load attempt $attempt failed to load image: $imageUrl")
+                            Timber.tag("AdvancedImageViewer").e(e, "Background load attempt $attempt failed to load original image: $imageUrl")
                             if (attempt < maxAttempts) {
                                 delay(1000L * attempt) // Exponential backoff
                             }
@@ -159,15 +159,15 @@ fun AdvancedImageViewer(
                 while (downloadedBitmap == null && attempt < maxAttempts) {
                     attempt++
                     try {
-                        downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                        downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
                         if (downloadedBitmap == null) {
-                            Timber.tag("AdvancedImageViewer").w("Attempt $attempt failed to load image: $imageUrl")
+                            Timber.tag("AdvancedImageViewer").w("Attempt $attempt failed to load original image: $imageUrl")
                             if (attempt < maxAttempts) {
                                 delay(1000L * attempt) // Exponential backoff
                             }
                         }
                     } catch (e: Exception) {
-                        Timber.tag("AdvancedImageViewer").e(e, "Attempt $attempt failed to load image: $imageUrl")
+                        Timber.tag("AdvancedImageViewer").e(e, "Attempt $attempt failed to load original image: $imageUrl")
                         if (attempt < maxAttempts) {
                             delay(1000L * attempt) // Exponential backoff
                         }
@@ -180,7 +180,7 @@ fun AdvancedImageViewer(
                         hasError = true,
                         retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("AdvancedImageViewer").e("All attempts failed to load image: $imageUrl")
+                    Timber.tag("AdvancedImageViewer").e("All attempts failed to load original image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     
@@ -507,16 +507,33 @@ fun ImageViewer(
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
-    // Load image using ImageCacheManager with retry mechanism
+    // Load image using two-tier system: cached placeholder first, then original quality
     LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
 
-            // Try to load from cache first
+            // Try to load from cache first as placeholder
             val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-
-            // If not cached, download and cache with retry logic
-            if (cachedBitmap == null) {
+            
+            if (cachedBitmap != null) {
+                // Show cached image immediately as placeholder
+                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
+                onLoadComplete?.invoke()
+                Timber.tag("ImageViewer").d("Showing cached image as placeholder: $imageUrl")
+                
+                // Load original high-quality image in background
+                try {
+                    val originalBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                    if (originalBitmap != null) {
+                        loadState = loadState.copy(bitmap = originalBitmap)
+                        Timber.tag("ImageViewer").d("Replaced cached image with original: $imageUrl")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ImageViewer").d("Failed to load original image in background: ${e.message}")
+                    // Keep showing cached image if original loading fails
+                }
+            } else {
+                // No cached image available, show loading and load original directly
                 var downloadedBitmap: android.graphics.Bitmap? = null
                 var attempt = 0
                 val maxAttempts = 2 // Fewer retries for preview images
@@ -524,15 +541,15 @@ fun ImageViewer(
                 while (downloadedBitmap == null && attempt < maxAttempts) {
                     attempt++
                     try {
-                        downloadedBitmap = ImageCacheManager.loadImage(context, imageUrl, mid)
+                        downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
                         if (downloadedBitmap == null) {
-                            Timber.tag("ImageViewer").w("Attempt $attempt failed to load image: $imageUrl")
+                            Timber.tag("ImageViewer").w("Attempt $attempt failed to load original image: $imageUrl")
                             if (attempt < maxAttempts) {
                                 delay(500L * attempt) // Shorter backoff for preview images
                             }
                         }
                     } catch (e: Exception) {
-                        Timber.tag("ImageViewer").d(e, "Attempt $attempt failed to load image: $imageUrl")
+                        Timber.tag("ImageViewer").d(e, "Attempt $attempt failed to load original image: $imageUrl")
                         if (attempt < maxAttempts) {
                             delay(500L * attempt) // Shorter backoff for preview images
                         }
@@ -545,14 +562,11 @@ fun ImageViewer(
                         hasError = true,
                         retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("ImageViewer").d("All attempts failed to load image: $imageUrl")
+                    Timber.tag("ImageViewer").d("All attempts failed to load original image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     onLoadComplete?.invoke()
                 }
-            } else {
-                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
-                onLoadComplete?.invoke()
             }
         } catch (e: Exception) {
             loadState = loadState.copy(

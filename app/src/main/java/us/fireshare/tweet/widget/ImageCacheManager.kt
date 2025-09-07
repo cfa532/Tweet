@@ -227,6 +227,100 @@ object ImageCacheManager {
         }
 
     /**
+     * Perform download for original quality images (no compression)
+     */
+    private suspend fun performDownloadOriginal(imageUrl: String, mid: String, context: Context): Bitmap? =
+        withContext(Dispatchers.IO) {
+            var connection: HttpURLConnection? = null
+            var inputStream: InputStream? = null
+
+            try {
+                val url = URL(imageUrl)
+                connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = CONNECTION_TIMEOUT
+                connection.readTimeout = READ_TIMEOUT
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("User-Agent", "TweetApp/1.0")
+
+                // Add connection to pool
+                connectionPool[mid] = connection
+
+                inputStream = connection.inputStream
+                
+                // Read the image data to check size
+                val imageData = inputStream.readBytes()
+                val imageSize = imageData.size
+                
+                // Save original data directly (for original images, always save original data)
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                val file = File(dir, "$mid.jpg")
+                
+                FileOutputStream(file).use { out ->
+                    out.write(imageData)
+                }
+                Timber.tag("ImageCacheManager").d("Saved original image data (${imageSize} bytes) for: $mid")
+                
+                // Decode bitmap from the data with original quality
+                val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
+
+                if (bitmap != null && !bitmap.isRecycled) {
+                    return@withContext bitmap
+                } else {
+                    Timber.tag("ImageCacheManager")
+                        .d("Failed to decode original image from URL: $imageUrl")
+                    return@withContext null
+                }
+            } catch (e: OutOfMemoryError) {
+                Timber.tag("ImageCacheManager").d("OutOfMemoryError downloading original image: $e")
+                clearMemoryCache()
+                return@withContext null
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").d("Error downloading original image: $e")
+                return@withContext null
+            } finally {
+                inputStream?.close()
+                connection?.disconnect()
+                connectionPool.remove(mid)
+            }
+        }
+
+    /**
+     * Cache original image without compression
+     */
+    private suspend fun cacheOriginalImage(context: Context, mid: String, bitmap: Bitmap) =
+        withContext(Dispatchers.IO) {
+            try {
+                if (bitmap.isRecycled) {
+                    Timber.tag("ImageCacheManager")
+                        .w("Attempting to cache recycled original bitmap for: $mid")
+                    return@withContext
+                }
+
+                // Store original bitmap in memory cache
+                memoryCache.put(mid, bitmap)
+
+                // Save to disk with original quality
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                val file = File(dir, "$mid.jpg")
+
+                try {
+                    // Save with maximum quality
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, FileOutputStream(file))
+                    Timber.tag("ImageCacheManager").d("Cached original image: $mid")
+                } catch (e: IOException) {
+                    Timber.tag("ImageCacheManager").d("Error saving original image to disk: $e")
+                }
+            } catch (e: OutOfMemoryError) {
+                Timber.tag("ImageCacheManager").d("OutOfMemoryError caching original image: $e")
+                clearMemoryCache()
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").d("Error caching original image: $e")
+            }
+        }
+
+    /**
      * Load image from URL or cache with prioritization
      */
     suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? =
@@ -239,6 +333,63 @@ object ImageCacheManager {
                 downloadAndCacheImage(context, imageUrl, mid)
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadImage: $e")
+                null
+            }
+        }
+
+    /**
+     * Load original image without compression for high-quality display
+     */
+    suspend fun loadOriginalImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                // Use separate cache key for original images
+                val originalMid = "${mid}_original"
+                
+                // Check if original image is already cached first
+                getCachedImage(context, originalMid)?.let { return@withContext it }
+
+                // Check if already downloading this image
+                if (downloadQueue.containsKey(originalMid)) {
+                    return@withContext null
+                }
+
+                // Acquire semaphore to limit concurrent downloads
+                downloadSemaphore.acquire()
+                downloadQueue[originalMid] = true
+                activeDownloads.incrementAndGet()
+
+                try {
+                    var bitmap: Bitmap? = null
+                    var attempt = 0
+
+                    while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
+                        attempt++
+                        try {
+                            bitmap = performDownloadOriginal(imageUrl, originalMid, context)
+                            if (bitmap != null && !bitmap.isRecycled) {
+                                // Store original bitmap in memory cache with original key
+                                memoryCache.put(originalMid, bitmap)
+                                return@withContext bitmap
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ImageCacheManager")
+                                .d("Original download attempt $attempt failed for $mid: $e")
+                            if (attempt < MAX_RETRY_ATTEMPTS) {
+                                delay(1000L * attempt) // Exponential backoff
+                            }
+                        }
+                    }
+
+                    return@withContext null
+
+                } finally {
+                    downloadQueue.remove(originalMid)
+                    activeDownloads.decrementAndGet()
+                    downloadSemaphore.release()
+                }
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").d("Error in loadOriginalImage: $e")
                 null
             }
         }
@@ -443,6 +594,49 @@ object ImageCacheManager {
             bitmap
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error decoding bitmap with orientation: $e")
+            null
+        }
+    }
+
+    /**
+     * Decode bitmap from byte array with correct EXIF orientation handling
+     */
+    private fun decodeBitmapFromByteArrayWithCorrectOrientation(byteArray: ByteArray): Bitmap? {
+        return try {
+            val byteArrayInputStream = java.io.ByteArrayInputStream(byteArray)
+
+            // Create options to decode bounds first
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+
+            // Mark the stream so we can reset it
+            byteArrayInputStream.mark(byteArray.size)
+            BitmapFactory.decodeStream(byteArrayInputStream, null, options)
+            byteArrayInputStream.reset()
+
+            // Decode the actual bitmap with original quality
+            val decodeOptions = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888 // Use full quality for original images
+            }
+
+            val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
+            if (bitmap != null) {
+                // Apply EXIF orientation correction
+                val correctedBitmap = applyExifOrientation(byteArray, bitmap)
+                if (correctedBitmap != bitmap) {
+                    // If we created a new bitmap, recycle the original
+                    bitmap.recycle()
+                }
+                Timber.tag("ImageCacheManager")
+                    .d("Successfully decoded original bitmap from byte array: ${bitmap.width}x${bitmap.height}")
+                correctedBitmap
+            } else {
+                Timber.tag("ImageCacheManager").d("Failed to decode original bitmap from byte array")
+                null
+            }
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").d("Error decoding original bitmap from byte array: $e")
             null
         }
     }
