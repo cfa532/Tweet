@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -84,7 +83,6 @@ fun AdvancedImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
     var imageFile by remember { mutableStateOf<File?>(null) }
@@ -249,7 +247,7 @@ fun AdvancedImageViewer(
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
-                        setMaxScale(5f) // Maximum zoom for pinch-to-zoom
+                        maxScale = 4f // Maximum zoom for pinch-to-zoom
                         
                         // Add long press listener for the third-party view
                         setOnLongClickListener {
@@ -505,7 +503,6 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
