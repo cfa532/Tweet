@@ -84,8 +84,7 @@ fun VideoPreview(
     var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
-    var recoveryAttempts by remember(videoMid) { mutableIntStateOf(0) }
-    val MAX_RECOVERY_ATTEMPTS = 5 // Increased from 3 to 5 for more lenient retry
+    var hasRetried by remember(videoMid) { mutableStateOf(false) }
 
     // Use VideoLoadingManager to track visibility and manage loading
     videoMid?.let { mid ->
@@ -300,35 +299,29 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // Check if it's a network-related error that might be temporary
-                val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("unable to resolve", ignoreCase = true) == true
+                Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
                 
-                // For network errors, be more lenient and don't immediately show error state
-                if (isNetworkError && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
-                    recoveryAttempts++
-                    Timber.tag("VideoPreview").d("Network error detected, will retry automatically (attempt $recoveryAttempts)")
+                // If we haven't retried yet, attempt one retry
+                if (!hasRetried && videoMid != null) {
+                    hasRetried = true
+                    Timber.tag("VideoPreview").d("Attempting retry for video: $videoMid")
                     
-                    // Keep loading state for network errors to allow automatic retry
+                    // Keep loading state during retry
                     isLoading = true
                     hasError = false
                     
-                    // Auto-retry after a delay for network errors
+                    // Retry after a short delay
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        delay(3000) // Wait 3 seconds before auto-retry
+                        delay(2000) // Wait 2 seconds before retry
                         if (isLoading && !hasError && videoMid != null) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url)
                         }
                     }
                 } else {
-                    // For non-network errors or after max attempts, show error state
+                    // After retry or if no videoMid, show error state
                     isLoading = false
                     hasError = true
-                    // Only log the final error, not intermediate trial errors
                     Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
-                    Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
                 }
             }
         }
@@ -419,12 +412,12 @@ fun VideoPreview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    // Show retry button
-                    if (videoMid != null) {
+                    // Show retry button only if we haven't retried yet
+                    if (videoMid != null && !hasRetried) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                recoveryAttempts++
+                                hasRetried = true
                                 hasError = false
                                 isLoading = true
                                 
