@@ -138,8 +138,9 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 }
 
                 override fun onIsLoadingChanged(isLoading: Boolean) {
-                    Timber.tag("createExoPlayer")
-                        .d("Player loading state changed: $isLoading for URL: $url")
+                    // Reduced logging to avoid spam during video operations
+                    // Timber.tag("createExoPlayer")
+                    //     .d("Player loading state changed: $isLoading for URL: $url")
                 }
             })
         }
