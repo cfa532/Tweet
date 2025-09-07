@@ -247,6 +247,7 @@ fun AdvancedImageViewer(
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
+                        setMaxScale(10f) // Increase maximum zoom for pinch-to-zoom
                         
                         // Add long press listener for the third-party view
                         setOnLongClickListener {
