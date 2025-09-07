@@ -173,8 +173,7 @@ fun MediaItemView(
                 // Use a completely stable approach with key
                 val videoMid = mediaItems[index].mid
                 val videoUrl = attachment.url
-                val videoAspectRatio = mediaItems[index].aspectRatio
-                
+
                 // Use key with a stable identifier to prevent recreation
                 key("video_${videoMid}_${index}") {
                     VideoPreview(
@@ -183,7 +182,6 @@ fun MediaItemView(
                         index = index,
                         autoPlay = autoPlay,
                         inPreviewGrid = inPreviewGrid,
-                        aspectRatio = videoAspectRatio,
                         callback = { goto(index) },
                         videoMid = videoMid,
                         onVideoCompleted = onVideoCompleted

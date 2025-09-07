@@ -48,7 +48,7 @@ import us.fireshare.tweet.service.OrientationManager
 import kotlin.math.abs
 
 /**
- * Simple full-screen video player wrapper that uses an existing player without FullScreenVideoManager
+ * Simple full-screen video player wrapper that uses the unified VideoManager
  * This prevents conflicts when multiple videos are opened in full-screen
  */
 @RequiresApi(Build.VERSION_CODES.R)
@@ -62,8 +62,6 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(true) } // Start with controls visible
-    var showCloseButton by remember { mutableStateOf(true) } // Start with close button visible
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
     // Add player listener to handle state changes
@@ -72,19 +70,23 @@ fun FullScreenVideoPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_IDLE -> {
-                        // If player becomes idle, prepare it again
-                        existingPlayer.prepare()
+                        // Only prepare if not already preparing and no error occurred
+                        if (!existingPlayer.isLoading) {
+                            Timber.d("FullScreenVideoPlayer: Player idle, preparing")
+                            existingPlayer.prepare()
+                        }
                     }
                     Player.STATE_READY -> {
                         // When ready, start playback
+                        Timber.d("FullScreenVideoPlayer: Player ready, starting playback")
                         existingPlayer.playWhenReady = true
                     }
                     Player.STATE_ENDED -> {
                         // If video ends, restart it
+                        Timber.d("FullScreenVideoPlayer: Video ended, restarting")
                         existingPlayer.seekTo(0)
                         existingPlayer.playWhenReady = true
                     }
-
                     Player.STATE_BUFFERING -> {
                         // Video is buffering, this is normal - no action needed
                         Timber.d("FullScreenVideoPlayer: Video is buffering")
@@ -93,8 +95,9 @@ fun FullScreenVideoPlayer(
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // If there's an error, try to prepare again
-                existingPlayer.prepare()
+                Timber.e("FullScreenVideoPlayer: Player error: ${error.message}")
+                // Don't automatically retry on error - let user handle it
+                // This prevents endless retry loops
             }
         }
         
@@ -144,12 +147,8 @@ fun FullScreenVideoPlayer(
         val configurationChangeListener = object : android.content.ComponentCallbacks2 {
             override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
                 Timber.d("FullScreenVideoPlayer: Configuration changed, ensuring video continues playing")
-                // Ensure video continues playing after configuration change
+                // Only resume if player is ready and was playing before
                 if (existingPlayer.playbackState == Player.STATE_READY) {
-                    existingPlayer.playWhenReady = true
-                } else if (existingPlayer.playbackState == Player.STATE_IDLE) {
-                    // If player is idle, prepare it again
-                    existingPlayer.prepare()
                     existingPlayer.playWhenReady = true
                 }
             }
@@ -170,52 +169,28 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Additional LaunchedEffect to handle rotation more aggressively
+    // Start playback and unmute when entering full screen - only run once
     LaunchedEffect(Unit) {
-        // Check player state periodically and ensure it's playing
-        while (true) {
-            delay(1000) // Check every second
-            if (existingPlayer.playbackState == Player.STATE_READY && !existingPlayer.isPlaying) {
-                Timber.d("FullScreenVideoPlayer: Player ready but not playing, resuming playback")
-                existingPlayer.playWhenReady = true
-            }
-        }
-    }
-
-    // Start playback and unmute when entering full screen
-    LaunchedEffect(Unit) {
-        // More aggressive player state handling
-        when (existingPlayer.playbackState) {
-            Player.STATE_IDLE -> {
-                // If player is idle, prepare it
-                existingPlayer.prepare()
-            }
-            Player.STATE_ENDED -> {
-                // If player has ended, seek to beginning and prepare
-                existingPlayer.seekTo(0)
-                existingPlayer.prepare()
-            }
-            else -> {
-                // For other states, just ensure it's ready to play
-                if (!existingPlayer.playWhenReady) {
-                    existingPlayer.playWhenReady = true
-                }
-            }
-        }
-        
         // Set volume and start playback
-        existingPlayer.volume = 1.0f // Unmute video
-        existingPlayer.playWhenReady = true
+        try {
+            existingPlayer.volume = 1.0f // Unmute video
+        } catch (e: Exception) {
+            Timber.e("FullScreenVideoPlayer - Error setting volume: ${e.message}")
+        }
         
-        // Add a retry mechanism - if player is still not ready after 1 second, try again
-        delay(1000)
-        if (existingPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+        // Only prepare if player is idle and not already loading
+        if (existingPlayer.playbackState == Player.STATE_IDLE && !existingPlayer.isLoading) {
+            Timber.d("FullScreenVideoPlayer: Initial preparation")
             existingPlayer.prepare()
+        }
+        
+        // Start playback if ready
+        if (existingPlayer.playbackState == Player.STATE_READY) {
             existingPlayer.playWhenReady = true
         }
     }
 
-    // Full screen video player UI
+    // Full screen video player UI - let ExoPlayer handle its own controls completely
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -240,37 +215,24 @@ fun FullScreenVideoPlayer(
                     }
                 )
             }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { 
-                        Timber.d("FullScreenVideoPlayer: Screen tapped, toggling controls")
-                        showControls = !showControls
-                        showCloseButton = !showCloseButton
-                    }
-                )
-            }
     ) {
-        // Video player view with native controls
+        // Video player view with native controls - NO interference
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = existingPlayer
-                    useController = true // Re-enable native controls
+                    useController = true // Use native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Let ExoPlayer handle its own control visibility
+                    controllerShowTimeoutMs = 2000 // Auto-hide after 2 seconds
+                    controllerHideOnTouch = true // Hide when tapping outside controls
+                    // Start with controls hidden
+                    hideController()
                 }
             },
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { 
-                            Timber.d("FullScreenVideoPlayer: AndroidView tapped, toggling controls")
-                            showControls = !showControls
-                            showCloseButton = !showCloseButton
-                        }
-                    )
-                }
                 .graphicsLayer {
                     translationY = dragOffset
                     // Add some scaling effect as the video is dragged down
@@ -278,66 +240,10 @@ fun FullScreenVideoPlayer(
                     scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
                     // Add alpha effect for fade out
                     alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                },
-            update = { playerView ->
-                // Control the visibility of the native controller
-                if (showControls) {
-                    playerView.showController()
-                } else {
-                    playerView.hideController()
-                }
-            }
-        )
-
-        // Auto-hide controls and close button after 2 seconds
-        LaunchedEffect(showControls, showCloseButton) {
-            if (showControls || showCloseButton) {
-                delay(2000)
-                showControls = false
-                showCloseButton = false
-            }
-        }
-
-        // Transparent overlay for tap detection (above video player)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { 
-                            Timber.d("FullScreenVideoPlayer: Overlay tapped, toggling controls")
-                            showControls = !showControls
-                            showCloseButton = !showCloseButton
-                        }
-                    )
                 }
         )
 
-        // Close button overlay (since native controls don't have a close button)
-        if (showCloseButton) {
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.close),
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
+        // No close button overlay - let native controls handle everything
     }
 }
 
@@ -352,28 +258,32 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    var showControls by remember { mutableStateOf(true) } // Start with controls visible
-    var showCloseButton by remember { mutableStateOf(true) } // Start with close button visible
+    var showControls by remember { mutableStateOf(false) } // Start with controls hidden
+    var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
     // Get the dedicated full screen player
     val exoPlayer = remember {
-        FullScreenVideoManager.getFullScreenPlayer(context)
+        VideoManager.getFullScreenPlayer(context)
     }
 
     // Load video into the full screen player
     LaunchedEffect(videoUrl) {
-        FullScreenVideoManager.loadVideo(context, videoUrl)
+        VideoManager.loadVideo(context, videoUrl)
     }
 
     // Start playback when entering full screen
     LaunchedEffect(Unit) {
         // Set volume to 1f (unmuted) for full screen
-        FullScreenVideoManager.setVolume(1f)
+        try {
+            exoPlayer.volume = 1f
+        } catch (e: Exception) {
+            Timber.e("FullScreenVideoPlayer - Error setting volume: ${e.message}")
+        }
 
         // Start playback with auto-replay
-        FullScreenVideoManager.startPlayback(autoReplay)
-        
+        VideoManager.startPlayback(autoReplay)
+
         // Auto-play the video
         exoPlayer.playWhenReady = true
     }
@@ -386,11 +296,12 @@ fun FullScreenVideoPlayer(
                 // Allow rotation in full-screen mode
                 Timber.d("FullScreenVideoPlayer (API 30+): Entering full-screen, allowing rotation")
                 OrientationManager.allowRotation(act)
-                
+
                 val windowInsetsController = act.window.insetsController
                 windowInsetsController?.let { controller ->
                     controller.hide(android.view.WindowInsets.Type.systemBars())
-                    controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.systemBarsBehavior =
+                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 }
             }
         }
@@ -402,7 +313,7 @@ fun FullScreenVideoPlayer(
                     // Restore portrait orientation
                     Timber.d("FullScreenVideoPlayer (API 30+): Exiting full-screen, locking to portrait")
                     OrientationManager.lockToPortrait(act)
-                    
+
                     val windowInsetsController = act.window.insetsController
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
@@ -424,32 +335,20 @@ fun FullScreenVideoPlayer(
                     exoPlayer.playWhenReady = true
                 }
             }
-            
+
             override fun onLowMemory() {
                 // Handle low memory if needed
             }
-            
+
             override fun onTrimMemory(level: Int) {
                 // Handle memory trimming if needed
             }
         }
-        
+
         context.registerComponentCallbacks(configurationChangeListener)
-        
+
         onDispose {
             context.unregisterComponentCallbacks(configurationChangeListener)
-        }
-    }
-
-    // Additional LaunchedEffect to handle rotation more aggressively
-    LaunchedEffect(Unit) {
-        // Check player state periodically and ensure it's playing
-        while (true) {
-            delay(1000) // Check every second
-            if (exoPlayer.playbackState == Player.STATE_READY && !exoPlayer.isPlaying) {
-                Timber.d("FullScreenVideoPlayer (API 30+): Player ready but not playing, resuming playback")
-                exoPlayer.playWhenReady = true
-            }
         }
     }
 
@@ -491,18 +390,18 @@ fun FullScreenVideoPlayer(
         // Video player view
         AndroidView(
             factory = {
-                            PlayerView(context).apply {
-                player = exoPlayer
-                useController = false // We'll implement custom controls
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                setBackgroundColor(android.graphics.Color.BLACK)
-            }
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = false // We'll implement custom controls
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
             },
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { 
+                        onTap = {
                             Timber.d("FullScreenVideoPlayer (API 30+): AndroidView tapped, toggling controls")
                             showControls = !showControls
                             showCloseButton = !showCloseButton
@@ -518,7 +417,7 @@ fun FullScreenVideoPlayer(
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { 
+                            onTap = {
                                 Timber.d("FullScreenVideoPlayer (API 30+): Controls overlay tapped, toggling controls")
                                 showControls = !showControls
                                 showCloseButton = !showCloseButton
@@ -563,7 +462,9 @@ fun FullScreenVideoPlayer(
                 ) {
                     Icon(
                         imageVector = if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (exoPlayer.isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
+                        contentDescription = if (exoPlayer.isPlaying) stringResource(R.string.pause) else stringResource(
+                            R.string.play
+                        ),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -578,8 +479,10 @@ fun FullScreenVideoPlayer(
                 showControls = false
                 showCloseButton = false
             }
+
         }
     }
 }
+
 
 

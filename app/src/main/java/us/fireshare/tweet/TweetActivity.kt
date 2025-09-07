@@ -40,8 +40,8 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
-import us.fireshare.tweet.ui.theme.TweetTheme
 import us.fireshare.tweet.ui.theme.ThemeManager
+import us.fireshare.tweet.ui.theme.TweetTheme
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -100,6 +100,14 @@ class TweetActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Resume incomplete uploads when app comes to foreground
+        if (::initJob.isInitialized && initJob.isCompleted) {
+            HproseInstance.resumeIncompleteUploads(this)
         }
     }
 

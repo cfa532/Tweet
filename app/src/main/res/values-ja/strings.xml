@@ -15,4 +15,7 @@
     <string name="theme_system">システム設定に従う</string>
     <string name="theme_light">ライトモード</string>
     <string name="theme_dark">ダークモード</string>
+    
+    <!-- Error Messages -->
+    <string name="delete_failed">ツイートの削除に失敗しました。もう一度お試しください。</string>
 </resources>

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -57,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,6 +86,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
@@ -109,6 +110,30 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+    
+    // Use visibility-based video loading with debouncing
+    val visibleMessages by remember(listState, chatMessages) {
+        derivedStateOf {
+            val currentVisibleIndex = listState.firstVisibleItemIndex
+            val visibleItemCount = listState.layoutInfo.visibleItemsInfo.size
+            chatMessages.filterIndexed { index, _ ->
+                index >= currentVisibleIndex && index < currentVisibleIndex + visibleItemCount
+            }
+        }
+    }
+    
+    // Preload videos for visible messages with shorter debouncing for LAN
+    LaunchedEffect(visibleMessages, chatMessages.size) {
+        delay(100) // 0.1 second debounce for faster LAN response
+        visibleMessages.forEach { message ->
+            message.attachments?.forEach { attachment ->
+                if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                    val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                }
+            }
+        }
+    }
     val shouldScrollToBottom by viewModel.shouldScrollToBottom.collectAsState()
     
     // Pull-to-refresh state
@@ -157,56 +182,30 @@ fun ChatScreen(
         viewModel.chatListViewModel?.updateSession(null,
             hasNews = false, receiptId = viewModel.receiptId)
         
-        // Preload videos from recent messages for better performance
-        val recentMessages = chatMessages.takeLast(10) // Preload videos from last 10 messages
-        recentMessages.forEach { message ->
-            message.attachments?.forEach { attachment ->
-                if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-                    !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
-                    val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
-                        } catch (e: Exception) {
-                            Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
-                        }
-                    }
-                }
-            }
-        }
+        // Add a small delay before starting periodic fetching to avoid immediate recompositions
+        delay(1000)
         
         while (true) {
-            withContext(Dispatchers.IO) {
-                viewModel.fetchNewMessage()
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.fetchNewMessage()
+                }
+            } catch (e: Exception) {
+                // Log error but don't let it break the periodic fetching
+                Timber.e("ChatScreen - Error fetching new messages: ${e.message}")
+                // Add longer delay on error to prevent rapid retries
+                delay(5000)
             }
             delay(15_000)
         }
     }
 
-    // Scroll to bottom when messages are first loaded and preload videos
+    // Scroll to bottom when messages are first loaded
     LaunchedEffect(chatMessages.isNotEmpty()) {
         if (chatMessages.isNotEmpty()) {
             // Add a small delay to ensure the LazyColumn is properly laid out
             delay(100)
             scrollToBottom()
-            
-            // Preload videos from new messages for better performance
-            val newMessages = chatMessages.takeLast(5) // Preload videos from last 5 messages
-            newMessages.forEach { message ->
-                message.attachments?.forEach { attachment ->
-                    if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-                        !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
-                        val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                        coroutineScope.launch(Dispatchers.IO) {
-                            try {
-                                us.fireshare.tweet.widget.VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
-                            } catch (e: Exception) {
-                                Timber.tag("ChatScreen").e(e, "Failed to preload video: ${attachment.mid}")
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
     
@@ -238,6 +237,7 @@ fun ChatScreen(
                         Text(
                             text = "${receipt.name} @${receipt.username}",
                             style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                         Spacer(modifier = Modifier.fillMaxWidth())
                     }
@@ -256,22 +256,23 @@ fun ChatScreen(
 //        bottomBar = { BottomNavigationBar(navController, 1) }
     ) { innerPadding ->
         Surface(modifier = Modifier.padding(innerPadding)) {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    // Hide keyboard when tapping outside
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        // Hide keyboard when tapping outside
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        // Removed .pullRefresh(pullRefreshState)
+                    // Removed .pullRefresh(pullRefreshState)
                 ) {
                     LazyColumn(
                         modifier = Modifier
@@ -307,7 +308,7 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        
+
                         // Show "No more messages" indicator at the top if no more messages
                         if (!hasMoreMessages && chatMessages.isNotEmpty() && !isLoadingOlderMessages) {
                             item {
@@ -325,14 +326,14 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        
+
                         itemsIndexed(chatMessages) { index, msg ->
                             // Add time divider if more than 1 hour difference from previous message
                             if (index > 0) {
                                 val previousMessage = chatMessages[index - 1]
                                 val timeDifference = msg.timestamp - previousMessage.timestamp
                                 val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
-                                
+
                                 if (timeDifference > oneHourInMillis) {
                                     // Time divider
                                     Box(
@@ -355,7 +356,9 @@ fun ChatScreen(
                                             Text(
                                                 text = formatTimestamp(msg.timestamp),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(
+                                                    alpha = 0.6f
+                                                ),
                                                 modifier = Modifier.padding(horizontal = 12.dp)
                                             )
                                             HorizontalDivider(
@@ -369,10 +372,10 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            
+
                             ChatItem(
-                                viewModel = viewModel, 
-                                message = msg, 
+                                viewModel = viewModel,
+                                message = msg,
                                 messages = chatMessages,
                                 onImageClick = { attachment ->
                                     fullScreenAttachment = attachment
@@ -385,7 +388,7 @@ fun ChatScreen(
                             )
                         }
                     }
-                    
+
                     // Removed PullRefreshIndicator
                 }
                 ChatInput(
@@ -405,7 +408,7 @@ fun ChatScreen(
         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
         
         when (attachment.type) {
-            us.fireshare.tweet.datamodel.MediaType.Image -> {
+            MediaType.Image -> {
                 us.fireshare.tweet.widget.AdvancedImageViewer(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
@@ -413,7 +416,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Try to get existing player for seamless transition
                 val existingPlayer = VideoManager.transferToFullScreen(attachment.mid)
                 
@@ -425,7 +428,7 @@ fun ChatScreen(
                         onClose = {
                             showFullScreen = false
                             // Return player back to VideoManager when closed
-                            us.fireshare.tweet.widget.VideoManager.returnFromFullScreen(attachment.mid)
+                            VideoManager.returnFromFullScreen(attachment.mid)
                         },
                         enableImmersiveMode = true
                     )
@@ -894,29 +897,9 @@ fun ChatMediaPreview(
     val mediaUrl =
         us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
 
-    // State to track loading
-    var isLoading by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
-    // Preload video if it's a video attachment and not already preloaded
-    LaunchedEffect(attachment.mid, attachment.type) {
-        if ((attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
-            // Preload video in background similar to MediaPreviewGrid
-            withContext(Dispatchers.IO) {
-                try {
-                    us.fireshare.tweet.widget.VideoManager.preloadVideo(
-                        context,
-                        attachment.mid,
-                        mediaUrl
-                    )
-                } catch (e: Exception) {
-                    timber.log.Timber.tag("ChatMediaPreview")
-                        .e(e, "Failed to preload video: ${attachment.mid}")
-                }
-            }
-        }
-    }
+    // Video preloading is handled by the main ChatScreen component with debouncing
 
     // Helper function to apply aspect ratio rule: use 0.8 if aspect ratio is smaller than 0.8, otherwise use original value
     fun applyAspectRatioRule(originalAspectRatio: Float?): Float {
@@ -931,85 +914,45 @@ fun ChatMediaPreview(
 
     Box(
         modifier = Modifier
-            .fillMaxWidth(0.7f)
+            .fillMaxWidth(0.8f)
             .aspectRatio(adjustedAspectRatio)
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
     ) {
-        // Show loading spinner only if video is not preloaded
-        if (isLoading && (attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) && 
-            !us.fireshare.tweet.widget.VideoManager.isVideoPreloaded(attachment.mid)) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
         when (attachment.type) {
-            us.fireshare.tweet.datamodel.MediaType.Image -> {
+            MediaType.Image -> {
                 us.fireshare.tweet.widget.ImageViewer(
                     imageUrl = mediaUrl,
                     modifier = Modifier
                         .fillMaxSize()
                         .clickable { onImageClick?.invoke() },
-                    enableLongPress = false,
-                    onLoadComplete = { isLoading = false }
+                    enableLongPress = false
                 )
             }
 
-            us.fireshare.tweet.datamodel.MediaType.Video, us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
-                Box(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    // Use VideoPreview with shared player that can transition to full-screen
+            MediaType.Video, MediaType.HLS_VIDEO -> {
+                // Use a completely stable approach with key (same as MediaCell)
+                val videoMid = attachment.mid
+                val videoUrl = mediaUrl
+
+                // Use key with stable identifier to prevent recreation (same as MediaItemView)
+                key("chat_video_${videoMid}_0") {
                     us.fireshare.tweet.widget.VideoPreview(
-                        url = mediaUrl,
+                        url = videoUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
-                        autoPlay = false,
+                        autoPlay = true,
                         inPreviewGrid = true,
-                        aspectRatio = adjustedAspectRatio,
                         callback = { index ->
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
                         },
-                        videoMid = attachment.mid,
-                        onLoadComplete = { isLoading = false }
+                        videoMid = videoMid
                     )
-                    
-                    // Play button overlay
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { onVideoClick?.invoke() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = stringResource(R.string.play),
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
-            us.fireshare.tweet.datamodel.MediaType.Audio -> {
+            MediaType.Audio -> {
                 us.fireshare.tweet.widget.AudioPlayer(
                     attachments,
                     0,

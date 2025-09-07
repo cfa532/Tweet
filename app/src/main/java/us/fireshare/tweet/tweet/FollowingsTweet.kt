@@ -1,5 +1,7 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -33,6 +35,7 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.R)
 fun FollowingsTweet(
     parentEntry: NavBackStackEntry,
     scrollBehavior: TopAppBarScrollBehavior,

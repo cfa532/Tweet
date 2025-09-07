@@ -23,7 +23,6 @@ import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
-import us.fireshare.tweet.widget.FullScreenVideoManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
 
@@ -89,7 +88,7 @@ class TweetApplication : Application(){
         // Release all video players to prevent memory leaks
         VideoManager.releaseAllVideos()
         // Release full screen video player
-        FullScreenVideoManager.release()
+        VideoManager.releaseFullScreenPlayer()
         // Cancel the scope when the application is terminating (rare in modern Android)
         applicationScope.cancel()
     }

@@ -278,7 +278,7 @@ data class User(
                 return writableUrl
             }
 
-            val hostIP = HproseInstance.getHostIP(firstHostId)
+            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true")
             if (hostIP != null) {
                 
                 // Extract clean IP and port

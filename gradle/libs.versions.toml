@@ -1,16 +1,15 @@
 [versions]
 accompanistPager = "0.36.0"
 accompanistSystemuicontroller = "0.36.0"
-agp = "8.12.1"
-androidxJunit = "1.3.0"
+agp = "8.13.0"
 assistedInjectAnnotationsDagger2 = "0.8.1"
 assistedInjectProcessorDagger2 = "0.8.1"
 core = "3.5.3"
 coreSplashscreen = "1.2.0-rc01"
 coreVersion = "1.7.0"
-firebaseBom = "34.1.0"
+firebaseBom = "34.2.0"
 firebaseCrashlyticsPlugin = "3.0.6"
-hiltAndroid = "2.57"
+hiltAndroid = "2.57.1"
 hiltNavigationCompose = "1.2.0"
 kotlin = "2.1.21"
 coreKtx = "1.17.0"
@@ -19,9 +18,9 @@ junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 kotlinxCoroutinesCore = "1.10.2"
 kotlinxSerializationJson = "1.9.0"
-lifecycleRuntimeKtx = "2.9.2"
+lifecycleRuntimeKtx = "2.9.3"
 activityCompose = "1.10.1"
-composeBom = "2025.08.00"
+composeBom = "2025.08.01"
 materialIconsExtendedAndroid = "1.7.8"
 media3Datasource = "1.8.0"
 navigationRuntimeKtx = "2.9.3"
@@ -31,7 +30,6 @@ hproseJava = "2.0.38"
 media3Exoplayer = "1.8.0"
 media3Ui = "1.8.0"
 media3Common = "1.8.0"
-coilCompose = "2.7.0"
 gson = "2.13.1"
 appcompat = "1.7.1"
 roomKtx = "2.7.2"
@@ -44,13 +42,12 @@ workRuntimeKtx = "2.10.3"
 hiltCommon = "1.2.0"
 constraintlayoutCompose = "1.1.1"
 hiltWork = "1.2.0"
-firebaseCrashlyticsBuildtools = "3.0.6"
 roomCompiler = "2.7.2"
 ktor= "3.2.3"
 firebaseAnalytics = "23.0.0"
-ksp = "2.1.21-2.0.2"
 uiGraphics = "1.9.0"
 workTesting = "2.10.3"
+exifinterface = "1.4.1"
 
 [libraries]
 accompanist-systemuicontroller = { module = "com.google.accompanist:accompanist-systemuicontroller", version.ref = "accompanistSystemuicontroller" }
@@ -85,7 +82,6 @@ hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hil
 androidx-media3-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer"}
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3Ui" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3Common" }
-coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 hprose-java = { module = "org.hprose:hprose-java", version.ref = "hproseJava" }
@@ -115,8 +111,8 @@ work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "w
 androidx-hilt-common = { group = "androidx.hilt", name = "hilt-common", version.ref = "hiltCommon" }
 androidx-constraintlayout-compose = { group = "androidx.constraintlayout", name = "constraintlayout-compose", version.ref = "constraintlayoutCompose" }
 androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
-firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -160,7 +160,7 @@ fun ShareBottomSheet(
                 }
             }
         },
-        ShareOption(getString(context, R.string.share_link), painterResource(R.drawable.ic_link)) {
+        ShareOption(getString(context, R.string.share_link), painterResource(R.drawable.ic_share)) {
             val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Shared Text", shareText.value)
             clipboardManager.setPrimaryClip(clip)

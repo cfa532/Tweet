@@ -350,7 +350,56 @@ fun SelectedImageDisplay(uri: Uri) {
     LaunchedEffect(uri) {
         try {
             val inputStream = context.contentResolver.openInputStream(uri)
-            bitmap.value = android.graphics.BitmapFactory.decodeStream(inputStream)
+            bitmap.value = inputStream?.let { 
+                // Read the entire stream into a byte array to handle mark/reset issues
+                val byteArray = inputStream.readBytes()
+                val byteArrayInputStream = java.io.ByteArrayInputStream(byteArray)
+                
+                // Use the private method directly since we need EXIF orientation handling
+                val options = android.graphics.BitmapFactory.Options().apply {
+                    inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                }
+                val bitmap = android.graphics.BitmapFactory.decodeStream(byteArrayInputStream, null, options)
+                if (bitmap != null) {
+                    // Apply EXIF orientation correction
+                    try {
+                        // Create a temporary file to use with ExifInterface
+                        val tempFile = java.io.File.createTempFile("exif_temp", ".jpg")
+                        tempFile.writeBytes(byteArray)
+                        
+                        val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
+                        val orientation = exif.getAttributeInt(
+                            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+                        )
+                        
+                        // Clean up temp file
+                        tempFile.delete()
+                        
+                        val matrix = android.graphics.Matrix()
+                        when (orientation) {
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSPOSE -> {
+                                matrix.postRotate(90f)
+                                matrix.postScale(-1f, 1f)
+                            }
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_TRANSVERSE -> {
+                                matrix.postRotate(270f)
+                                matrix.postScale(-1f, 1f)
+                            }
+                            else -> return@let bitmap
+                        }
+                        
+                        android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                    } catch (e: Exception) {
+                        bitmap
+                    }
+                } else null
+            }
             inputStream?.close()
         } catch (e: Exception) {
             // Handle error

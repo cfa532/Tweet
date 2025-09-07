@@ -157,19 +157,30 @@ fun UserAvatar(
             }
         }
     } else {
-        // Show fallback with user initials
-        Box(
-            modifier = modifier
-                .background(MaterialTheme.colorScheme.primary)
-                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = user.name?.firstOrNull()?.uppercase() ?: "U",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
+        // Show default system icon when avatar is null or empty
+        if (user.avatar.isNullOrEmpty() || mid.isEmpty()) {
+            // Use manyone.png as default system icon
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                modifier = modifier
             )
+        } else {
+            // Show fallback with user initials for other cases (like loading errors)
+            Box(
+                modifier = modifier
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = user.name?.firstOrNull()?.uppercase() ?: "U",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }

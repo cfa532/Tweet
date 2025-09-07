@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatSession
@@ -106,13 +107,25 @@ fun ChatListScreen(
             userViewModel.refreshFollowingsAndFans()
         }
         
+        // Initial message preview
         withContext(Dispatchers.IO) {
             viewModel.previewMessages()
         }
+        
+        // Add a small delay before starting periodic fetching to avoid immediate recompositions
+        delay(2000)
+        
         while (true) {
-            delay(60_000)
-            withContext(Dispatchers.IO) {
-                viewModel.previewMessages()
+            try {
+                delay(60_000)
+                withContext(Dispatchers.IO) {
+                    viewModel.previewMessages()
+                }
+            } catch (e: Exception) {
+                // Log error but don't let it break the periodic fetching
+                Timber.e("ChatListScreen - Error in periodic message preview: ${e.message}")
+                // Add longer delay on error to prevent rapid retries
+                delay(30_000)
             }
         }
     }
@@ -389,7 +402,15 @@ fun ChatSession(
                 )
             }
             Text(
-                text = chatMessage.content ?: "",
+                text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
+                    if (chatMessage.authorId == appUser.mid) {
+                        "Attachment sent"
+                    } else {
+                        "Attachment received"
+                    }
+                } else {
+                    chatMessage.content ?: ""
+                },
                 style = MaterialTheme.typography.bodyLarge
             )
         }

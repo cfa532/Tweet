@@ -274,10 +274,11 @@ fun MediaBrowser(
                     // Try to get existing player for seamless transition
                     val existingPlayer = VideoManager.transferToFullScreen(videoMid)
                     val attachments = tweetAttachments // Store in local variable for smart casting
-                    
+
                     if (existingPlayer != null && attachments != null) {
                         // Use existing player for seamless transition
-                        val videoItem = attachments.find { it.mid == videoMid } ?: attachments.first()
+                        val videoItem =
+                            attachments.find { it.mid == videoMid } ?: attachments.first()
                         FullScreenVideoPlayer(
                             existingPlayer = existingPlayer,
                             videoItem = videoItem,
@@ -299,7 +300,8 @@ fun MediaBrowser(
                             },
                             enableImmersiveMode = true, // Enable immersive mode for orientation control
                             onHorizontalSwipe = { direction ->
-                                Timber.tag("MediaBrowser").d("Horizontal swipe detected: $direction")
+                                Timber.tag("MediaBrowser")
+                                    .d("Horizontal swipe detected: $direction")
                                 animationScope.launch {
                                     if (direction > 0) {
                                         // Swipe right, go to next page
@@ -472,8 +474,14 @@ fun MediaBrowser(
                         onClick = {
                             activity?.let { act ->
                                 when (configuration.orientation) {
-                                    Configuration.ORIENTATION_LANDSCAPE -> OrientationManager.lockToPortrait(act)
-                                    Configuration.ORIENTATION_PORTRAIT -> OrientationManager.lockToLandscape(act)
+                                    Configuration.ORIENTATION_LANDSCAPE -> OrientationManager.lockToPortrait(
+                                        act
+                                    )
+
+                                    Configuration.ORIENTATION_PORTRAIT -> OrientationManager.lockToLandscape(
+                                        act
+                                    )
+
                                     else -> OrientationManager.allowRotation(act)
                                 }
                             }

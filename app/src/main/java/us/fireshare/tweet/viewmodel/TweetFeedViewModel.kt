@@ -283,13 +283,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     suspend fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
+        userViewModel: UserViewModel? = null,
         callback: () -> Unit,
-        userViewModel: us.fireshare.tweet.viewmodel.UserViewModel? = null
     ) {
         // Check if this is a retweet and get original tweet info
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
-        val isRetweet = tweetToDelete?.originalTweetId != null
-        val originalTweetId = tweetToDelete?.originalTweetId
 
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
@@ -298,31 +296,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (tweetToDelete?.authorId == appUser.mid) {
             appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
             TweetCacheManager.saveUser(appUser)
-            Timber.tag("TweetFeedViewModel").d("Updated user tweet count to: ${appUser.tweetCount}")
-        }
-
-        // Optimistically decrease retweet count if this is a retweet
-        if (isRetweet && originalTweetId != null) {
-            _tweets.value = _tweets.value.map { tweet ->
-                if (tweet.mid == originalTweetId) {
-                    val newRetweetCount = max(0, tweet.retweetCount - 1)
-                    Timber.tag("TweetFeedViewModel")
-                        .d("Optimistically decreased retweet count for ${originalTweetId} from ${tweet.retweetCount} to $newRetweetCount")
-                    tweet.copy(retweetCount = newRetweetCount)
-                } else {
-                    tweet
-                }
-            }
-
-            // Post TweetUpdated notification to update individual TweetViewModel instances
-            val updatedOriginalTweet = _tweets.value.find { it.mid == originalTweetId }
-            if (updatedOriginalTweet != null) {
-                applicationScope.launch {
-                    TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedOriginalTweet))
-                    Timber.tag("TweetFeedViewModel")
-                        .d("Posted TweetUpdated notification for optimistically updated original tweet ${originalTweetId}")
-                }
-            }
         }
 
         // Also remove from UserViewModel lists if provided (for profile screen)
@@ -336,29 +309,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         // Perform actual deletion in background
-        applicationScope.launch(IO) {
-            try {
-                // Delete from local cache first
-                dao.deleteCachedTweet(tweetId)
+        // Delete from local cache first
+        dao.deleteCachedTweet(tweetId)
 
-                // Delete from backend
-                HproseInstance.deleteTweet(tweetId)
-
-                // Call callback on main thread
-                withContext(Main) {
-                    callback()
-                }
-            } catch (e: Exception) {
-                // If backend deletion fails, just log the error
-                Timber.tag("TweetFeedViewModel")
-                    .e(e, "Failed to delete tweet $tweetId from backend: ${e.message}")
-
-                // Call callback on main thread
-                withContext(Main) {
-                    callback()
-                }
-            }
-        }
+        // Delete from backend
+        HproseInstance.deleteTweet(tweetId)
+        callback()
     }
 
     /**
@@ -382,6 +338,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
+        val workId = uploadRequest.id.toString()
+        
+        // Save incomplete upload for potential resume
+        val incompleteUpload = HproseInstance.IncompleteUpload(
+            workId = workId,
+            tweetContent = content,
+            attachmentUris = attachments?.map { it.toString() } ?: emptyList(),
+            isPrivate = isPrivate,
+            timestamp = System.currentTimeMillis()
+        )
+        HproseInstance.saveIncompleteUpload(context, incompleteUpload)
 
         // No need to observe work status; UI will update via notification system
     }

@@ -131,21 +131,37 @@ fun MediaGrid(
         }
     }
     
-    // Track current playing video for sequential playback
-    var currentPlayingVideoIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+    // Build mapping between video-only list and grid indices
+    val videoGridIndices by remember(limitedMediaList) {
+        derivedStateOf {
+            limitedMediaList.mapIndexedNotNull { index, item ->
+                val mediaType = inferMediaTypeFromAttachment(item)
+                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) index else null
+            }
+        }
+    }
+
+    // Track current playing video as index within videoGridIndices
+    var currentVideoListIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+
+    fun isAutoPlayForGridIndex(gridIndex: Int): Boolean {
+        return currentVideoListIndex >= 0 &&
+            currentVideoListIndex < videoGridIndices.size &&
+            videoGridIndices[currentVideoListIndex] == gridIndex
+    }
     
     // Optimize: Use LaunchedEffect with proper keys to avoid unnecessary video setup
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
             // For multiple videos, only the first one should autoplay initially
-            currentPlayingVideoIndex = 0
+            currentVideoListIndex = 0
             VideoManager.setupSequentialPlayback(videoMids)
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
-            currentPlayingVideoIndex = 0
+            currentVideoListIndex = 0
             VideoManager.stopSequentialPlayback()
         } else {
-            currentPlayingVideoIndex = -1
+            currentVideoListIndex = -1
             VideoManager.stopSequentialPlayback()
         }
         
@@ -161,7 +177,7 @@ fun MediaGrid(
                             VideoManager.preloadVideo(context, videoMid, mediaUrl)
                         } catch (e: Exception) {
                             // Log error but don't block UI
-                            Timber.tag("MediaPreviewGrid").e(e, "Failed to preload video: $videoMid")
+                            Timber.tag("MediaGrid").e(e, "Failed to preload video: $videoMid")
                         }
                     }
                 }
@@ -170,10 +186,10 @@ fun MediaGrid(
     }
     
     // Handle sequential video completion
-    LaunchedEffect(currentPlayingVideoIndex) {
-        if (videoMids.size > 1 && currentPlayingVideoIndex >= 0) {
+    LaunchedEffect(currentVideoListIndex) {
+        if (videoMids.size > 1 && currentVideoListIndex >= 0) {
             // Set up completion listener for current video
-            val currentVideoMid = videoMids[currentPlayingVideoIndex]
+            val currentVideoMid = videoMids[currentVideoListIndex]
             currentVideoMid?.let { mid ->
                 // Wait for video to complete and then move to next
                 delay(100) // Small delay to ensure video is loaded
@@ -190,16 +206,23 @@ fun MediaGrid(
     }
     
     // Function to handle video completion and move to next
-    fun onVideoCompleted(videoIndex: Int) {
-        if (videoMids.size > 1 && videoIndex == currentPlayingVideoIndex) {
-            // Move to next video
-            val nextIndex = (videoIndex + 1) % videoMids.size
-            currentPlayingVideoIndex = nextIndex
-            
+    fun onVideoCompleted(gridIndex: Int) {
+        if (videoMids.isEmpty()) return
+        // Translate grid index to video list index
+        val completedVideoListIndex = videoGridIndices.indexOf(gridIndex)
+        if (completedVideoListIndex == -1) return
+        if (currentVideoListIndex == completedVideoListIndex) {
             // Notify VideoManager about completion
-            val completedVideoMid = videoMids[videoIndex]
+            val completedVideoMid = videoMids.getOrNull(completedVideoListIndex)
             completedVideoMid?.let { mid ->
                 VideoManager.onVideoCompleted(mid)
+            }
+
+            // Advance to next video without looping; stop after last
+            val nextListIndex = completedVideoListIndex + 1
+            currentVideoListIndex = if (nextListIndex < videoGridIndices.size) nextListIndex else -1
+            if (currentVideoListIndex == -1) {
+                VideoManager.stopSequentialPlayback()
             }
         }
     }
@@ -225,7 +248,6 @@ fun MediaGrid(
                         .clickable {
                             val params = MediaViewerParams(
                                 mediaItems.map {
-                                    Timber.d("MediaPreviewGrid: Creating MediaItem with type: ${it.type}")
                                     MediaItem(
                                         getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                         it.type
@@ -236,7 +258,7 @@ fun MediaGrid(
                         },
                     index = 0,
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
-                    autoPlay = currentPlayingVideoIndex == 0,
+                    autoPlay = isAutoPlayForGridIndex(0),
                     inPreviewGrid = true,
                     viewModel = viewModel,
                     onVideoCompleted = { onVideoCompleted(0) }
@@ -270,7 +292,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = idx,
-                                    autoPlay = currentPlayingVideoIndex == idx,
+                                    autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(idx) }
@@ -298,7 +320,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = idx,
-                                    autoPlay = currentPlayingVideoIndex == idx,
+                                    autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(idx) }
@@ -327,7 +349,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = currentPlayingVideoIndex == 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(0) }
@@ -344,7 +366,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = currentPlayingVideoIndex == 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(1) }
@@ -363,7 +385,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 0,
-                                    autoPlay = currentPlayingVideoIndex == 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(0) }
@@ -380,7 +402,7 @@ fun MediaGrid(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     index = 1,
-                                    autoPlay = currentPlayingVideoIndex == 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     onVideoCompleted = { onVideoCompleted(1) }
@@ -422,7 +444,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -446,7 +468,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -475,7 +497,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -501,7 +523,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -529,7 +551,7 @@ fun MediaGrid(
                                 modifier = Modifier
                                     .fillMaxSize(),
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -553,7 +575,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -582,7 +604,7 @@ fun MediaGrid(
                                     .fillMaxSize(),
                                     
                                 index = 0,
-                                autoPlay = currentPlayingVideoIndex == 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
                                 onVideoCompleted = { onVideoCompleted(0) }
@@ -608,7 +630,7 @@ fun MediaGrid(
                                             .fillMaxSize(),
                                             
                                         index = idx,
-                                        autoPlay = currentPlayingVideoIndex == idx,
+                                        autoPlay = isAutoPlayForGridIndex(idx),
                                         inPreviewGrid = true,
                                         viewModel = viewModel,
                                         onVideoCompleted = { onVideoCompleted(idx) }
@@ -653,7 +675,7 @@ fun MediaGrid(
                             index = index,
                             numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
                                 mediaItems.size - maxItems else 0,
-                            autoPlay = currentPlayingVideoIndex == index,
+                            autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
                             onVideoCompleted = { onVideoCompleted(index) }
@@ -671,24 +693,20 @@ fun MediaGrid(
 fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     // Check if type is provided and valid
     if (attachment.type != null && attachment.type != MediaType.Unknown) {
-        Timber.d("MediaPreviewGrid: Using provided type: ${attachment.type}")
         return attachment.type
     }
-    
+
     // If type is Unknown but we have a valid type, try to infer from other properties
     if (attachment.type == MediaType.Unknown) {
-        Timber.d("MediaPreviewGrid: Type is Unknown, checking for video indicators")
-        
         // Check if it has aspect ratio (indicates video)
         if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
-            Timber.d("MediaPreviewGrid: Found aspect ratio ${attachment.aspectRatio}, treating as video")
             return MediaType.Video
         }
     }
-    
+
     // Check filename extension
     val fileName = attachment.fileName?.lowercase() ?: ""
-    
+
     // Special case for .3gp files - check if they have aspect ratio (video) or not (audio)
     if (fileName.endsWith(".3gp")) {
         return if (attachment.aspectRatio != null && attachment.aspectRatio > 0) {
@@ -697,33 +715,35 @@ fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
             MediaType.Audio
         }
     }
-    
+
     val inferredType = when {
-        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || 
-        fileName.endsWith(".png") || fileName.endsWith(".gif") || 
-        fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
-        
-        fileName.endsWith(".mp4") || fileName.endsWith(".mov") || 
-        fileName.endsWith(".avi") || fileName.endsWith(".mkv") || 
-        fileName.endsWith(".webm") || fileName.endsWith(".m4v") || 
-        fileName.endsWith(".3gpp") -> MediaType.Video
+        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
+                fileName.endsWith(".png") || fileName.endsWith(".gif") ||
+                fileName.endsWith(".webp") || fileName.endsWith(".bmp") -> MediaType.Image
+
+        fileName.endsWith(".mp4") || fileName.endsWith(".mov") ||
+                fileName.endsWith(".avi") || fileName.endsWith(".mkv") ||
+                fileName.endsWith(".webm") || fileName.endsWith(".m4v") ||
+                fileName.endsWith(".3gpp") -> MediaType.Video
+
         fileName.endsWith(".m3u8") -> MediaType.HLS_VIDEO
-        
-        fileName.endsWith(".mp3") || fileName.endsWith(".wav") || 
-        fileName.endsWith(".aac") || fileName.endsWith(".ogg") || 
-        fileName.endsWith(".flac") || fileName.endsWith(".m4a") ||
-        fileName.endsWith(".wma") || fileName.endsWith(".opus") ||
-        fileName.endsWith(".amr") -> MediaType.Audio
-        
+
+        fileName.endsWith(".mp3") || fileName.endsWith(".wav") ||
+                fileName.endsWith(".aac") || fileName.endsWith(".ogg") ||
+                fileName.endsWith(".flac") || fileName.endsWith(".m4a") ||
+                fileName.endsWith(".wma") || fileName.endsWith(".opus") ||
+                fileName.endsWith(".amr") -> MediaType.Audio
+
         fileName.endsWith(".pdf") -> MediaType.PDF
         fileName.endsWith(".doc") || fileName.endsWith(".docx") -> MediaType.Word
         fileName.endsWith(".xls") || fileName.endsWith(".xlsx") -> MediaType.Excel
         fileName.endsWith(".ppt") || fileName.endsWith(".pptx") -> MediaType.PPT
-        fileName.endsWith(".zip") || fileName.endsWith(".rar") || 
-        fileName.endsWith(".7z") -> MediaType.Zip
+        fileName.endsWith(".zip") || fileName.endsWith(".rar") ||
+                fileName.endsWith(".7z") -> MediaType.Zip
+
         fileName.endsWith(".txt") -> MediaType.Txt
         fileName.endsWith(".html") || fileName.endsWith(".htm") -> MediaType.Html
-        
+
         else -> MediaType.Unknown
     }
     return inferredType

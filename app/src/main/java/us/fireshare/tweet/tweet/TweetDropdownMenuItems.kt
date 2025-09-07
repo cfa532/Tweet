@@ -23,17 +23,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import us.fireshare.tweet.viewmodel.TweetViewModel
 
 @Composable
 fun TweetDropdownMenuItems(
@@ -47,26 +50,13 @@ fun TweetDropdownMenuItems(
     val navController = LocalNavController.current
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
-    val originTweetViewModel =
-        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-            hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                parentEntry, key = tweet.originalTweetId
-            ) { factory ->
-                // Create a temporary tweet for the ViewModel, the actual tweet will be loaded by the ViewModel
-                factory.create(
-                    Tweet(
-                        mid = tweet.originalTweetId!!,
-                        authorId = tweet.originalAuthorId!!
-                    )
-                )
-            }
-        } else null
     val context = LocalContext.current
 
-    // Only show delete button if tweet author is current user AND we're in allowed contexts
+    // Show delete button based on context
     val shouldShowDeleteButton = when (contextType) {
         "followingsTweet" -> true // Show delete for all tweets in main feed
         "appUserProfile" -> tweet.authorId == appUser.mid // Show delete only for app user's tweets in profile
+        "tweetDetail" -> tweet.authorId == appUser.mid // Show delete for user's own tweets in detail view
         else -> false // Don't show delete in other contexts
     }
     
@@ -74,37 +64,52 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
+                // inform user the tweet is being deleted.
                 Toast.makeText(
                     context,
                     context.getString(R.string.delete_tweet),
                     Toast.LENGTH_SHORT
                 ).show()
-                // Dismiss popup immediately for better UX
                 onDismissRequest()
 
-                tweetFeedViewModel.viewModelScope.launch(IO) {
+                applicationScope.launch(IO) {
                     try {
-                        tweetFeedViewModel.delTweet(navController, tweet.mid, {
-                            applicationScope.launch(IO) {
-                                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                    val originalTweet = HproseInstance.fetchTweet(
-                                        tweet.originalTweetId!!,
-                                        tweet.originalAuthorId!!,
-                                        shouldCache = false
-                                    )
-                                    originalTweet?.let {
-                                        originTweetViewModel?.updateRetweetCount(
-                                            it,      // original tweet
-                                            tweet.mid,      // retweet Id
-                                            -1
+                        tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
+                            // Deletion completed successfully
+                            Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
+                            
+                            // Update retweet count of original tweet if this is a retweet
+                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                                applicationScope.launch(IO) {
+                                    try {
+                                        val originalTweet = HproseInstance.fetchTweet(
+                                            tweet.originalTweetId!!,
+                                            tweet.originalAuthorId!!,
+                                            shouldCache = false
                                         )
+                                        originalTweet?.let { original ->
+                                            HproseInstance.updateRetweetCount(original, tweet.mid, -1)?.let { updatedTweet ->
+                                                // Post notification to update UI
+                                                TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedTweet))
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Timber.tag("TweetDropdownMenuItems").e(e, "Error updating retweet count")
                                     }
                                 }
                             }
-                        }, appUserViewModel)
+                        }
                     } catch (e: Exception) {
                         Timber.tag("TweetDropdownMenuItems")
                             .e(e, "Error deleting tweet: ${e.message}")
+                        // Show error toast for any exceptions
+                        withContext(Main) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.delete_failed),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 }
             },

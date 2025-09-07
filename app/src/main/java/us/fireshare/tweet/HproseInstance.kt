@@ -1,13 +1,17 @@
 package us.fireshare.tweet
 
-
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import hprose.client.HproseClient
@@ -22,6 +26,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -43,13 +48,13 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
-import us.fireshare.tweet.widget.SimplifiedVideoCacheManager
+import us.fireshare.tweet.widget.VideoManager
+import java.util.UUID
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
-
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
     lateinit var preferenceHelper: PreferenceHelper
@@ -57,6 +62,18 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
+    
+    // Data class for tracking incomplete uploads
+    data class IncompleteUpload(
+        val workId: String,
+        val tweetContent: String,
+        val attachmentUris: List<String>,
+        val isPrivate: Boolean,
+        val timestamp: Long,
+        val videoConversionJobId: String? = null,  // For HLS video conversion jobs
+        val videoConversionBaseUrl: String? = null,  // Base URL for polling status
+        val videoConversionUri: String? = null  // Original video URI for aspect ratio calculation
+    )
 
     suspend fun init(context: Context) {
         HproseClassManager.register(Tweet::class.java, "Tweet")
@@ -185,11 +202,11 @@ object HproseInstance {
                         // Check if the response indicates success or failure
                         val success = receiptResponse?.get("success") as? Boolean ?: true
                         val errorMsg = receiptResponse?.get("error") as? String
-                        
-                        if (success) {
-                            return Pair(true, null)
+
+                        return if (success) {
+                            Pair(true, null)
                         } else {
-                            return Pair(false, errorMsg ?: "Unknown error")
+                            Pair(false, errorMsg ?: "Unknown error")
                         }
                     } catch (e: Exception) {
                         Timber.tag("sendMessage").e("Error sending to receipt: $e")
@@ -352,9 +369,9 @@ object HproseInstance {
      * @param nodeId
      * Find IP addresses of given node.
      * */
-    suspend fun getHostIP(nodeId: MimeiId): String? {
+    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = "false"): String? {
         val entry = "get_node_ip"
-        val params = mapOf("aid" to appId, "ver" to "last", "nodeid" to nodeId)
+        val params = mapOf("aid" to appId, "ver" to "last", "nodeid" to nodeId, "v4only" to v4Only)
         try {
             return appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {
@@ -942,15 +959,6 @@ object HproseInstance {
     }
 
     /**
-     * Result class for toggle operations
-     */
-    data class ToggleResult(
-        val tweet: Tweet,
-        val isSuccess: Boolean,
-        val errorMessage: String? = null
-    )
-
-    /**
      * Load favorite status of the tweet by appUser.
      * */
     suspend fun toggleFavorite(tweet: Tweet): Tweet {
@@ -1097,7 +1105,7 @@ object HproseInstance {
     /**
      * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
      */
-    suspend fun deleteTweet(tweetId: String): String? {
+    suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
         val entry = "delete_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1110,7 +1118,7 @@ object HproseInstance {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
             if (response?.get("success") == true) {
-                val deletedTweetId = response["tweetid"] as? String
+                val deletedTweetId = response["tweetid"] as? MimeiId
 
                 // Post notification for successful deletion
                 if (deletedTweetId != null) {
@@ -1121,7 +1129,6 @@ object HproseInstance {
                         )
                     )
                 }
-
                 deletedTweetId
             } else {
                 val errorMessage =
@@ -1130,7 +1137,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("deleteTweet").e(e)
-            null
+            throw Exception(e.message)
         }
     }
 
@@ -1241,7 +1248,7 @@ object HproseInstance {
 
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
-        if (cachedUser != null) {
+        if (cachedUser != null && cachedUser.baseUrl != null) {
             return cachedUser
         }
 
@@ -1338,8 +1345,7 @@ object HproseInstance {
         return try {
             appUser.hproseService?.runMApp<Boolean>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId")
-            Timber.tag("togglePinnedTweet").e("Exception: $e")
+            Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId $e")
             null
         }
     }
@@ -1379,13 +1385,6 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("logging").e(e)
         }
-    }
-
-    /**
-     * Get blacklist statistics for monitoring and debugging
-     */
-    suspend fun getBlackListStats(): BlackList.BlackListStats {
-        return BlackList.getStats()
     }
 
     /**
@@ -1500,7 +1499,7 @@ object HproseInstance {
     }
 
     /**
-     * Upload video file to backend for HLS conversion using multipart form data
+     * Upload video file to backend for HLS conversion using multipart form data with progress polling
      */
     private suspend fun uploadHLSVideo(
         context: Context,
@@ -1546,8 +1545,9 @@ object HproseInstance {
         Timber.tag("uploadHLSVideo").d("ReferenceId: $referenceId")
         Timber.tag("uploadHLSVideo").d("NoResample: $noResample")
 
-        return try {
-            val response = httpClient.post(convertVideoURL) {
+        try {
+            // Step 1: Upload video and get job ID
+            val uploadResponse = httpClient.post(convertVideoURL) {
                 setBody(
                     io.ktor.client.request.forms.MultiPartFormDataContent(
                         io.ktor.client.request.forms.formData {
@@ -1581,32 +1581,145 @@ object HproseInstance {
                 )
             }
 
-            if (response.status == HttpStatusCode.OK) {
-                val responseText = response.bodyAsText()
-                val responseData = Gson().fromJson(responseText, Map::class.java)
-
-                val cid =
-                    responseData?.get("cid") as? String ?: throw Exception("No CID in response")
-                val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
-
-                @OptIn(UnstableApi::class)
-                val aspectRatio = SimplifiedVideoCacheManager.getVideoAspectRatio(context, uri)
-
-                Timber.tag("uploadHLSVideo").d("HLS video uploaded successfully: $cid")
-                MimeiFileType(
-                    cid,
-                    us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
-                    fileSize,
-                    fileName,
-                    fileTimestamp,
-                    aspectRatio
-                )
-            } else {
-                throw Exception("Upload failed with status: ${response.status}")
+            if (uploadResponse.status != HttpStatusCode.OK) {
+                throw Exception("Upload failed with status: ${uploadResponse.status}")
             }
+
+            val uploadResponseText = uploadResponse.bodyAsText()
+            val uploadResponseData = Gson().fromJson(uploadResponseText, Map::class.java)
+            
+            val success = uploadResponseData?.get("success") as? Boolean
+            if (success != true) {
+                val errorMessage = uploadResponseData?.get("message") as? String ?: "Upload failed"
+                throw Exception(errorMessage)
+            }
+
+            val jobId = uploadResponseData["jobId"] as? String
+                ?: throw Exception("No job ID in response")
+            
+            Timber.tag("uploadHLSVideo").d("Upload started, job ID: $jobId")
+
+            // Update incomplete upload with video conversion job information
+            // This allows resuming video conversion polling if the app is backgrounded
+            updateIncompleteUploadWithVideoJob(context, jobId, "$scheme://$host:$cloudDrivePort", uri.toString())
+
+            // Step 2: Poll for progress and completion
+            return pollVideoConversionStatus(
+                context = context,
+                uri = uri,
+                fileName = fileName,
+                fileTimestamp = fileTimestamp,
+                jobId = jobId,
+                baseUrl = "$scheme://$host:$cloudDrivePort"
+            )
+
         } catch (e: Exception) {
-            Timber.tag("uploadVideoToNetDisk").e("Error uploading to netdisk: ${e.message}")
+            Timber.tag("uploadHLSVideo").e("Error uploading to netdisk: ${e.message}")
             throw e
+        }
+    }
+
+    /**
+     * Poll video conversion status until completion with retry logic for connection issues
+     */
+    private suspend fun pollVideoConversionStatus(
+        context: Context,
+        uri: Uri,
+        fileName: String?,
+        fileTimestamp: Long,
+        jobId: String,
+        baseUrl: String
+    ): MimeiFileType? {
+        val statusURL = "$baseUrl/convert-video/status/$jobId"
+        var lastProgress = 0
+        var lastMessage = "Starting video processing..."
+        var consecutiveFailures = 0
+        val maxConsecutiveFailures = 10 // Allow more failures for long processing
+        val maxPollingTime = 2 * 60 * 60 * 1000L // 2 hours max polling time for very long videos
+        val startTime = System.currentTimeMillis()
+        
+        Timber.tag("pollVideoConversionStatus").d("Starting to poll status for job: $jobId")
+
+        while (true) {
+            // Check if we've been polling too long
+            if (System.currentTimeMillis() - startTime > maxPollingTime) {
+                throw Exception("Video processing timeout after ${maxPollingTime / 1000 / 60} minutes")
+            }
+
+            try {
+                val statusResponse = httpClient.get(statusURL)
+                
+                if (statusResponse.status != HttpStatusCode.OK) {
+                    throw Exception("Status check failed with status: ${statusResponse.status}")
+                }
+
+                val statusResponseText = statusResponse.bodyAsText()
+                val statusData = Gson().fromJson(statusResponseText, Map::class.java)
+                
+                val success = statusData?.get("success") as? Boolean
+                if (success != true) {
+                    val errorMessage = statusData?.get("message") as? String ?: "Status check failed"
+                    throw Exception(errorMessage)
+                }
+
+                val status = statusData["status"] as? String
+                val progress = (statusData["progress"] as? Number)?.toInt() ?: 0
+                val message = statusData["message"] as? String ?: "Processing..."
+
+                // Reset failure counter on successful request
+                consecutiveFailures = 0
+
+                // Log progress updates
+                if (progress != lastProgress || message != lastMessage) {
+                    Timber.tag("pollVideoConversionStatus").d("Progress: $progress% - $message")
+                    lastProgress = progress
+                    lastMessage = message
+                }
+
+                when (status) {
+                    "completed" -> {
+                        val cid = statusData["cid"] as? String
+                            ?: throw Exception("No CID in completion response")
+                        
+                        @OptIn(UnstableApi::class)
+                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+
+                        Timber.tag("pollVideoConversionStatus").d("Video conversion completed successfully: $cid")
+                        return MimeiFileType(
+                            cid,
+                            us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
+                            0L, // File size not provided in new response format
+                            fileName,
+                            fileTimestamp,
+                            aspectRatio
+                        )
+                    }
+                    "failed" -> {
+                        val errorMessage = statusData["message"] as? String ?: "Video conversion failed"
+                        throw Exception(errorMessage)
+                    }
+                    "uploading", "processing" -> {
+                        // Continue polling
+                        kotlinx.coroutines.delay(3000) // Poll every 3 seconds
+                    }
+                    else -> {
+                        Timber.tag("pollVideoConversionStatus").w("Unknown status: $status")
+                        kotlinx.coroutines.delay(3000)
+                    }
+                }
+            } catch (e: Exception) {
+                consecutiveFailures++
+                Timber.tag("pollVideoConversionStatus").e("Error polling status (attempt $consecutiveFailures/$maxConsecutiveFailures): ${e.message}")
+                
+                if (consecutiveFailures >= maxConsecutiveFailures) {
+                    throw Exception("Failed to poll status after $maxConsecutiveFailures consecutive failures: ${e.message}")
+                }
+                
+                // Exponential backoff for retries, but cap at reasonable maximum
+                val retryDelay = minOf(60000L, 2000L * (1 shl minOf(consecutiveFailures - 1, 5))) // Max 60 seconds
+                Timber.tag("pollVideoConversionStatus").d("Retrying in ${retryDelay}ms...")
+                kotlinx.coroutines.delay(retryDelay)
+            }
         }
     }
 
@@ -1627,7 +1740,6 @@ object HproseInstance {
             "m4v" -> "video/x-m4v"
             else -> null
         }
-        
         return extensionType ?: "video/mp4" // Default fallback
     }
 
@@ -1692,7 +1804,7 @@ object HproseInstance {
             // Calculate aspect ratio for image or video
             val aspectRatio = when (mediaType) {
                 us.fireshare.tweet.datamodel.MediaType.Image -> getImageAspectRatio(context, uri)
-                us.fireshare.tweet.datamodel.MediaType.Video -> SimplifiedVideoCacheManager.getVideoAspectRatio(
+                us.fireshare.tweet.datamodel.MediaType.Video -> VideoManager.getVideoAspectRatio(
                     context,
                     uri
                 )
@@ -1728,6 +1840,224 @@ object HproseInstance {
             requestTimeoutMillis = 3_000_000 // Total request timeout (5 minutes)
             connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
             socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
+        }
+    }
+    
+    /**
+     * Save incomplete upload to SharedPreferences
+     */
+    fun saveIncompleteUpload(context: Context, upload: IncompleteUpload) {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val uploadJson = Gson().toJson(upload)
+        prefs.edit { putString(upload.workId, uploadJson) }
+        Timber.tag("HproseInstance").d("Saved incomplete upload: ${upload.workId}")
+    }
+    
+    /**
+     * Remove incomplete upload from SharedPreferences
+     */
+    fun removeIncompleteUpload(context: Context, workId: String) {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        prefs.edit { remove(workId) }
+        Timber.tag("HproseInstance").d("Removed incomplete upload: $workId")
+    }
+    
+    /**
+     * Update incomplete upload with video conversion job information
+     */
+    private fun updateIncompleteUploadWithVideoJob(context: Context, jobId: String, baseUrl: String, videoUri: String) {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val allEntries = prefs.all
+        
+        // Find the most recent incomplete upload (likely the current one)
+        var mostRecentUpload: IncompleteUpload? = null
+        var mostRecentKey: String? = null
+        var mostRecentTime = 0L
+        
+        for ((key, value) in allEntries) {
+            try {
+                val upload = Gson().fromJson(value as String, IncompleteUpload::class.java)
+                if (upload.timestamp > mostRecentTime) {
+                    mostRecentTime = upload.timestamp
+                    mostRecentUpload = upload
+                    mostRecentKey = key
+                }
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error parsing incomplete upload: $e")
+            }
+        }
+        
+        // Update the most recent upload with video job information
+        mostRecentUpload?.let { upload ->
+            val updatedUpload = upload.copy(
+                videoConversionJobId = jobId,
+                videoConversionBaseUrl = baseUrl,
+                videoConversionUri = videoUri
+            )
+            val uploadJson = Gson().toJson(updatedUpload)
+            prefs.edit { putString(mostRecentKey, uploadJson) }
+            Timber.tag("HproseInstance").d("Updated incomplete upload with video job info: $jobId")
+        }
+    }
+    
+    
+    /**
+     * Get all incomplete uploads from SharedPreferences
+     */
+    fun getIncompleteUploads(context: Context): List<IncompleteUpload> {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val allEntries = prefs.all
+        val uploads = mutableListOf<IncompleteUpload>()
+        
+        for ((key, value) in allEntries) {
+            try {
+                val upload = Gson().fromJson(value as String, IncompleteUpload::class.java)
+                // Only include uploads from the last 24 hours
+                if (System.currentTimeMillis() - upload.timestamp < 24 * 60 * 60 * 1000) {
+                    uploads.add(upload)
+                } else {
+                    // Remove old uploads
+                    prefs.edit { remove(key) }
+                }
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error parsing incomplete upload: $e")
+                // Remove corrupted entries
+                prefs.edit {remove(key) }
+            }
+        }
+        
+        return uploads
+    }
+    
+    /**
+     * Resume incomplete uploads when app comes to foreground
+     */
+    fun resumeIncompleteUploads(context: Context) {
+        val incompleteUploads = getIncompleteUploads(context)
+        if (incompleteUploads.isEmpty()) {
+            Timber.tag("HproseInstance").d("No incomplete uploads to resume")
+            return
+        }
+        
+        Timber.tag("HproseInstance").d("Found ${incompleteUploads.size} incomplete uploads to resume")
+        
+        for (upload in incompleteUploads) {
+            try {
+                // Check original WorkManager state for this upload
+                try {
+                    val uuid = UUID.fromString(upload.workId)
+                    val info = WorkManager.getInstance(context).getWorkInfoById(uuid).get()
+                    if (info != null) {
+                        when (info.state) {
+                            WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                                Timber.tag("HproseInstance").d("Skipping resume: work ${upload.workId} is ${info.state}")
+                                continue
+                            }
+                            WorkInfo.State.SUCCEEDED -> {
+                                Timber.tag("HproseInstance").d("Cleaning up: work ${upload.workId} already SUCCEEDED")
+                                removeIncompleteUpload(context, upload.workId)
+                                continue
+                            }
+                            else -> { /* proceed */ }
+                        }
+                    }
+                } catch (_: Exception) { /* ignore invalid UUID or fetch errors */ }
+                // Check if this is a video conversion job that needs resumption
+                if (upload.videoConversionJobId != null && upload.videoConversionBaseUrl != null) {
+                    Timber.tag("HproseInstance").d("Resuming video conversion for job: ${upload.videoConversionJobId}")
+                    
+                    // Create a coroutine to check job status and resume if needed
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        try {
+                            val videoUri = upload.videoConversionUri?.let { Uri.parse(it) }
+                            val fileName = videoUri?.lastPathSegment
+                            val fileTimestamp = System.currentTimeMillis()
+                            
+                            // Check the backend with jobID to see how video conversion is going
+                            val result = pollVideoConversionStatus(
+                                context = context,
+                                uri = videoUri ?: Uri.EMPTY,
+                                fileName = fileName,
+                                fileTimestamp = fileTimestamp,
+                                jobId = upload.videoConversionJobId,
+                                baseUrl = upload.videoConversionBaseUrl
+                            )
+                            
+                            if (result != null) {
+                                // Video conversion is finished, upload the tweet and get it done
+                                val tweet = Tweet(
+                                    mid = System.currentTimeMillis().toString(),
+                                    authorId = appUser.mid,
+                                    content = upload.tweetContent,
+                                    attachments = listOf(result),
+                                    isPrivate = upload.isPrivate
+                                )
+                                
+                                HproseInstance.uploadTweet(tweet)?.let { uploadedTweet ->
+                                    Timber.tag("HproseInstance").d("Successfully completed resumed video upload: ${uploadedTweet.mid}")
+                                    removeIncompleteUpload(context, upload.workId)
+                                } ?: run {
+                                    Timber.tag("HproseInstance").e("Failed to upload tweet after video conversion completion")
+                                }
+                            } else {
+                                Timber.tag("HproseInstance").e("Video conversion polling failed for job: ${upload.videoConversionJobId}")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("HproseInstance").e("Error resuming video conversion: $e")
+                            // Remove the problematic incomplete upload to prevent future retries
+                            removeIncompleteUpload(context, upload.workId)
+                        }
+                    }
+                    continue
+                }
+                
+                // Handle regular file uploads (non-video uploads)
+                // For non-video uploads, we still need to validate URIs since they might be expired
+                val validUris = mutableListOf<String>()
+                
+                for (uriString in upload.attachmentUris) {
+                    try {
+                        val uri = uriString.toUri()
+                        // Test if we can access the URI
+                        context.contentResolver.openInputStream(uri)?.use {
+                            validUris.add(uriString)
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("HproseInstance").w("URI no longer accessible: $uriString - ${e.message}")
+                    }
+                }
+                
+                // If all URIs are invalid, skip this upload
+                if (validUris.isEmpty() && upload.attachmentUris.isNotEmpty()) {
+                    Timber.tag("HproseInstance").w("Skipping upload ${upload.workId} - all attachment URIs are no longer accessible")
+                    removeIncompleteUpload(context, upload.workId)
+                    continue
+                }
+                
+                // Create new WorkManager request to resume the upload
+                val data = workDataOf(
+                    "tweetContent" to upload.tweetContent,
+                    "attachmentUris" to validUris.toTypedArray(),
+                    "isPrivate" to upload.isPrivate,
+                    "isResume" to true
+                )
+                
+                val uploadRequest = androidx.work.OneTimeWorkRequest.Builder(
+                    us.fireshare.tweet.service.UploadTweetWorker::class.java
+                )
+                    .setInputData(data)
+                    .build()
+                
+                val workManager = androidx.work.WorkManager.getInstance(context)
+                workManager.enqueue(uploadRequest)
+                
+                Timber.tag("HproseInstance").d("Resumed non-video upload for workId: ${upload.workId} with ${validUris.size} valid URIs")
+                
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error resuming upload ${upload.workId}: $e")
+                // Remove the problematic incomplete upload to prevent future retries
+                removeIncompleteUpload(context, upload.workId)
+            }
         }
     }
 }

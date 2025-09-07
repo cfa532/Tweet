@@ -218,14 +218,7 @@ class ChatViewModel @AssistedInject constructor(
                                     .d("ChatMessageSent: Skipped duplicate message with ID: ${event.message.id}")
                             }
                             
-                            // If message has attachments but no content, add descriptive text
-                            val messageWithContent =
-                                if (!event.message.attachments.isNullOrEmpty() && event.message.content.isNullOrBlank()) {
-                                    event.message.copy(content = "Attachment sent")
-                                } else {
-                                    event.message
-                                }
-                            chatListViewModel?.updateSession(messageWithContent, hasNews = false)
+                            chatListViewModel?.updateSession(event.message, hasNews = false)
 
                             // No success toast for attachment messages - only show failure toasts
                         }
@@ -306,22 +299,11 @@ class ChatViewModel @AssistedInject constructor(
             // update session in database
             chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
 
-            // Enhance message for ChatListViewModel update only
-            val lastMessage = updatedNews.last()
-            val enhancedLastMessage =
-                if (!lastMessage.attachments.isNullOrEmpty() && lastMessage.content.isNullOrBlank()) {
-                    if (lastMessage.authorId == appUser.mid) {
-                        lastMessage.copy(content = "Attachment sent")
-                    } else {
-                        lastMessage.copy(content = "Attachment received")
-                    }
-                } else {
-                    lastMessage
-                }
             // update session in memory
+            val lastMessage = updatedNews.last()
             Timber.tag("ChatViewModel")
-                .d("fetchNewMessage calling updateSession with message: ${enhancedLastMessage.content}, authorId: ${enhancedLastMessage.authorId}")
-            chatListViewModel?.updateSession(enhancedLastMessage, hasNews = false)
+                .d("fetchNewMessage calling updateSession with message: ${lastMessage.content}, authorId: ${lastMessage.authorId}")
+            chatListViewModel?.updateSession(lastMessage, hasNews = false)
         }
     }
 

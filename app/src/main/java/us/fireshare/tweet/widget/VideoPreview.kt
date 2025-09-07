@@ -3,15 +3,21 @@ package us.fireshare.tweet.widget
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,12 +25,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -39,6 +46,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.datamodel.MediaType
@@ -59,7 +68,6 @@ fun VideoPreview(
     index: Int,
     autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
-    aspectRatio: Float?,
     callback: (Int) -> Unit,
     videoMid: MimeiId? = null,
     onLoadComplete: (() -> Unit)? = null,
@@ -73,12 +81,22 @@ fun VideoPreview(
     var isLoading by remember(videoMid) {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
+    var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
+    var recoveryAttempts by remember(videoMid) { mutableIntStateOf(0) }
+    val MAX_RECOVERY_ATTEMPTS = 5 // Increased from 3 to 5 for more lenient retry
+
+    // Use VideoLoadingManager to track visibility and manage loading
+    videoMid?.let { mid ->
+        rememberVideoLoadingManager(
+            videoMid = mid,
+            isVisible = isVideoVisible
+        )
+    }
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
-        Timber.d("VideoPreview: Creating new ExoPlayer for videoMid: $videoMid")
         val player = if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url)
         } else {
@@ -91,12 +109,8 @@ fun VideoPreview(
         player
     }
 
-    // Preload video if not already cached
-    LaunchedEffect(videoMid, url) {
-        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-            VideoManager.preloadVideo(context, videoMid, url)
-        }
-    }
+    // Video preloading is handled by parent components (ChatScreen, MediaItemView, etc.)
+    // This prevents conflicts and race conditions
 
     /**
      * Stop playing when screen is locked or closed. Resume play when unlocked.
@@ -146,7 +160,14 @@ fun VideoPreview(
             // If player is already ready, start immediately
             if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
                 exoPlayer.playWhenReady = autoPlay
+                isLoading = false // Ensure loading state is updated
                 return@LaunchedEffect
+            }
+
+            // If video is preloaded but player is idle, prepare it
+            if (videoMid != null && VideoManager.isVideoPreloaded(videoMid) && 
+                exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                exoPlayer.prepare()
             }
 
             // Ensure player is in a good state before playing
@@ -161,7 +182,8 @@ fun VideoPreview(
             // Don't pause if the video is being used in full screen
             videoMid?.let { mid ->
                 val activeCount = VideoManager.getVideoActiveCount(mid)
-                if (activeCount <= 1) {
+                val isInFullScreen = VideoManager.isVideoInFullScreen(mid)
+                if (activeCount <= 1 && !isInFullScreen) {
                     exoPlayer.playWhenReady = false
                 }
             } ?: run {
@@ -171,15 +193,63 @@ fun VideoPreview(
         }
     }
 
+    // React to changes in autoPlay while visible (for sequential playback)
+    LaunchedEffect(autoPlay, isVideoVisible) {
+        if (!isVideoVisible) return@LaunchedEffect
+        try {
+            // Always keep repeat mode off for previews
+            exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
+            if (autoPlay) {
+                if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                    exoPlayer.prepare()
+                }
+                exoPlayer.playWhenReady = true
+            } else {
+                exoPlayer.playWhenReady = false
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    // Monitor for video loading issues and trigger cleanup if needed
+    LaunchedEffect(hasError, isLoading) {
+        if (hasError && videoMid != null) {
+            // Check if we have too many video players and force cleanup
+            val cachedCount = VideoManager.getCachedVideoCount()
+            if (cachedCount > 8) { // If we have more than 8 cached videos, force cleanup
+                Timber.w("VideoPreview - Too many cached videos ($cachedCount), forcing cleanup")
+                VideoManager.forceCleanupInactiveVideos()
+            }
+        }
+    }
+
     LaunchedEffect(isMuted) {
-        exoPlayer.volume = if (isMuted) 0f else 1f
+        try {
+            exoPlayer.volume = if (isMuted) 0f else 1f
+            // Persist mute state to preferences
+            preferenceHelper.setSpeakerMute(isMuted)
+        } catch (e: Exception) {
+            Timber.e("VideoPreview - Error setting volume: ${e.message}")
+        }
+    }
+
+    // Watch for global mute state changes only when visible, at a relaxed cadence
+    LaunchedEffect(isVideoVisible) {
+        if (!isVideoVisible) return@LaunchedEffect
+        while (isVideoVisible) {
+            val globalMuteState = preferenceHelper.getSpeakerMute()
+            if (isMuted != globalMuteState) {
+                isMuted = globalMuteState
+            }
+            delay(500) // Check every 500ms while visible
+        }
     }
 
     // Show time label when video starts playing and auto-hide after 3 seconds
     LaunchedEffect(exoPlayer.isPlaying) {
         if (exoPlayer.isPlaying) {
             showTimeLabel = true
-            kotlinx.coroutines.delay(3000)
+            delay(3000)
             showTimeLabel = false
         }
     }
@@ -188,7 +258,7 @@ fun VideoPreview(
     LaunchedEffect(showTimeLabel) {
         while (showTimeLabel) {
             remainingTime = exoPlayer.duration - exoPlayer.currentPosition
-            kotlinx.coroutines.delay(1000)
+            delay(1000)
         }
     }
 
@@ -230,14 +300,36 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                isLoading = false
-                Timber.tag("VideoPreview").e(error, "Player error for video: $videoMid")
-                Timber.tag("VideoPreview").e("Error cause: ${error.cause}")
-                Timber.tag("VideoPreview").e("Error code: ${error.errorCode}")
-
-                // Let the SimplifiedVideoCacheManager handle the fallback logic
-                // It will mark the video as failed only after all attempts are exhausted
-                // We just log the error here and let the fallback mechanism work
+                // Check if it's a network-related error that might be temporary
+                val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
+                        error.cause?.message?.contains("unable to resolve", ignoreCase = true) == true
+                
+                // For network errors, be more lenient and don't immediately show error state
+                if (isNetworkError && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
+                    recoveryAttempts++
+                    Timber.tag("VideoPreview").d("Network error detected, will retry automatically (attempt $recoveryAttempts)")
+                    
+                    // Keep loading state for network errors to allow automatic retry
+                    isLoading = true
+                    hasError = false
+                    
+                    // Auto-retry after a delay for network errors
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        delay(3000) // Wait 3 seconds before auto-retry
+                        if (isLoading && !hasError && videoMid != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url)
+                        }
+                    }
+                } else {
+                    // For non-network errors or after max attempts, show error state
+                    isLoading = false
+                    hasError = true
+                    // Only log the final error, not intermediate trial errors
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
+                    Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
+                }
             }
         }
     }
@@ -251,7 +343,6 @@ fun VideoPreview(
     }
 
     // When previewing a single video, limit its height to show more content.
-//    val boxModifier = if (inPreviewGrid) modifier.heightIn(max = 500.dp) else modifier
     Box(
         modifier = modifier
             .clipToBounds()
@@ -259,7 +350,6 @@ fun VideoPreview(
             .onGloballyPositioned { layoutCoordinates ->
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
-                    Timber.d("VideoPreview: Visibility changed for videoMid: $videoMid, isVideoVisible: $isVideoVisible -> $newVisibility")
                     isVideoVisible = newVisibility
                 }
             }
@@ -276,8 +366,10 @@ fun VideoPreview(
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
-                    // Show buffering indicator
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    // Keep last frame to avoid black flashes when resetting/pausing
+                    setKeepContentOnPlayerReset(true)
+                    // Only show buffering indicator when playing and buffering
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }
@@ -293,7 +385,7 @@ fun VideoPreview(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
@@ -302,12 +394,80 @@ fun VideoPreview(
             }
         }
         
+        // Show error state when video fails to load
+        if (hasError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BrokenImage,
+                        contentDescription = "Video Error",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Video unavailable",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    // Show retry button
+                    if (videoMid != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                recoveryAttempts++
+                                hasError = false
+                                isLoading = true
+                                
+                                // Attempt recovery on the main thread (required for ExoPlayer)
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                    try {
+                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
+                                        if (!success) {
+                                            // If recovery failed, show error again
+                                            hasError = true
+                                            isLoading = false
+                                        } else {
+                                            // Ensure playback resumes if visible and allowed
+                                            if (isVideoVisible && autoPlay) {
+                                                exoPlayer.playWhenReady = true
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        // Only log retry failures at debug level to avoid noise
+                                        Timber.d("VideoPreview - Retry failed: ${e.message}")
+                                        hasError = true
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = "Retry",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Mute button in lower right corner
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(8.dp),
-            contentAlignment = androidx.compose.ui.Alignment.BottomEnd
+            contentAlignment = Alignment.BottomEnd
         ) {
             Box(
                 modifier = Modifier
@@ -316,8 +476,13 @@ fun VideoPreview(
                         color = Color.Black.copy(alpha = 0.2f),
                         shape = CircleShape
                     )
-                    .clickable { isMuted = !isMuted },
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        isMuted = !isMuted
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isMuted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
@@ -327,14 +492,14 @@ fun VideoPreview(
                 )
             }
         }
-        
+
         // Time label in lower left corner
         if (showTimeLabel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp),
-                contentAlignment = androidx.compose.ui.Alignment.BottomStart
+                contentAlignment = Alignment.BottomStart
             ) {
                 Box(
                     modifier = Modifier
