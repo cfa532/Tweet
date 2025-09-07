@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatSession
@@ -68,7 +69,6 @@ import us.fireshare.tweet.viewmodel.UserViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -5,8 +5,13 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import hprose.client.HproseClient
@@ -21,14 +26,10 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import androidx.work.WorkManager
-import androidx.work.OneTimeWorkRequest
-import androidx.work.workDataOf
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
@@ -48,10 +49,9 @@ import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
+import java.util.UUID
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
-import androidx.core.content.edit
-import androidx.core.net.toUri
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -1943,6 +1943,25 @@ object HproseInstance {
         
         for (upload in incompleteUploads) {
             try {
+                // Check original WorkManager state for this upload
+                try {
+                    val uuid = UUID.fromString(upload.workId)
+                    val info = WorkManager.getInstance(context).getWorkInfoById(uuid).get()
+                    if (info != null) {
+                        when (info.state) {
+                            WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                                Timber.tag("HproseInstance").d("Skipping resume: work ${upload.workId} is ${info.state}")
+                                continue
+                            }
+                            WorkInfo.State.SUCCEEDED -> {
+                                Timber.tag("HproseInstance").d("Cleaning up: work ${upload.workId} already SUCCEEDED")
+                                removeIncompleteUpload(context, upload.workId)
+                                continue
+                            }
+                            else -> { /* proceed */ }
+                        }
+                    }
+                } catch (_: Exception) { /* ignore invalid UUID or fetch errors */ }
                 // Check if this is a video conversion job that needs resumption
                 if (upload.videoConversionJobId != null && upload.videoConversionBaseUrl != null) {
                     Timber.tag("HproseInstance").d("Resuming video conversion for job: ${upload.videoConversionJobId}")

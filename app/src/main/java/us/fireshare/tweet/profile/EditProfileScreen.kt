@@ -64,7 +64,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.viewmodel.UserViewModel
-import us.fireshare.tweet.widget.ImageCacheManager
 
 /**
  * Register and edit user profile.

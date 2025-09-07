@@ -7,7 +7,6 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import us.fireshare.tweet.widget.VideoManager
 import java.util.Calendar
 
 class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {
