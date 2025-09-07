@@ -1496,7 +1496,7 @@ object HproseInstance {
     }
 
     /**
-     * Upload video file to backend for HLS conversion using multipart form data
+     * Upload video file to backend for HLS conversion using multipart form data with progress polling
      */
     private suspend fun uploadHLSVideo(
         context: Context,
@@ -1542,8 +1542,9 @@ object HproseInstance {
         Timber.tag("uploadHLSVideo").d("ReferenceId: $referenceId")
         Timber.tag("uploadHLSVideo").d("NoResample: $noResample")
 
-        return try {
-            val response = httpClient.post(convertVideoURL) {
+        try {
+            // Step 1: Upload video and get job ID
+            val uploadResponse = httpClient.post(convertVideoURL) {
                 setBody(
                     io.ktor.client.request.forms.MultiPartFormDataContent(
                         io.ktor.client.request.forms.formData {
@@ -1577,32 +1578,120 @@ object HproseInstance {
                 )
             }
 
-            if (response.status == HttpStatusCode.OK) {
-                val responseText = response.bodyAsText()
-                val responseData = Gson().fromJson(responseText, Map::class.java)
-
-                val cid =
-                    responseData?.get("cid") as? String ?: throw Exception("No CID in response")
-                val fileSize = (responseData["size"] as? Number)?.toLong() ?: 0L
-
-                @OptIn(UnstableApi::class)
-                val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-
-                Timber.tag("uploadHLSVideo").d("HLS video uploaded successfully: $cid")
-                MimeiFileType(
-                    cid,
-                    us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
-                    fileSize,
-                    fileName,
-                    fileTimestamp,
-                    aspectRatio
-                )
-            } else {
-                throw Exception("Upload failed with status: ${response.status}")
+            if (uploadResponse.status != HttpStatusCode.OK) {
+                throw Exception("Upload failed with status: ${uploadResponse.status}")
             }
+
+            val uploadResponseText = uploadResponse.bodyAsText()
+            val uploadResponseData = Gson().fromJson(uploadResponseText, Map::class.java)
+            
+            val success = uploadResponseData?.get("success") as? Boolean
+            if (success != true) {
+                val errorMessage = uploadResponseData?.get("message") as? String ?: "Upload failed"
+                throw Exception(errorMessage)
+            }
+
+            val jobId = uploadResponseData?.get("jobId") as? String
+                ?: throw Exception("No job ID in response")
+            
+            Timber.tag("uploadHLSVideo").d("Upload started, job ID: $jobId")
+
+            // Step 2: Poll for progress and completion
+            return pollVideoConversionStatus(
+                context = context,
+                uri = uri,
+                fileName = fileName,
+                fileTimestamp = fileTimestamp,
+                jobId = jobId,
+                baseUrl = "$scheme://$host:$cloudDrivePort"
+            )
+
         } catch (e: Exception) {
-            Timber.tag("uploadVideoToNetDisk").e("Error uploading to netdisk: ${e.message}")
+            Timber.tag("uploadHLSVideo").e("Error uploading to netdisk: ${e.message}")
             throw e
+        }
+    }
+
+    /**
+     * Poll video conversion status until completion
+     */
+    private suspend fun pollVideoConversionStatus(
+        context: Context,
+        uri: Uri,
+        fileName: String?,
+        fileTimestamp: Long,
+        jobId: String,
+        baseUrl: String
+    ): MimeiFileType? {
+        val statusURL = "$baseUrl/convert-video/status/$jobId"
+        var lastProgress = 0
+        var lastMessage = "Starting video processing..."
+        
+        Timber.tag("pollVideoConversionStatus").d("Starting to poll status for job: $jobId")
+
+        while (true) {
+            try {
+                val statusResponse = httpClient.get(statusURL)
+                
+                if (statusResponse.status != HttpStatusCode.OK) {
+                    throw Exception("Status check failed with status: ${statusResponse.status}")
+                }
+
+                val statusResponseText = statusResponse.bodyAsText()
+                val statusData = Gson().fromJson(statusResponseText, Map::class.java)
+                
+                val success = statusData?.get("success") as? Boolean
+                if (success != true) {
+                    val errorMessage = statusData?.get("message") as? String ?: "Status check failed"
+                    throw Exception(errorMessage)
+                }
+
+                val status = statusData["status"] as? String
+                val progress = (statusData["progress"] as? Number)?.toInt() ?: 0
+                val message = statusData["message"] as? String ?: "Processing..."
+
+                // Log progress updates
+                if (progress != lastProgress || message != lastMessage) {
+                    Timber.tag("pollVideoConversionStatus").d("Progress: $progress% - $message")
+                    lastProgress = progress
+                    lastMessage = message
+                }
+
+                when (status) {
+                    "completed" -> {
+                        val cid = statusData["cid"] as? String
+                            ?: throw Exception("No CID in completion response")
+                        
+                        @OptIn(UnstableApi::class)
+                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+
+                        Timber.tag("pollVideoConversionStatus").d("Video conversion completed successfully: $cid")
+                        return MimeiFileType(
+                            cid,
+                            us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
+                            0L, // File size not provided in new response format
+                            fileName,
+                            fileTimestamp,
+                            aspectRatio
+                        )
+                    }
+                    "failed" -> {
+                        val errorMessage = statusData["message"] as? String ?: "Video conversion failed"
+                        throw Exception(errorMessage)
+                    }
+                    "uploading", "processing" -> {
+                        // Continue polling
+                        kotlinx.coroutines.delay(3000) // Poll every 3 seconds
+                    }
+                    else -> {
+                        Timber.tag("pollVideoConversionStatus").w("Unknown status: $status")
+                        kotlinx.coroutines.delay(3000)
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("pollVideoConversionStatus").e("Error polling status: ${e.message}")
+                throw e
+            }
         }
     }
 
@@ -1623,7 +1712,6 @@ object HproseInstance {
             "m4v" -> "video/x-m4v"
             else -> null
         }
-        
         return extensionType ?: "video/mp4" // Default fallback
     }
 
