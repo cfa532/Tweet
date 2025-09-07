@@ -50,6 +50,7 @@ fun ProfileTopBarButton(
 
     // Use local boolean state for immediate UI feedback
     var localIsFollowing by remember { mutableStateOf(false) }
+    var isOperationInProgress by remember { mutableStateOf(false) }
     
     // Update local state when followings change
     LaunchedEffect(followings) {
@@ -75,8 +76,17 @@ fun ProfileTopBarButton(
                 context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
                 else -> {
                     if (!appUser.isGuest()) {
+                        // Prevent multiple simultaneous operations
+                        if (isOperationInProgress) {
+                            return@DebouncedButton
+                        }
+
+                        // Store the previous state for potential rollback
+                        val previousState = localIsFollowing
+                        
                         // Toggle local state immediately for instant UI feedback
                         localIsFollowing = !localIsFollowing
+                        isOperationInProgress = true
 
                         appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                             try {
@@ -87,21 +97,25 @@ fun ProfileTopBarButton(
                                     }
                                 }
 
-                                if (result == null) {
-                                    // Operation failed, revert the local state
-                                    localIsFollowing = !localIsFollowing
-                                    withContext(Dispatchers.Main) {
+                                withContext(Dispatchers.Main) {
+                                    isOperationInProgress = false
+                                    
+                                    if (result == null) {
+                                        // Operation failed, revert the local state
+                                        localIsFollowing = previousState
                                         Toast.makeText(
                                             context,
                                             context.getString(R.string.follow_operation_failed),
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
+                                    // If result is not null, the operation succeeded and local state is correct
                                 }
                             } catch (e: Exception) {
                                 // Exception occurred, revert the local state
-                                localIsFollowing = !localIsFollowing
                                 withContext(Dispatchers.Main) {
+                                    localIsFollowing = previousState
+                                    isOperationInProgress = false
                                     Toast.makeText(
                                         context,
                                         context.getString(R.string.follow_operation_failed),

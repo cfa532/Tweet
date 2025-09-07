@@ -41,6 +41,7 @@ fun ToggleFollowingButton(
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     var localFollowState by remember { mutableStateOf(isFollowing) }
+    var isOperationInProgress by remember { mutableStateOf(false) }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     // Update local state when followings change
@@ -58,8 +59,17 @@ fun ToggleFollowingButton(
                 return@DebouncedButton
             }
 
+            // Prevent multiple simultaneous operations
+            if (isOperationInProgress) {
+                return@DebouncedButton
+            }
+
+            // Store the previous state for potential rollback
+            val previousState = localFollowState
+            
             // Toggle local state immediately for instant UI feedback
             localFollowState = !localFollowState
+            isOperationInProgress = true
 
             appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                 try {
@@ -76,21 +86,25 @@ fun ToggleFollowingButton(
                         }
                     }
 
-                    if (result == null) {
-                        // Operation failed, revert the local state
-                        localFollowState = !localFollowState
-                        withContext(Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
+                        isOperationInProgress = false
+                        
+                        if (result == null) {
+                            // Operation failed, revert the local state
+                            localFollowState = previousState
                             Toast.makeText(
                                 context,
                                 context.getString(R.string.follow_operation_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
+                        // If result is not null, the operation succeeded and local state is correct
                     }
                 } catch (e: Exception) {
                     // Exception occurred, revert the local state
-                    localFollowState = !localFollowState
                     withContext(Dispatchers.Main) {
+                        localFollowState = previousState
+                        isOperationInProgress = false
                         Toast.makeText(
                             context,
                             context.getString(R.string.follow_operation_failed),
