@@ -135,8 +135,9 @@ fun AdvancedImageViewer(
                         // Update with original high-resolution image
                         loadState = loadState.copy(bitmap = downloadedBitmap)
                         
-                        // Update file for SubsamplingScaleImageView
-                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                        // Update file for SubsamplingScaleImageView (use original cache key)
+                        val originalMid = "${mid}_original"
+                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
                         if (updatedCachedFile != null && updatedCachedFile.exists()) {
                             imageFile = updatedCachedFile
                         }
@@ -184,8 +185,9 @@ fun AdvancedImageViewer(
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     
-                    // Get the cached file for SubsamplingScaleImageView
-                    val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                    // Get the cached file for SubsamplingScaleImageView (use original cache key)
+                    val originalMid = "${mid}_original"
+                    val cachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
                     if (cachedFile != null && cachedFile.exists()) {
                         imageFile = cachedFile
                     }
@@ -242,12 +244,12 @@ fun AdvancedImageViewer(
             AndroidView(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
-                        setDoubleTapZoomScale(3f)
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_CROP)
+                        setDoubleTapZoomScale(2f)
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
-                        setMaxScale(10f) // Increase maximum zoom for pinch-to-zoom
+                        setMaxScale(5f) // Maximum zoom for pinch-to-zoom
                         
                         // Add long press listener for the third-party view
                         setOnLongClickListener {
