@@ -337,7 +337,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             .build()
 
         val workManager = WorkManager.getInstance(context)
-        workManager.enqueue(uploadRequest)
+        val workId = workManager.enqueue(uploadRequest).result.toString()
+        
+        // Save incomplete upload for potential resume
+        val incompleteUpload = HproseInstance.IncompleteUpload(
+            workId = workId,
+            tweetContent = content,
+            attachmentUris = attachments?.map { it.toString() } ?: emptyList(),
+            isPrivate = isPrivate,
+            timestamp = System.currentTimeMillis()
+        )
+        HproseInstance.saveIncompleteUpload(context, incompleteUpload)
 
         // No need to observe work status; UI will update via notification system
     }

@@ -103,6 +103,14 @@ class TweetActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Resume incomplete uploads when app comes to foreground
+        if (::initJob.isInitialized && initJob.isCompleted) {
+            HproseInstance.resumeIncompleteUploads(this)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
     }

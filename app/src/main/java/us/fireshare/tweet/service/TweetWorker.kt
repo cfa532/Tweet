@@ -179,6 +179,11 @@ class UploadTweetWorker @AssistedInject constructor(
 
                 HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
                     Timber.tag("UploadTweetWorker").d(tweet.toString())
+                    
+                    // Remove incomplete upload from tracking since it completed successfully
+                    val workId = id.toString()
+                    HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                    
                     return Result.success()
                 }
                 TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))

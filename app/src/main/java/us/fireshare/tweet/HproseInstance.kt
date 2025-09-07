@@ -24,6 +24,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequest
+import androidx.work.workDataOf
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
@@ -45,6 +48,7 @@ import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
+import androidx.core.content.edit
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
@@ -55,6 +59,15 @@ object HproseInstance {
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
+    
+    // Data class for tracking incomplete uploads
+    data class IncompleteUpload(
+        val workId: String,
+        val tweetContent: String,
+        val attachmentUris: List<String>,
+        val isPrivate: Boolean,
+        val timestamp: Long
+    )
 
     suspend fun init(context: Context) {
         HproseClassManager.register(Tweet::class.java, "Tweet")
@@ -1796,6 +1809,92 @@ object HproseInstance {
             requestTimeoutMillis = 3_000_000 // Total request timeout (5 minutes)
             connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
             socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
+        }
+    }
+    
+    /**
+     * Save incomplete upload to SharedPreferences
+     */
+    fun saveIncompleteUpload(context: Context, upload: IncompleteUpload) {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val uploadJson = Gson().toJson(upload)
+        prefs.edit { putString(upload.workId, uploadJson) }
+        Timber.tag("HproseInstance").d("Saved incomplete upload: ${upload.workId}")
+    }
+    
+    /**
+     * Remove incomplete upload from SharedPreferences
+     */
+    fun removeIncompleteUpload(context: Context, workId: String) {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        prefs.edit { remove(workId) }
+        Timber.tag("HproseInstance").d("Removed incomplete upload: $workId")
+    }
+    
+    /**
+     * Get all incomplete uploads from SharedPreferences
+     */
+    fun getIncompleteUploads(context: Context): List<IncompleteUpload> {
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val allEntries = prefs.all
+        val uploads = mutableListOf<IncompleteUpload>()
+        
+        for ((key, value) in allEntries) {
+            try {
+                val upload = Gson().fromJson(value as String, IncompleteUpload::class.java)
+                // Only include uploads from the last 24 hours
+                if (System.currentTimeMillis() - upload.timestamp < 24 * 60 * 60 * 1000) {
+                    uploads.add(upload)
+                } else {
+                    // Remove old uploads
+                    prefs.edit { remove(key) }
+                }
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error parsing incomplete upload: $e")
+                // Remove corrupted entries
+                prefs.edit {remove(key) }
+            }
+        }
+        
+        return uploads
+    }
+    
+    /**
+     * Resume incomplete uploads when app comes to foreground
+     */
+    fun resumeIncompleteUploads(context: Context) {
+        val incompleteUploads = getIncompleteUploads(context)
+        if (incompleteUploads.isEmpty()) {
+            Timber.tag("HproseInstance").d("No incomplete uploads to resume")
+            return
+        }
+        
+        Timber.tag("HproseInstance").d("Found ${incompleteUploads.size} incomplete uploads to resume")
+        
+        for (upload in incompleteUploads) {
+            try {
+                // Create new WorkManager request to resume the upload
+                val data = workDataOf(
+                    "tweetContent" to upload.tweetContent,
+                    "attachmentUris" to upload.attachmentUris.toTypedArray(),
+                    "isPrivate" to upload.isPrivate,
+                    "isResume" to true // Flag to indicate this is a resumed upload
+                )
+                
+                val uploadRequest = androidx.work.OneTimeWorkRequest.Builder(
+                    us.fireshare.tweet.service.UploadTweetWorker::class.java
+                )
+                    .setInputData(data)
+                    .build()
+                
+                val workManager = androidx.work.WorkManager.getInstance(context)
+                workManager.enqueue(uploadRequest)
+                
+                Timber.tag("HproseInstance").d("Resumed upload for workId: ${upload.workId}")
+                
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error resuming upload ${upload.workId}: $e")
+            }
         }
     }
 }
