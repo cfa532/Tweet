@@ -50,7 +50,6 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
@@ -167,53 +166,36 @@ private fun RetweetContent(
         val originalTweetId = tweet.originalTweetId
         var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
         var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
-        var hasAttemptedLoad by remember(originalTweetId) { mutableStateOf(false) }
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
             if (originalTweetId != null && tweet.originalAuthorId != null) {
-                // First check cache to avoid unnecessary loading
-                val cachedTweet = TweetCacheManager.getCachedTweet(originalTweetId)
-                if (cachedTweet != null) {
-                    originalTweet = cachedTweet
-                    isLoadingOriginal = false
-                    hasAttemptedLoad = true
-                    Timber.tag("TweetItem")
-                        .d("Original tweet loaded from cache: ${cachedTweet.mid}")
-                    return@LaunchedEffect
-                }
+                withContext(IO) {
+                    try {
+                        val originalAuthorId = tweet.originalAuthorId ?: ""
 
-                // Only fetch from network if we haven't attempted to load yet or if visible
-                if (!hasAttemptedLoad || isVisible) {
-                    withContext(IO) {
-                        try {
-                            val originalAuthorId = tweet.originalAuthorId ?: ""
-
+                        Timber.tag("TweetItem")
+                            .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
+                        originalTweet = HproseInstance.fetchTweet(
+                            originalTweetId,
+                            originalAuthorId,
+                            shouldCache = true
+                        )
+                        if (originalTweet != null) {
                             Timber.tag("TweetItem")
-                                .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
-                            originalTweet = HproseInstance.fetchTweet(
-                                originalTweetId,
-                                originalAuthorId,
-                                shouldCache = true
-                            )
-                            if (originalTweet != null) {
-                                Timber.tag("TweetItem")
-                                    .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
-                            } else {
-                                Timber.tag("TweetItem")
-                                    .w("Original tweet not found: $originalTweetId")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("TweetItem").e(e, "Failed to load original tweet")
-                            originalTweet = null
-                        } finally {
-                            isLoadingOriginal = false
-                            hasAttemptedLoad = true
+                                .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
+                        } else {
+                            Timber.tag("TweetItem")
+                                .w("Original tweet not found: $originalTweetId")
                         }
+                    } catch (e: Exception) {
+                        Timber.tag("TweetItem").e(e, "Failed to load original tweet")
+                        originalTweet = null
+                    } finally {
+                        isLoadingOriginal = false
                     }
                 }
             } else {
                 isLoadingOriginal = false
-                hasAttemptedLoad = true
             }
         }
 
@@ -473,53 +455,36 @@ private fun QuotedTweetContent(
     val originalTweetId = tweet.originalTweetId
     var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
     var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
-    var hasAttemptedLoad by remember(originalTweetId) { mutableStateOf(false) }
 
     LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
         if (originalTweetId != null && tweet.originalAuthorId != null) {
-            // First check cache to avoid unnecessary loading
-            val cachedTweet = TweetCacheManager.getCachedTweet(originalTweetId)
-            if (cachedTweet != null) {
-                originalTweet = cachedTweet
-                isLoadingOriginal = false
-                hasAttemptedLoad = true
-                Timber.tag("TweetItem")
-                    .d("Quoted original tweet loaded from cache: ${cachedTweet.mid}")
-                return@LaunchedEffect
-            }
-
-            // Only fetch from network if we haven't attempted to load yet
-            if (!hasAttemptedLoad) {
-                try {
-                    withContext(IO) {
-                        Timber.tag("TweetItem")
-                            .d("Fetching quoted original tweet: $originalTweetId from author: ${tweet.originalAuthorId}")
-                        originalTweet = HproseInstance.fetchTweet(
-                            originalTweetId,
-                            tweet.originalAuthorId!!,
-                            shouldCache = true
-                        )
-                        if (originalTweet != null) {
-                            Timber.tag("TweetItem")
-                                .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
-                        } else {
-                            Timber.tag("TweetItem")
-                                .w("Quoted original tweet not found: $originalTweetId")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("TweetItem").e(
-                        e,
-                        "Error loading original tweet: $originalTweetId"
+            try {
+                withContext(IO) {
+                    Timber.tag("TweetItem")
+                        .d("Fetching quoted original tweet: $originalTweetId from author: ${tweet.originalAuthorId}")
+                    originalTweet = HproseInstance.fetchTweet(
+                        originalTweetId,
+                        tweet.originalAuthorId!!,
+                        shouldCache = true
                     )
-                } finally {
-                    isLoadingOriginal = false
-                    hasAttemptedLoad = true
+                    if (originalTweet != null) {
+                        Timber.tag("TweetItem")
+                            .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
+                    } else {
+                        Timber.tag("TweetItem")
+                            .w("Quoted original tweet not found: $originalTweetId")
+                    }
                 }
+            } catch (e: Exception) {
+                Timber.tag("TweetItem").e(
+                    e,
+                    "Error loading original tweet: $originalTweetId"
+                )
+            } finally {
+                isLoadingOriginal = false
             }
         } else {
             isLoadingOriginal = false
-            hasAttemptedLoad = true
         }
     }
 
