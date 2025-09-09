@@ -86,19 +86,43 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         
         when (level) {
             TRIM_MEMORY_UI_HIDDEN -> {
-                // App UI is hidden, but user might return quickly - preserve cache
-                Timber.d("Memory warning: UI_HIDDEN - Preserving cache for quick return")
-                // Do not clear cache when UI is hidden
+                // App UI is hidden, but user might return quickly - preserve ALL cache
+                Timber.d("Memory warning: UI_HIDDEN - Preserving ALL cache for quick return")
+                // Do not clear any cache when UI is hidden
             }
             TRIM_MEMORY_BACKGROUND -> {
-                // App is in background, but user might return - preserve cache
-                Timber.d("Memory warning: BACKGROUND - Preserving cache for potential return")
-                // Do not clear cache when app goes to background
+                // App is in background, but user might return - preserve ALL cache
+                Timber.d("Memory warning: BACKGROUND - Preserving ALL cache for potential return")
+                // Do not clear any cache when app goes to background
+            }
+            TRIM_MEMORY_RUNNING_MODERATE -> {
+                // System is running low on memory - clear some cache but preserve user experience
+                Timber.w("Memory warning: RUNNING_MODERATE - System memory pressure, clearing minimal cache")
+                clearMinimalVideoAndImageCaches()
+            }
+            TRIM_MEMORY_RUNNING_LOW -> {
+                // System is running low on memory - clear more cache
+                Timber.w("Memory warning: RUNNING_LOW - System memory pressure, clearing moderate cache")
+                clearPartialVideoAndImageCaches()
+            }
+            TRIM_MEMORY_RUNNING_CRITICAL -> {
+                // System is running critically low on memory - clear significant cache
+                Timber.w("Memory warning: RUNNING_CRITICAL - System critically low on memory, clearing significant cache")
+                clearSignificantVideoAndImageCaches()
+            }
+            TRIM_MEMORY_COMPLETE -> {
+                // System is about to kill the app - clear all cache
+                Timber.w("Memory warning: COMPLETE - System about to kill app, clearing all cache")
+                clearAllVideoAndImageCaches()
             }
             else -> {
-                // Only clear cache for actual system memory pressure warnings
-                Timber.w("Memory warning: Level $level - System memory pressure, clearing partial caches")
-                clearPartialVideoAndImageCaches()
+                // For any other memory levels, only clear cache if it's a critical system warning
+                if (level >= TRIM_MEMORY_RUNNING_MODERATE) {
+                    Timber.w("Memory warning: Level $level - System memory pressure, clearing partial caches")
+                    clearPartialVideoAndImageCaches()
+                } else {
+                    Timber.d("Memory warning: Level $level - Non-critical, preserving cache")
+                }
             }
         }
     }
@@ -116,6 +140,19 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         clearPartialVideoAndImageCaches()
     }
 
+    private fun clearMinimalVideoAndImageCaches() {
+        // Clear only 10% of inactive video and image caches for minimal impact
+        try {
+            VideoManager.clearMinimalInactiveVideos()
+            applicationScope.launch {
+                ImageCacheManager.clearMinimalCachedImages(this@TweetApplication)
+            }
+            Timber.d("Cleared 10%% of video and image caches due to moderate memory pressure (tweets preserved)")
+        } catch (e: Exception) {
+            Timber.e("Error clearing minimal video and image caches: ${e.message}")
+        }
+    }
+
     private fun clearPartialVideoAndImageCaches() {
         // Clear 30% of video and image caches (keep tweets)
         try {
@@ -128,6 +165,32 @@ class TweetApplication : Application(), ComponentCallbacks2 {
             Timber.d("Cleared 30%% of video and image caches due to memory pressure (tweets preserved)")
         } catch (e: Exception) {
             Timber.e("Error clearing partial video and image caches: ${e.message}")
+        }
+    }
+
+    private fun clearSignificantVideoAndImageCaches() {
+        // Clear 60% of video and image caches for significant memory pressure
+        try {
+            VideoManager.clearSignificantInactiveVideos()
+            applicationScope.launch {
+                ImageCacheManager.clearSignificantCachedImages(this@TweetApplication)
+            }
+            Timber.d("Cleared 60%% of video and image caches due to critical memory pressure (tweets preserved)")
+        } catch (e: Exception) {
+            Timber.e("Error clearing significant video and image caches: ${e.message}")
+        }
+    }
+
+    private fun clearAllVideoAndImageCaches() {
+        // Clear all video and image caches when system is about to kill the app
+        try {
+            VideoManager.releaseAllVideos()
+            applicationScope.launch {
+                ImageCacheManager.clearAllCachedImages(this@TweetApplication)
+            }
+            Timber.d("Cleared ALL video and image caches due to system about to kill app (tweets preserved)")
+        } catch (e: Exception) {
+            Timber.e("Error clearing all video and image caches: ${e.message}")
         }
     }
 

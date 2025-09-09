@@ -609,6 +609,23 @@ object VideoManager {
     }
 
     /**
+     * Clear 10% of inactive videos for minimal memory pressure
+     */
+    fun clearMinimalInactiveVideos() {
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        if (inactiveVideos.isNotEmpty()) {
+            // Clear 10% of inactive videos
+            val videosToClear = (inactiveVideos.size * 0.1).toInt().coerceAtLeast(1)
+            val videosToRelease = inactiveVideos.take(videosToClear)
+            
+            Timber.w("VideoManager - Minimal memory pressure: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (10%)")
+            videosToRelease.forEach { videoMid ->
+                releaseVideo(videoMid)
+            }
+        }
+    }
+
+    /**
      * Clear 30% of inactive videos for system memory warnings
      * This is called when the system reports low memory conditions
      */
@@ -640,22 +657,57 @@ object VideoManager {
     }
 
     /**
-     * Attempt to recover a video that has stopped loading
+     * Clear 60% of inactive videos for significant memory pressure
+     */
+    fun clearSignificantInactiveVideos() {
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        if (inactiveVideos.isNotEmpty()) {
+            // Clear 60% of inactive videos
+            val videosToClear = (inactiveVideos.size * 0.6).toInt().coerceAtLeast(1)
+            val videosToRelease = inactiveVideos.take(videosToClear)
+            
+            Timber.w("VideoManager - Significant memory pressure: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (60%)")
+            videosToRelease.forEach { videoMid ->
+                releaseVideo(videoMid)
+            }
+        }
+        
+        // Also clear 60% of preloaded videos that aren't active
+        val inactivePreloadedVideos = preloadedVideos.filter { !activeVideos.containsKey(it) }
+        if (inactivePreloadedVideos.isNotEmpty()) {
+            val preloadedToClear = (inactivePreloadedVideos.size * 0.6).toInt().coerceAtLeast(1)
+            val preloadedToRelease = inactivePreloadedVideos.take(preloadedToClear)
+            
+            Timber.d("VideoManager - Clearing ${preloadedToRelease.size} of ${inactivePreloadedVideos.size} inactive preloaded videos (60%)")
+            preloadedToRelease.forEach { videoMid ->
+                preloadedVideos.remove(videoMid)
+                releaseVideo(videoMid)
+            }
+        }
+    }
+
+    /**
+     * Attempt to recover a video that has stopped loading with thorough reset
      */
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
         val player = videoPlayers[videoMid] ?: return false
 
-        Timber.d("VideoManager - Attempting recovery for video: $videoMid")
+        Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid")
 
         try {
-            // Stop and reset the player
+            // Thorough reset: stop, clear, and reset player state
             player.stop()
+            player.clearMediaItems()
             player.seekTo(0)
+            
+            // Reset playback state
+            player.playWhenReady = false
+            player.pause()
 
-            // Create a new media source with extended timeouts for network congestion
+            // Create a new media source with extended timeouts and retry configuration
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(30000) // 30 seconds connection timeout
-                .setReadTimeoutMs(30000)    // 30 seconds read timeout
+                .setConnectTimeoutMs(45000) // 45 seconds connection timeout for thorough retry
+                .setReadTimeoutMs(45000)    // 45 seconds read timeout for thorough retry
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("TweetApp/1.0")
 
@@ -667,14 +719,15 @@ object VideoManager {
                 androidx.media3.common.MediaItem.fromUri(videoUrl)
             )
 
+            // Set the new media source and prepare
             player.setMediaSource(mediaSource)
             player.prepare()
 
-            Timber.d("VideoManager - Recovery attempted for video: $videoMid")
+            Timber.d("VideoManager - Thorough recovery attempted for video: $videoMid")
             return true
         } catch (e: Exception) {
             // Only log recovery failures at debug level to avoid noise during trials
-            Timber.d("VideoManager - Recovery failed for video: $videoMid, error: ${e.message}")
+            Timber.d("VideoManager - Thorough recovery failed for video: $videoMid, error: ${e.message}")
             return false
         }
     }

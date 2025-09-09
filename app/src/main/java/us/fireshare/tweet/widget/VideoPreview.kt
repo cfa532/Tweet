@@ -84,7 +84,8 @@ fun VideoPreview(
     var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
-    var hasRetried by remember(videoMid) { mutableStateOf(false) }
+    var retryCount by remember(videoMid) { mutableIntStateOf(0) }
+    val maxRetries = 3
 
     // Use VideoLoadingManager to track visibility and manage loading
     videoMid?.let { mid ->
@@ -301,10 +302,10 @@ fun VideoPreview(
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
                 
-                // If we haven't retried yet, attempt one retry
-                if (!hasRetried && videoMid != null) {
-                    hasRetried = true
-                    Timber.tag("VideoPreview").d("Attempting retry for video: $videoMid")
+                // If we haven't exceeded max retries, attempt automatic retry
+                if (retryCount < maxRetries && videoMid != null) {
+                    retryCount++
+                    Timber.tag("VideoPreview").d("Attempting automatic retry $retryCount/$maxRetries for video: $videoMid")
                     
                     // Keep loading state during retry
                     isLoading = true
@@ -318,10 +319,10 @@ fun VideoPreview(
                         }
                     }
                 } else {
-                    // After retry or if no videoMid, show error state
+                    // After max retries or if no videoMid, show error state with retry button
                     isLoading = false
                     hasError = true
-                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message} (retries: $retryCount)")
                 }
             }
         }
@@ -412,32 +413,44 @@ fun VideoPreview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    // Show retry button only if we haven't retried yet
-                    if (videoMid != null && !hasRetried) {
+                    // Show retry button for manual retry attempts
+                    if (videoMid != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                hasRetried = true
+                                retryCount++
                                 hasError = false
                                 isLoading = true
                                 
-                                // Attempt recovery on the main thread (required for ExoPlayer)
+                                Timber.tag("VideoPreview").d("Manual retry attempt $retryCount for video: $videoMid")
+                                
+                                // Attempt thorough recovery on the main thread (required for ExoPlayer)
                                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                                     try {
+                                        // Perform thorough retry by completely resetting the player
+                                        exoPlayer.stop()
+                                        exoPlayer.clearMediaItems()
+                                        
+                                        // Wait a moment for cleanup
+                                        delay(500)
+                                        
+                                        // Create a completely new media source
                                         val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
                                         if (!success) {
                                             // If recovery failed, show error again
                                             hasError = true
                                             isLoading = false
+                                            Timber.tag("VideoPreview").w("Manual retry failed for video: $videoMid")
                                         } else {
                                             // Ensure playback resumes if visible and allowed
                                             if (isVideoVisible && autoPlay) {
                                                 exoPlayer.playWhenReady = true
                                             }
+                                            Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
                                         }
                                     } catch (e: Exception) {
                                         // Only log retry failures at debug level to avoid noise
-                                        Timber.d("VideoPreview - Retry failed: ${e.message}")
+                                        Timber.d("VideoPreview - Manual retry failed: ${e.message}")
                                         hasError = true
                                         isLoading = false
                                     }
@@ -446,8 +459,18 @@ fun VideoPreview(
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "Retry",
+                                text = if (retryCount > 0) "Retry Again" else "Retry",
                                 style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        
+                        // Show retry count information
+                        if (retryCount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Attempts: $retryCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
