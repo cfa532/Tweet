@@ -1,6 +1,8 @@
 package us.fireshare.tweet
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.Constraints
@@ -10,7 +12,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -18,8 +19,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
-import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.BadgeStateManager
+import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
@@ -27,10 +28,10 @@ import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
-class TweetApplication : Application(){
+class TweetApplication : Application(), ComponentCallbacks2 {
     companion object {
         // Use SupervisorJob to prevent one child's failure from cancelling others
-        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val applicationScope = CoroutineScope(SupervisorJob() + IO)
     }
 
     override fun onCreate() {
@@ -74,17 +75,64 @@ class TweetApplication : Application(){
             messageCheckRequest
         )
 
-        // Start video memory monitoring
-        VideoManager.startMemoryMonitoring()
+        // Video memory monitoring removed - now relies on system memory warnings only
         
         // Initialize BlackList with database
         BlackList.initialize(this)
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        
+        when (level) {
+            TRIM_MEMORY_UI_HIDDEN -> {
+                // App UI is hidden, free large UI-related resources
+                Timber.d("Memory warning: UI_HIDDEN - Freeing UI resources")
+                clearPartialVideoAndImageCaches()
+            }
+            TRIM_MEMORY_BACKGROUND -> {
+                // App is in background and system is running low on memory
+                Timber.w("Memory warning: BACKGROUND - App in background, system low on memory")
+                clearPartialVideoAndImageCaches()
+            }
+            else -> {
+                // For any other memory trim levels (including deprecated ones), clear partial caches
+                Timber.w("Memory warning: Level $level - Clearing partial caches")
+                clearPartialVideoAndImageCaches()
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Handle configuration changes if needed
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        // This is called when the system is running very low on memory
+        // and is about to kill background processes
+        Timber.w("Memory warning: onLowMemory - System about to kill background processes")
+        clearPartialVideoAndImageCaches()
+    }
+
+    private fun clearPartialVideoAndImageCaches() {
+        // Clear 30% of video and image caches (keep tweets)
+        try {
+            VideoManager.clearInactiveVideos()
+            // Clear 30% of image cache
+            applicationScope.launch {
+                ImageCacheManager.clearPartialCachedImages(this@TweetApplication)
+            }
+            // Note: Tweet cache is intentionally left alone as it's small
+            Timber.d("Cleared 30%% of video and image caches due to memory pressure (tweets preserved)")
+        } catch (e: Exception) {
+            Timber.e("Error clearing partial video and image caches: ${e.message}")
+        }
+    }
+
     override fun onTerminate() {
         super.onTerminate()
-        // Stop video memory monitoring
-        VideoManager.stopMemoryMonitoring()
         // Release all video players to prevent memory leaks
         VideoManager.releaseAllVideos()
         // Release full screen video player
@@ -135,8 +183,4 @@ class ReleaseTree : Timber.Tree() {
             else -> "UNKNOWN"
         }
     }
-}
-
-object AppContainer {
-    var users: MutableSet<User> = emptySet<User>().toMutableSet()
 }

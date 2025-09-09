@@ -541,6 +541,52 @@ object ImageCacheManager {
     }
 
     /**
+     * Clear 30% of cached images for system memory warnings
+     * This is called when the system reports low memory conditions
+     */
+    suspend fun clearPartialCachedImages(context: Context) = withContext(Dispatchers.IO) {
+        try {
+            // Get all cached image files from disk
+            val cacheDir = File(context.cacheDir, CACHE_DIR)
+            if (!cacheDir.exists()) {
+                return@withContext
+            }
+
+            val cachedFiles = cacheDir.listFiles()?.filter { it.isFile && it.extension == "jpg" }
+            if (cachedFiles.isNullOrEmpty()) {
+                return@withContext
+            }
+
+            // Calculate 30% of cached images to clear
+            val imagesToClear = (cachedFiles.size * 0.3).toInt().coerceAtLeast(1)
+            val imagesToDelete = cachedFiles.take(imagesToClear)
+
+            Timber.w("ImageCacheManager - System memory warning: clearing ${imagesToDelete.size} of ${cachedFiles.size} cached images (30%)")
+
+            // Clear from memory cache first
+            imagesToDelete.forEach { file ->
+                val mid = file.nameWithoutExtension
+                memoryCache.remove(mid)
+            }
+
+            // Delete from disk cache
+            imagesToDelete.forEach { file ->
+                try {
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ImageCacheManager").d("Error deleting cached image file ${file.name}: $e")
+                }
+            }
+
+            Timber.d("ImageCacheManager - Cleared ${imagesToDelete.size} cached images due to memory pressure")
+        } catch (e: Exception) {
+            Timber.e("ImageCacheManager - Error clearing partial cached images: $e")
+        }
+    }
+
+    /**
      * Get memory cache statistics
      */
     fun getMemoryCacheStats(): String {

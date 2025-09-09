@@ -74,10 +74,6 @@ object VideoManager {
     private val preloadQueue = mutableListOf<MimeiId>()
 
     // ===== CONFIGURATION =====
-    private const val MEMORY_THRESHOLD_BYTES = 1024L * 1024 * 1024 // 1GB for memory threshold
-    private const val MAX_VIDEO_PLAYERS = 24 // Reduced to mitigate memory pressure and jank
-    private const val CLEANUP_RATIO =
-        0.6 // Release 60% of inactive videos when memory pressure is high
     private const val PRELOAD_AHEAD_COUNT = 3 // Number of upcoming tweets to preload videos from
     private const val PRELOAD_DELAY_MS =
         500L // Delay before starting preload to avoid excessive loading
@@ -85,7 +81,7 @@ object VideoManager {
     private const val MAX_CONCURRENT_PRELOADS = 3 // Allow up to 3 concurrent player creations
 
     // ===== MEMORY MONITORING =====
-    private var memoryMonitoringJob: kotlinx.coroutines.Job? = null
+    // Removed custom memory monitoring - now relies on system warnings only
 
     // Concurrency control for preloading to avoid main-thread contention
     private val preloadSemaphore: Semaphore = Semaphore(MAX_CONCURRENT_PRELOADS)
@@ -280,8 +276,7 @@ object VideoManager {
      * Only creates new players for visible or preloading videos
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
-        // Check memory usage before creating new player
-        checkMemoryAndReleaseVideos()
+        // No player count limit - let system memory warnings handle memory pressure
 
         // Mark as preloaded if it was in the preload queue
         preloadedVideos.add(videoMid)
@@ -442,8 +437,7 @@ object VideoManager {
             return
         }
 
-        // Check memory usage before preloading
-        checkMemoryAndReleaseVideos()
+        // No player count limit - let system memory warnings handle memory pressure
 
         if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
             return // Already cached or preloaded
@@ -460,8 +454,7 @@ object VideoManager {
                     if (!isActive) return@launch
                     val player = createExoPlayer(context, videoUrl, MediaType.Video)
                     // Add to cache on main thread
-                    // Check memory again before adding to cache
-                    checkMemoryAndReleaseVideos()
+                    // No player count limit - let system memory warnings handle memory pressure
                     if (!isActive) {
                         try { player.release() } catch (_: Exception) {}
                         return@launch
@@ -616,6 +609,37 @@ object VideoManager {
     }
 
     /**
+     * Clear 30% of inactive videos for system memory warnings
+     * This is called when the system reports low memory conditions
+     */
+    fun clearInactiveVideos() {
+        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
+        if (inactiveVideos.isNotEmpty()) {
+            // Clear 30% of inactive videos
+            val videosToClear = (inactiveVideos.size * 0.3).toInt().coerceAtLeast(1)
+            val videosToRelease = inactiveVideos.take(videosToClear)
+            
+            Timber.w("VideoManager - System memory warning: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (30%)")
+            videosToRelease.forEach { videoMid ->
+                releaseVideo(videoMid)
+            }
+        }
+        
+        // Also clear 30% of preloaded videos that aren't active
+        val inactivePreloadedVideos = preloadedVideos.filter { !activeVideos.containsKey(it) }
+        if (inactivePreloadedVideos.isNotEmpty()) {
+            val preloadedToClear = (inactivePreloadedVideos.size * 0.3).toInt().coerceAtLeast(1)
+            val preloadedToRelease = inactivePreloadedVideos.take(preloadedToClear)
+            
+            Timber.d("VideoManager - Clearing ${preloadedToRelease.size} of ${inactivePreloadedVideos.size} inactive preloaded videos (30%)")
+            preloadedToRelease.forEach { videoMid ->
+                preloadedVideos.remove(videoMid)
+                releaseVideo(videoMid)
+            }
+        }
+    }
+
+    /**
      * Attempt to recover a video that has stopped loading
      */
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
@@ -659,109 +683,10 @@ object VideoManager {
      * Get cache statistics
      */
     fun getCacheStats(): String {
-        val memoryUsage = getCurrentMemoryUsage()
-        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Visible: ${visibleVideos.size}, Preloaded: ${preloadedVideos.size}, Memory: ${memoryUsage / (1024 * 1024)}MB"
+        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Visible: ${visibleVideos.size}, Preloaded: ${preloadedVideos.size}"
     }
 
-    /**
-     * Get current memory usage in bytes
-     */
-    private fun getCurrentMemoryUsage(): Long {
-        return try {
-            val runtime = Runtime.getRuntime()
-            runtime.totalMemory() - runtime.freeMemory()
-        } catch (e: Exception) {
-            Timber.e("VideoManager - Error getting memory usage: ${e.message}")
-            0L
-        }
-    }
-
-    /**
-     * Check if memory usage is above threshold
-     */
-    private fun isMemoryUsageHigh(): Boolean {
-        return getCurrentMemoryUsage() > MEMORY_THRESHOLD_BYTES
-    }
-
-    /**
-     * Monitor memory usage and release videos if needed
-     * Prioritizes releasing non-visible videos first
-     */
-    private fun checkMemoryAndReleaseVideos() {
-        // Check if we have too many video players regardless of memory usage
-        if (videoPlayers.size > MAX_VIDEO_PLAYERS) {
-            Timber.w("VideoManager - Too many video players (${videoPlayers.size}), releasing inactive videos")
-            val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-            if (inactiveVideos.isNotEmpty()) {
-                val videosToRelease =
-                    inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt())
-                videosToRelease.forEach { videoMid ->
-                    releaseVideo(videoMid)
-                }
-                Timber.d("VideoManager - Released ${videosToRelease.size} videos due to player count limit")
-            }
-        }
-
-        // Check memory usage
-        if (!isMemoryUsageHigh()) {
-            return
-        }
-
-        Timber.w("VideoManager - Memory usage high (${getCurrentMemoryUsage() / (1024 * 1024)}MB), releasing inactive videos")
-
-        // Get inactive videos (not currently being used)
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-
-        if (inactiveVideos.isNotEmpty()) {
-            // Release oldest inactive videos first
-            val videosToRelease =
-                inactiveVideos.take((inactiveVideos.size * CLEANUP_RATIO).toInt()) // Release 60% of inactive videos
-
-            videosToRelease.forEach { videoMid ->
-                releaseVideo(videoMid)
-            }
-
-            Timber.tag("checkMemoryAndReleaseVideos")
-                .d("Released ${videosToRelease.size} videos due to memory pressure")
-        } else {
-            Timber.w("VideoManager - No inactive videos to release, memory pressure remains high")
-        }
-    }
-
-    /**
-     * Start periodic memory monitoring
-     * This should be called from the application class
-     */
-    @kotlin.OptIn(DelicateCoroutinesApi::class)
-    fun startMemoryMonitoring() {
-        // Cancel existing job if any
-        memoryMonitoringJob?.cancel()
-
-        memoryMonitoringJob = GlobalScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    withContext(Dispatchers.Main) {
-                        checkMemoryAndReleaseVideos()
-                    }
-                    kotlinx.coroutines.delay(15000) // Check every 15 seconds for more responsive cleanup
-                } catch (e: Exception) {
-                    Timber.e("VideoManager - Error in memory monitoring: ${e.message}")
-                    kotlinx.coroutines.delay(60000) // Wait longer on error
-                }
-            }
-        }
-        Timber.tag("startMemoryMonitoring").d("Started periodic memory monitoring")
-    }
-
-    /**
-     * Stop memory monitoring
-     * This should be called when the application is being destroyed
-     */
-    fun stopMemoryMonitoring() {
-        memoryMonitoringJob?.cancel()
-        memoryMonitoringJob = null
-        Timber.tag("stopMemoryMonitoring").d("Stopped periodic memory monitoring")
-    }
+    // Player count checking removed - now relies entirely on system memory warnings
 
     /**
      * Get detailed memory statistics
