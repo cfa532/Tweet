@@ -86,18 +86,18 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         
         when (level) {
             TRIM_MEMORY_UI_HIDDEN -> {
-                // App UI is hidden, free large UI-related resources
-                Timber.d("Memory warning: UI_HIDDEN - Freeing UI resources")
-                clearPartialVideoAndImageCaches()
+                // App UI is hidden, but user might return quickly - preserve cache
+                Timber.d("Memory warning: UI_HIDDEN - Preserving cache for quick return")
+                // Do not clear cache when UI is hidden
             }
             TRIM_MEMORY_BACKGROUND -> {
-                // App is in background and system is running low on memory
-                Timber.w("Memory warning: BACKGROUND - App in background, system low on memory")
-                clearPartialVideoAndImageCaches()
+                // App is in background, but user might return - preserve cache
+                Timber.d("Memory warning: BACKGROUND - Preserving cache for potential return")
+                // Do not clear cache when app goes to background
             }
             else -> {
-                // For any other memory trim levels (including deprecated ones), clear partial caches
-                Timber.w("Memory warning: Level $level - Clearing partial caches")
+                // Only clear cache for actual system memory pressure warnings
+                Timber.w("Memory warning: Level $level - System memory pressure, clearing partial caches")
                 clearPartialVideoAndImageCaches()
             }
         }
