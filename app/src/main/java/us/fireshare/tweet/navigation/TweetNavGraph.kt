@@ -29,7 +29,6 @@ import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.chat.ChatListScreen
 import us.fireshare.tweet.chat.ChatScreen
-import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.profile.EditProfileScreen
 import us.fireshare.tweet.profile.FollowerScreen
 import us.fireshare.tweet.profile.FollowingScreen
@@ -49,7 +48,6 @@ import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-
 import us.fireshare.tweet.widget.MediaBrowser
 import javax.inject.Inject
 import kotlin.reflect.typeOf
@@ -108,16 +106,6 @@ fun TweetNavGraph(
                 val parentEntry = remember(navBackStackEntry) {
                     navController.getBackStackEntry(NavTwee)
                 }
-                val viewModel =
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry,            // The scope and key will identify
-                        key = args.tweetId      // the viewModel to be injected.
-                    )
-                    { factory ->
-                        factory.create(
-                            Tweet(mid = args.tweetId, authorId = args.authorId)
-                        )
-                    }
                 TweetDetailScreen(args.authorId, args.tweetId, parentEntry)
             }
             composable<NavTweet.ComposeTweet> {
@@ -165,11 +153,6 @@ fun TweetNavGraph(
                     navController.getBackStackEntry(NavTwee)
                 }
                 UserBookmarks(sharedViewModel.appUserViewModel, parentEntry)
-            }
-            composable<NavTweet.Comments> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
             }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
@@ -256,12 +239,6 @@ fun TweetNavGraph(
                 }
                 val tweetId = it.toRoute<NavTweet.DeepLink>().tweetId
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
-                val viewModel =
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweetId
-                    ) { factory ->
-                        factory.create(Tweet(authorId = authorId, mid = tweetId))
-                    }
                 TweetDetailScreen(authorId, tweetId, parentEntry)
             }
         }
