@@ -378,7 +378,7 @@ fun MediaBrowser(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
-                                    if (offsetY > 20f && !isNavigationTriggered.value) {
+                                    if (offsetY > 100f && !isNavigationTriggered.value) {
                                         isNavigationTriggered.value = true
                                         navController.popBackStack()
                                     }
@@ -421,9 +421,8 @@ fun MediaBrowser(
                                 state = rememberDraggableState { delta ->
                                     isDragging = true
                                     offsetY += delta
-                                    if (offsetY > 200f && scaleFactor <= 1 && !isNavigationTriggered.value) {
-                                        isNavigationTriggered.value =
-                                            true    // prevent multiple popBack
+                                    if (offsetY > 300f && scaleFactor <= 1 && !isNavigationTriggered.value) {
+                                        isNavigationTriggered.value = true
                                         navController.popBackStack()
                                     }
                                 }
