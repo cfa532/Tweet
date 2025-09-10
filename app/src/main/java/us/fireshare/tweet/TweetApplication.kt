@@ -20,7 +20,6 @@ import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.service.BadgeStateManager
-import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
@@ -84,45 +83,23 @@ class TweetApplication : Application(), ComponentCallbacks2 {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         
-        when (level) {
-            TRIM_MEMORY_UI_HIDDEN -> {
+        // Modern Android API (API 34+) only uses UI_HIDDEN and BACKGROUND levels
+        // All other TRIM_MEMORY_* constants are deprecated and no longer sent
+        when {
+            level >= TRIM_MEMORY_BACKGROUND -> {
+                // App is in background and may be killed - preserve cache for quick return
+                // This is the highest level we'll receive in modern Android
+                Timber.d("Memory warning: BACKGROUND (level $level) - Preserving cache for potential return")
+                // Do not clear cache when app goes to background to maintain good UX
+            }
+            level >= TRIM_MEMORY_UI_HIDDEN -> {
                 // App UI is hidden, but user might return quickly - preserve ALL cache
-                Timber.d("Memory warning: UI_HIDDEN - Preserving ALL cache for quick return")
+                Timber.d("Memory warning: UI_HIDDEN (level $level) - Preserving ALL cache for quick return")
                 // Do not clear any cache when UI is hidden
             }
-            TRIM_MEMORY_BACKGROUND -> {
-                // App is in background, but user might return - preserve ALL cache
-                Timber.d("Memory warning: BACKGROUND - Preserving ALL cache for potential return")
-                // Do not clear any cache when app goes to background
-            }
-            TRIM_MEMORY_RUNNING_MODERATE -> {
-                // System is running low on memory - clear some cache but preserve user experience
-                Timber.w("Memory warning: RUNNING_MODERATE - System memory pressure, clearing minimal cache")
-                clearMinimalVideoAndImageCaches()
-            }
-            TRIM_MEMORY_RUNNING_LOW -> {
-                // System is running low on memory - clear more cache
-                Timber.w("Memory warning: RUNNING_LOW - System memory pressure, clearing moderate cache")
-                clearPartialVideoAndImageCaches()
-            }
-            TRIM_MEMORY_RUNNING_CRITICAL -> {
-                // System is running critically low on memory - clear significant cache
-                Timber.w("Memory warning: RUNNING_CRITICAL - System critically low on memory, clearing significant cache")
-                clearSignificantVideoAndImageCaches()
-            }
-            TRIM_MEMORY_COMPLETE -> {
-                // System is about to kill the app - clear all cache
-                Timber.w("Memory warning: COMPLETE - System about to kill app, clearing all cache")
-                clearAllVideoAndImageCaches()
-            }
             else -> {
-                // For any other memory levels, only clear cache if it's a critical system warning
-                if (level >= TRIM_MEMORY_RUNNING_MODERATE) {
-                    Timber.w("Memory warning: Level $level - System memory pressure, clearing partial caches")
-                    clearPartialVideoAndImageCaches()
-                } else {
-                    Timber.d("Memory warning: Level $level - Non-critical, preserving cache")
-                }
+                // Any other levels (shouldn't happen in modern Android, but handle gracefully)
+                Timber.d("Memory warning: Unknown level $level - Preserving cache")
             }
         }
     }
@@ -137,62 +114,13 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         // This is called when the system is running very low on memory
         // and is about to kill background processes
         Timber.w("Memory warning: onLowMemory - System about to kill background processes")
-        clearPartialVideoAndImageCaches()
+        // In modern Android, we rely on onTrimMemory for memory management
+        // onLowMemory is still called but we preserve cache for better UX
     }
 
-    private fun clearMinimalVideoAndImageCaches() {
-        // Clear only 10% of inactive video and image caches for minimal impact
-        try {
-            VideoManager.clearMinimalInactiveVideos()
-            applicationScope.launch {
-                ImageCacheManager.clearMinimalCachedImages(this@TweetApplication)
-            }
-            Timber.d("Cleared 10%% of video and image caches due to moderate memory pressure (tweets preserved)")
-        } catch (e: Exception) {
-            Timber.e("Error clearing minimal video and image caches: ${e.message}")
-        }
-    }
-
-    private fun clearPartialVideoAndImageCaches() {
-        // Clear 30% of video and image caches (keep tweets)
-        try {
-            VideoManager.clearInactiveVideos()
-            // Clear 30% of image cache
-            applicationScope.launch {
-                ImageCacheManager.clearPartialCachedImages(this@TweetApplication)
-            }
-            // Note: Tweet cache is intentionally left alone as it's small
-            Timber.d("Cleared 30%% of video and image caches due to memory pressure (tweets preserved)")
-        } catch (e: Exception) {
-            Timber.e("Error clearing partial video and image caches: ${e.message}")
-        }
-    }
-
-    private fun clearSignificantVideoAndImageCaches() {
-        // Clear 60% of video and image caches for significant memory pressure
-        try {
-            VideoManager.clearSignificantInactiveVideos()
-            applicationScope.launch {
-                ImageCacheManager.clearSignificantCachedImages(this@TweetApplication)
-            }
-            Timber.d("Cleared 60%% of video and image caches due to critical memory pressure (tweets preserved)")
-        } catch (e: Exception) {
-            Timber.e("Error clearing significant video and image caches: ${e.message}")
-        }
-    }
-
-    private fun clearAllVideoAndImageCaches() {
-        // Clear all video and image caches when system is about to kill the app
-        try {
-            VideoManager.releaseAllVideos()
-            applicationScope.launch {
-                ImageCacheManager.clearAllCachedImages(this@TweetApplication)
-            }
-            Timber.d("Cleared ALL video and image caches due to system about to kill app (tweets preserved)")
-        } catch (e: Exception) {
-            Timber.e("Error clearing all video and image caches: ${e.message}")
-        }
-    }
+    // Note: Cache clearing methods removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels, and we preserve
+    // cache for both to maintain good user experience
 
     override fun onTerminate() {
         super.onTerminate()

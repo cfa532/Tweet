@@ -608,83 +608,8 @@ object VideoManager {
         }
     }
 
-    /**
-     * Clear 10% of inactive videos for minimal memory pressure
-     */
-    fun clearMinimalInactiveVideos() {
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        if (inactiveVideos.isNotEmpty()) {
-            // Clear 10% of inactive videos
-            val videosToClear = (inactiveVideos.size * 0.1).toInt().coerceAtLeast(1)
-            val videosToRelease = inactiveVideos.take(videosToClear)
-            
-            Timber.w("VideoManager - Minimal memory pressure: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (10%)")
-            videosToRelease.forEach { videoMid ->
-                releaseVideo(videoMid)
-            }
-        }
-    }
-
-    /**
-     * Clear 30% of inactive videos for system memory warnings
-     * This is called when the system reports low memory conditions
-     */
-    fun clearInactiveVideos() {
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        if (inactiveVideos.isNotEmpty()) {
-            // Clear 30% of inactive videos
-            val videosToClear = (inactiveVideos.size * 0.3).toInt().coerceAtLeast(1)
-            val videosToRelease = inactiveVideos.take(videosToClear)
-            
-            Timber.w("VideoManager - System memory warning: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (30%)")
-            videosToRelease.forEach { videoMid ->
-                releaseVideo(videoMid)
-            }
-        }
-        
-        // Also clear 30% of preloaded videos that aren't active
-        val inactivePreloadedVideos = preloadedVideos.filter { !activeVideos.containsKey(it) }
-        if (inactivePreloadedVideos.isNotEmpty()) {
-            val preloadedToClear = (inactivePreloadedVideos.size * 0.3).toInt().coerceAtLeast(1)
-            val preloadedToRelease = inactivePreloadedVideos.take(preloadedToClear)
-            
-            Timber.d("VideoManager - Clearing ${preloadedToRelease.size} of ${inactivePreloadedVideos.size} inactive preloaded videos (30%)")
-            preloadedToRelease.forEach { videoMid ->
-                preloadedVideos.remove(videoMid)
-                releaseVideo(videoMid)
-            }
-        }
-    }
-
-    /**
-     * Clear 60% of inactive videos for significant memory pressure
-     */
-    fun clearSignificantInactiveVideos() {
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        if (inactiveVideos.isNotEmpty()) {
-            // Clear 60% of inactive videos
-            val videosToClear = (inactiveVideos.size * 0.6).toInt().coerceAtLeast(1)
-            val videosToRelease = inactiveVideos.take(videosToClear)
-            
-            Timber.w("VideoManager - Significant memory pressure: clearing ${videosToRelease.size} of ${inactiveVideos.size} inactive videos (60%)")
-            videosToRelease.forEach { videoMid ->
-                releaseVideo(videoMid)
-            }
-        }
-        
-        // Also clear 60% of preloaded videos that aren't active
-        val inactivePreloadedVideos = preloadedVideos.filter { !activeVideos.containsKey(it) }
-        if (inactivePreloadedVideos.isNotEmpty()) {
-            val preloadedToClear = (inactivePreloadedVideos.size * 0.6).toInt().coerceAtLeast(1)
-            val preloadedToRelease = inactivePreloadedVideos.take(preloadedToClear)
-            
-            Timber.d("VideoManager - Clearing ${preloadedToRelease.size} of ${inactivePreloadedVideos.size} inactive preloaded videos (60%)")
-            preloadedToRelease.forEach { videoMid ->
-                preloadedVideos.remove(videoMid)
-                releaseVideo(videoMid)
-            }
-        }
-    }
+    // Note: clearSignificantInactiveVideos() removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels
 
     /**
      * Attempt to recover a video that has stopped loading with thorough reset

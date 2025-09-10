@@ -540,50 +540,8 @@ object ImageCacheManager {
         }
     }
 
-    /**
-     * Clear 10% of cached images for minimal memory pressure
-     */
-    suspend fun clearMinimalCachedImages(context: Context) = withContext(Dispatchers.IO) {
-        try {
-            // Get all cached image files from disk
-            val cacheDir = File(context.cacheDir, CACHE_DIR)
-            if (!cacheDir.exists()) {
-                return@withContext
-            }
-
-            val cachedFiles = cacheDir.listFiles()?.filter { it.isFile && it.extension == "jpg" }
-            if (cachedFiles.isNullOrEmpty()) {
-                return@withContext
-            }
-
-            // Calculate 10% of cached images to clear
-            val imagesToClear = (cachedFiles.size * 0.1).toInt().coerceAtLeast(1)
-            val imagesToDelete = cachedFiles.take(imagesToClear)
-
-            Timber.w("ImageCacheManager - Minimal memory pressure: clearing ${imagesToDelete.size} of ${cachedFiles.size} cached images (10%)")
-
-            // Clear from memory cache first
-            imagesToDelete.forEach { file ->
-                val mid = file.nameWithoutExtension
-                memoryCache.remove(mid)
-            }
-
-            // Delete from disk cache
-            imagesToDelete.forEach { file ->
-                try {
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error deleting cached image file ${file.name}: $e")
-                }
-            }
-
-            Timber.d("ImageCacheManager - Cleared ${imagesToDelete.size} cached images due to minimal memory pressure")
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error clearing minimal cached images: $e")
-        }
-    }
+    // Note: clearMinimalCachedImages() removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels
 
     /**
      * Clear 30% of cached images for system memory warnings
@@ -631,50 +589,8 @@ object ImageCacheManager {
         }
     }
 
-    /**
-     * Clear 60% of cached images for significant memory pressure
-     */
-    suspend fun clearSignificantCachedImages(context: Context) = withContext(Dispatchers.IO) {
-        try {
-            // Get all cached image files from disk
-            val cacheDir = File(context.cacheDir, CACHE_DIR)
-            if (!cacheDir.exists()) {
-                return@withContext
-            }
-
-            val cachedFiles = cacheDir.listFiles()?.filter { it.isFile && it.extension == "jpg" }
-            if (cachedFiles.isNullOrEmpty()) {
-                return@withContext
-            }
-
-            // Calculate 60% of cached images to clear
-            val imagesToClear = (cachedFiles.size * 0.6).toInt().coerceAtLeast(1)
-            val imagesToDelete = cachedFiles.take(imagesToClear)
-
-            Timber.w("ImageCacheManager - Significant memory pressure: clearing ${imagesToDelete.size} of ${cachedFiles.size} cached images (60%)")
-
-            // Clear from memory cache first
-            imagesToDelete.forEach { file ->
-                val mid = file.nameWithoutExtension
-                memoryCache.remove(mid)
-            }
-
-            // Delete from disk cache
-            imagesToDelete.forEach { file ->
-                try {
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error deleting cached image file ${file.name}: $e")
-                }
-            }
-
-            Timber.d("ImageCacheManager - Cleared ${imagesToDelete.size} cached images due to significant memory pressure")
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error clearing significant cached images: $e")
-        }
-    }
+    // Note: clearSignificantCachedImages() removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels
 
     /**
      * Get memory cache statistics
