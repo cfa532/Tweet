@@ -20,7 +20,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -180,16 +179,6 @@ object VideoManager {
      */
     fun isVideoVisible(videoMid: MimeiId): Boolean = visibleVideos.contains(videoMid)
 
-    /**
-     * Get currently visible videos
-     */
-    fun getVisibleVideos(): Set<MimeiId> = visibleVideos.toSet()
-
-    /**
-     * Get currently preloading videos
-     */
-    fun getPreloadingVideos(): Set<MimeiId> = preloadingVideos.toSet()
-
     // ===== SMART PRELOADING =====
 
     /**
@@ -217,8 +206,8 @@ object VideoManager {
             for (i in startIndex until endIndex) {
                 val tweet = tweets[i]
                 val videoAttachments = tweet.attachments?.filter {
-                    it.type == us.fireshare.tweet.datamodel.MediaType.Video ||
-                            it.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                    it.type == MediaType.Video ||
+                            it.type == MediaType.HLS_VIDEO
                 } ?: emptyList()
 
                 for (attachment in videoAttachments) {
@@ -370,31 +359,6 @@ object VideoManager {
     fun resumeVideo(videoMid: MimeiId, shouldPlay: Boolean = true) {
         videoPlayers[videoMid]?.let { player ->
             player.playWhenReady = shouldPlay
-        }
-    }
-
-    /**
-     * Release a specific video player
-     * Note: This method must be called on the main thread
-     */
-    fun releaseVideo(videoMid: MimeiId) {
-        // Ensure we're on the main thread
-        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - releaseVideo() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
-            throw IllegalStateException("VideoManager.releaseVideo() must be called on the main thread")
-        }
-
-        videoPlayers.remove(videoMid)?.let { player ->
-            try {
-                // Stop playback before releasing
-                player.stop()
-                player.release()
-                activeVideos.remove(videoMid)
-                visibleVideos.remove(videoMid)
-                preloadedVideos.remove(videoMid)
-            } catch (e: Exception) {
-                Timber.e("VideoManager - Error releasing video $videoMid: $e")
-            }
         }
     }
 
@@ -559,6 +523,18 @@ object VideoManager {
                             player.playWhenReady = true
                         }
                     }
+
+                    Player.STATE_BUFFERING -> {
+                        TODO()
+                    }
+
+                    Player.STATE_IDLE -> {
+                        TODO()
+                    }
+
+                    Player.STATE_READY -> {
+                        TODO()
+                    }
                 }
             }
         }
@@ -594,19 +570,8 @@ object VideoManager {
      */
     fun getVideoActiveCount(videoMid: MimeiId): Int = activeVideos.getOrDefault(videoMid, 0)
 
-    /**
-     * Force cleanup of all inactive videos
-     * This can be called when videos stop loading to recover from congestion
-     */
-    fun forceCleanupInactiveVideos() {
-        val inactiveVideos = videoPlayers.keys.filter { !activeVideos.containsKey(it) }
-        if (inactiveVideos.isNotEmpty()) {
-            Timber.w("VideoManager - Force cleaning up ${inactiveVideos.size} inactive videos")
-            inactiveVideos.forEach { videoMid ->
-                releaseVideo(videoMid)
-            }
-        }
-    }
+    // Note: forceCleanupInactiveVideos() removed as it's no longer needed
+    // Modern memory management relies on system memory warnings only
 
     // Note: clearSignificantInactiveVideos() removed as modern Android (API 34+) 
     // only sends UI_HIDDEN and BACKGROUND memory levels

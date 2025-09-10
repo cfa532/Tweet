@@ -211,17 +211,8 @@ fun VideoPreview(
         }
     }
 
-    // Monitor for video loading issues and trigger cleanup if needed
-    LaunchedEffect(hasError, isLoading) {
-        if (hasError && videoMid != null) {
-            // Check if we have too many video players and force cleanup
-            val cachedCount = VideoManager.getCachedVideoCount()
-            if (cachedCount > 8) { // If we have more than 8 cached videos, force cleanup
-                Timber.w("VideoPreview - Too many cached videos ($cachedCount), forcing cleanup")
-                VideoManager.forceCleanupInactiveVideos()
-            }
-        }
-    }
+    // Note: Video loading issue monitoring removed as modern memory management
+    // relies on system memory warnings and automatic cleanup
 
     LaunchedEffect(isMuted) {
         try {
@@ -314,7 +305,7 @@ fun VideoPreview(
                     // Retry after a short delay
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                         delay(2000) // Wait 2 seconds before retry
-                        if (isLoading && !hasError && videoMid != null) {
+                        if (isLoading && !hasError) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url)
                         }
                     }

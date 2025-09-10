@@ -229,7 +229,11 @@ object ImageCacheManager {
     /**
      * Perform download for original quality images (no compression)
      */
-    private suspend fun performDownloadOriginal(imageUrl: String, mid: String, context: Context): Bitmap? =
+    private suspend fun performDownloadOriginal(
+        imageUrl: String,
+        mid: String,
+        context: Context
+    ): Bitmap? =
         withContext(Dispatchers.IO) {
             var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
@@ -246,21 +250,22 @@ object ImageCacheManager {
                 connectionPool[mid] = connection
 
                 inputStream = connection.inputStream
-                
+
                 // Read the image data to check size
                 val imageData = inputStream.readBytes()
                 val imageSize = imageData.size
-                
+
                 // Save original data directly (for original images, always save original data)
                 val dir = File(context.cacheDir, CACHE_DIR)
                 if (!dir.exists()) dir.mkdirs()
                 val file = File(dir, "$mid.jpg")
-                
+
                 FileOutputStream(file).use { out ->
                     out.write(imageData)
                 }
-                Timber.tag("ImageCacheManager").d("Saved original image data (${imageSize} bytes) for: $mid")
-                
+                Timber.tag("ImageCacheManager")
+                    .d("Saved original image data (${imageSize} bytes) for: $mid")
+
                 // Decode bitmap from the data with original quality
                 val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
 
@@ -282,41 +287,6 @@ object ImageCacheManager {
                 inputStream?.close()
                 connection?.disconnect()
                 connectionPool.remove(mid)
-            }
-        }
-
-    /**
-     * Cache original image without compression
-     */
-    private suspend fun cacheOriginalImage(context: Context, mid: String, bitmap: Bitmap) =
-        withContext(Dispatchers.IO) {
-            try {
-                if (bitmap.isRecycled) {
-                    Timber.tag("ImageCacheManager")
-                        .w("Attempting to cache recycled original bitmap for: $mid")
-                    return@withContext
-                }
-
-                // Store original bitmap in memory cache
-                memoryCache.put(mid, bitmap)
-
-                // Save to disk with original quality
-                val dir = File(context.cacheDir, CACHE_DIR)
-                if (!dir.exists()) dir.mkdirs()
-                val file = File(dir, "$mid.jpg")
-
-                try {
-                    // Save with maximum quality
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, FileOutputStream(file))
-                    Timber.tag("ImageCacheManager").d("Cached original image: $mid")
-                } catch (e: IOException) {
-                    Timber.tag("ImageCacheManager").d("Error saving original image to disk: $e")
-                }
-            } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError caching original image: $e")
-                clearMemoryCache()
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error caching original image: $e")
             }
         }
 
@@ -345,7 +315,7 @@ object ImageCacheManager {
             try {
                 // Use separate cache key for original images
                 val originalMid = "${mid}_original"
-                
+
                 // Check if original image is already cached first
                 getCachedImage(context, originalMid)?.let { return@withContext it }
 
@@ -391,21 +361,6 @@ object ImageCacheManager {
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadOriginalImage: $e")
                 null
-            }
-        }
-
-    /**
-     * Preload image in background (lower priority)
-     */
-    suspend fun preloadImage(context: Context, imageUrl: String, mid: String) =
-        withContext(Dispatchers.IO) {
-            try {
-                // Only preload if not already cached
-                if (getCachedImage(context, mid) == null) {
-                    downloadAndCacheImage(context, imageUrl, mid)
-                }
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error preloading image: $e")
             }
         }
 
@@ -543,51 +498,8 @@ object ImageCacheManager {
     // Note: clearMinimalCachedImages() removed as modern Android (API 34+) 
     // only sends UI_HIDDEN and BACKGROUND memory levels
 
-    /**
-     * Clear 30% of cached images for system memory warnings
-     * This is called when the system reports low memory conditions
-     */
-    suspend fun clearPartialCachedImages(context: Context) = withContext(Dispatchers.IO) {
-        try {
-            // Get all cached image files from disk
-            val cacheDir = File(context.cacheDir, CACHE_DIR)
-            if (!cacheDir.exists()) {
-                return@withContext
-            }
-
-            val cachedFiles = cacheDir.listFiles()?.filter { it.isFile && it.extension == "jpg" }
-            if (cachedFiles.isNullOrEmpty()) {
-                return@withContext
-            }
-
-            // Calculate 30% of cached images to clear
-            val imagesToClear = (cachedFiles.size * 0.3).toInt().coerceAtLeast(1)
-            val imagesToDelete = cachedFiles.take(imagesToClear)
-
-            Timber.w("ImageCacheManager - System memory warning: clearing ${imagesToDelete.size} of ${cachedFiles.size} cached images (30%)")
-
-            // Clear from memory cache first
-            imagesToDelete.forEach { file ->
-                val mid = file.nameWithoutExtension
-                memoryCache.remove(mid)
-            }
-
-            // Delete from disk cache
-            imagesToDelete.forEach { file ->
-                try {
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error deleting cached image file ${file.name}: $e")
-                }
-            }
-
-            Timber.d("ImageCacheManager - Cleared ${imagesToDelete.size} cached images due to memory pressure")
-        } catch (e: Exception) {
-            Timber.e("ImageCacheManager - Error clearing partial cached images: $e")
-        }
-    }
+    // Note: clearPartialCachedImages() removed as it's no longer used
+    // Modern Android (API 34+) only sends UI_HIDDEN and BACKGROUND memory levels
 
     // Note: clearSignificantCachedImages() removed as modern Android (API 34+) 
     // only sends UI_HIDDEN and BACKGROUND memory levels
@@ -684,7 +596,8 @@ object ImageCacheManager {
                     .d("Successfully decoded original bitmap from byte array: ${bitmap.width}x${bitmap.height}")
                 correctedBitmap
             } else {
-                Timber.tag("ImageCacheManager").d("Failed to decode original bitmap from byte array")
+                Timber.tag("ImageCacheManager")
+                    .d("Failed to decode original bitmap from byte array")
                 null
             }
         } catch (e: Exception) {
