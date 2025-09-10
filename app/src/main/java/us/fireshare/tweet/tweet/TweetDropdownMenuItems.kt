@@ -1,10 +1,13 @@
 package us.fireshare.tweet.tweet
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +40,17 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+
+/**
+ * Shorten tweet ID by showing first 6 and last 6 characters with ellipsis in the middle
+ */
+private fun shortenTweetId(tweetId: String): String {
+    return if (tweetId.length > 12) {
+        "${tweetId.take(6)}...${tweetId.takeLast(6)}"
+    } else {
+        tweetId
+    }
+}
 
 @Composable
 fun TweetDropdownMenuItems(
@@ -159,13 +173,31 @@ fun TweetDropdownMenuItems(
     DropdownMenuItem(
         modifier = Modifier.alpha(1f),
         onClick = {
+            // Copy tweet ID to clipboard
+            val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clipData = ClipData.newPlainText("Tweet ID", tweet.mid)
+            clipboardManager.setPrimaryClip(clipData)
+            
+            // Show confirmation toast
+            Toast.makeText(
+                context,
+                "Tweet ID copied to clipboard",
+                Toast.LENGTH_SHORT
+            ).show()
+            
             onDismissRequest()
         },
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = "Copy tweet ID",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.width(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = tweet.mid,
-                    fontSize = 12.sp,
+                    text = shortenTweetId(tweet.mid),
                     color = MaterialTheme.colorScheme.secondary
                 )
             }

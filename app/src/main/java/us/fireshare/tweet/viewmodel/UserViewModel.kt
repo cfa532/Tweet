@@ -120,8 +120,9 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Refresh user data to ensure it's up to date (e.g., after profile editing)
+     * Includes retry logic with exponential backoff for network-related failures.
      */
-    suspend fun refreshUserData() {
+    suspend fun refreshUserData(maxRetries: Int = 3) {
         try {
             // If this is the current user's profile, update from appUser
             if (userId == appUser.mid) {
@@ -136,8 +137,8 @@ class UserViewModel @AssistedInject constructor(
                 
                 Timber.tag("refreshUserData").d("Refreshed user data for current user: ${appUser.name}")
             } else {
-                // For other users, fetch fresh data from the server using existing pattern
-                refreshUser()
+                // For other users, fetch fresh data from the server with retry logic
+                refreshUserWithRetry(maxRetries)
                 
                 // Update count variables from the refreshed user data
                 _bookmarksCount.value = user.value.bookmarksCount
@@ -153,6 +154,43 @@ class UserViewModel @AssistedInject constructor(
     
         } catch (e: Exception) {
             Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
+        }
+    }
+
+    /**
+     * Refresh user data with retry logic
+     */
+    private suspend fun refreshUserWithRetry(maxRetries: Int = 3) {
+        repeat(maxRetries) { attempt ->
+            try {
+                val refreshedUser = getUser(userId, maxRetries = 1) // Single attempt per retry
+                if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    _user.value = refreshedUser
+                    return // Success, exit retry loop
+                } else {
+                    Timber.tag("refreshUserWithRetry").w("Failed to fetch valid user data for $userId (attempt ${attempt + 1})")
+                }
+            } catch (e: Exception) {
+                Timber.tag("refreshUserWithRetry").e(e, "Error refreshing user $userId (attempt ${attempt + 1})")
+                
+                // Check if it's a network-related error that should be retried
+                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.message?.contains("connection", ignoreCase = true) == true ||
+                        e.message?.contains("unreachable", ignoreCase = true) == true
+                
+                if (!isNetworkError) {
+                    // Don't retry for non-network errors
+                    return
+                }
+            }
+            
+            // If this isn't the last attempt, wait before retrying
+            if (attempt < maxRetries - 1) {
+                val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
+                Timber.tag("refreshUserWithRetry").d("Retrying user refresh in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                kotlinx.coroutines.delay(delayMs)
+            }
         }
     }
 
@@ -539,7 +577,7 @@ class UserViewModel @AssistedInject constructor(
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
                 val loadedUser =
-                    getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                    getUser(userId, maxRetries = 3) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 _user.value = loadedUser
 
                 // Initialize count variables from user data
@@ -569,7 +607,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun refreshUser() {
-        getUser(userId)?.let {
+        getUser(userId, maxRetries = 3)?.let {
             _user.value = it
         }
     }
@@ -812,12 +850,14 @@ class UserViewModel @AssistedInject constructor(
     }
 
 
-    suspend fun login(context: Context, callback: () -> Unit) {
+    suspend fun login(context: Context, callback: () -> Unit, maxRetries: Int = 3) {
         isLoading.value = true
+        loginError.value = "" // Clear previous errors
+        
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
         ) {
-            val ret = HproseInstance.login(username.value!!, password.value, context)
+            val ret = HproseInstance.login(username.value!!, password.value, context, maxRetries)
 
             if (ret.second != null) {
                 // something wrong

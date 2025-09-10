@@ -313,38 +313,78 @@ object HproseInstance {
      * There are two steps for a guest user to login. First, find UserID given username.
      * Second, find the node which has this user's data, and logon to that node.
      * Finally update the baseUrl of the current user with the new ip of the user's node.
+     * Includes retry logic with exponential backoff for network-related failures.
      * */
     suspend fun login(
         username: String,
         password: String,
-        context: Context
+        context: Context,
+        maxRetries: Int = 3
     ): Pair<User?, String?> {
-        return try {
-            val userId = getUserId(username) ?: return Pair(
-                null,
-                context.getString(R.string.login_getuserid_fail)
-            )
-            val user =
-                getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
-            val entry = "login"
-            val params = mapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "username" to username,
-                "password" to password
-            )
-            val response =
-                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+        var lastError: String? = null
+        
+        repeat(maxRetries) { attempt ->
+            try {
+                val userId = getUserId(username) ?: return Pair(
+                    null,
+                    context.getString(R.string.login_getuserid_fail)
+                )
+                val user =
+                    getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
+                val entry = "login"
+                val params = mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "username" to username,
+                    "password" to password
+                )
+                val response =
+                    user.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            when (response?.get("status") as? String) {
-                "success" -> Pair(user, null)
-                "failure" -> Pair(null, response["reason"] as? String ?: "Unknown error occurred")
-                else -> Pair(null, context.getString(R.string.login_error))
+                when (response?.get("status") as? String) {
+                    "success" -> return Pair(user, null)
+                    "failure" -> {
+                        val errorMsg = response["reason"] as? String ?: "Unknown error occurred"
+                        lastError = errorMsg
+                        // Don't retry for authentication failures (wrong password, etc.)
+                        if (errorMsg.contains("password", ignoreCase = true) || 
+                            errorMsg.contains("username", ignoreCase = true) ||
+                            errorMsg.contains("invalid", ignoreCase = true)) {
+                            return Pair(null, errorMsg)
+                        }
+                        // For other failures, continue to retry
+                    }
+                    else -> {
+                        lastError = context.getString(R.string.login_error)
+                        // Continue to retry for unknown errors
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = context.getString(R.string.login_error)
+                Timber.tag("Login").e(e, "Login attempt ${attempt + 1} failed")
+                
+                // Check if it's a network-related error that should be retried
+                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.message?.contains("connection", ignoreCase = true) == true ||
+                        e.message?.contains("unreachable", ignoreCase = true) == true
+                
+                if (!isNetworkError) {
+                    // Don't retry for non-network errors
+                    return Pair(null, lastError)
+                }
             }
-        } catch (e: Exception) {
-            Timber.tag("Login").e(e)
-            Pair(null, context.getString(R.string.login_error))
+            
+            // If this isn't the last attempt, wait before retrying
+            if (attempt < maxRetries - 1) {
+                val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
+                Timber.tag("Login").d("Retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                kotlinx.coroutines.delay(delayMs)
+            }
         }
+        
+        // All retries failed
+        return Pair(null, lastError ?: context.getString(R.string.login_error))
     }
 
     /**
@@ -1238,8 +1278,9 @@ object HproseInstance {
      * 5. Update cache with fetched user data
      *
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
+     * Includes retry logic with exponential backoff for network-related failures.
      */
-    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl): User? {
+    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3): User? {
         // Check if user is blacklisted
         if (BlackList.isBlacklisted(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")
@@ -1255,61 +1296,152 @@ object HproseInstance {
         // Step 2: Create user instance, which was either expired or not found in cache.
         val user = getUserInstance(userId)
 
-        // Step 3: Determine the base URL to use
+        // Step 3: Determine the base URL to use with retry logic
         val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
-            // Get provider IP for the user
-            val providerIP = getProviderIP(userId) ?: return null
-            "http://$providerIP"
+            // Get provider IP for the user with retry logic
+            getProviderIPWithRetry(userId, maxRetries)?.let { "http://$it" } ?: return null
         } else {
             baseUrl
         }
 
-        // Step 4: Set the base URL and fetch user data
+        // Step 4: Set the base URL and fetch user data with retry logic
         user.baseUrl = finalBaseUrl
-        updateUserFromServer(user)  // user object is updated in this function
+        val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
 
-        // Step 5: Cache the user and return
-        TweetCacheManager.saveUser(user)
-        return user
+        // Step 5: Only cache the user if fetch was successful and user data is valid
+        if (fetchSuccess && user.mid.isNotEmpty() && user.name != null) {
+            TweetCacheManager.saveUser(user)
+            return user
+        } else {
+            Timber.tag("getUser").w("Failed to fetch valid user data for $userId, not caching")
+            return null
+        }
     }
 
     /**
-     * Update user data from server using "get_user" entry
+     * Update user data from server using "get_user" entry with retry logic
+     * @return true if user data was successfully fetched and updated, false otherwise
      */
-    private suspend fun updateUserFromServer(user: User) {
-        val entry = "get_user"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "userid" to user.mid
-        )
-        try {
-            val response = user.hproseService?.runMApp<Any>(entry, params)
+    private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3): Boolean {
+        repeat(maxRetries) { attempt ->
+            try {
+                val entry = "get_user"
+                val params = mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "userid" to user.mid
+                )
+                
+                val response = user.hproseService?.runMApp<Any>(entry, params)
 
-            when (response) {
-                is String -> {
-                    // User data not found on this node, but IP of a valid provider is returned.
-                    // Provider IP received, update baseUrl and retry
-                    val providerIP = response
-                    user.baseUrl = "http://$providerIP"
-                    user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
+                when (response) {
+                    is String -> {
+                        // User data not found on this node, but IP of a valid provider is returned.
+                        // Provider IP received, update baseUrl and retry
+                        val providerIP = response
+                        user.baseUrl = "http://$providerIP"
+                        user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
+                            // Record successful access
+                            BlackList.recordSuccess(user.mid)
+                            user.from(userData)
+                            // Validate that user data is not null or empty
+                            if (user.mid.isNotEmpty() && user.name != null) {
+                                return true // Success, exit retry loop
+                            } else {
+                                Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")
+                            }
+                        }
+                    }
+
+                    is Map<*, *> -> {
                         // Record successful access
                         BlackList.recordSuccess(user.mid)
-                        user.from(userData)
+                        user.from(response as Map<String, Any>)
+                        // Validate that user data is not null or empty
+                        if (user.mid.isNotEmpty() && user.name != null) {
+                            return true // Success, exit retry loop
+                        } else {
+                            Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")
+                        }
+                    }
+                    
+                    null -> {
+                        Timber.tag("updateUserFromServer").w("Null response received for user ${user.mid}")
                     }
                 }
-
-                is Map<*, *> -> {
-                    // Record successful access
-                    BlackList.recordSuccess(user.mid)
-                    user.from(response as Map<String, Any>)
+            } catch (e: Exception) {
+                // Record failed access
+                BlackList.recordFailure(user.mid)
+                Timber.tag("updateUserFromServer").e("${e.message} ${user.mid} (attempt ${attempt + 1})")
+                
+                // Check if it's a network-related error that should be retried
+                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.message?.contains("connection", ignoreCase = true) == true ||
+                        e.message?.contains("unreachable", ignoreCase = true) == true
+                
+                if (!isNetworkError) {
+                    // Don't retry for non-network errors
+                    return false
                 }
             }
-        } catch (e: Exception) {
-            // Record failed access
-            BlackList.recordFailure(user.mid)
-            Timber.tag("updateUserFromServer").e("${e.message} ${user.mid}")
+            
+            // If this isn't the last attempt, wait before retrying
+            if (attempt < maxRetries - 1) {
+                val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
+                Timber.tag("updateUserFromServer").d("Retrying user fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                kotlinx.coroutines.delay(delayMs)
+            }
         }
+        return false // All retries failed
+    }
+
+    /**
+     * Update user data from server using "get_user" entry (legacy method for backward compatibility)
+     */
+    private suspend fun updateUserFromServer(user: User) {
+        updateUserFromServerWithRetry(user, 1) // Single attempt for legacy calls
+    }
+
+    /**
+     * Get provider IP for a user with retry logic
+     */
+    private suspend fun getProviderIPWithRetry(userId: MimeiId, maxRetries: Int = 3): String? {
+        repeat(maxRetries) { attempt ->
+            try {
+                val entry = "get_provider_ip"
+                val params = mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "mid" to userId
+                )
+                val response = appUser.hproseService?.runMApp<String>(entry, params)
+                if (response != null) {
+                    return response
+                }
+            } catch (e: Exception) {
+                Timber.tag("getProviderIP").e("Error getting provider IP for user: $userId (attempt ${attempt + 1})")
+                
+                // Check if it's a network-related error that should be retried
+                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.message?.contains("connection", ignoreCase = true) == true ||
+                        e.message?.contains("unreachable", ignoreCase = true) == true
+                
+                if (!isNetworkError) {
+                    // Don't retry for non-network errors
+                    return null
+                }
+            }
+            
+            // If this isn't the last attempt, wait before retrying
+            if (attempt < maxRetries - 1) {
+                val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
+                Timber.tag("getProviderIP").d("Retrying provider IP fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                kotlinx.coroutines.delay(delayMs)
+            }
+        }
+        return null
     }
 
     /**

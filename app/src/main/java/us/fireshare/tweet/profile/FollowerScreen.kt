@@ -140,6 +140,11 @@ fun FollowerItem(
         }
     }
 
+    // Don't render if user is null or has null username
+    if (user.mid.isEmpty() || user.username.isNullOrEmpty()) {
+        return
+    }
+
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 1.dp),
         thickness = 1.dp,

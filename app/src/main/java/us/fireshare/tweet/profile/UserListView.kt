@@ -109,11 +109,15 @@ fun UserListView(
                 val initialUserIds = fetchUserIds(0)
                 Timber.tag("UserListView").d("fetchUserIds(0) returned: ${initialUserIds.size} user IDs")
                 if (initialUserIds.isNotEmpty()) {
+                    // Filter out invalid user IDs (null, empty, or guest IDs)
+                    val validUserIds = initialUserIds.filter { userId ->
+                        userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
+                    }
                     // Ensure no duplicates in initial load
-                    val uniqueInitialUserIds = initialUserIds.distinct()
+                    val uniqueInitialUserIds = validUserIds.distinct()
                     allUserIds = uniqueInitialUserIds
                     displayedUserCount = minOf(uniqueInitialUserIds.size, TW_CONST.USER_BATCH_SIZE)
-                    Timber.tag("UserListView").d("Initial load completed: fetched ${uniqueInitialUserIds.size} unique user IDs, displaying $displayedUserCount")
+                    Timber.tag("UserListView").d("Initial load completed: fetched ${initialUserIds.size} user IDs, filtered to ${validUserIds.size} valid IDs, ${uniqueInitialUserIds.size} unique user IDs, displaying $displayedUserCount")
                 } else {
                     serverDepleted = true
                     Timber.tag("UserListView").d("No initial user IDs found, server depleted")
@@ -209,12 +213,16 @@ fun UserListView(
                             serverDepleted = true
                             Timber.tag("UserListView").d("No more user IDs available, server depleted")
                         } else {
+                            // Filter out invalid user IDs (null, empty, or guest IDs)
+                            val validNewUserIds = newUserIds.filter { userId ->
+                                userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
+                            }
                             // Add new user IDs to the list, ensuring no duplicates
-                            val uniqueNewUserIds = newUserIds.filter { newId -> !allUserIds.contains(newId) }
+                            val uniqueNewUserIds = validNewUserIds.filter { newId -> !allUserIds.contains(newId) }
                             if (uniqueNewUserIds.isNotEmpty()) {
                                 allUserIds = allUserIds + uniqueNewUserIds
                                 displayedUserCount = minOf(displayedUserCount + TW_CONST.USER_BATCH_SIZE, allUserIds.size)
-                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs, total: ${allUserIds.size}, displayed: $displayedUserCount")
+                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs (from ${newUserIds.size} fetched, ${validNewUserIds.size} valid), total: ${allUserIds.size}, displayed: $displayedUserCount")
                             } else {
                                 // All new IDs were duplicates, mark as depleted
                                 serverDepleted = true

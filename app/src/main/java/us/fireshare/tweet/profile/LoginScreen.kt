@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -135,9 +136,9 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         Button(
             onClick = {
                 viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    viewModel.login(context) {
+                    viewModel.login(context, {
                         popBack()
-                    }
+                    })
                 } },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
             enabled = !isLoading    // disable Login button during loading
@@ -155,6 +156,27 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = loginError, color = Color.Red)
+        
+        // Show retry button if there's an error and not currently loading
+        if (loginError.isNotEmpty() && !isLoading) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        viewModel.login(context, {
+                            popBack()
+                        }, maxRetries = 3)
+                    }
+                },
+                modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFF9800) // Orange color
+                )
+            ) {
+                Text(text = "Retry Login", color = Color.White)
+            }
+        }
+        
         Spacer(modifier = Modifier.height(32.dp))
 
         val annotatedText = buildAnnotatedString {

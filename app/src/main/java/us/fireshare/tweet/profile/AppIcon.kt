@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -67,7 +68,8 @@ fun AppIcon() {
 fun UserAvatar(
     user: User,
     size: Int = 40,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
     val mid = user.avatar ?: ""
@@ -130,57 +132,44 @@ fun UserAvatar(
     } else if (!loadState.avatarUrl.isNullOrEmpty() && !loadState.hasError) {
         // Show loading state or try to load from URL
         if (loadState.isLoading) {
-            Box(
-                modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Loading...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            // Fallback to initials
-            Box(
+            // Show manyone.png icon while loading
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name?.firstOrNull()?.uppercase() ?: "U",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            )
+        } else {
+            // Fallback to manyone.png icon
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
+                modifier = modifier
+            )
         }
     } else {
-        // Show default system icon when avatar is null or empty
+        // Show default system icon with 50% gray color when avatar is null or empty
         if (user.avatar.isNullOrEmpty() || mid.isEmpty()) {
             // Use manyone.png as default system icon
             Image(
                 painter = painterResource(id = R.drawable.manyone),
                 contentDescription = stringResource(R.string.user_avatar),
                 contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
             )
         } else {
-            // Show fallback with user initials for other cases (like loading errors)
-            Box(
+            // Show fallback manyone.png icon for other cases (like loading errors)
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name?.firstOrNull()?.uppercase() ?: "U",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            )
         }
     }
 }
