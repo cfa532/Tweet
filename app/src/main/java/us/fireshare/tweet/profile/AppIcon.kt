@@ -48,7 +48,7 @@ data class AvatarLoadState(
 @Composable
 fun AppIcon() {
     Image(
-        painter = painterResource(R.drawable.ic_app_logo),
+        painter = painterResource(R.drawable.ic_splash),
                         contentDescription = stringResource(R.string.app_icon),
         modifier = Modifier
             .size(36.dp)
