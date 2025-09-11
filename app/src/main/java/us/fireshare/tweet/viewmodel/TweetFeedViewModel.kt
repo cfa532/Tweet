@@ -47,16 +47,65 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
+    
+    // Track if ViewModel has been initialized to prevent race conditions
+    private var isInitialized = false
 
     init {
-        // Load initial tweets when ViewModel is created
-        viewModelScope.launch(Dispatchers.IO) {
-            refresh(0)
-            initState.value = false
-        }
-
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
+        
+        // Don't load tweets immediately - wait for explicit initialization
+        // This prevents race conditions with HproseInstance initialization
+    }
+    
+    /**
+     * Initialize the ViewModel after HproseInstance is ready.
+     * This should be called from the UI layer after app initialization completes.
+     */
+    fun initialize() {
+        if (!isInitialized) {
+            isInitialized = true
+            viewModelScope.launch(IO) {
+                // Ensure appUser is properly initialized before loading tweets
+                if (appUser.baseUrl != null && appUser.followingList != null) {
+                    refresh(0)
+                } else {
+                    // If appUser is not ready, wait a bit and retry
+                    kotlinx.coroutines.delay(500)
+                    if (appUser.baseUrl != null && appUser.followingList != null) {
+                        refresh(0)
+                    } else {
+                        Timber.tag("TweetFeedViewModel").w("AppUser not properly initialized, skipping initial tweet load")
+                    }
+                }
+                initState.value = false
+            }
+        }
+    }
+    
+    /**
+     * Reset the ViewModel state for logout or user changes.
+     * This clears all data and allows re-initialization.
+     */
+    fun reset() {
+        isInitialized = false
+        
+        // Clear cached tweets to prevent stale data
+        tweets.value.forEach {
+            if (it.mid != null) {   // deal with corrupted data
+                dao.deleteCachedTweet(it.mid)
+            }
+        }
+        
+        _tweets.value = emptyList()
+        initState.value = true
+        
+        // Re-initialize after a short delay to ensure appUser state is updated
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(100) // Small delay to ensure state consistency
+            initialize()
+        }
     }
 
     /**
@@ -87,7 +136,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         if (appUser.isGuest()) {
             // show tweets of administrator only
-            val defaultUserId = getAlphaIds().first()
+            val alphaIds = getAlphaIds()
+            if (alphaIds.isEmpty()) {
+                Timber.tag("TweetFeedViewModel").w("No alpha IDs configured, returning empty list for guest user")
+                return emptyList()
+            }
+            val defaultUserId = alphaIds.first()
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
@@ -251,14 +305,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    fun reset() {
-        tweets.value.forEach {
-            if (it.mid != null) {   // deal with corrupted data
-                dao.deleteCachedTweet(it.mid)
-            }
-        }
-        _tweets.value = emptyList()
-    }
 
     /**
      * Remove a tweet from the list when it becomes unavailable (e.g., original tweet deleted)

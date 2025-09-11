@@ -41,6 +41,7 @@ import us.fireshare.tweet.datamodel.UserContentType
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId,
+    private val tweetFeedViewModel: TweetFeedViewModel
 ): ViewModel() {
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
@@ -904,6 +905,10 @@ class UserViewModel @AssistedInject constructor(
         _tweets.value = emptyList()
         _pinnedTweets.value = emptyList()
         dao.clearAllCachedTweets()
+        
+        // Reset TweetFeedViewModel to prevent stale data and race conditions
+        tweetFeedViewModel.reset()
+        
         popBack()
     }
 

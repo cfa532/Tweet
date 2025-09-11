@@ -63,6 +63,12 @@ fun TweetFeedScreen(
         TabItem(title = context.getString(R.string.recommendation))
     )
 
+    // Initialize the ViewModel when the screen is first displayed
+    // This ensures HproseInstance is ready before tweet loading begins
+    LaunchedEffect(Unit) {
+        viewModel.initialize()
+    }
+
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()

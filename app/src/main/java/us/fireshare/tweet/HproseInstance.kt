@@ -521,12 +521,21 @@ object HproseInstance {
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
     ): List<Tweet?> {
+        val alphaIds = getAlphaIds()
+        val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
+        
+        // For guest users, if no alpha IDs are configured, return empty list
+        if (user.isGuest() && alphaIds.isEmpty()) {
+            Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user, returning empty list")
+            return emptyList()
+        }
+        
         val params = mutableMapOf(
             "aid" to appId,
             "ver" to "last",
             "pn" to pageNumber,
             "ps" to pageSize,
-            "userid" to if (!user.isGuest()) user.mid else getAlphaIds().first(),
+            "userid" to if (!user.isGuest()) user.mid else userIdForGuest,
             "appuserid" to appUser.mid
         )
         if (entry == "update_following_tweets") {
