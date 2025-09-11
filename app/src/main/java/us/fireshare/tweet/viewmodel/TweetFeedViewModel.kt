@@ -68,12 +68,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             isInitialized = true
             viewModelScope.launch(IO) {
                 // Ensure appUser is properly initialized before loading tweets
-                if (appUser.baseUrl != null && appUser.followingList != null) {
+                // Only check baseUrl since getTweetFeed doesn't require followingList
+                if (appUser.baseUrl != null) {
                     refresh(0)
                 } else {
                     // If appUser is not ready, wait a bit and retry
                     kotlinx.coroutines.delay(500)
-                    if (appUser.baseUrl != null && appUser.followingList != null) {
+                    if (appUser.baseUrl != null) {
                         refresh(0)
                     } else {
                         Timber.tag("TweetFeedViewModel").w("AppUser not properly initialized, skipping initial tweet load")
