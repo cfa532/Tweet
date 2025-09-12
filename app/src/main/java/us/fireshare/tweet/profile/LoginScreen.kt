@@ -133,15 +133,33 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         val context = LocalContext.current
+        val hasError = loginError.isNotEmpty()
+        
         Button(
             onClick = {
                 viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    viewModel.login(context, {
-                        popBack()
-                    })
-                } },
+                    if (hasError) {
+                        // Retry login with max retries when there's an error
+                        viewModel.login(context, {
+                            popBack()
+                        }, maxRetries = 3)
+                    } else {
+                        // Normal login attempt
+                        viewModel.login(context, {
+                            popBack()
+                        })
+                    }
+                }
+            },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
-            enabled = !isLoading    // disable Login button during loading
+            enabled = !isLoading,    // disable button during loading
+            colors = if (hasError) {
+                ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFF9800) // Orange color for retry
+                )
+            } else {
+                ButtonDefaults.buttonColors() // Default color for login
+            }
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -150,32 +168,15 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                     strokeWidth = 2.dp
                 )
             } else {
-                Text(text = stringResource(R.string.login))     // Login
+                Text(
+                    text = if (hasError) "Retry Login" else stringResource(R.string.login),
+                    color = Color.White
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = loginError, color = Color.Red)
-        
-        // Show retry button if there's an error and not currently loading
-        if (loginError.isNotEmpty() && !isLoading) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    viewModel.viewModelScope.launch(Dispatchers.IO) {
-                        viewModel.login(context, {
-                            popBack()
-                        }, maxRetries = 3)
-                    }
-                },
-                modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF9800) // Orange color
-                )
-            ) {
-                Text(text = "Retry Login", color = Color.White)
-            }
-        }
         
         Spacer(modifier = Modifier.height(32.dp))
 

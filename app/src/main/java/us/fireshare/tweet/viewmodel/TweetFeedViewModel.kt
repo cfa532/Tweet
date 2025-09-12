@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
+import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -381,6 +382,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         )
         val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
             .setInputData(data)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
             .build()
 
         val workManager = WorkManager.getInstance(context)

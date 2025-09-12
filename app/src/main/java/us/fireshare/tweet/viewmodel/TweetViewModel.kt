@@ -9,6 +9,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -237,6 +238,11 @@ class TweetViewModel @AssistedInject constructor(
         )
         val uploadRequest = OneTimeWorkRequest.Builder(UploadCommentWorker::class.java)
             .setInputData(data)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
             .build()
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)

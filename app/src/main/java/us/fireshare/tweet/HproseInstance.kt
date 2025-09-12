@@ -1318,7 +1318,7 @@ object HproseInstance {
         val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
 
         // Step 5: Only cache the user if fetch was successful and user data is valid
-        if (fetchSuccess && user.mid.isNotEmpty() && user.name != null) {
+        if (fetchSuccess && user.mid.isNotEmpty() && user.username != null) {
             TweetCacheManager.saveUser(user)
             return user
         } else {
@@ -1354,7 +1354,7 @@ object HproseInstance {
                             BlackList.recordSuccess(user.mid)
                             user.from(userData)
                             // Validate that user data is not null or empty
-                            if (user.mid.isNotEmpty() && user.name != null) {
+                            if (user.mid.isNotEmpty() && user.username != null) {
                                 return true // Success, exit retry loop
                             } else {
                                 Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")
@@ -1367,7 +1367,7 @@ object HproseInstance {
                         BlackList.recordSuccess(user.mid)
                         user.from(response as Map<String, Any>)
                         // Validate that user data is not null or empty
-                        if (user.mid.isNotEmpty() && user.name != null) {
+                        if (user.mid.isNotEmpty() && user.username != null) {
                             return true // Success, exit retry loop
                         } else {
                             Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")

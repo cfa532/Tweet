@@ -34,6 +34,7 @@ class UploadCommentWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        val runAttemptCount = runAttemptCount
         return try {
             val tweetId = inputData.getString("tweetId") ?: return Result.failure()
             val authorId = inputData.getString("authorId") ?: return Result.failure()
@@ -66,7 +67,10 @@ class UploadCommentWorker @AssistedInject constructor(
             }
             if (attachmentUris.size != attachments.size) {
                 Timber.tag("UploadCommentWorker").e("Attachments upload failure")
-                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Attachments upload failure"))
+                // Only show toast on final attempt
+                if (runAttemptCount >= 3) {
+                    TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Attachments upload failure"))
+                }
                 return Result.failure()
             }
             val comment = Tweet(
@@ -93,12 +97,18 @@ class UploadCommentWorker @AssistedInject constructor(
                 }
                 return Result.success()
             } else {
-                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed"))
+                // Only show toast on final attempt
+                if (runAttemptCount >= 3) {
+                    TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed"))
+                }
                 return Result.failure()
             }
         } catch (e: Exception) {
             Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
-            TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed: ${e.message}"))
+            // Only show toast on final attempt
+            if (runAttemptCount >= 3) {
+                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed: ${e.message}"))
+            }
             Result.failure()
         }
     }
@@ -110,6 +120,7 @@ class UploadTweetWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        val runAttemptCount = runAttemptCount
         return try {
             val tweetContent = inputData.getString("tweetContent")
             val attachmentUris =
@@ -157,7 +168,13 @@ class UploadTweetWorker @AssistedInject constructor(
                             Timber.tag("UploadTweetWorker").d("Added attachment to list: ${result.mid}")
                         } else {
                             Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair - null result")
-                            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
+                            // Only show toast on final attempt and clean up incomplete upload
+                            if (runAttemptCount >= 3) {
+                                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
+                                // Clean up incomplete upload tracking on final failure
+                                val workId = id.toString()
+                                HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                            }
                             return Result.failure()
                         }
                     }
@@ -165,7 +182,13 @@ class UploadTweetWorker @AssistedInject constructor(
 
                 if (attachmentUris.size != attachments.size) {
                     Timber.tag("UploadTweetWorker").e("Attachments upload failure")
-                    TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachments upload failure"))
+                    // Only show toast on final attempt and clean up incomplete upload
+                    if (runAttemptCount >= 3) {
+                        TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachments upload failure"))
+                        // Clean up incomplete upload tracking on final failure
+                        val workId = id.toString()
+                        HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                    }
                     return Result.failure()
                 }
 
@@ -186,14 +209,26 @@ class UploadTweetWorker @AssistedInject constructor(
                     
                     return Result.success()
                 }
-                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))
+                // Only show toast on final attempt and clean up incomplete upload
+                if (runAttemptCount >= 3) {
+                    TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))
+                    // Clean up incomplete upload tracking on final failure
+                    val workId = id.toString()
+                    HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                }
                 Result.failure()
             } finally {
                 wakeLock.release()
             }
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
-            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: ${e.message}"))
+            // Only show toast on final attempt and clean up incomplete upload
+            if (runAttemptCount >= 3) {
+                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: ${e.message}"))
+                // Clean up incomplete upload tracking on final failure
+                val workId = id.toString()
+                HproseInstance.removeIncompleteUpload(applicationContext, workId)
+            }
             return Result.failure()
         }
     }

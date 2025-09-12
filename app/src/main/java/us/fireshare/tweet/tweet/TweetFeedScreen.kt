@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -181,11 +182,18 @@ fun TweetFeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (index) {
-                            0 -> FollowingsTweet(
-                                parentEntry,
-                                scrollBehavior,
-                                viewModel,
-                                onScrollStateChange = { scrollState = it })
+                            0 -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    FollowingsTweet(
+                                        parentEntry,
+                                        scrollBehavior,
+                                        viewModel,
+                                        onScrollStateChange = { scrollState = it })
+                                } else {
+                                    // Fallback for API < 30
+                                    Text("Followings not available on this Android version")
+                                }
+                            }
 
                             1 -> RecommendedTweetScreen()
                         }

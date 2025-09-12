@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.BackoffPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -177,6 +179,11 @@ class ChatViewModel @AssistedInject constructor(
                     "sessionId" to sessionId,
                     "messageTimestamp" to System.currentTimeMillis()
                 )
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
             )
             .build()
 

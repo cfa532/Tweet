@@ -26,9 +26,13 @@ class SendChatMessageWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        val runAttemptCount = runAttemptCount
         val receiptId = inputData.getString("receiptId") ?: run {
             Timber.tag("SendChatMessageWorker").e("Missing receiptId in input data")
-            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Missing recipient ID"))
+            // Only show toast on final attempt
+            if (runAttemptCount >= 3) {
+                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Missing recipient ID"))
+            }
             return Result.failure()
         }
         
@@ -62,12 +66,18 @@ class SendChatMessageWorker @AssistedInject constructor(
                             .d("File uploaded successfully: ${uploadedFile.mid}")
                     } else {
                         Timber.tag("SendChatMessageWorker").e("Failed to upload file - uploadToIPFS returned null")
-                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment"))
+                        // Only show toast on final attempt
+                        if (runAttemptCount >= 3) {
+                            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment"))
+                        }
                         return Result.failure()
                     }
                 } catch (e: Exception) {
                     Timber.tag("SendChatMessageWorker").e(e, "Error uploading file: $attachmentUri")
-                    TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment: ${e.message}"))
+                    // Only show toast on final attempt
+                    if (runAttemptCount >= 3) {
+                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment: ${e.message}"))
+                    }
                     return Result.failure()
                 }
             }
@@ -123,7 +133,10 @@ class SendChatMessageWorker @AssistedInject constructor(
             }
         } catch (e: Exception) {
             Timber.tag("SendChatMessageWorker").e(e, "Unexpected error in doWork")
-            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}"))
+            // Only show toast on final attempt
+            if (runAttemptCount >= 3) {
+                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}"))
+            }
             Result.failure()
         } finally {
             try {
