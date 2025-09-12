@@ -873,6 +873,9 @@ class UserViewModel @AssistedInject constructor(
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 refreshFollowingsAndFans()
+                
+                // Reset and refresh tweet feed after successful login
+                tweetFeedViewModel.reset()
 
                 // Show success Toast message on main thread
                 withContext(Dispatchers.Main) {
