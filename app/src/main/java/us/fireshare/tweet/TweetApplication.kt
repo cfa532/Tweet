@@ -143,6 +143,8 @@ class ReleaseTree : Timber.Tree() {
         if (priority == Log.VERBOSE || priority == Log.DEBUG || priority == Log.INFO) {
             return
         }
+        // Error messages are no longer sent back to server
+        // Only log locally for debugging purposes
         val logEntry = JSONObject().apply {
             put("timestamp", System.currentTimeMillis())
             put("level", priorityToString(priority))
@@ -150,18 +152,6 @@ class ReleaseTree : Timber.Tree() {
             put("message", message)
             t?.let { put("exception", it.toString()) }
         }
-        CoroutineScope(IO).launch {
-            HproseInstance.logging(logEntry.toString())
-        }
-
-        // Log to your crash reporting tool or any other logging service
-        // For example, using Firebase Crashlytics:
-        // FirebaseCrashlytics.getInstance().log(message)
-        // if (t != null) {
-        //     FirebaseCrashlytics.getInstance().recordException(t)
-        // }
-
-        // You can also log to a file or a remote server here
     }
 
     private fun priorityToString(priority: Int): String {
