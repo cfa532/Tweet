@@ -72,53 +72,35 @@ class LocalVideoProcessingService(
                             is ZipCompressor.ZipCompressionResult.Success -> {
                                 Timber.tag(TAG).d("Zip compression completed successfully")
                                 
-                                // Step 3: Upload zip to /process-zip endpoint
+                                // Step 3: Upload zip to /process-zip endpoint and poll for completion
                                 Timber.tag(TAG).d("Step 3: Uploading zip to /process-zip endpoint")
-                                val uploadResult = zipUploadService.uploadZipFile(
+                                val processingResult = zipUploadService.uploadZipFile(
                                     zipResult.zipFile,
                                     fileName,
                                     fileTimestamp,
                                     referenceId
                                 )
                                 
-                                when (uploadResult) {
-                                    is ZipUploadService.ZipUploadResult.Success -> {
-                                        Timber.tag(TAG).d("Zip upload successful, job ID: ${uploadResult.jobId}")
+                                when (processingResult) {
+                                    is ZipUploadService.ZipProcessingResult.Success -> {
+                                        Timber.tag(TAG).d("Video processing completed successfully: ${processingResult.cid}")
                                         
-                                        // Step 4: Poll for processing completion
-                                        Timber.tag(TAG).d("Step 4: Polling for processing completion")
-                                        val processingResult = zipUploadService.pollZipProcessingStatus(
-                                            uploadResult.jobId,
-                                            uploadResult.baseUrl,
-                                            fileName,
-                                            fileTimestamp
+                                        // Get aspect ratio for the result
+                                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+                                        
+                                        VideoProcessingResult.Success(
+                                            MimeiFileType(
+                                                processingResult.cid,
+                                                MediaType.HLS_VIDEO,
+                                                0L, // File size not provided
+                                                fileName,
+                                                fileTimestamp,
+                                                aspectRatio
+                                            )
                                         )
-                                        
-                                        when (processingResult) {
-                                            is ZipUploadService.ZipProcessingResult.Success -> {
-                                                Timber.tag(TAG).d("Video processing completed successfully: ${processingResult.cid}")
-                                                
-                                                // Get aspect ratio for the result
-                                                val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-                                                
-                                                VideoProcessingResult.Success(
-                                                    MimeiFileType(
-                                                        processingResult.cid,
-                                                        MediaType.HLS_VIDEO,
-                                                        0L, // File size not provided
-                                                        fileName,
-                                                        fileTimestamp,
-                                                        aspectRatio
-                                                    )
-                                                )
-                                            }
-                                            is ZipUploadService.ZipProcessingResult.Error -> {
-                                                VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
-                                            }
-                                        }
                                     }
-                                    is ZipUploadService.ZipUploadResult.Error -> {
-                                        VideoProcessingResult.Error("Upload failed: ${uploadResult.message}")
+                                    is ZipUploadService.ZipProcessingResult.Error -> {
+                                        VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
                                     }
                                 }
                             }
