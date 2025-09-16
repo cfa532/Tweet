@@ -47,6 +47,7 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
+import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
@@ -1607,20 +1608,24 @@ object HproseInstance {
             }
         }
 
-        // For video files, try uploading to netdisk first
+        // For video files, use local processing only (no fallback for testing)
         if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video || mediaType == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) {
-            Timber.tag("uploadToIPFS").d("Detected video file, attempting netdisk upload first")
+            Timber.tag("uploadToIPFS").d("Detected video file, attempting local processing only")
             try {
-                val netdiskResult =
-                    uploadHLSVideo(context, uri, fileName, fileTimestamp, referenceId, noResample)
-                if (netdiskResult != null) {
+                val localResult = processVideoLocally(context, uri, fileName, fileTimestamp, referenceId)
+                if (localResult != null) {
                     Timber.tag("uploadToIPFS()")
-                        .d("Video uploaded to netdisk successfully: ${netdiskResult.mid}")
-                    return netdiskResult
+                        .d("Video processed locally successfully: ${localResult.mid}")
+                    return localResult
+                } else {
+                    Timber.tag("uploadToIPFS()")
+                        .e("Local video processing failed - no fallback available")
+                    return null
                 }
             } catch (e: Exception) {
                 Timber.tag("uploadToIPFS()")
-                    .w("Failed to upload video to netdisk, falling back to IPFS: ${e.message}")
+                    .e("Local video processing failed with exception: ${e.message}")
+                return null
             }
         } else {
             Timber.tag("uploadToIPFS").d("Non-video file, proceeding with IPFS upload")
@@ -1637,6 +1642,43 @@ object HproseInstance {
         }
         Timber.tag("uploadToIPFS").d("Returning result: ${result?.mid ?: "null"}")
         return result
+    }
+
+    /**
+     * Process video locally using FFmpeg Kit: convert to HLS, compress, and upload to /process-zip
+     */
+    private suspend fun processVideoLocally(
+        context: Context,
+        uri: Uri,
+        fileName: String?,
+        fileTimestamp: Long,
+        referenceId: MimeiId?
+    ): MimeiFileType? {
+        return try {
+            Timber.tag("processVideoLocally").d("Starting local video processing for: $fileName")
+            
+            val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
+            val result = localProcessingService.processVideo(
+                uri = uri,
+                fileName = fileName ?: "video",
+                fileTimestamp = fileTimestamp,
+                referenceId = referenceId
+            )
+            
+            when (result) {
+                is LocalVideoProcessingService.VideoProcessingResult.Success -> {
+                    Timber.tag("processVideoLocally").d("Local processing successful: ${result.mimeiFile.mid}")
+                    result.mimeiFile
+                }
+                is LocalVideoProcessingService.VideoProcessingResult.Error -> {
+                    Timber.tag("processVideoLocally").e("Local processing failed: ${result.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("processVideoLocally").e(e, "Error in local video processing")
+            null
+        }
     }
 
     /**
