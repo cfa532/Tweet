@@ -169,7 +169,7 @@ dependencies {
     implementation(libs.subsampling.scale.image.view)
 
     // Support library for ExifInterface
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation(libs.androidx.exifinterface)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

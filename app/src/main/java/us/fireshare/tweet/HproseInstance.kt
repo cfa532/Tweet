@@ -330,7 +330,7 @@ object HproseInstance {
                     context.getString(R.string.login_getuserid_fail)
                 )
                 val user =
-                    getUser(userId) ?: return Pair(null, context.getString(R.string.login_getuser_fail))
+                    getUser(userId, "") ?: return Pair(null, context.getString(R.string.login_getuser_fail))
                 val entry = "login"
                 val params = mapOf(
                     "aid" to appId,
