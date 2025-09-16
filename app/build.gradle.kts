@@ -112,8 +112,8 @@ android {
 }
 
 dependencies {
-    // FFmpeg Kit for local video processing - using 16KB version from Maven Central
-    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.0.0")
+    // FFmpeg Kit for local video processing - custom 16KB build with libx264
+    implementation(files("libs/ffmpeg-kit-16kb-with-libx264.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)

@@ -151,8 +151,8 @@ class LocalHLSConverter(private val context: Context) {
     ): String {
         return """
             -i "$inputPath" 
-            -vf "scale=$width:$height:force_original_aspect_ratio=decrease,pad=$width:$height:(ow-iw)/2:(oh-ih)/2" 
-            -c:v mpeg4 -c:a aac -b:v $bitrate -b:a $audioBitrate 
+            -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
+            -c:v libx264 -c:a aac -b:v $bitrate -b:a $audioBitrate 
             -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
             -hls_flags delete_segments 
             -f hls "$outputPath"
