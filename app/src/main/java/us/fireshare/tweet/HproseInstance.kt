@@ -1832,6 +1832,12 @@ object HproseInstance {
             try {
                 val statusResponse = httpClient.get(statusURL)
                 
+                if (statusResponse.status == HttpStatusCode.NotFound) {
+                    // Job ID not found - cancel immediately without retry
+                    Timber.tag("pollVideoConversionStatus").e("Job ID not found: $jobId")
+                    throw Exception("Job ID not found: $jobId")
+                }
+                
                 if (statusResponse.status != HttpStatusCode.OK) {
                     throw Exception("Status check failed with status: ${statusResponse.status}")
                 }
@@ -1842,6 +1848,12 @@ object HproseInstance {
                 val success = statusData?.get("success") as? Boolean
                 if (success != true) {
                     val errorMessage = statusData?.get("message") as? String ?: "Status check failed"
+                    // Check if the error message indicates job not found
+                    if (errorMessage.contains("not found", ignoreCase = true) || 
+                        errorMessage.contains("job not found", ignoreCase = true)) {
+                        Timber.tag("pollVideoConversionStatus").e("Job ID not found in response: $jobId")
+                        throw Exception("Job ID not found: $jobId")
+                    }
                     throw Exception(errorMessage)
                 }
 
@@ -2123,6 +2135,13 @@ object HproseInstance {
         }
         
         Timber.tag("HproseInstance").d("Found ${incompleteUploads.size} incomplete uploads to resume")
+        
+        // TEMPORARILY CLEAR ALL INCOMPLETE UPLOADS FOR TESTING
+        // This prevents old failed uploads from interfering with new video processing
+        Timber.tag("HproseInstance").d("Clearing all incomplete uploads for clean testing")
+        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        return
         
         for (upload in incompleteUploads) {
             try {

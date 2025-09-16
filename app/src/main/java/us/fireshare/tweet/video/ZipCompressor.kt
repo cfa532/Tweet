@@ -38,8 +38,8 @@ class ZipCompressor {
 
             FileOutputStream(outputZipFile).use { fileOutputStream ->
                 ZipOutputStream(fileOutputStream).use { zipOutputStream ->
-                    // Add all files from the HLS directory to the zip
-                    addDirectoryToZip(hlsDirectory, hlsDirectory.name, zipOutputStream)
+                    // Add all files from the HLS directory to the zip root (no parent directory)
+                    addDirectoryToZip(hlsDirectory, "", zipOutputStream)
                 }
             }
 

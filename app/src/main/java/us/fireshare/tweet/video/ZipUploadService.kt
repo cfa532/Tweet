@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.gson.Gson
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.HttpStatusCode
@@ -151,7 +152,13 @@ class ZipUploadService(
 
         while (System.currentTimeMillis() - startTime < maxPollingTime) {
             try {
-                val statusResponse = httpClient.post(statusURL)
+                val statusResponse = httpClient.get(statusURL)
+                
+                if (statusResponse.status == HttpStatusCode.NotFound) {
+                    // Job ID not found - cancel immediately without retry
+                    Timber.tag(TAG).e("Job ID not found: $jobId")
+                    return@withContext ZipProcessingResult.Error("Job ID not found: $jobId")
+                }
                 
                 if (statusResponse.status != HttpStatusCode.OK) {
                     consecutiveFailures++
@@ -165,6 +172,17 @@ class ZipUploadService(
                 consecutiveFailures = 0 // Reset failure count on success
                 val statusResponseText = statusResponse.body<String>()
                 val statusData = Gson().fromJson(statusResponseText, Map::class.java)
+                
+                // Check if the response indicates job not found
+                val success = statusData?.get("success") as? Boolean
+                if (success == false) {
+                    val errorMessage = statusData["message"] as? String ?: "Unknown error"
+                    if (errorMessage.contains("not found", ignoreCase = true) || 
+                        errorMessage.contains("job not found", ignoreCase = true)) {
+                        Timber.tag(TAG).e("Job ID not found in response: $jobId")
+                        return@withContext ZipProcessingResult.Error("Job ID not found: $jobId")
+                    }
+                }
 
                 val status = statusData["status"] as? String
                 val progress = (statusData["progress"] as? Number)?.toInt() ?: 0
