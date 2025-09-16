@@ -112,6 +112,8 @@ android {
 }
 
 dependencies {
+    // FFmpeg Kit for local video processing - using 16KB version from Maven Central
+    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.0.0")
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)
@@ -172,9 +174,6 @@ dependencies {
 
     // Support library for ExifInterface
     implementation(libs.androidx.exifinterface)
-
-    // FFmpeg Kit for local video processing - using 16KB version from Maven Central
-    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.0.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
