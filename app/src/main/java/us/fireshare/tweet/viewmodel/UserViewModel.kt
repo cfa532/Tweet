@@ -1239,21 +1239,24 @@ class UserViewModel @AssistedInject constructor(
                     }
 
                     is TweetEvent.TweetDeleted -> {
-                        // Batch update all related state to reduce recompositions
-                        val updatedTweets = tweets.value.filterNot { it.mid == event.tweetId }
-                        val updatedPinnedTweets =
-                            pinnedTweets.value.filterNot { it.mid == event.tweetId }
-                        val updatedFavorites = favorites.value.filterNot { it.mid == event.tweetId }
-                        val updatedBookmarks = bookmarks.value.filterNot { it.mid == event.tweetId }
+                        // Only process if it's the current user's tweet
+                        if (event.authorId == user.value.mid) {
+                            // Batch update all related state to reduce recompositions
+                            val updatedTweets = tweets.value.filterNot { it.mid == event.tweetId }
+                            val updatedPinnedTweets =
+                                pinnedTweets.value.filterNot { it.mid == event.tweetId }
+                            val updatedFavorites = favorites.value.filterNot { it.mid == event.tweetId }
+                            val updatedBookmarks = bookmarks.value.filterNot { it.mid == event.tweetId }
 
-                        _tweets.value = updatedTweets
-                        _pinnedTweets.value = updatedPinnedTweets
-                        _favorites.value = updatedFavorites
-                        _bookmarks.value = updatedBookmarks
+                            _tweets.value = updatedTweets
+                            _pinnedTweets.value = updatedPinnedTweets
+                            _favorites.value = updatedFavorites
+                            _bookmarks.value = updatedBookmarks
 
-                        // Update user's tweet count while preserving other fields
-                        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
-                        _tweetCount.value = updatedTweets.size
+                            // Update user's tweet count while preserving other fields
+                            _user.value = _user.value.copy(tweetCount = updatedTweets.size)
+                            _tweetCount.value = updatedTweets.size
+                        }
                     }
 
                     else -> {

@@ -904,31 +904,6 @@ object HproseInstance {
         }
     }
 
-    /**
-     * Delete a tweet and returned the deleted tweetId
-     * */
-    suspend fun delTweet(tweetId: MimeiId): MimeiId? {
-        val entry = "delete_tweet"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "entry" to entry,
-            "tweetid" to tweetId,
-            "authorid" to appUser.mid
-        )
-        return try {
-            val response =
-                appUser.hproseService?.runMApp<String>(entry, params)
-            if (response != null) {
-                // Post notification for successful deletion
-                TweetNotificationCenter.post(TweetEvent.TweetDeleted(tweetId, appUser.mid))
-            }
-            response
-        } catch (e: Exception) {
-            Timber.tag("delTweet").e(e)
-            null
-        }
-    }
 
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) {
         val entry = "delete_comment"

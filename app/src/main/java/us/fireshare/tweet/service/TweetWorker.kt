@@ -251,12 +251,20 @@ class DeleteTweetWorker @AssistedInject constructor(
             try {
                 // might make the upload less error prone
                 withContext(Dispatchers.IO) {
-                    HproseInstance.delTweet(tweetId)?.let { tweetId: MimeiId ->
-                        Timber.tag("DeleteTweetWorker").d("Tweet $tweetId deleted.")
-                        val outputData = workDataOf("tweetId" to tweetId)
-                        return@withContext Result.success(outputData)
+                    try {
+                        val deletedTweetId = HproseInstance.deleteTweet(tweetId)
+                        if (deletedTweetId != null) {
+                            Timber.tag("DeleteTweetWorker").d("Tweet $deletedTweetId deleted.")
+                            val outputData = workDataOf("tweetId" to deletedTweetId)
+                            return@withContext Result.success(outputData)
+                        } else {
+                            Timber.tag("DeleteTweetWorker").w("Tweet deletion returned null")
+                            return@withContext Result.failure()
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("DeleteTweetWorker").e(e, "Error deleting tweet: ${e.message}")
+                        return@withContext Result.failure()
                     }
-                    return@withContext Result.failure()
                 }
             } finally {
                 wakeLock.release()

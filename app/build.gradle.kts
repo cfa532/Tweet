@@ -112,8 +112,8 @@ android {
 }
 
 dependencies {
-    // FFmpeg Kit for local video processing - custom 16KB build with libx264
-    implementation(files("libs/ffmpeg-kit-16kb-with-libx264.aar"))
+    // FFmpeg Kit for local video processing - minimal 16KB build with libx264 (ARM only)
+    implementation(files("libs/ffmpeg-kit-16kb-minimal.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)

@@ -507,9 +507,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.TweetDeleted -> {
-                            // Tweet is already removed optimistically, just log
-                            Timber.tag("TweetFeedViewModel")
-                                .d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
+                            // Remove tweet from feed if it still exists (in case optimistic removal failed)
+                            withContext(Main) {
+                                val beforeCount = _tweets.value.size
+                                _tweets.value = _tweets.value.filterNot { it.mid == event.tweetId }
+                                val afterCount = _tweets.value.size
+                                
+                                if (beforeCount > afterCount) {
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Removed tweet ${event.tweetId} from feed via notification (${beforeCount} -> ${afterCount})")
+                                } else {
+                                    Timber.tag("TweetFeedViewModel")
+                                        .d("Tweet ${event.tweetId} not found in feed (already removed optimistically)")
+                                }
+                            }
                         }
 
                         is TweetEvent.CommentUploaded -> {
