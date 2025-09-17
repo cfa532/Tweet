@@ -87,7 +87,9 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
@@ -697,12 +699,28 @@ fun ChatInput(
         }
     }
     
+    // Function to check if file is within size limits
+    fun isFileSizeValid(uri: Uri): Boolean {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val fileSize = inputStream?.available() ?: 0
+            inputStream?.close()
+            fileSize <= TW_CONST.MAX_FILE_SIZE
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
     // File picker launcher for single file selection
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.selectedAttachment.value = it
+            if (isFileSizeValid(it)) {
+                viewModel.selectedAttachment.value = it
+            } else {
+                Toast.makeText(context, "Video files must be smaller than 120MB", Toast.LENGTH_LONG).show()
+            }
         }
     }
     

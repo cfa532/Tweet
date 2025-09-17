@@ -47,7 +47,7 @@ import us.fireshare.tweet.ui.theme.TweetTheme
 class TweetActivity : ComponentActivity() {
     private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
-    
+
     // Register activity result launcher for notification permission
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -91,7 +91,7 @@ class TweetActivity : ComponentActivity() {
                 // Initialize theme manager with current preference
                 val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
                 ThemeManager.updateThemeMode(initialThemeMode)
-                
+
                 TweetTheme(themeMode = ThemeManager.currentThemeMode) {
                     Scaffold(
                         modifier = Modifier.fillMaxWidth()

@@ -379,6 +379,7 @@ typealias MimeiId = String      // 27 or 64 character long string
 object TW_CONST {
     const val GUEST_ID = "000000000000000000000000000"      // 27
     const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
+    const val MAX_FILE_SIZE = 120 * 1024 * 1024  // 120MB in bytes - max file size for attachments
     const val CLOUD_PORT = 8010         // port to netdisk and transcode service.
     const val PAGE_SIZE = 10
     const val USER_BATCH_SIZE = 20      // Batch size for user fetching

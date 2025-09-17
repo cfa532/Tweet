@@ -145,7 +145,7 @@ fun TweetListView(
             val startTime = System.currentTimeMillis()
             val maxInitializationTime = 10000L // 10 seconds timeout
 
-            while (!enoughTweets && !localServerDepleted &&
+            while (!localServerDepleted &&
                 (System.currentTimeMillis() - startTime) < maxInitializationTime
             ) {
 
@@ -164,8 +164,17 @@ fun TweetListView(
                             .d("Server depleted at page $pageToLoad, returned ${tweetsWithNulls.size} tweets")
                     }
 
-                    // Check if we have enough tweets
-                    enoughTweets = tweets.size >= MINMIMUM_TWEET_COUNT
+                    // Check if we have enough visible tweets (for logging purposes)
+                    val visibleTweets = tweets.filterNotNull().filter { tweet ->
+                        if (showPrivateTweets) {
+                            // Profile screen: show private tweets only if it's the app user's own profile
+                            !tweet.isPrivate || tweet.authorId == currentUserId
+                        } else {
+                            // Tweet feed: only show public tweets
+                            !tweet.isPrivate
+                        }
+                    }
+                    val enoughTweets = visibleTweets.size >= MINMIMUM_TWEET_COUNT
 
                     // Move to next page for next iteration
                     pageToLoad++
@@ -429,8 +438,8 @@ fun TweetListView(
 
         // Allow loading if last tweet is visible, not already refreshing, and no pending load for the same page
         // OR if there's an external loadmore request (even when serverDepleted is true)
-        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.size >= 4 && !serverDepleted) ||
-            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.size >= 4)
+        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.size >= 1 && !serverDepleted) ||
+            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.size >= 1)
         ) {
 
             val nextPage = lastLoadedPage + 1

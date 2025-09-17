@@ -137,7 +137,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
 
         if (appUser.isGuest()) {
-            // show tweets of administrator only
+            // For guest users: call getTweetsByUser() to fetch tweets
             val alphaIds = getAlphaIds()
             if (alphaIds.isEmpty()) {
                 Timber.tag("TweetFeedViewModel").w("No alpha IDs configured, returning empty list for guest user")
@@ -155,6 +155,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             val result = getTweets(defaultUserId, pageNumber)
             return result
         } else {
+            // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()

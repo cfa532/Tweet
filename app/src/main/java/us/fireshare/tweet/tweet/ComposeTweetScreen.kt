@@ -78,11 +78,11 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
-import java.io.File
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.service.FileTypeDetector
+import us.fireshare.tweet.utils.createImageFile
+import us.fireshare.tweet.utils.createVideoFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,49 +101,89 @@ fun ComposeTweetScreen(
     var isPrivate by remember { mutableStateOf(false) }
 
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    
+    // Function to check if file is within size limits
+    fun isFileSizeValid(uri: Uri): Boolean {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val fileSize = inputStream?.available() ?: 0
+            inputStream?.close()
+            fileSize <= TW_CONST.MAX_FILE_SIZE
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
     val filesPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
             if (selectedAttachments.find { u -> u == uri } == null) {
-                selectedAttachments.add(uri)
-            }
-        }
-    }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-
-    val cameraLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (success) {
-                imageUri?.let {
-                    selectedAttachments.add(it)
+                if (isFileSizeValid(uri)) {
+                    selectedAttachments.add(uri)
+                } else {
+                    Toast.makeText(context, "Files must be smaller than 120MB", Toast.LENGTH_LONG).show()
                 }
             }
         }
+    }
+    // Store the photo URI for later use
+    var currentPhotoURI: android.net.Uri? by remember { mutableStateOf(null) }
 
-    // take a picture as attachment
-    val takeAShot = {
-        val photoFile = createImageFile(context)
-        photoFile?.also {
-            val photoURI: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                it
-            )
-            imageUri = photoURI
-            cameraLauncher.launch(photoURI)
+    // Camera launcher using TakePicture contract
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        android.util.Log.d("CameraDebug", "TakePicture result: $success")
+        if (success) {
+            // The photo was taken successfully
+            currentPhotoURI?.let { uri ->
+                android.util.Log.d("CameraDebug", "Adding photo URI to attachments: $uri")
+                selectedAttachments.add(uri)
+            }
+        } else {
+            android.util.Log.d("CameraDebug", "Photo not taken")
         }
     }
 
-    // request user permission to user camera
+    // Open camera app
+    val openCamera = {
+        try {
+            // Create a temporary file for the camera to save to
+            val photoFile = createImageFile(context)
+            if (photoFile != null) {
+                val photoURI = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    photoFile
+                )
+                
+                android.util.Log.d("CameraDebug", "Created photo file: $photoFile")
+                android.util.Log.d("CameraDebug", "Photo URI: $photoURI")
+                
+                // Store the photo URI for later use
+                currentPhotoURI = photoURI
+                
+                // Launch camera with the photo URI
+                cameraLauncher.launch(photoURI)
+            } else {
+                android.util.Log.e("CameraDebug", "Failed to create photo file")
+                Toast.makeText(context, "Failed to create photo file", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CameraDebug", "Error opening camera", e)
+            Toast.makeText(context, "Error opening camera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Request camera permission
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) {
-        if (it) {
-            Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
-            takeAShot()
+    ) { isGranted ->
+        if (isGranted) {
+            openCamera()
         } else {
-            Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Camera permission required", Toast.LENGTH_SHORT).show()
         }
     }
     // manually prevent fast continuous click of a button
@@ -376,7 +416,7 @@ fun ComposeTweetScreen(
                                     Manifest.permission.CAMERA
                                 ) == PackageManager.PERMISSION_GRANTED
                             ) {
-                                takeAShot()
+                                openCamera()
                             } else {
                                 permissionLauncher.launch(Manifest.permission.CAMERA)
                             }
@@ -455,16 +495,6 @@ fun ComposeTweetScreen(
                 }
             )
         }
-    }
-}
 
-@Throws(IOException::class)
-fun createImageFile(context: Context): File? {
-    val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-    val storageDir: File? = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-    return File.createTempFile(
-        "JPEG_${timeStamp}_",
-        ".jpg",
-        storageDir
-    )
+    }
 }

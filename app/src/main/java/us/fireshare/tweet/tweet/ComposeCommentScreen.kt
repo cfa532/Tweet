@@ -1,8 +1,10 @@
 package us.fireshare.tweet.tweet
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -71,6 +73,10 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.widget.UploadFilePreview
+import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.service.FileTypeDetector
+import us.fireshare.tweet.utils.createImageFile
+import us.fireshare.tweet.utils.createVideoFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,44 +104,61 @@ fun ComposeCommentScreen(
 
     // Create a launcher for the file picker
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    
+    // Function to check if file is within size limits
+    fun isFileSizeValid(uri: Uri): Boolean {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val fileSize = inputStream?.available() ?: 0
+            inputStream?.close()
+            fileSize <= TW_CONST.MAX_FILE_SIZE
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         uri?.let {
             if (selectedAttachments.find { u -> u == it } == null) {
-                selectedAttachments.add(it)
-            }
-        }
-    }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (success) {
-                imageUri?.let {
+                if (isFileSizeValid(it)) {
                     selectedAttachments.add(it)
+                } else {
+                    Toast.makeText(context, "Files must be smaller than 120MB", Toast.LENGTH_LONG).show()
                 }
             }
         }
-    val takeAShot = {
-        val photoFile = createImageFile(context)
-        photoFile?.also {
-            val photoURI: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                it
-            )
-            imageUri = photoURI
-            cameraLauncher.launch(photoURI)
+    }
+    // Camera launcher that opens system camera app
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                selectedAttachments.add(uri)
+            }
         }
     }
+
+    // Open camera app
+    val openCamera = {
+        val intent = android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+        if (intent.resolveActivity(context.packageManager) != null) {
+            cameraLauncher.launch(intent)
+        } else {
+            Toast.makeText(context, "No camera app available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Request camera permission
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) {
-        if (it) {
-            Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
-            takeAShot()
+    ) { isGranted ->
+        if (isGranted) {
+            openCamera()
         } else {
-            Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Camera permission required", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -312,7 +335,7 @@ fun ComposeCommentScreen(
                                     Manifest.permission.CAMERA
                                 ) == PackageManager.PERMISSION_GRANTED
                             ) {
-                                takeAShot()
+                                openCamera()
                             } else {
                                 permissionLauncher.launch(Manifest.permission.CAMERA)
                             }
@@ -399,5 +422,6 @@ fun ComposeCommentScreen(
                 }
             )
         }
+
     }
 }

@@ -259,7 +259,7 @@ class TweetViewModel @AssistedInject constructor(
         val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
 //            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
 //                    "${tweet.mid}/${tweet.authorId}"
-        
+
         // Generate share content based on tweet title or first 40 characters of content
         val shareContent = when {
             !tweet.title.isNullOrBlank() -> tweet.title!!
@@ -273,13 +273,13 @@ class TweetViewModel @AssistedInject constructor(
             }
             else -> ""
         }
-        
+
         val textToShare = if (shareContent.isNotEmpty()) {
             "$shareContent\n\n$deepLink"
         } else {
             deepLink
         }
-        
+
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, textToShare)
