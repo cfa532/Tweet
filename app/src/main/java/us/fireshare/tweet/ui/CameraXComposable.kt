@@ -1,7 +1,9 @@
 package us.fireshare.tweet.ui
 
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlipCameraAndroid
@@ -25,6 +27,8 @@ fun CameraXPreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    var isBackCamera by remember { mutableStateOf(true) }
     
     LaunchedEffect(Unit) {
         cameraManager.initialize()
@@ -45,9 +49,25 @@ fun CameraXPreview(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { previewView ->
-                cameraManager.startCamera(previewView, onImageCaptured)
+            update = { pv ->
+                previewView = pv
+                cameraManager.startCamera(pv, onImageCaptured)
             }
+        )
+
+        // Camera indicator at top
+        Text(
+            text = if (isBackCamera) "Back Camera" else "Front Camera",
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp)
+                .background(
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         )
 
         // Camera Controls
@@ -67,15 +87,16 @@ fun CameraXPreview(
                 // Switch camera button
                 IconButton(
                     onClick = {
-                        // Switch camera implementation would go here
-                        // For now, we'll just log
-                        android.util.Log.d("CameraX", "Switch camera requested")
+                        previewView?.let { pv ->
+                            cameraManager.switchCamera(pv, onImageCaptured)
+                            isBackCamera = !isBackCamera
+                        }
                     },
                     modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.FlipCameraAndroid,
-                        contentDescription = "Switch Camera",
+                        contentDescription = if (isBackCamera) "Switch to Front Camera" else "Switch to Back Camera",
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(32.dp)
                     )

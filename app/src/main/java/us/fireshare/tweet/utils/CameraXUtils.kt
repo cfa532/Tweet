@@ -21,6 +21,7 @@ class CameraXManager(
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private lateinit var cameraExecutor: ExecutorService
+    private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
     fun initialize() {
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -54,9 +55,6 @@ class CameraXManager(
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
 
-        // Select back camera as a default
-        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
         try {
             // Unbind use cases before rebinding
             cameraProvider.unbindAll()
@@ -64,7 +62,7 @@ class CameraXManager(
             // Bind use cases to camera
             camera = cameraProvider.bindToLifecycle(
                 lifecycleOwner,
-                cameraSelector,
+                currentCameraSelector,
                 preview,
                 imageCapture
             )
@@ -115,15 +113,19 @@ class CameraXManager(
     }
 
     fun switchCamera(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
-        val cameraSelector = if (camera?.cameraInfo?.lensFacing == CameraSelector.LENS_FACING_BACK) {
-            CameraSelector.DEFAULT_FRONT_CAMERA
-        } else {
-            CameraSelector.DEFAULT_BACK_CAMERA
-        }
-        
         cameraProvider?.let { provider ->
             try {
+                // Unbind current use cases
                 provider.unbindAll()
+                
+                // Switch camera selector
+                currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
+                
+                // Rebind with new camera
                 bindCameraUseCases(previewView, onImageCaptured)
             } catch (exc: Exception) {
                 android.util.Log.e("CameraX", "Camera switch failed", exc)
