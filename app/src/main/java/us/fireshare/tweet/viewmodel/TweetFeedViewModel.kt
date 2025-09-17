@@ -361,7 +361,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         dao.deleteCachedTweet(tweetId)
 
         // Delete from backend
-        HproseInstance.deleteTweet(tweetId)
+        try {
+            val deletedTweetId = HproseInstance.deleteTweet(tweetId)
+            if (deletedTweetId != null && tweetToDelete != null) {
+                // Post notification with correct author ID
+                TweetNotificationCenter.post(
+                    TweetEvent.TweetDeleted(
+                        deletedTweetId,
+                        tweetToDelete.authorId
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").e(e, "Error deleting tweet: ${e.message}")
+        }
         callback()
     }
 

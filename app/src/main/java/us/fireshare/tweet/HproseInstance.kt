@@ -1144,16 +1144,6 @@ object HproseInstance {
 
             if (response?.get("success") == true) {
                 val deletedTweetId = response["tweetid"] as? MimeiId
-
-                // Post notification for successful deletion
-                if (deletedTweetId != null) {
-                    TweetNotificationCenter.post(
-                        TweetEvent.TweetDeleted(
-                            deletedTweetId,
-                            appUser.mid
-                        )
-                    )
-                }
                 deletedTweetId
             } else {
                 val errorMessage =
