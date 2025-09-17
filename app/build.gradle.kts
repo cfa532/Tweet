@@ -20,8 +20,8 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 55    // Google Play store version code
-        versionName = "37"   // compared with App Mimei version to check for upgrade.
+        versionCode = 58    // Google Play store version code
+        versionName = "38"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -112,7 +112,7 @@ android {
 }
 
 dependencies {
-    // FFmpeg Kit for local video processing - minimal 16KB build with libx264 (ARM only)
+    // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
     implementation(files("libs/ffmpeg-kit-16kb-minimal.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
