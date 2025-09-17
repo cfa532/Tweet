@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,14 +57,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.widget.UploadFilePreview
-import us.fireshare.tweet.utils.createImageFile
 import us.fireshare.tweet.utils.createVideoFile
+import us.fireshare.tweet.ui.CameraXPreview
 
 @Composable
 fun ReplyEditorBox(
@@ -90,25 +90,19 @@ fun ReplyEditorBox(
             }
         }
     }
-    // Camera launcher that opens system camera app
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                selectedAttachments.add(uri)
-            }
-        }
+    // CameraX state
+    var showCamera by remember { mutableStateOf(false) }
+
+    // Handle image capture from CameraX
+    val onImageCaptured = { uri: Uri ->
+        android.util.Log.d("CameraX", "Image captured: $uri")
+        selectedAttachments.add(uri)
+        showCamera = false
     }
 
-    // Open camera app
+    // Open camera with CameraX
     val openCamera = {
-        val intent = android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-        if (intent.resolveActivity(context.packageManager) != null) {
-            cameraLauncher.launch(intent)
-        } else {
-            Toast.makeText(context, "No camera app available", Toast.LENGTH_SHORT).show()
-        }
+        showCamera = true
     }
 
     // Request camera permission
@@ -424,4 +418,12 @@ fun ReplyEditorBox(
         )
     }
 
+    // CameraX Preview
+    if (showCamera) {
+        CameraXPreview(
+            onImageCaptured = onImageCaptured,
+            onDismiss = { showCamera = false },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }

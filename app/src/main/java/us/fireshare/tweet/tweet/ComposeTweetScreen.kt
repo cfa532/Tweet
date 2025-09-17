@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -68,7 +69,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -81,8 +81,8 @@ import us.fireshare.tweet.widget.UploadFilePreview
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.service.FileTypeDetector
-import us.fireshare.tweet.utils.createImageFile
 import us.fireshare.tweet.utils.createVideoFile
+import us.fireshare.tweet.ui.CameraXPreview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,53 +127,19 @@ fun ComposeTweetScreen(
             }
         }
     }
-    // Store the photo URI for later use
-    var currentPhotoURI: android.net.Uri? by remember { mutableStateOf(null) }
+    // CameraX state
+    var showCamera by remember { mutableStateOf(false) }
 
-    // Camera launcher using TakePicture contract
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        android.util.Log.d("CameraDebug", "TakePicture result: $success")
-        if (success) {
-            // The photo was taken successfully
-            currentPhotoURI?.let { uri ->
-                android.util.Log.d("CameraDebug", "Adding photo URI to attachments: $uri")
-                selectedAttachments.add(uri)
-            }
-        } else {
-            android.util.Log.d("CameraDebug", "Photo not taken")
-        }
+    // Handle image capture from CameraX
+    val onImageCaptured = { uri: Uri ->
+        android.util.Log.d("CameraX", "Image captured: $uri")
+        selectedAttachments.add(uri)
+        showCamera = false
     }
 
-    // Open camera app
+    // Open camera with CameraX
     val openCamera = {
-        try {
-            // Create a temporary file for the camera to save to
-            val photoFile = createImageFile(context)
-            if (photoFile != null) {
-                val photoURI = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    photoFile
-                )
-                
-                android.util.Log.d("CameraDebug", "Created photo file: $photoFile")
-                android.util.Log.d("CameraDebug", "Photo URI: $photoURI")
-                
-                // Store the photo URI for later use
-                currentPhotoURI = photoURI
-                
-                // Launch camera with the photo URI
-                cameraLauncher.launch(photoURI)
-            } else {
-                android.util.Log.e("CameraDebug", "Failed to create photo file")
-                Toast.makeText(context, "Failed to create photo file", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("CameraDebug", "Error opening camera", e)
-            Toast.makeText(context, "Error opening camera: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        showCamera = true
     }
 
     // Request camera permission
@@ -496,5 +462,13 @@ fun ComposeTweetScreen(
             )
         }
 
+        // CameraX Preview
+        if (showCamera) {
+            CameraXPreview(
+                onImageCaptured = onImageCaptured,
+                onDismiss = { showCamera = false },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
