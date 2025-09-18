@@ -1,6 +1,5 @@
 package us.fireshare.tweet.tweet
 
-import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,8 +15,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -48,8 +45,6 @@ fun ComposeCommentScreen(
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetViewModel = sharedViewModel.tweetViewModel
-    val tweet by tweetViewModel.tweetState.collectAsState()
-    val author by remember { derivedStateOf { tweet.author } }
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
@@ -64,8 +59,7 @@ fun ComposeCommentScreen(
     var showCamera by remember { mutableStateOf(false) }
     var showExitConfirmation by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isSearching by remember { mutableStateOf(false) }
-    
+
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
 
     // File size validation
@@ -75,7 +69,7 @@ fun ComposeCommentScreen(
             val fileSize = inputStream?.available() ?: 0
             inputStream?.close()
             fileSize <= TW_CONST.MAX_FILE_SIZE
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -111,10 +105,8 @@ fun ComposeCommentScreen(
 
     // Handle mention search
     val onMentionSearch = { query: String ->
-        isSearching = true
         sharedViewModel.appUserViewModel.viewModelScope.launch {
             suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
-            isSearching = false
         }
         Unit
     }
