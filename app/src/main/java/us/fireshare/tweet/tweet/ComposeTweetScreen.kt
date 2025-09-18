@@ -137,6 +137,13 @@ fun ComposeTweetScreen(
         showCamera = false
     }
 
+    // Handle video recording from CameraX
+    val onVideoRecorded = { uri: Uri ->
+        android.util.Log.d("CameraX", "Video recorded: $uri")
+        selectedAttachments.add(uri)
+        showCamera = false
+    }
+
     // Open camera with CameraX
     val openCamera = {
         showCamera = true
@@ -466,6 +473,7 @@ fun ComposeTweetScreen(
         if (showCamera) {
             CameraXPreview(
                 onImageCaptured = onImageCaptured,
+                onVideoRecorded = onVideoRecorded,
                 onDismiss = { showCamera = false },
                 modifier = Modifier.fillMaxSize()
             )

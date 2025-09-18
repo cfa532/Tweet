@@ -1,9 +1,12 @@
 package us.fireshare.tweet.utils
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -18,6 +21,8 @@ class CameraXManager(
     private val lifecycleOwner: LifecycleOwner
 ) {
     private var imageCapture: ImageCapture? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var recording: Recording? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private lateinit var cameraExecutor: ExecutorService
@@ -55,6 +60,12 @@ class CameraXManager(
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
 
+        // VideoCapture
+        val recorder = Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+            .build()
+        videoCapture = VideoCapture.withOutput(recorder)
+
         try {
             // Unbind use cases before rebinding
             cameraProvider.unbindAll()
@@ -64,7 +75,8 @@ class CameraXManager(
                 lifecycleOwner,
                 currentCameraSelector,
                 preview,
-                imageCapture
+                imageCapture,
+                videoCapture
             )
 
         } catch (exc: Exception) {
@@ -133,7 +145,62 @@ class CameraXManager(
         }
     }
 
+    fun startVideoRecording(onVideoRecorded: (Uri) -> Unit) {
+        val videoCapture = videoCapture ?: return
+
+        val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
+            .format(System.currentTimeMillis())
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.P) {
+                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/CameraX-Video")
+            }
+        }
+
+        val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(
+            context.contentResolver,
+            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        ).setContentValues(contentValues).build()
+
+        recording = videoCapture.output
+            .prepareRecording(context, mediaStoreOutputOptions)
+            .apply {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    withAudioEnabled()
+                }
+            }
+            .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
+                when (recordEvent) {
+                    is VideoRecordEvent.Start -> {
+                        android.util.Log.d("CameraX", "Video recording started")
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        if (!recordEvent.hasError()) {
+                            val savedUri = recordEvent.outputResults.outputUri
+                            android.util.Log.d("CameraX", "Video saved: $savedUri")
+                            onVideoRecorded(savedUri)
+                        } else {
+                            android.util.Log.e("CameraX", "Video recording failed: ${recordEvent.error}")
+                        }
+                        recording = null
+                    }
+                }
+            }
+    }
+
+    fun stopVideoRecording() {
+        recording?.stop()
+        recording = null
+    }
+
+    fun isRecording(): Boolean {
+        return recording != null
+    }
+
     fun cleanup() {
+        recording?.stop()
         cameraExecutor.shutdown()
     }
 }
