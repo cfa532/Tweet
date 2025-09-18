@@ -269,9 +269,25 @@ class UserViewModel @AssistedInject constructor(
                 else
                     list.filterNot { it == subjectUserId }
             }
-            _user.value = user.value.copy(followingCount = followings.value.size)
+            // Update the count manually - increment/decrement based on the action
+            val newCount = if (isFollowing) {
+                _followingsCount.value + 1
+            } else {
+                _followingsCount.value - 1
+            }
+            _followingsCount.value = newCount
+            
+            // Update the user object with the correct count
+            _user.value = user.value.copy(followingCount = newCount)
+            
+            // Also update appUser.followingCount so refreshUserData uses the correct value
+            if (userId == appUser.mid) {
+                appUser.followingCount = newCount
+            }
+            
             withContext(IO) {
-                TweetCacheManager.saveUser(appUser)
+                // Save the updated user object to cache
+                TweetCacheManager.saveUser(_user.value)
             }
             // callback to update tweet feed. Load or remove tweets of the others.
             updateTweetFeed(isFollowing)

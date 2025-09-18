@@ -56,13 +56,18 @@ fun ProfileDetail(
     val followingsCount by viewModel.followingsCount.collectAsState()
     val followersCount by viewModel.followersCount.collectAsState()
     val tweetCount by viewModel.tweetCount.collectAsState()
+    
 
-    // Stabilize the LaunchedEffect to prevent unnecessary calls
-    LaunchedEffect(appUserFollowings.size) {
-        withContext(IO) {
-            viewModel.refreshFollowingsAndFans()
-        }
-    }
+    // Only refresh followings and fans when the user changes, not on every size change
+    // Removed automatic refresh to prevent count flicking during navigation
+    // LaunchedEffect(displayUser.mid) {
+    //     withContext(IO) {
+    //         viewModel.refreshFollowingsAndFans()
+    //     }
+    // }
+    
+    // No need to sync counts since viewModel == appUserViewModel for current user
+    // Count updates are handled directly in toggleFollowingWithResult
 
     // go to list of followings of the user
     Surface(

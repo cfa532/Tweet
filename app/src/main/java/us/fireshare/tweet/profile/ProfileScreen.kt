@@ -99,19 +99,18 @@ fun ProfileScreen(
     }
 
     // Refresh user data when returning to ProfileScreen (e.g., after editing profile)
-    LaunchedEffect(Unit) {
-        // Refresh user data to ensure it's up to date
-        withContext(Dispatchers.IO) {
-            viewModel.refreshUserData()
+    // Only refresh when actually returning to this screen, not when navigating away
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val previousRoute = remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(currentRoute) {
+        if (previousRoute.value != null && previousRoute.value != currentRoute && currentRoute?.contains("UserProfile") == true) {
+            // Only refresh when returning to this profile screen from another screen
+            withContext(Dispatchers.IO) {
+                viewModel.refreshUserData()
+            }
         }
-    }
-
-    // Additional refresh when the screen becomes active again
-    LaunchedEffect(navController.currentBackStackEntryAsState().value?.destination?.route) {
-        // Refresh user data when navigation changes (e.g., returning from EditProfileScreen)
-        withContext(Dispatchers.IO) {
-            viewModel.refreshUserData()
-        }
+        previousRoute.value = currentRoute
     }
 
 
