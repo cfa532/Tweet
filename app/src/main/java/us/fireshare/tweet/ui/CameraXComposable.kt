@@ -25,7 +25,18 @@ import androidx.core.content.ContextCompat
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
 import us.fireshare.tweet.utils.CameraXManager
+
+/**
+ * Format duration in seconds to MM:SS format
+ */
+private fun formatDuration(seconds: Long): String {
+    val minutes = seconds / 60
+    val remainingSeconds = seconds % 60
+    return String.format("%02d:%02d", minutes, remainingSeconds)
+}
 
 @Composable
 fun CameraXPreview(
@@ -41,6 +52,7 @@ fun CameraXPreview(
     var isBackCamera by remember { mutableStateOf(true) }
     var isRecording by remember { mutableStateOf(false) }
     var captureMode by remember { mutableStateOf("photo") } // "photo" or "video"
+    var recordingDuration by remember { mutableStateOf(0L) } // Recording duration in seconds
 
     // Audio permission launcher
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -55,6 +67,18 @@ fun CameraXPreview(
     
     LaunchedEffect(Unit) {
         cameraManager.initialize()
+    }
+    
+    // Recording timer
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            while (isRecording) {
+                delay(1000) // Update every second
+                recordingDuration++
+            }
+        } else {
+            recordingDuration = 0L // Reset timer when not recording
+        }
     }
     
     DisposableEffect(Unit) {
@@ -105,19 +129,37 @@ fun CameraXPreview(
                 )
             }
             
-            // Recording indicator (when recording) - center
+            // Recording indicator with timer (when recording) - center
             if (isRecording) {
-                Text(
-                    text = "REC",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                             RoundedCornerShape(8.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+                ) {
+                    // Recording dot
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                MaterialTheme.colorScheme.error,
+                                RoundedCornerShape(4.dp)
+                            )
+                    )
+                    
+                    // Timer text
+                    Text(
+                        text = formatDuration(recordingDuration),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
             }
             
             // Cancel button (moved to right) without background

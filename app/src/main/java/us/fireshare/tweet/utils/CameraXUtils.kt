@@ -91,10 +91,12 @@ class CameraXManager(
         val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
             .format(System.currentTimeMillis())
         val contentValues = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "Tweet_$name.jpg")
             put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(android.provider.MediaStore.Images.Media.DESCRIPTION, "Photo taken with Tweet app")
+            put(android.provider.MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
             if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.P) {
-                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Tweet")
             }
         }
 
@@ -151,10 +153,12 @@ class CameraXManager(
         val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
             .format(System.currentTimeMillis())
         val contentValues = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "Tweet_$name.mp4")
             put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            put(android.provider.MediaStore.Video.Media.DESCRIPTION, "Video recorded with Tweet app")
+            put(android.provider.MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis())
             if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.P) {
-                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/CameraX-Video")
+                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/Tweet")
             }
         }
 

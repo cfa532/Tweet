@@ -242,7 +242,7 @@ fun AdvancedImageViewer(
             AndroidView(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_CROP)
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
                         setDoubleTapZoomScale(2f)
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
