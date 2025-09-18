@@ -35,6 +35,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
@@ -76,27 +77,51 @@ class TweetActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            initJob.await()   // wait until network ready
-            activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+            try {
+                // Add timeout for network initialization
+                withTimeoutOrNull(10000) { // 10 second timeout
+                    initJob.await()   // wait until network ready
+                } ?: run {
+                    Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
+                }
+                
+                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
-            // Request notification permission on app startup
-            requestNotificationPermissionIfNeeded()
+                // Request notification permission on app startup
+                requestNotificationPermissionIfNeeded()
 
-            launch {
-                delay(15000)
-                activityViewModel.checkForUpgrade(this@TweetActivity)
-            }
+                launch {
+                    delay(15000)
+                    activityViewModel.checkForUpgrade(this@TweetActivity)
+                }
 
-            setContent {
-                // Initialize theme manager with current preference
-                val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
-                ThemeManager.updateThemeMode(initialThemeMode)
+                setContent {
+                    // Initialize theme manager with current preference
+                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
+                    ThemeManager.updateThemeMode(initialThemeMode)
 
-                TweetTheme(themeMode = ThemeManager.currentThemeMode) {
-                    Scaffold(
-                        modifier = Modifier.fillMaxWidth()
-                    ) { innerPadding ->
-                        TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
+                        Scaffold(
+                            modifier = Modifier.fillMaxWidth()
+                        ) { innerPadding ->
+                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("TweetActivity").e(e, "Error during app initialization")
+                // Still show the app even if initialization fails
+                activityViewModel.isAppReady.value = true
+                setContent {
+                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
+                    ThemeManager.updateThemeMode(initialThemeMode)
+
+                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
+                        Scaffold(
+                            modifier = Modifier.fillMaxWidth()
+                        ) { innerPadding ->
+                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                        }
                     }
                 }
             }

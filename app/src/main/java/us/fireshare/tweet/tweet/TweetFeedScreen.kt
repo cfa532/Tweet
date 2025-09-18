@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -69,6 +70,9 @@ fun TweetFeedScreen(
     LaunchedEffect(Unit) {
         viewModel.initialize()
     }
+
+    // Collect initialization state to show loading indicator
+    val initState by viewModel.initState.collectAsState()
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
@@ -184,11 +188,18 @@ fun TweetFeedScreen(
                         when (index) {
                             0 -> {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                    FollowingsTweet(
-                                        parentEntry,
-                                        scrollBehavior,
-                                        viewModel,
-                                        onScrollStateChange = { scrollState = it })
+                                    if (initState) {
+                                        // Show loading indicator while initializing
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    } else {
+                                        FollowingsTweet(
+                                            parentEntry,
+                                            scrollBehavior,
+                                            viewModel,
+                                            onScrollStateChange = { scrollState = it })
+                                    }
                                 } else {
                                     // Fallback for API < 30
                                     Text("Followings not available on this Android version")

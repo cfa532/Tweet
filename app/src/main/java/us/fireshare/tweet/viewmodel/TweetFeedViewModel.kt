@@ -68,20 +68,37 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (!isInitialized) {
             isInitialized = true
             viewModelScope.launch(IO) {
-                // Ensure appUser is properly initialized before loading tweets
-                // Only check baseUrl since getTweetFeed doesn't require followingList
-                if (appUser.baseUrl != null) {
-                    refresh(0)
-                } else {
-                    // If appUser is not ready, wait a bit and retry
-                    kotlinx.coroutines.delay(500)
+                try {
+                    // Ensure appUser is properly initialized before loading tweets
+                    // Only check baseUrl since getTweetFeed doesn't require followingList
                     if (appUser.baseUrl != null) {
                         refresh(0)
                     } else {
-                        Timber.tag("TweetFeedViewModel").w("AppUser not properly initialized, skipping initial tweet load")
+                        // If appUser is not ready, wait a bit and retry with exponential backoff
+                        var retryCount = 0
+                        val maxRetries = 3
+                        while (retryCount < maxRetries && appUser.baseUrl == null) {
+                            val delayTime = 500L * (retryCount + 1) // Exponential backoff: 500ms, 1s, 1.5s
+                            kotlinx.coroutines.delay(delayTime)
+                            retryCount++
+                            Timber.tag("TweetFeedViewModel").d("Retry $retryCount: waiting for appUser.baseUrl to be initialized")
+                        }
+                        
+                        if (appUser.baseUrl != null) {
+                            refresh(0)
+                        } else {
+                            Timber.tag("TweetFeedViewModel").w("AppUser not properly initialized after $maxRetries retries, skipping initial tweet load")
+                            // Set some default state to prevent blank screen
+                            _tweets.value = emptyList()
+                        }
                     }
+                } catch (e: Exception) {
+                    Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization")
+                    // Set empty state to prevent blank screen
+                    _tweets.value = emptyList()
+                } finally {
+                    initState.value = false
                 }
-                initState.value = false
             }
         }
     }

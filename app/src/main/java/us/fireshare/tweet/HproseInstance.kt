@@ -78,20 +78,38 @@ object HproseInstance {
     )
 
     suspend fun init(context: Context) {
-        HproseClassManager.register(Tweet::class.java, "Tweet")
-        HproseClassManager.register(User::class.java, "User")
+        try {
+            HproseClassManager.register(Tweet::class.java, "Tweet")
+            HproseClassManager.register(User::class.java, "User")
 
-        this.preferenceHelper = PreferenceHelper(context)
-        chatDatabase = ChatDatabase.getInstance(context)
-        val tweetCache = TweetCacheDatabase.getInstance(context)
-        dao = tweetCache.tweetDao()
+            this.preferenceHelper = PreferenceHelper(context)
+            chatDatabase = ChatDatabase.getInstance(context)
+            val tweetCache = TweetCacheDatabase.getInstance(context)
+            dao = tweetCache.tweetDao()
 
-        appUser = User(
-            mid = TW_CONST.GUEST_ID,
-            baseUrl = preferenceHelper.getAppUrls().first(),
-            followingList = getAlphaIds()
-        )
-        initAppEntry()
+            appUser = User(
+                mid = TW_CONST.GUEST_ID,
+                baseUrl = preferenceHelper.getAppUrls().first(),
+                followingList = getAlphaIds()
+            )
+            initAppEntry()
+        } catch (e: Exception) {
+            Timber.tag("HproseInstance").e(e, "Error during HproseInstance initialization")
+            // Set up minimal fallback state to prevent app from being completely broken
+            if (!::preferenceHelper.isInitialized) {
+                this.preferenceHelper = PreferenceHelper(context)
+            }
+            // appUser is already initialized with default value, but ensure it has a valid baseUrl
+            if (appUser.baseUrl == null) {
+                appUser = User(
+                    mid = TW_CONST.GUEST_ID,
+                    baseUrl = preferenceHelper.getAppUrls().firstOrNull(),
+                    followingList = getAlphaIds()
+                )
+            }
+            // Re-throw the exception so the calling code can handle it
+            throw e
+        }
     }
 
     /**

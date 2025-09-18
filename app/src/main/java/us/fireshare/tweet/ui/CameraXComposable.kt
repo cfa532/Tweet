@@ -95,7 +95,7 @@ fun CameraXPreview(
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
             inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
-            inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0)
+            inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
@@ -152,7 +152,7 @@ fun CameraXPreview(
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
             inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
-            inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0)
+            inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
