@@ -26,6 +26,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.utils.CameraXManager
 
@@ -47,6 +48,7 @@ fun CameraXPreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val configuration = LocalConfiguration.current
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var isBackCamera by remember { mutableStateOf(true) }
@@ -68,6 +70,9 @@ fun CameraXPreview(
     LaunchedEffect(Unit) {
         cameraManager.initialize()
     }
+    
+    // Note: Orientation changes are now handled automatically by CameraXManager
+    // No need to manually rebind on orientation changes
     
     // Recording timer
     LaunchedEffect(isRecording) {

@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.view.OrientationEventListener
+import android.view.Surface
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
@@ -28,9 +30,42 @@ class CameraXManager(
     private var cameraProvider: ProcessCameraProvider? = null
     private lateinit var cameraExecutor: ExecutorService
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var currentRotation = Surface.ROTATION_0
+    private var orientationEventListener: OrientationEventListener? = null
 
     fun initialize() {
         cameraExecutor = Executors.newSingleThreadExecutor()
+        setupOrientationListener()
+    }
+    
+    private fun setupOrientationListener() {
+        orientationEventListener = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                
+                val newRotation = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_270  // Landscape left
+                    in 135..224 -> Surface.ROTATION_180 // Portrait upside down
+                    in 225..314 -> Surface.ROTATION_90  // Landscape right
+                    else -> Surface.ROTATION_0          // Portrait normal
+                }
+                
+                if (newRotation != currentRotation) {
+                    val oldRotation = currentRotation
+                    currentRotation = newRotation
+                    Timber.tag("CameraX").d("Orientation changed from $oldRotation to $currentRotation (degrees: $orientation)")
+                    // Update existing use cases with new rotation
+                    updateUseCaseRotations()
+                }
+            }
+        }
+        orientationEventListener?.enable()
+    }
+    
+    private fun updateUseCaseRotations() {
+        imageCapture?.targetRotation = currentRotation
+        videoCapture?.targetRotation = currentRotation
+        Timber.tag("CameraX").d("Updated use case rotations to: $currentRotation")
     }
 
     fun startCamera(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
@@ -49,8 +84,11 @@ class CameraXManager(
     private fun bindCameraUseCases(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
         val cameraProvider = cameraProvider ?: return
 
+        Timber.tag("CameraX").d("Binding camera use cases with rotation: ${getCurrentRotationName()} ($currentRotation)")
+
         // Preview
         val preview = Preview.Builder()
+            .setTargetRotation(currentRotation)
             .build()
             .also {
                 it.surfaceProvider = previewView.surfaceProvider
@@ -59,6 +97,7 @@ class CameraXManager(
         // ImageCapture
         imageCapture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setTargetRotation(currentRotation)
             .build()
 
         // VideoCapture
@@ -66,6 +105,9 @@ class CameraXManager(
             .setQualitySelector(QualitySelector.from(Quality.SD))
             .build()
         videoCapture = VideoCapture.withOutput(recorder)
+            .also {
+                it.targetRotation = currentRotation
+            }
 
         try {
             // Unbind use cases before rebinding
@@ -87,6 +129,8 @@ class CameraXManager(
 
     fun takePicture(onImageCaptured: (Uri) -> Unit) {
         val imageCapture = imageCapture ?: return
+
+        Timber.tag("CameraX").d("Taking picture with rotation: ${getCurrentRotationName()} ($currentRotation)")
 
         // Create time stamped name and MediaStore entry.
         val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
@@ -204,8 +248,37 @@ class CameraXManager(
         return recording != null
     }
 
+    fun getCurrentRotation(): Int {
+        return currentRotation
+    }
+    
+    fun getCurrentRotationName(): String {
+        return when (currentRotation) {
+            Surface.ROTATION_0 -> "Portrait"
+            Surface.ROTATION_90 -> "Landscape Right"
+            Surface.ROTATION_180 -> "Portrait Upside Down"
+            Surface.ROTATION_270 -> "Landscape Left"
+            else -> "Unknown"
+        }
+    }
+    
+    fun onOrientationChanged() {
+        // Rebind camera use cases with new rotation
+        cameraProvider?.let { provider ->
+            try {
+                provider.unbindAll()
+                // Get the current preview view from the composable
+                // This will be handled by the UI layer calling startCamera again
+            } catch (exc: Exception) {
+                Timber.tag("CameraX").e(exc, "Failed to rebind camera on orientation change")
+            }
+        }
+    }
+
     fun cleanup() {
         recording?.stop()
+        orientationEventListener?.disable()
+        orientationEventListener = null
         cameraExecutor.shutdown()
     }
 }
