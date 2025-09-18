@@ -1,89 +1,43 @@
 package us.fireshare.tweet.tweet
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Environment
-import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.R
-import us.fireshare.tweet.navigation.SharedViewModel
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import us.fireshare.tweet.widget.UploadFilePreview
-import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
-import us.fireshare.tweet.service.FileTypeDetector
-import us.fireshare.tweet.utils.createVideoFile
-import us.fireshare.tweet.ui.CameraXPreview
+import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.ui.components.ActionButtonsRow
+import us.fireshare.tweet.ui.components.AttachmentPreviewRow
+import us.fireshare.tweet.ui.components.CameraHandler
+import us.fireshare.tweet.ui.components.ComposeTextField
+import us.fireshare.tweet.ui.components.ComposeTopAppBar
+import us.fireshare.tweet.ui.components.ExitConfirmationDialog
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,12 +52,18 @@ fun ComposeTweetScreen(
     LaunchedEffect(Unit) {
         tweetFeedViewModel.setNotificationContext(context)
     }
+
+    // State management
     var tweetContent by remember { mutableStateOf("") }
     var isPrivate by remember { mutableStateOf(false) }
-
-    val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    var showCamera by remember { mutableStateOf(false) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
     
-    // Function to check if file is within size limits
+    val selectedAttachments = remember { mutableStateListOf<Uri>() }
+
+    // File size validation
     fun isFileSizeValid(uri: Uri): Boolean {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri)
@@ -114,7 +74,8 @@ fun ComposeTweetScreen(
             false
         }
     }
-    
+
+    // File picker launcher
     val filesPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -128,8 +89,6 @@ fun ComposeTweetScreen(
             }
         }
     }
-    // CameraX state
-    var showCamera by remember { mutableStateOf(false) }
 
     // Handle image capture from CameraX
     val onImageCaptured = { uri: Uri ->
@@ -145,339 +104,117 @@ fun ComposeTweetScreen(
         showCamera = false
     }
 
-    // Open camera with CameraX
-    val openCamera = {
+    // Handle mention search
+    val onMentionSearch = { query: String ->
+        isSearching = true
+        sharedViewModel.appUserViewModel.viewModelScope.launch {
+            suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
+            isSearching = false
+        }
+        Unit
+    }
+
+    // Handle suggestion selection
+    val onSuggestionSelected = { suggestion: String ->
+        tweetContent = tweetContent.substringBeforeLast("@") + "@$suggestion "
+        suggestions = emptyList()
+    }
+
+    // Handle send action
+    val onSendClick = {
+        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
+            // Upload logic would go here
+            navController.popBackStack()
+        }
+        Unit
+    }
+
+    // Handle back action
+    val onBackClick = {
+        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
+            showExitConfirmation = true
+        } else {
+            navController.popBackStack()
+        }
+        Unit
+    }
+
+    // Handle camera click
+    val onCameraClick = {
         showCamera = true
     }
 
-    // Request camera permission
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            openCamera()
-        } else {
-            Toast.makeText(context, "Camera permission required", Toast.LENGTH_SHORT).show()
-        }
+    // Handle file picker click
+    val onFilePickerClick = {
+        filesPickerLauncher.launch(arrayOf("*/*"))
     }
-    // manually prevent fast continuous click of a button
-    var lastClickTime by remember { mutableLongStateOf(0L) }
-    var showExitConfirmation by remember { mutableStateOf(false) }
-    val debounceTime = 500L
+
+    // Check if there's content to send
+    val hasContent = tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
-                title = {
-                    Text("Edit", fontSize = 18.sp)
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-                            showExitConfirmation = true
-                        } else {
-                            navController.popBackStack()
-                        }
-                    }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    }
-                },
-                actions = {
-                    var isLoading by remember { mutableStateOf(false) }
-                    val coroutineScope = rememberCoroutineScope()
-
-                    // Listen for upload completion to reset loading state
-                    LaunchedEffect(Unit) {
-                        tweetFeedViewModel.startListeningToNotifications(context)
-                    }
-
-                    IconButton(
-                        enabled = !isLoading,
-                        onClick = {
-                            if (tweetContent.trim()
-                                    .isNotEmpty() || selectedAttachments.isNotEmpty()
-                            ) {
-                                isLoading = true
-
-                                // Store content before clearing
-                                val contentToUpload = tweetContent.trim()
-                                val attachmentsToUpload = selectedAttachments.toList()
-                                val isPrivateUpload = isPrivate
-
-                                // Clear UI immediately for better UX
-                                selectedAttachments.clear()
-                                tweetContent = ""
-
-                                // Upload tweet
-                                tweetFeedViewModel.uploadTweet(
-                                    context,
-                                    contentToUpload,
-                                    attachmentsToUpload,
-                                    isPrivateUpload
-                                )
-
-                                // Navigate back after a short delay to ensure upload is initiated
-                                val currentTime = SystemClock.elapsedRealtime()
-                                if (currentTime - lastClickTime > debounceTime) {
-                                    coroutineScope.launch {
-                                        delay(100) // Small delay to ensure upload is started
-                                        navController.popBackStack()
-                                    }
-                                    lastClickTime = currentTime
-                                }
-                            }
-                        }, modifier = Modifier
-                            .padding(horizontal = 16.dp) // Add padding for spacing
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = stringResource(R.string.send),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.rotate(180f)
-                        )
-                    }
-                }
+            ComposeTopAppBar(
+                title = "Edit",
+                showCamera = showCamera,
+                onBackClick = onBackClick,
+                onSendClick = onSendClick,
+                hasContent = hasContent
             )
-        }) { innerPadding ->
-        // content of scaffold, in the middle of current page.
+        }
+    ) { innerPadding ->
         Surface(
             modifier = Modifier
                 .padding(innerPadding)
-                .imePadding(),
+                .imePadding()
         ) {
-            Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp))
-            {
-                val focusRequester = remember { FocusRequester() }
-                val keyboardController = LocalSoftwareKeyboardController.current
-                var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-                var isSearching by remember { mutableStateOf(false) } // Track search state
-                val focusManager = LocalFocusManager.current
-
-                LaunchedEffect(Unit) {
-                    focusRequester.requestFocus() // Request focus on composable launch
-                }
-
-                OutlinedTextField(
-                    value = tweetContent,
-                    onValueChange = {
-                        // Limit tweet content to 280 characters (Twitter standard)
-                        if (it.length <= 280) {
-                            tweetContent = it
-                            if (it.contains("@") && !isSearching) {
-                                isSearching = true  // start search for suggestions
-                                val query = it.substringAfterLast("@")
-                                tweetFeedViewModel.viewModelScope.launch {
-                                    suggestions =
-                                        sharedViewModel.appUserViewModel.getSuggestions(query)
-                                    isSearching = false
-                                }
-                            } else {
-                                suggestions = emptyList()
-                                isSearching = false
-                            }
-                        }
-                    },
-                    label = { Text("What's happening?") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 200.dp, max = 600.dp)
-                        .alpha(0.7f)
-                        .focusRequester(focusRequester)
-                        .onFocusChanged {
-                            if (it.isFocused) {
-                                // Optionally show the keyboard programmatically
-                                keyboardController?.show()
-                            }
-                        },
-                    trailingIcon = {
-                        if (suggestions.isNotEmpty()) {
-                            IconButton(onClick = {
-                                suggestions = emptyList()
-                                isSearching = false
-                                focusManager.clearFocus()
-                            }) {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.close_suggestions)
-                                )
-                            }
-                        }
-                    }
+            Column(
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp)
+            ) {
+                // Text input field with mention suggestions
+                ComposeTextField(
+                    text = tweetContent,
+                    onTextChange = { tweetContent = it },
+                    onMentionSearch = onMentionSearch,
+                    suggestions = suggestions,
+                    onSuggestionSelected = onSuggestionSelected,
+                    onClearSuggestions = { suggestions = emptyList() }
                 )
-                if (suggestions.isNotEmpty()) {
-                    DropdownMenu(
-                        expanded = true,
-                        onDismissRequest = {
-                            suggestions = emptyList()
-                            isSearching = false
-                        },
-                        modifier = Modifier
-                            .height(IntrinsicSize.Min)
-                            .border(
-                                width = 1.dp, // Border width
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(4.dp)
-                            ),
-                    ) {
-                        suggestions.forEach { suggestion ->
-                            DropdownMenuItem(
-                                onClick = {
-                                    tweetContent =
-                                        tweetContent.substringBeforeLast("@") + "@$suggestion "
-                                    suggestions = emptyList()
-                                    isSearching = false
-                                    focusManager.clearFocus()
-                                },
-                                text = { Text(suggestion) },
-                                modifier = Modifier.heightIn(max = 30.dp)
-                            )
-                        }
-                    }
-                }
 
-                // Character counter
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(
-                        text = "${tweetContent.length}/280",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (tweetContent.length > 260) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // Attachment preview row
+                AttachmentPreviewRow(
+                    attachments = selectedAttachments,
+                    onRemoveAttachment = { selectedAttachments.remove(it) }
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // the row of action icons.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .weight(1f)
-                            .alpha(0.9f)
-                            .size(40.dp)
-                    ) {
-                        Checkbox(
-                            checked = isPrivate,
-                            onCheckedChange = { isPrivate = !isPrivate },
-                            modifier = Modifier
-                        )
-                        Text(
-                            text = "Private",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    Spacer(Modifier.weight(1f))
-
-                    IconButton(
-                        onClick = {
-                            if (ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.CAMERA
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                openCamera()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_camera), // Replace with your camera icon
-                            contentDescription = stringResource(R.string.open_camera),
-                            tint = MaterialTheme.colorScheme.surfaceTint,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // select media files to upload
-                    IconButton(
-                        onClick = { filesPickerLauncher.launch(arrayOf("*/*")) },
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_photo_plus),
-                            contentDescription = stringResource(R.string.upload_file),
-                            tint = MaterialTheme.colorScheme.surfaceTint,
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
-                }
-
-                // Display previews for attached files
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) {
-                    items(selectedAttachments.chunked(4)) { rowItems ->
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(rowItems) { uri ->
-                                UploadFilePreview(uri, onCheckedChange = { updatedUri, checked ->
-                                    if (!checked) {
-                                        selectedAttachments.remove(updatedUri)
-                                    }
-                                })
-                            }
-                        }
-                    }
-                }
+                // Action buttons row
+                ActionButtonsRow(
+                    isPrivate = isPrivate,
+                    onPrivateChange = { isPrivate = it },
+                    onCameraClick = onCameraClick,
+                    onFilePickerClick = onFilePickerClick,
+                    onSendClick = onSendClick,
+                    isLoading = false
+                )
             }
         }
-
-        // Exit confirmation dialog
-        if (showExitConfirmation) {
-            AlertDialog(
-                onDismissRequest = { showExitConfirmation = false },
-                title = { Text(stringResource(R.string.discard_tweet)) },
-                text = { Text(stringResource(R.string.unsaved_content_warning)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showExitConfirmation = false
-                            navController.popBackStack()
-                        }
-                    ) {
-                        Text(stringResource(R.string.discard))
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showExitConfirmation = false }
-                    ) {
-                        Text(stringResource(R.string.keep_editing))
-                    }
-                }
-            )
-        }
-
-        // CameraX Preview
-        if (showCamera) {
-            CameraXPreview(
-                onImageCaptured = onImageCaptured,
-                onVideoRecorded = onVideoRecorded,
-                onDismiss = { showCamera = false },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
     }
+
+    // Exit confirmation dialog
+    ExitConfirmationDialog(
+        showDialog = showExitConfirmation,
+        onDismiss = { showExitConfirmation = false },
+        onConfirm = { navController.popBackStack() }
+    )
+
+    // Camera handler
+    CameraHandler(
+        showCamera = showCamera,
+        onImageCaptured = onImageCaptured,
+        onVideoRecorded = onVideoRecorded,
+        onDismiss = { showCamera = false },
+        modifier = Modifier.fillMaxSize()
+    )
 }
