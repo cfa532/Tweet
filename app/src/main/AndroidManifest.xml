@@ -54,7 +54,6 @@
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
-            android:screenOrientation="unspecified"
             android:theme="@style/Theme.App.Starting">
             <tools:validation testUrl="http://fireshare.uk/tweet/agvvgWJmmXtji5FLTt768Plu3He/uCQDqhZgCGw3zpXtNSWo9Ftyn7Q" />
 
