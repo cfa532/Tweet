@@ -27,6 +27,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.utils.CameraXManager
 
@@ -44,11 +51,13 @@ fun CameraXPreview(
     onImageCaptured: (Uri) -> Unit,
     onVideoRecorded: (Uri) -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    openedFromComposer: Boolean = true // Default to true since most camera usage is from composer
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
+    val view = LocalView.current
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var isBackCamera by remember { mutableStateOf(true) }
@@ -69,10 +78,47 @@ fun CameraXPreview(
     
     LaunchedEffect(Unit) {
         cameraManager.initialize()
+        
+        // Force hide keyboard and system UI immediately when opening from composer
+        val activity = context as androidx.activity.ComponentActivity
+        val window = activity.window
+        val windowInsetsController = WindowCompat.getInsetsController(window, view)
+        
+        // Aggressively hide keyboard using multiple methods
+        windowInsetsController.hide(WindowInsetsCompat.Type.ime())
+        
+        // Hide keyboard using InputMethodManager with multiple approaches
+        val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
+        inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_NOT_ALWAYS)
+        
+        // If opened from composer, be extra aggressive with keyboard hiding
+        if (openedFromComposer) {
+            inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
+            inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0)
+        }
+        
+        // Force clear focus to ensure keyboard doesn't reappear
+        view.clearFocus()
+        
+        // Hide all system UI elements
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
+        
+        // Set full screen flags
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        )
+        
+        // Hide action bar and any app navigation
+        activity.actionBar?.hide()
+        
+        // Additional delay to ensure keyboard is fully hidden
+        delay(100)
+        inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
     }
-    
-    // Note: Orientation changes are now handled automatically by CameraXManager
-    // No need to manually rebind on orientation changes
     
     // Recording timer
     LaunchedEffect(isRecording) {
@@ -86,8 +132,58 @@ fun CameraXPreview(
         }
     }
     
+    // Handle full screen mode and cleanup
     DisposableEffect(Unit) {
+        val activity = context as androidx.activity.ComponentActivity
+        val window = activity.window
+        val windowInsetsController = WindowCompat.getInsetsController(window, view)
+        
+        // Hide all system UI elements for true full screen
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.ime()) // Hide keyboard
+        
+        // Aggressively hide keyboard using InputMethodManager with multiple approaches
+        val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
+        inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_NOT_ALWAYS)
+        
+        // If opened from composer, be extra aggressive with keyboard hiding
+        if (openedFromComposer) {
+            inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
+            inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0)
+        }
+        
+        // Force clear focus to ensure keyboard doesn't reappear
+        view.clearFocus()
+        
+        // Set behavior to prevent system bars from showing
+        windowInsetsController.systemBarsBehavior = 
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        
+        // Additional window flags for full screen
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        )
+        
+        // Hide action bar if present
+        activity.actionBar?.hide()
+        
         onDispose {
+            // Restore system bars when camera is dismissed
+            windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
+            windowInsetsController.show(WindowInsetsCompat.Type.navigationBars())
+            windowInsetsController.show(WindowInsetsCompat.Type.statusBars())
+            
+            // Clear full screen flags
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            
+            // Show action bar if it was hidden
+            activity.actionBar?.show()
+            
+            // Cleanup camera manager
             cameraManager.cleanup()
         }
     }
@@ -107,12 +203,12 @@ fun CameraXPreview(
             }
         )
 
-        // Top controls row with camera switch and cancel buttons (moved lower)
+        // Top controls row with camera switch and cancel buttons
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(top = 70.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
+                .padding(top = 32.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -185,7 +281,7 @@ fun CameraXPreview(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(24.dp),
+                .padding(bottom = 32.dp, start = 24.dp, end = 24.dp, top = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

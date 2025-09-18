@@ -87,6 +87,7 @@ class LocalVideoProcessingService(
                                         
                                         // Get aspect ratio for the result
                                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+                                        Timber.tag(TAG).d("Video aspect ratio calculated: $aspectRatio for URI: $uri")
                                         
                                         VideoProcessingResult.Success(
                                             MimeiFileType(

@@ -758,15 +758,33 @@ object VideoManager {
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
                 ?.toIntOrNull() ?: 0
 
+            // Check for rotation metadata (some videos have rotation info)
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull() ?: 0
+
             retriever.release()
 
             if (width > 0 && height > 0) {
-                width.toFloat() / height.toFloat()
+                // Calculate aspect ratio considering video rotation
+                val aspectRatio = when (rotation) {
+                    90, 270 -> {
+                        // For 90/270 degree rotations, swap width and height for correct aspect ratio
+                        height.toFloat() / width.toFloat()
+                    }
+                    else -> {
+                        // For normal orientation, use width/height
+                        width.toFloat() / height.toFloat()
+                    }
+                }
+                
+                Timber.tag("VideoManager").d("Video aspect ratio calculated: $aspectRatio (${width}x${height}, rotation: ${rotation}°) for URI: $uri")
+                aspectRatio
             } else {
+                Timber.tag("VideoManager").w("Could not determine video dimensions for URI: $uri, using default 16:9")
                 16f / 9f // Default aspect ratio
             }
         } catch (e: Exception) {
-            Timber.e("VideoManager - Error getting video aspect ratio: ${e.message}")
+            Timber.tag("VideoManager").e(e, "Error getting video aspect ratio for URI: $uri, using default 16:9")
             16f / 9f // Default aspect ratio on error
         }
     }
