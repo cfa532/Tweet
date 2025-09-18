@@ -101,7 +101,7 @@ fun UserFavorites(
                     viewModel.getFavorites(pageNumber)
                     emptyList<Tweet?>() // Return empty list since getFavorites updates the state
                 },
-                showPrivateTweets = false,
+                showPrivateTweets = true, // Show private tweets in favorites since they are user's own favorites
                 parentEntry = parentEntry
             )
         }
