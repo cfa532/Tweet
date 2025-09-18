@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.camera.view.PreviewView
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import us.fireshare.tweet.utils.CameraXManager
 
 @Composable
@@ -75,25 +78,34 @@ fun CameraXPreview(
             }
         )
 
-        // Camera indicator at top
+        // Top controls row with camera switch and cancel buttons (moved lower)
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxWidth()
+                .padding(top = 70.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (isBackCamera) "Back Camera" else "Front Camera",
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
+            // Switch camera button (moved to left) without background
+            IconButton(
+                onClick = {
+                    previewView?.let { pv ->
+                        cameraManager.switchCamera(pv, onImageCaptured)
+                        isBackCamera = !isBackCamera
+                    }
+                },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FlipCameraAndroid,
+                    contentDescription = if (isBackCamera) "Switch to Front Camera" else "Switch to Back Camera",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp).alpha(0.8f)
+                )
+            }
             
+            // Recording indicator (when recording) - center
             if (isRecording) {
                 Text(
                     text = "REC",
@@ -101,115 +113,115 @@ fun CameraXPreview(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier
                         .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                             RoundedCornerShape(8.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
+            
+            // Cancel button (moved to right) without background
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Cancel",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp).alpha(0.8f)
+                )
+            }
         }
 
-        // Camera Controls
-        Column(
+        // Bottom controls - Mode toggle and capture button
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top controls row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Switch camera button
-                IconButton(
-                    onClick = {
-                        previewView?.let { pv ->
-                            cameraManager.switchCamera(pv, onImageCaptured)
-                            isBackCamera = !isBackCamera
-                        }
-                    },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FlipCameraAndroid,
-                        contentDescription = if (isBackCamera) "Switch to Front Camera" else "Switch to Back Camera",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(32.dp)
+            // Photo mode button (smaller with further reduced opacity and background)
+            IconButton(
+                onClick = { captureMode = "photo" },
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        if (captureMode == "photo") 
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        else 
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                        RoundedCornerShape(18.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Close button
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = "Photo Mode",
+                    tint = if (captureMode == "photo") 
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else 
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            // Mode toggle buttons
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Photo mode button
-                IconButton(
-                    onClick = { captureMode = "photo" },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Photo Mode",
-                        tint = if (captureMode == "photo") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Capture button
-                FloatingActionButton(
-                    onClick = {
-                        if (captureMode == "photo") {
-                            cameraManager.takePicture(onImageCaptured)
+            // Capture button (gray with reduced opacity)
+            FloatingActionButton(
+                onClick = {
+                    if (captureMode == "photo") {
+                        cameraManager.takePicture(onImageCaptured)
+                    } else {
+                        if (isRecording) {
+                            cameraManager.stopVideoRecording()
+                            isRecording = false
                         } else {
-                            if (isRecording) {
-                                cameraManager.stopVideoRecording()
-                                isRecording = false
+                            // Check for audio permission before starting video recording
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                cameraManager.startVideoRecording(onVideoRecorded)
+                                isRecording = true
                             } else {
-                                // Check for audio permission before starting video recording
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                    cameraManager.startVideoRecording(onVideoRecorded)
-                                    isRecording = true
-                                } else {
-                                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
+                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         }
-                    },
-                    modifier = Modifier.size(72.dp),
-                    containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(
-                        imageVector = if (captureMode == "photo") Icons.Default.CameraAlt else if (isRecording) Icons.Default.Stop else Icons.Default.Videocam,
-                        contentDescription = if (captureMode == "photo") "Take Photo" else if (isRecording) "Stop Recording" else "Start Recording",
-                        modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
+                    }
+                },
+                modifier = Modifier.size(72.dp),
+                containerColor = if (isRecording) 
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                else 
+                    androidx.compose.ui.graphics.Color.Gray.copy(alpha = 0.6f)
+            ) {
+                Icon(
+                    imageVector = if (captureMode == "photo") Icons.Default.CameraAlt else if (isRecording) Icons.Default.Stop else Icons.Default.Videocam,
+                    contentDescription = if (captureMode == "photo") "Take Photo" else if (isRecording) "Stop Recording" else "Start Recording",
+                    modifier = Modifier.size(32.dp),
+                    tint = if (isRecording) MaterialTheme.colorScheme.onError else androidx.compose.ui.graphics.Color.White
+                )
+            }
 
-                // Video mode button
-                IconButton(
-                    onClick = { captureMode = "video" },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Videocam,
-                        contentDescription = "Video Mode",
-                        tint = if (captureMode == "video") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(24.dp)
+            // Video mode button (smaller with further reduced opacity and background)
+            IconButton(
+                onClick = { captureMode = "video" },
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        if (captureMode == "video") 
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        else 
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                        RoundedCornerShape(18.dp)
                     )
-                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = "Video Mode",
+                    tint = if (captureMode == "video") 
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else 
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
