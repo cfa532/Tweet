@@ -95,12 +95,14 @@ fun ReplyEditorBox(
 
     // Handle image capture from CameraX
     val onImageCaptured = { uri: Uri ->
+        android.util.Log.d("CameraX", "Image captured: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }
 
     // Handle video recording from CameraX
     val onVideoRecorded = { uri: Uri ->
+        android.util.Log.d("CameraX", "Video recorded: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }

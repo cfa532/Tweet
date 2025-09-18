@@ -4,8 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.view.OrientationEventListener
-import android.view.Surface
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
@@ -17,7 +15,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import timber.log.Timber
 
 class CameraXManager(
     private val context: Context,
@@ -30,40 +27,9 @@ class CameraXManager(
     private var cameraProvider: ProcessCameraProvider? = null
     private lateinit var cameraExecutor: ExecutorService
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-    private var orientationEventListener: OrientationEventListener? = null
-    private var currentOrientation = 0
 
     fun initialize() {
         cameraExecutor = Executors.newSingleThreadExecutor()
-        setupOrientationListener()
-    }
-    
-    private fun setupOrientationListener() {
-        orientationEventListener = object : OrientationEventListener(context) {
-            override fun onOrientationChanged(orientation: Int) {
-                val newOrientation = when (orientation) {
-                    in 45..134 -> 90
-                    in 135..224 -> 180
-                    in 225..314 -> 270
-                    else -> 0
-                }
-                
-                if (newOrientation != currentOrientation) {
-                    currentOrientation = newOrientation
-                    updateCameraOrientation()
-                }
-            }
-        }
-        orientationEventListener?.enable()
-    }
-    
-    private fun updateCameraOrientation() {
-        imageCapture?.targetRotation = when (currentOrientation) {
-            90 -> Surface.ROTATION_90
-            180 -> Surface.ROTATION_180
-            270 -> Surface.ROTATION_270
-            else -> Surface.ROTATION_0
-        }
     }
 
     fun startCamera(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
@@ -74,7 +40,7 @@ class CameraXManager(
                 cameraProvider = cameraProviderFuture.get()
                 bindCameraUseCases(previewView, onImageCaptured)
             } catch (exc: Exception) {
-                Timber.tag("CameraX").e(exc, "Use case binding failed")
+                android.util.Log.e("CameraX", "Use case binding failed", exc)
             }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -92,7 +58,6 @@ class CameraXManager(
         // ImageCapture
         imageCapture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .setTargetRotation(Surface.ROTATION_0)
             .build()
 
         // VideoCapture
@@ -115,7 +80,7 @@ class CameraXManager(
             )
 
         } catch (exc: Exception) {
-            Timber.tag("CameraX").e(exc, "Use case binding failed")
+            android.util.Log.e("CameraX", "Use case binding failed", exc)
         }
     }
 
@@ -147,11 +112,12 @@ class CameraXManager(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onError(exception: ImageCaptureException) {
-                    Timber.tag("CameraX").e(exception, "Photo capture failed: ${exception.message}")
+                    android.util.Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     val savedUri = output.savedUri
+                    android.util.Log.d("CameraX", "Photo capture succeeded: $savedUri")
                     savedUri?.let { onImageCaptured(it) }
                 }
             }
@@ -174,7 +140,7 @@ class CameraXManager(
                 // Rebind with new camera
                 bindCameraUseCases(previewView, onImageCaptured)
             } catch (exc: Exception) {
-                Timber.tag("CameraX").e(exc, "Camera switch failed")
+                android.util.Log.e("CameraX", "Camera switch failed", exc)
             }
         }
     }
@@ -208,14 +174,15 @@ class CameraXManager(
             .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
-                        Timber.tag("CameraX").d("Video recording started")
+                        android.util.Log.d("CameraX", "Video recording started")
                     }
                     is VideoRecordEvent.Finalize -> {
                         if (!recordEvent.hasError()) {
                             val savedUri = recordEvent.outputResults.outputUri
+                            android.util.Log.d("CameraX", "Video saved: $savedUri")
                             onVideoRecorded(savedUri)
                         } else {
-                            Timber.tag("CameraX").e("Video recording failed: ${recordEvent.error}")
+                            android.util.Log.e("CameraX", "Video recording failed: ${recordEvent.error}")
                         }
                         recording = null
                     }
@@ -234,8 +201,6 @@ class CameraXManager(
 
     fun cleanup() {
         recording?.stop()
-        orientationEventListener?.disable()
-        orientationEventListener = null
         cameraExecutor.shutdown()
     }
 }
