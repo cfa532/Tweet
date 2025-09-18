@@ -95,6 +95,8 @@ fun ProfileScreen(
         // load tweets only when user profile screen is opened.
         withContext(Dispatchers.IO) {
             viewModel.initLoad()
+            // Sync user data with server when profile screen is opened
+            viewModel.syncUser()
         }
     }
 

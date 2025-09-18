@@ -127,7 +127,7 @@ fun FollowerItem(
     LaunchedEffect(userId) {
         Timber.tag("FollowerItem").d("Loading user data for userId: $userId")
         withContext(IO) {
-            viewModel.refreshUser()
+            viewModel.getUser()
         }
     }
 
@@ -135,7 +135,7 @@ fun FollowerItem(
     LaunchedEffect(user) {
         if (user.isGuest()) {
             withContext(IO) {
-                viewModel.refreshUser()
+                viewModel.getUser()
             }
         }
     }

@@ -623,8 +623,18 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun refreshUser() {
+    suspend fun getUser() {
         getUser(userId, maxRetries = 3)?.let {
+            _user.value = it
+        }
+    }
+
+    /**
+     * Sync user data with server using the refresh_user backend endpoint.
+     * This is specifically for getting the latest user data from the server.
+     */
+    suspend fun syncUser() {
+        HproseInstance.syncUser(userId)?.let {
             _user.value = it
         }
     }

@@ -272,7 +272,7 @@ fun ChatUserItem(
     // Proactively load user data for every user ID
     LaunchedEffect(userId) {
         withContext(Dispatchers.IO) {
-            userViewModel.refreshUser()
+            userViewModel.getUser()
         }
     }
     
@@ -280,7 +280,7 @@ fun ChatUserItem(
     LaunchedEffect(user) {
         if (user.isGuest()) {
             withContext(Dispatchers.IO) {
-                userViewModel.refreshUser()
+                userViewModel.getUser()
             }
         }
     }

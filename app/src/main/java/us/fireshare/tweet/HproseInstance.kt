@@ -834,6 +834,55 @@ object HproseInstance {
         }
     }
 
+    /**
+     * Refresh user data from server using "refresh_user" entry.
+     * @param userId The user ID to refresh
+     * @return Updated User object from server, or null if refresh failed
+     */
+    suspend fun syncUser(userId: MimeiId): User? {
+        // Check if user is blacklisted
+        if (BlackList.isBlacklisted(userId)) {
+            Timber.tag("syncUser").d("User $userId is blacklisted, returning null")
+            return null
+        }
+
+        return try {
+            // Get the user to access their hproseService
+            val user = getUser(userId) ?: return null
+            
+            val entry = "refresh_user"
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "userid" to userId,
+            )
+            
+            user.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { userData ->
+                // Record successful access
+                BlackList.recordSuccess(userId)
+                
+                // Create updated user from server response
+                val refreshedUser = getUserInstance(userId)
+                refreshedUser.from(userData)
+                refreshedUser.baseUrl = user.baseUrl
+                
+                // Update cache with refreshed user data
+                TweetCacheManager.saveUser(refreshedUser)
+                
+                Timber.tag("syncUser").d("Successfully synced user: $userId")
+                refreshedUser
+            }
+        } catch (e: Exception) {
+            // Record failed access
+            BlackList.recordFailure(userId)
+            
+            Timber.tag("syncUser").e("Error refreshing user: $userId")
+            Timber.tag("syncUser").e("Exception: $e")
+            
+            null
+        }
+    }
+
     suspend fun loadCachedTweets(
         startRank: Int,  // earlier in time, therefore smaller timestamp
         count: Int,

@@ -125,7 +125,7 @@ fun FollowingItem(
     // Proactively load user data for every user ID
     LaunchedEffect(userId) {
         withContext(IO) {
-            viewModel.refreshUser()
+            viewModel.getUser()
         }
     }
 
@@ -133,7 +133,7 @@ fun FollowingItem(
     LaunchedEffect(user) {
         if (user.isGuest()) {
             withContext(IO) {
-                viewModel.refreshUser()
+                viewModel.getUser()
             }
         }
     }
