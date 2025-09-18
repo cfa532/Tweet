@@ -69,6 +69,8 @@ fun CameraXPreview(
             factory = { context ->
                 PreviewView(context).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    // Enable orientation handling
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 }
             },
             modifier = Modifier.fillMaxSize(),
