@@ -74,6 +74,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -132,14 +133,14 @@ fun ComposeTweetScreen(
 
     // Handle image capture from CameraX
     val onImageCaptured = { uri: Uri ->
-        android.util.Log.d("CameraX", "Image captured: $uri")
+        Timber.tag("CameraX").d("Image captured: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }
 
     // Handle video recording from CameraX
     val onVideoRecorded = { uri: Uri ->
-        android.util.Log.d("CameraX", "Video recorded: $uri")
+        Timber.tag("CameraX").d("Video recorded: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }

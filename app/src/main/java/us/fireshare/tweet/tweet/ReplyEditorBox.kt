@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.profile.UserAvatar
@@ -95,14 +96,14 @@ fun ReplyEditorBox(
 
     // Handle image capture from CameraX
     val onImageCaptured = { uri: Uri ->
-        android.util.Log.d("CameraX", "Image captured: $uri")
+        Timber.tag("CameraX").d("Image captured: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }
 
     // Handle video recording from CameraX
     val onVideoRecorded = { uri: Uri ->
-        android.util.Log.d("CameraX", "Video recorded: $uri")
+        Timber.tag("CameraX").d("Video recorded: $uri")
         selectedAttachments.add(uri)
         showCamera = false
     }

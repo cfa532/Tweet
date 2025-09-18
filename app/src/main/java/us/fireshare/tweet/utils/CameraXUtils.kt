@@ -10,6 +10,7 @@ import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import timber.log.Timber
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -40,7 +41,7 @@ class CameraXManager(
                 cameraProvider = cameraProviderFuture.get()
                 bindCameraUseCases(previewView, onImageCaptured)
             } catch (exc: Exception) {
-                android.util.Log.e("CameraX", "Use case binding failed", exc)
+                Timber.tag("CameraX").e(exc, "Use case binding failed")
             }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -52,7 +53,7 @@ class CameraXManager(
         val preview = Preview.Builder()
             .build()
             .also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
+                it.surfaceProvider = previewView.surfaceProvider
             }
 
         // ImageCapture
@@ -62,7 +63,7 @@ class CameraXManager(
 
         // VideoCapture
         val recorder = Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+            .setQualitySelector(QualitySelector.from(Quality.SD))
             .build()
         videoCapture = VideoCapture.withOutput(recorder)
 
@@ -80,7 +81,7 @@ class CameraXManager(
             )
 
         } catch (exc: Exception) {
-            android.util.Log.e("CameraX", "Use case binding failed", exc)
+            Timber.tag("CameraX").e( "Use case binding failed")
         }
     }
 
@@ -114,12 +115,12 @@ class CameraXManager(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onError(exception: ImageCaptureException) {
-                    android.util.Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
+                    Timber.tag("CameraX").e(exception, "Photo capture failed: ${exception.message}")
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     val savedUri = output.savedUri
-                    android.util.Log.d("CameraX", "Photo capture succeeded: $savedUri")
+                    Timber.tag("CameraX").d("Photo capture succeeded: $savedUri")
                     savedUri?.let { onImageCaptured(it) }
                 }
             }
@@ -142,7 +143,7 @@ class CameraXManager(
                 // Rebind with new camera
                 bindCameraUseCases(previewView, onImageCaptured)
             } catch (exc: Exception) {
-                android.util.Log.e("CameraX", "Camera switch failed", exc)
+                Timber.tag("CameraX").e(exc, "Camera switch failed")
             }
         }
     }
@@ -178,15 +179,15 @@ class CameraXManager(
             .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                 when (recordEvent) {
                     is VideoRecordEvent.Start -> {
-                        android.util.Log.d("CameraX", "Video recording started")
+                        Timber.tag("CameraX").d("Video recording started")
                     }
                     is VideoRecordEvent.Finalize -> {
                         if (!recordEvent.hasError()) {
                             val savedUri = recordEvent.outputResults.outputUri
-                            android.util.Log.d("CameraX", "Video saved: $savedUri")
+                            Timber.tag("CameraX").d("Video saved: $savedUri")
                             onVideoRecorded(savedUri)
                         } else {
-                            android.util.Log.e("CameraX", "Video recording failed: ${recordEvent.error}")
+                            Timber.tag("CameraX").e("Video recording failed: ${recordEvent.error}")
                         }
                         recording = null
                     }

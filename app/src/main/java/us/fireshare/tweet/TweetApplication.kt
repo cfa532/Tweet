@@ -3,7 +3,6 @@ package us.fireshare.tweet
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
-import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -140,7 +139,7 @@ class ReleaseTree : Timber.Tree() {
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
 
         // Only log WARN, ERROR, and WTF levels in release builds
-        if (priority == Log.VERBOSE || priority == Log.DEBUG || priority == Log.INFO) {
+        if (priority == android.util.Log.VERBOSE || priority == android.util.Log.DEBUG || priority == android.util.Log.INFO) {
             return
         }
         // Error messages are no longer sent back to server
@@ -156,11 +155,11 @@ class ReleaseTree : Timber.Tree() {
 
     private fun priorityToString(priority: Int): String {
         return when (priority) {
-            Log.ERROR -> "ERROR"
-            Log.WARN -> "WARN"
-            Log.INFO -> "INFO"
-            Log.DEBUG -> "DEBUG"
-            Log.VERBOSE -> "VERBOSE"
+            android.util.Log.ERROR -> "ERROR"
+            android.util.Log.WARN -> "WARN"
+            android.util.Log.INFO -> "INFO"
+            android.util.Log.DEBUG -> "DEBUG"
+            android.util.Log.VERBOSE -> "VERBOSE"
             else -> "UNKNOWN"
         }
     }
