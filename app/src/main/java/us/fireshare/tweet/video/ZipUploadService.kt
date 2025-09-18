@@ -3,16 +3,16 @@ package us.fireshare.tweet.video
 import android.content.Context
 import com.google.gson.Gson
 import io.ktor.client.HttpClient
-import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.User
 import java.io.File
 
 /**

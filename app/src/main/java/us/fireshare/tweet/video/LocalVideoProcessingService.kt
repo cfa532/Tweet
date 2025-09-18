@@ -6,10 +6,10 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
 

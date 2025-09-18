@@ -89,7 +89,6 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
