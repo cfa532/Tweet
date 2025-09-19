@@ -624,7 +624,7 @@ class UserViewModel @AssistedInject constructor(
             // When pageNumber is 0, load pinned tweets first and wait for completion
             if (pageNumber == 0) {
                 loadPinnedTweets()
-                // Ensure pinned tweets are loaded before proceeding
+                // Ensure pinned tweets are fully loaded before proceeding
                 Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
             }
 
@@ -700,6 +700,9 @@ class UserViewModel @AssistedInject constructor(
 
             Timber.tag("loadPinnedTweets")
                 .d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
+            
+            Timber.tag("loadPinnedTweets")
+                .d("Pinned tweets response: $pinnedTweetsResponse")
 
             if (!pinnedTweetsResponse.isNullOrEmpty()) {
                 // Parse the response: List<{tweet: Tweet, timestamp: Long}>
@@ -802,6 +805,9 @@ class UserViewModel @AssistedInject constructor(
 
                 Timber.tag("loadPinnedTweets")
                     .d("Updated pinned tweets list with ${_pinnedTweets.value.size} valid tweets: ${validPinnedTweets.map { it.mid }}")
+                
+                Timber.tag("loadPinnedTweets")
+                    .d("Pinned tweets state after update: ${_pinnedTweets.value}")
             } else {
                 // Clear pinned tweets if none found
                 _pinnedTweets.value = emptyList()
@@ -812,6 +818,8 @@ class UserViewModel @AssistedInject constructor(
             Timber.tag("loadPinnedTweets")
                 .e(e, "Error loading pinned tweets for user: ${user.value.mid}")
             // Don't clear pinned tweets on error, keep existing state
+            Timber.tag("loadPinnedTweets")
+                .d("Exception occurred, keeping existing pinned tweets: ${_pinnedTweets.value.size}")
         }
     }
 
@@ -1262,6 +1270,21 @@ class UserViewModel @AssistedInject constructor(
                             // Update user's tweet count while preserving other fields
                             _user.value = _user.value.copy(tweetCount = updatedTweets.size)
                             _tweetCount.value = updatedTweets.size
+                        }
+                    }
+                    
+                    is TweetEvent.TweetRetweeted -> {
+                        // Add the retweet to the user's tweet list if it's the current user's retweet
+                        if (event.retweet.authorId == user.value.mid) {
+                            // Add the retweet to the beginning of the tweets list
+                            _tweets.update { currentTweets ->
+                                (listOf(event.retweet) + currentTweets)
+                                    .distinctBy { it.mid }
+                                    .sortedByDescending { it.timestamp }
+                            }
+                            
+                            // Update user's tweet count
+                            _tweetCount.value = tweets.value.size
                         }
                     }
 
