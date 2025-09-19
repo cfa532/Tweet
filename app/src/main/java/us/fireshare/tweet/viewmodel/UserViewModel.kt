@@ -636,49 +636,29 @@ class UserViewModel @AssistedInject constructor(
             Timber.tag("getTweets")
                 .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
-            if (pageNumber == 0) {
-                // For refresh (page 0), replace the list only if we have no existing tweets
-                // This prevents replacing tweets during TweetListView recreation
-                if (_tweets.value.isEmpty()) {
-                    val filteredTweets = newTweets.filterNot { tweet: Tweet ->
-                        tweet.isPrivate && tweet.authorId != appUser.mid
-                    }
-
-                    // Get current pinned tweet IDs after ensuring they're loaded
-                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                    val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
-                        pinnedTweetIds.contains(tweet.mid)
-                    }
-
-                    _tweets.value = tweetsWithoutPinned
-                    _tweetCount.value = tweetsWithoutPinned.size
-
-                    Timber.tag("getTweets")
-                        .d("Initial load: Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list. Pinned IDs: $pinnedTweetIds")
-                } else {
-                    // We already have tweets, just ensure page 0 tweets are included
-                    Timber.tag("getTweets")
-                        .d("Page 0 called but tweets already exist (${_tweets.value.size} tweets), preserving existing list")
+            // Always merge new tweets with existing ones, never replace (like TweetFeedViewModel)
+            _tweets.update { currentTweets ->
+                val filteredTweets = newTweets.filterNot { tweet: Tweet ->
+                    tweet.isPrivate && tweet.authorId != appUser.mid
                 }
-            } else {
-                // For load more (page > 0), append to the list
-                _tweets.update { currentTweets ->
-                    val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
-                    val updatedTweets = currentTweets.map { tweet ->
-                        newTweetsMap[tweet.mid] ?: tweet
-                    }
-                    val combinedTweets = (updatedTweets + newTweets)
-                        .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+
+                // Get current pinned tweet IDs after ensuring they're loaded
+                val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
+                    pinnedTweetIds.contains(tweet.mid)
+                }
+
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val trulyNewTweets = tweetsWithoutPinned.filter { it.mid !in currentTweetIds }
+
+                if (trulyNewTweets.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + trulyNewTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
-
-                    // Filter out pinned tweets from the combined list
-                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                    val finalTweets = combinedTweets.filterNot { tweet: Tweet ->
-                        pinnedTweetIds.contains(tweet.mid)
-                    }.sortedByDescending { tweet: Tweet -> tweet.timestamp }
-
-                    _tweetCount.value = finalTweets.size
-                    finalTweets
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    _tweetCount.value = mergedTweets.size
+                    mergedTweets
+                } else {
+                    currentTweets
                 }
             }
 
