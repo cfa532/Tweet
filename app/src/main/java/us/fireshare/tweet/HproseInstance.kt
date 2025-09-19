@@ -835,9 +835,8 @@ object HproseInstance {
     }
 
     /**
-     * Refresh user data from server using "refresh_user" entry.
-     * @param userId The user ID to refresh
-     * @return Updated User object from server, or null if refresh failed
+     * @param userId The user ID to resync with main host node.
+     * @return Updated User object from server, or null if resync failed
      */
     suspend fun syncUser(userId: MimeiId): User? {
         // Check if user is blacklisted
@@ -850,7 +849,7 @@ object HproseInstance {
             // Get the user to access their hproseService
             val user = getUser(userId) ?: return null
             
-            val entry = "refresh_user"
+            val entry = "resync_user"
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
@@ -862,15 +861,15 @@ object HproseInstance {
                 BlackList.recordSuccess(userId)
                 
                 // Create updated user from server response
-                val refreshedUser = getUserInstance(userId)
-                refreshedUser.from(userData)
-                refreshedUser.baseUrl = user.baseUrl
+                val resyncedUser = getUserInstance(userId)
+                resyncedUser.from(userData)
+                resyncedUser.baseUrl = user.baseUrl
                 
                 // Update cache with refreshed user data
-                TweetCacheManager.saveUser(refreshedUser)
+                TweetCacheManager.saveUser(resyncedUser)
                 
                 Timber.tag("syncUser").d("Successfully synced user: $userId")
-                refreshedUser
+                resyncedUser
             }
         } catch (e: Exception) {
             // Record failed access

@@ -610,8 +610,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Sync user data with server using the refresh_user backend endpoint.
-     * This is specifically for getting the latest user data from the server.
+     * This is specifically for sync user on a node with its main host data.
      */
     suspend fun syncUser() {
         HproseInstance.syncUser(userId)?.let {
