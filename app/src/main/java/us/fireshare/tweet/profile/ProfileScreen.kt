@@ -250,49 +250,25 @@ private fun ProfileContentWithTweetListView(
         }
     }
 
-    // Create pull refresh state for initial loading
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = initState,
-        onRefresh = { /* No-op for initial load */ }
+    // Use TweetListView with header content for unified scrolling
+    // TweetListView handles its own pull-to-refresh functionality
+    TweetListView(
+        tweets = tweets,
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
+        },
+        modifier = Modifier.fillMaxSize(),
+        scrollBehavior = scrollBehavior,
+        contentPadding = PaddingValues(bottom = 60.dp),
+        showPrivateTweets = true, // Show private tweets in profile
+        parentEntry = parentEntry,
+        onScrollStateChange = onScrollStateChange,
+        currentUserId = userId, // Use userId directly
+        onTweetUnavailable = { tweetId ->
+            viewModel.removeTweetFromAllLists(tweetId)
+        },
+        headerContent = headerContent,
+        restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
+        context = if (userId == appUser.mid) "appUserProfile" else "default"
     )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
-    ) {
-        // Use TweetListView with header content for unified scrolling
-        TweetListView(
-            tweets = tweets,
-            fetchTweets = { pageNumber ->
-                viewModel.fetchTweets(pageNumber)
-            },
-            modifier = Modifier.fillMaxSize(),
-            scrollBehavior = scrollBehavior,
-            contentPadding = PaddingValues(bottom = 60.dp),
-            showPrivateTweets = true, // Show private tweets in profile
-            parentEntry = parentEntry,
-            onScrollStateChange = onScrollStateChange,
-            currentUserId = userId, // Use userId directly
-            onTweetUnavailable = { tweetId ->
-                viewModel.removeTweetFromAllLists(tweetId)
-            },
-            headerContent = headerContent,
-            restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
-            context = if (userId == appUser.mid) "appUserProfile" else "default"
-        )
-
-        // Show pull-to-refresh style indicator during initial load
-        if (initState) {
-            PullRefreshIndicator(
-                refreshing = true,
-                state = pullRefreshState,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 40.dp),
-                backgroundColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
 }
