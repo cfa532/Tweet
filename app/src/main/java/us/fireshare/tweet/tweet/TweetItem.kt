@@ -431,9 +431,9 @@ private fun RetweetWithContent(
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
                     // State hoist
+                    CommentButton(viewModel)
                     LikeButton(viewModel)
                     BookmarkButton(viewModel)
-                    CommentButton(viewModel)
                     RetweetButton(viewModel)
                     Spacer(modifier = Modifier.width(40.dp))
                     ShareButton(viewModel)

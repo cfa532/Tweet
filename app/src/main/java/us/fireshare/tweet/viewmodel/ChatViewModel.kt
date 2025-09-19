@@ -216,17 +216,8 @@ class ChatViewModel @AssistedInject constructor(
                                 if (event.message.authorId == appUser.mid) {
                                     _shouldScrollToBottom.value = true
                                 }
-                                
-                                Timber.tag("ChatViewModel")
-                                    .d("ChatMessageSent: Added new message with ID: ${event.message.id}")
-                            } else {
-                                Timber.tag("ChatViewModel")
-                                    .d("ChatMessageSent: Skipped duplicate message with ID: ${event.message.id}")
                             }
-                            
                             chatListViewModel?.updateSession(event.message, hasNews = false)
-
-                            // No success toast for attachment messages - only show failure toasts
                         }
                     }
 

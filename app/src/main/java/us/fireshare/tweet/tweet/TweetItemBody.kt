@@ -184,9 +184,9 @@ fun TweetItemBody(
                             .fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
+                        CommentButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        CommentButton(viewModel)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(40.dp))
                         ShareButton(viewModel)

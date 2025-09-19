@@ -229,9 +229,9 @@ fun TweetDetailBody(
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         // State hoist
+                        CommentButton(viewModel, onExpandReply = onExpandReply)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        CommentButton(viewModel, onExpandReply = onExpandReply)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)

@@ -518,9 +518,9 @@ fun MediaBrowser(
                             .padding(start = 16.dp, bottom = 32.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
+                        CommentButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        CommentButton(viewModel)
                         RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)

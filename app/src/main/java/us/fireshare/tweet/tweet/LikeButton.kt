@@ -83,16 +83,19 @@ fun CommentButton(
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = R.drawable.ic_notice),
+                painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-            )
+            if (count > 0) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
@@ -137,11 +140,13 @@ fun RetweetButton(viewModel: TweetViewModel) {
                 tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-            )
+            if (count>0) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                )
+            }
         }
     }
 }
@@ -176,11 +181,14 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
-            )
+            if (count > 0) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color
+                        ?: MaterialTheme.colorScheme.secondary
+                )
+            }
         }
     }
 }
@@ -217,11 +225,14 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                 tint = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = "$count",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
-            )
+            if (count > 0) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color
+                        ?: MaterialTheme.colorScheme.secondary
+                )
+            }
         }
     }
 }

@@ -156,9 +156,9 @@ fun CommentItem(
                 .padding(start = 40.dp, end = 4.dp, bottom = 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            CommentButton(viewModel)
             LikeButton(viewModel)
             BookmarkButton(viewModel)
-            CommentButton(viewModel)
             RetweetButton(viewModel)
             Spacer(modifier = Modifier.width(40.dp))
             ShareButton(viewModel)
