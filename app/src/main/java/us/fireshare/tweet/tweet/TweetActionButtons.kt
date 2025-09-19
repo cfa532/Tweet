@@ -83,10 +83,10 @@ fun CommentButton(
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = if (count>0) R.drawable.bubble_right_fill else R.drawable.bubble_right),
+                painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = MaterialTheme.colorScheme.secondary
+                tint = if (count >0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
             if (count > 0) {

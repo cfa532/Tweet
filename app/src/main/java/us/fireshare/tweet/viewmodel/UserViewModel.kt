@@ -745,8 +745,14 @@ class UserViewModel @AssistedInject constructor(
                         }
 
                         if (tweet != null && pinnedTimestamp != null) {
+                            // Ensure the author field is set correctly for pinned tweets
+                            val tweetWithAuthor = if (tweet.author == null) {
+                                tweet.copy(author = HproseInstance.getUser(tweet.authorId))
+                            } else {
+                                tweet
+                            }
                             // Keep the original tweet, but associate it with its pinned timestamp for sorting
-                            Pair(tweet, pinnedTimestamp)
+                            Pair(tweetWithAuthor, pinnedTimestamp)
                         } else {
                             Timber.tag("loadPinnedTweets")
                                 .w("Invalid pinned tweet data: tweet=$tweet, timestamp=$pinnedTimestamp")
