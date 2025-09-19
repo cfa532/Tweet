@@ -39,6 +39,7 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetViewModel
 
 /**
  * Shorten tweet ID by showing first 6 and last 6 characters with ellipsis in the middle
@@ -72,7 +73,12 @@ fun TweetDropdownMenuItems(
         "tweetDetail" -> tweet.authorId == appUser.mid // Show delete for user's own tweets in detail view
         else -> false // Don't show delete in other contexts
     }
-    
+    val originTweetViewModel = if (tweet.originalTweetId != null) hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry, key = tweet.originalTweetId
+    ) { factory ->
+        factory.create(Tweet.getInstance(tweet.originalTweetId!!, tweet.originalAuthorId!!))
+    } else null
+
     if (shouldShowDeleteButton) {
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
@@ -90,24 +96,14 @@ fun TweetDropdownMenuItems(
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
                             // Deletion completed successfully
                             Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
-                            
+
                             // Update retweet count of original tweet if this is a retweet
-                            if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                            if (originTweetViewModel != null) {
                                 applicationScope.launch(IO) {
-                                    try {
-                                        val originalTweet = HproseInstance.fetchTweet(
-                                            tweet.originalTweetId!!,
-                                            tweet.originalAuthorId!!,
-                                            shouldCache = false
-                                        )
-                                        originalTweet?.let { original ->
-                                            HproseInstance.updateRetweetCount(original, tweet.mid, -1)?.let { updatedTweet ->
-                                                // Post notification to update UI
-                                                TweetNotificationCenter.post(TweetEvent.TweetUpdated(updatedTweet))
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Timber.tag("TweetDropdownMenuItems").e(e, "Error updating retweet count")
+                                    HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
+                                        // Update cache with the new retweet count
+                                        HproseInstance.updateCachedTweet(updatedOriginTweet)
+                                        originTweetViewModel.updateViewModel(updatedOriginTweet)
                                     }
                                 }
                             }

@@ -73,6 +73,10 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
+    fun updateViewModel(tweet: Tweet) {
+        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount)
+    }
+
     fun savePlaybackPosition(url: String, position: Long) {
         playbackPositions[url] = position
         savedStateHandle["playbackPosition_$url"] = position

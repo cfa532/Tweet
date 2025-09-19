@@ -899,14 +899,14 @@ object HproseInstance {
     }
 
     /**
-     * Increase the retweetCount of the original tweet mimei.
-     * @param tweet is the original tweet
+     * Increase/decrease the retweetCount of the original tweet mimei.
+     * @param originalTweet is the original tweet
      * @param retweetId of the retweet.
      * @param direction to indicate increase or decrease retweet count.
-     * @return updated original tweet.
+     * @return the updated original tweet.
      * */
     suspend fun updateRetweetCount(
-        tweet: Tweet,
+        originalTweet: Tweet,
         retweetId: MimeiId,
         direction: Int = 1
     ): Tweet? {
@@ -915,13 +915,13 @@ object HproseInstance {
             "aid" to appId,
             "ver" to "last",
             "entry" to entry,
-            "tweetid" to tweet.mid,
+            "tweetid" to originalTweet.mid,
             "appuserid" to appUser.mid,
             "retweetid" to retweetId,
-            "authorid" to tweet.authorId
+            "authorid" to originalTweet.authorId
         )
         return try {
-            tweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let {
+            originalTweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let {
                 Tweet.from(it)
             }
         } catch (e: Exception) {
