@@ -122,7 +122,23 @@ fun ComposeTweetScreen(
     // Handle send action
     val onSendClick = {
         if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-            // Upload logic would go here
+            // Store content before clearing
+            val contentToUpload = tweetContent.trim()
+            val attachmentsToUpload = selectedAttachments.toList()
+            
+            // Clear UI immediately for better UX
+            selectedAttachments.clear()
+            tweetContent = ""
+            
+            // Upload tweet using TweetFeedViewModel
+            tweetFeedViewModel.uploadTweet(
+                context,
+                contentToUpload,
+                attachmentsToUpload,
+                isPrivate
+            )
+            
+            // Navigate back
             navController.popBackStack()
         }
         Unit
@@ -177,7 +193,8 @@ fun ComposeTweetScreen(
                     onMentionSearch = onMentionSearch,
                     suggestions = suggestions,
                     onSuggestionSelected = onSuggestionSelected,
-                    onClearSuggestions = { suggestions = emptyList() }
+                    onClearSuggestions = { suggestions = emptyList() },
+                    maxLines = 12
                 )
 
                 // Attachment preview row

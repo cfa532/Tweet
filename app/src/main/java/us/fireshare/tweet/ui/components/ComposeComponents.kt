@@ -53,6 +53,7 @@ fun ComposeTextField(
     suggestions: List<String>,
     onSuggestionSelected: (String) -> Unit,
     onClearSuggestions: () -> Unit,
+    maxLines: Int = 10,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -79,9 +80,10 @@ fun ComposeTextField(
             }
         },
         label = { Text("What's happening?") },
+        maxLines = maxLines,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 200.dp, max = 600.dp)
+            .heightIn(min = 200.dp)
             .alpha(0.7f)
             .focusRequester(focusRequester)
             .onFocusChanged {

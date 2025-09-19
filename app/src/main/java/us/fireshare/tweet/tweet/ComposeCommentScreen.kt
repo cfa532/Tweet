@@ -120,6 +120,7 @@ fun ComposeCommentScreen(
     // Handle send action
     val onSendClick = {
         if (tweetContent.isNotEmpty() || selectedAttachments.isNotEmpty()) {
+            // Store content before clearing
             val contentToUpload = tweetContent.trim()
             val attachmentsToUpload = selectedAttachments.toList()
 
@@ -127,7 +128,7 @@ fun ComposeCommentScreen(
             selectedAttachments.clear()
             tweetContent = ""
 
-            // Upload comment
+            // Upload comment using TweetViewModel
             tweetViewModel.uploadComment(
                 context,
                 contentToUpload,
@@ -187,7 +188,8 @@ fun ComposeCommentScreen(
                     onMentionSearch = onMentionSearch,
                     suggestions = suggestions,
                     onSuggestionSelected = onSuggestionSelected,
-                    onClearSuggestions = { suggestions = emptyList() }
+                    onClearSuggestions = { suggestions = emptyList() },
+                    maxLines = 10
                 )
 
                 // Attachment preview row
