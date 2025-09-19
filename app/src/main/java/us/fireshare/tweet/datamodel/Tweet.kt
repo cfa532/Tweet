@@ -232,7 +232,7 @@ data class Tweet(
             favorites!![1] = value
         }
 
-    var isRetweeted: Boolean
+    var hasRetweeted: Boolean
         get() = favorites?.getOrNull(2) ?: false
         set(value) {
             if (favorites == null) {

@@ -374,12 +374,10 @@ class TweetViewModel @AssistedInject constructor(
      * Perform a retweet action and update the UI immediately for better user experience.
      * */
     suspend fun retweetTweet() {
-        // Update retweet count and status immediately for better UX
-        val hasRetweeted = tweetState.value.isRetweeted
-        _tweetState.value.isRetweeted = !hasRetweeted
+        // Optimistic update of retweet count and status immediately for better UX
+        val currentCount = tweetState.value.retweetCount
         _tweetState.value = tweetState.value.copy(
-            retweetCount = if (hasRetweeted) max(0, tweetState.value.retweetCount - 1)
-            else tweetState.value.retweetCount + 1,
+            retweetCount = currentCount + 1,
         )
 
         // Perform the actual retweet operation
@@ -387,21 +385,10 @@ class TweetViewModel @AssistedInject constructor(
             HproseInstance.retweet(tweetState.value)
         } catch (e: Exception) {
             // Revert the UI changes if the retweet failed
-            _tweetState.value.isRetweeted = hasRetweeted
             _tweetState.value = tweetState.value.copy(
-                retweetCount = if (hasRetweeted) tweetState.value.retweetCount + 1
-                else max(0, tweetState.value.retweetCount - 1),
+                retweetCount = currentCount,
             )
             throw e
-        }
-    }
-
-    /**
-     * Update retweet account on the original tweet after retweet is deleted.
-     * */
-    suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
-        HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
-            _tweetState.value = it
         }
     }
 

@@ -83,12 +83,12 @@ fun CommentButton(
     }) {
         Row(horizontalArrangement = Arrangement.Center) {
             Icon(
-                painter = painterResource(id = R.drawable.bubble_right),
+                painter = painterResource(id = if (count>0) R.drawable.bubble_right_fill else R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             if (count > 0) {
                 Text(
                     text = "$count",
@@ -118,7 +118,6 @@ fun RetweetButton(viewModel: TweetViewModel) {
         } else {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    // Perform the actual retweet action
                     // The retweet will be added to feed automatically via notification system
                     viewModel.retweetTweet()
                     Timber.tag("RetweetButton").d("Retweet action completed")
@@ -139,7 +138,7 @@ fun RetweetButton(viewModel: TweetViewModel) {
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             if (count>0) {
                 Text(
                     text = "$count",
@@ -180,7 +179,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             if (count > 0) {
                 Text(
                     text = "$count",
