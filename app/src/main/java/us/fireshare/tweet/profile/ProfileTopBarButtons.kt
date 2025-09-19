@@ -24,10 +24,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.SharedViewModel
+import timber.log.Timber
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -92,6 +95,22 @@ fun ProfileTopBarButton(
                                 val result = appUserViewModel.toggleFollowingWithResult(user.mid) { isFollowingResult ->
                                     viewModel.viewModelScope.launch(Dispatchers.IO) {
                                         tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
+                                        
+                                        // Remove cache of the followed/unfollowed user to force refresh from server
+                                        TweetCacheManager.removeCachedUser(user.mid)
+                                        
+                                        // Refresh user data for the followed/unfollowed user
+                                        try {
+                                            // Get fresh user data from server and cache it
+                                            getUser(user.mid)?.let { refreshedUser ->
+                                                TweetCacheManager.saveUser(refreshedUser)
+                                                // Refresh the current viewmodel's user data
+                                                viewModel.refreshUserData()
+                                                Timber.tag("ProfileTopBarButtons").d("Refreshed user data for: ${user.mid}")
+                                            }
+                                        } catch (e: Exception) {
+                                            Timber.tag("ProfileTopBarButtons").e("Failed to refresh user data for ${user.mid}: $e")
+                                        }
                                     }
                                 }
 

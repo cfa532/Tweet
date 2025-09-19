@@ -125,34 +125,25 @@ class UserViewModel @AssistedInject constructor(
      */
     suspend fun refreshUserData(maxRetries: Int = 3) {
         try {
+            refreshUserWithRetry(maxRetries)
+
+            // Update count variables from the refreshed user data
+            _bookmarksCount.value = user.value.bookmarksCount
+            _favoritesCount.value = user.value.favoritesCount
+            _followersCount.value = user.value.followersCount
+            _followingsCount.value = user.value.followingCount
+            _tweetCount.value = user.value.tweetCount
+
+            Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
+
             // If this is the current user's profile, update from appUser
             if (userId == appUser.mid) {
-                _user.value = appUser
-                
-                // Also update the count variables to match the updated appUser
-                _bookmarksCount.value = appUser.bookmarksCount
-                _favoritesCount.value = appUser.favoritesCount
-                _followersCount.value = appUser.followersCount
-                _followingsCount.value = appUser.followingCount
-                _tweetCount.value = appUser.tweetCount
-                
-                Timber.tag("refreshUserData").d("Refreshed user data for current user: ${appUser.name}")
-            } else {
-                // For other users, fetch fresh data from the server with retry logic
-                refreshUserWithRetry(maxRetries)
-                
-                // Update count variables from the refreshed user data
-                _bookmarksCount.value = user.value.bookmarksCount
-                _favoritesCount.value = user.value.favoritesCount
-                _followersCount.value = user.value.followersCount
-                _followingsCount.value = user.value.followingCount
-                _tweetCount.value = user.value.tweetCount
-                
-                Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
+                appUser.bookmarksCount = user.value.bookmarksCount
+                appUser.favoritesCount = user.value.favoritesCount
+                appUser.followersCount = user.value.followersCount
+                appUser.followingCount = user.value.followingCount
+                appUser.tweetCount = user.value.tweetCount
             }
-            
-            // Reset the profile updated flag after refreshing
-    
         } catch (e: Exception) {
             Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
         }
@@ -173,24 +164,13 @@ class UserViewModel @AssistedInject constructor(
                 }
             } catch (e: Exception) {
                 Timber.tag("refreshUserWithRetry").e(e, "Error refreshing user $userId (attempt ${attempt + 1})")
-                
-                // Check if it's a network-related error that should be retried
-                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
-                        e.message?.contains("timeout", ignoreCase = true) == true ||
-                        e.message?.contains("connection", ignoreCase = true) == true ||
-                        e.message?.contains("unreachable", ignoreCase = true) == true
-                
-                if (!isNetworkError) {
-                    // Don't retry for non-network errors
-                    return
-                }
             }
             
             // If this isn't the last attempt, wait before retrying
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
                 Timber.tag("refreshUserWithRetry").d("Retrying user refresh in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                kotlinx.coroutines.delay(delayMs)
+                delay(delayMs)
             }
         }
     }

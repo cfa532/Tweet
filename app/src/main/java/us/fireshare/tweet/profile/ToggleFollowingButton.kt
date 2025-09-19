@@ -22,12 +22,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import timber.log.Timber
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable
@@ -83,6 +86,22 @@ fun ToggleFollowingButton(
                                 userId,
                                 isFollowingResult
                             )
+                            
+                            // Remove cache of the followed/unfollowed user to force refresh from server
+                            TweetCacheManager.removeCachedUser(userId)
+                            
+                            // Refresh user data for the followed/unfollowed user
+                            try {
+                                // Get fresh user data from server and cache it
+                                getUser(userId)?.let { refreshedUser ->
+                                    TweetCacheManager.saveUser(refreshedUser)
+                                    // Refresh the current viewmodel's user data
+                                    viewModel.refreshUserData()
+                                    Timber.tag("ToggleFollowingButton").d("Refreshed user data for: $userId")
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("ToggleFollowingButton").e("Failed to refresh user data for $userId: $e")
+                            }
                         }
                     }
 
