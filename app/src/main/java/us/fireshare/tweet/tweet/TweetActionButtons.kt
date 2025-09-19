@@ -86,7 +86,7 @@ fun CommentButton(
                 painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (count >0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.secondary
+                tint = if (count >0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
             if (count > 0) {
