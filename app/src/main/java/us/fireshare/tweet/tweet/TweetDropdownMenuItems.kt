@@ -34,8 +34,6 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.TweetEvent
-import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -103,7 +101,7 @@ fun TweetDropdownMenuItems(
                                     HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
                                         // Update cache with the new retweet count
                                         HproseInstance.updateCachedTweet(updatedOriginTweet)
-                                        originTweetViewModel.updateViewModel(updatedOriginTweet)
+                                        originTweetViewModel.updateRetweetCount(updatedOriginTweet)
                                     }
                                 }
                             }

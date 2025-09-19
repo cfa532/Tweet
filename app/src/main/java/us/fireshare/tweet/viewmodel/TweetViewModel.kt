@@ -73,7 +73,7 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    fun updateViewModel(tweet: Tweet) {
+    fun updateRetweetCount(tweet: Tweet) {
         _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount + 1)
         _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount - 1)
     }
