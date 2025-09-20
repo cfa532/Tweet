@@ -41,14 +41,16 @@ object ImageCacheManager {
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 8000 // 8 seconds
     private const val READ_TIMEOUT = 12000 // 12 seconds
-    private const val MAX_CONCURRENT_DOWNLOADS = 3 // Limit concurrent downloads
-    private const val MAX_RETRY_ATTEMPTS = 2
+    private const val MAX_CONCURRENT_DOWNLOADS = 4 // Allow more concurrent downloads but with proper debouncing
+    private const val MAX_RETRY_ATTEMPTS = 3 // Allow retries but with exponential backoff
 
     // Connection pool for better performance
     private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
     private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
     private val activeDownloads = AtomicInteger(0)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
+    private val lastDownloadAttempt = ConcurrentHashMap<String, Long>()
+    private const val DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce between retry attempts
 
     // LRU memory cache (mid -> Bitmap)
     private val memoryCache = object : LruCache<String, Bitmap>(MAX_MEMORY_CACHE_SIZE) {
@@ -110,8 +112,10 @@ object ImageCacheManager {
                     try {
                         val bitmap = decodeBitmapFromFileWithCorrectOrientation(file.absolutePath)
                         if (bitmap != null && !bitmap.isRecycled) {
-                            memoryCache.put(mid, bitmap)
-                            return@withContext bitmap
+                            // Create a copy to avoid recycling issues when the original is recycled
+                            val safeBitmap = bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)
+                            memoryCache.put(mid, safeBitmap)
+                            return@withContext safeBitmap
                         }
                     } catch (e: OutOfMemoryError) {
                         Timber.tag("ImageCacheManager")
@@ -130,7 +134,7 @@ object ImageCacheManager {
         }
 
     /**
-     * Download and cache image from URL with improved error handling and retry logic
+     * Download and cache image from URL with improved error handling, debouncing, and retry logic
      */
     suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
@@ -142,6 +146,14 @@ object ImageCacheManager {
                 if (downloadQueue.containsKey(mid)) {
                     return@withContext null
                 }
+
+                // Debounce: Check if we recently attempted this download
+                val currentTime = System.currentTimeMillis()
+                val lastAttempt = lastDownloadAttempt[mid] ?: 0
+                if (currentTime - lastAttempt < DEBOUNCE_DELAY_MS) {
+                    return@withContext null
+                }
+                lastDownloadAttempt[mid] = currentTime
 
                 // Acquire semaphore to limit concurrent downloads
                 downloadSemaphore.acquire()
@@ -159,13 +171,17 @@ object ImageCacheManager {
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
+                                // Clear debounce tracking on success
+                                lastDownloadAttempt.remove(mid)
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
                             Timber.tag("ImageCacheManager")
                                 .d("Download attempt $attempt failed for $mid: $e")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
-                                delay(1000L * attempt) // Exponential backoff
+                                // Exponential backoff with jitter to prevent thundering herd
+                                val backoffDelay = (1000L * attempt * attempt) + (0..500).random()
+                                delay(backoffDelay)
                             }
                         }
                     }
@@ -324,6 +340,14 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
+                // Debounce: Check if we recently attempted this download
+                val currentTime = System.currentTimeMillis()
+                val lastAttempt = lastDownloadAttempt[originalMid] ?: 0
+                if (currentTime - lastAttempt < DEBOUNCE_DELAY_MS) {
+                    return@withContext null
+                }
+                lastDownloadAttempt[originalMid] = currentTime
+
                 // Acquire semaphore to limit concurrent downloads
                 downloadSemaphore.acquire()
                 downloadQueue[originalMid] = true
@@ -338,15 +362,20 @@ object ImageCacheManager {
                         try {
                             bitmap = performDownloadOriginal(imageUrl, originalMid, context)
                             if (bitmap != null && !bitmap.isRecycled) {
-                                // Store original bitmap in memory cache with original key
-                                memoryCache.put(originalMid, bitmap)
-                                return@withContext bitmap
+                                // Create a copy to prevent recycling issues
+                                val safeBitmap = bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)
+                                memoryCache.put(originalMid, safeBitmap)
+                                // Clear debounce tracking on success
+                                lastDownloadAttempt.remove(originalMid)
+                                return@withContext safeBitmap
                             }
                         } catch (e: Exception) {
                             Timber.tag("ImageCacheManager")
                                 .d("Original download attempt $attempt failed for $mid: $e")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
-                                delay(1000L * attempt) // Exponential backoff
+                                // Exponential backoff with jitter
+                                val backoffDelay = (1000L * attempt * attempt) + (0..500).random()
+                                delay(backoffDelay)
                             }
                         }
                     }
