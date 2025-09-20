@@ -174,7 +174,7 @@ fun MediaGrid(
                     // Use application scope to avoid blocking the UI thread
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            VideoManager.preloadVideo(context, videoMid, mediaUrl)
+                            VideoManager.preloadVideo(context, videoMid, mediaUrl, item.type)
                         } catch (e: Exception) {
                             // Log error but don't block UI
                             Timber.tag("MediaGrid").e(e, "Failed to preload video: $videoMid")

@@ -184,6 +184,7 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         callback = { goto(index) },
                         videoMid = videoMid,
+                        videoType = attachment.type,
                         onVideoCompleted = onVideoCompleted
                     )
                 }

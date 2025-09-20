@@ -54,35 +54,13 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 private val maxRetries = 2
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    // Check if it's a network-related error
-                    val isNetworkError =
-                        error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                                error.cause?.message?.contains(
-                                    "timeout",
-                                    ignoreCase = true
-                                ) == true ||
-                                error.cause?.message?.contains(
-                                    "connection",
-                                    ignoreCase = true
-                                ) == true
-
-                    if (isNetworkError && retryCount < maxRetries) {
-                        retryCount++
-                        Timber.tag("createExoPlayer")
-                            .d("Network error detected, retrying (attempt $retryCount)")
-
-                        // Wait a bit before retrying to allow network to recover
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            try {
-                                prepare()
-                            } catch (e: Exception) {
-                                // Only log retry failures at debug level to avoid noise
-                                Timber.tag("createExoPlayer").d("Retry failed: ${e.message}")
-                            }
-                        }, 2000) // Wait 2 seconds before retry
+                    // For progressive videos, don't try HLS fallback
+                    if (mediaType != MediaType.HLS_VIDEO) {
+                        Timber.tag("createExoPlayer").d("Progressive video error: ${error.message}")
                         return
                     }
-
+                    
+                    // For HLS videos, try playlist fallback only
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
                         Timber.tag("createExoPlayer").d("Trying playlist.m3u8 fallback")
@@ -93,20 +71,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         )
                         setMediaSource(fallbackMediaSource)
                         prepare()
-                    } else if (!hasTriedOriginal) {
-                        hasTriedOriginal = true
-                        Timber.tag("createExoPlayer").d("Trying original URL fallback")
-
-                        // If both HLS attempts fail, try the original URL (progressive video)
-                        val originalMediaSource = mediaSourceFactory.createMediaSource(
-                            androidx.media3.common.MediaItem.fromUri(url)
-                        )
-                        setMediaSource(originalMediaSource)
-                        prepare()
                     } else {
                         // Only log the final failure as an error
                         Timber.tag("createExoPlayer")
-                            .e("All fallback attempts failed for URL: $url")
+                            .e("All HLS fallback attempts failed for URL: $url")
                         Timber.tag("createExoPlayer").e("Final error: ${error.message}")
                         Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
                     }
@@ -145,9 +113,14 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
             })
         }
 
-    // Start with master.m3u8 (try HLS first)
-    val mediaSource =
+    // Create media source based on video type
+    val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
+        // For HLS videos, start with master.m3u8
         mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+    } else {
+        // For progressive videos, use original URL directly
+        mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
+    }
     player.setMediaSource(mediaSource)
 
     // Prepare the player immediately after setting up the listener

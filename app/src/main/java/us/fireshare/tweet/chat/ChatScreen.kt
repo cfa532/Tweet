@@ -130,7 +130,7 @@ fun ChatScreen(
             message.attachments?.forEach { attachment ->
                 if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
                     val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl, attachment.type)
                 }
             }
         }
@@ -964,7 +964,8 @@ fun ChatMediaPreview(
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
                         },
-                        videoMid = videoMid
+                        videoMid = videoMid,
+                        videoType = attachment.type
                     )
                 }
             }

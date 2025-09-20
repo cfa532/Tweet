@@ -70,6 +70,7 @@ fun VideoPreview(
     inPreviewGrid: Boolean = true,
     callback: (Int) -> Unit,
     videoMid: MimeiId? = null,
+    videoType: MediaType? = null,
     onLoadComplete: (() -> Unit)? = null,
     onVideoCompleted: (() -> Unit)? = null
 ) {
@@ -98,9 +99,9 @@ fun VideoPreview(
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
         val player = if (videoMid != null) {
-            VideoManager.getVideoPlayer(context, videoMid, url)
+            VideoManager.getVideoPlayer(context, videoMid, url, videoType)
         } else {
-            createExoPlayer(context, url, MediaType.Video)
+            createExoPlayer(context, url, videoType ?: MediaType.Video)
         }
 
         // Explicitly disable repeat mode to prevent auto-replay

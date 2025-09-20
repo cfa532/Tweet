@@ -229,7 +229,7 @@ object VideoManager {
                                 baseUrl
                             ).toString()
 
-                            preloadVideo(context, attachment.mid, mediaUrl)
+                            preloadVideo(context, attachment.mid, mediaUrl, attachment.type)
                             addedThisCycle++
                             Timber.d("VideoManager - Preloading video: ${attachment.mid} from tweet $i")
                         } catch (e: Exception) {
@@ -264,7 +264,7 @@ object VideoManager {
      * Get or create an ExoPlayer instance for a video
      * Only creates new players for visible or preloading videos
      */
-    fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String): ExoPlayer {
+    fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
         // No player count limit - let system memory warnings handle memory pressure
 
         // Mark as preloaded if it was in the preload queue
@@ -277,7 +277,7 @@ object VideoManager {
             Timber.tag("getVideoPlayer").d("Creating new player for $videoMid")
 
             try {
-                val player = createExoPlayer(context, videoUrl, MediaType.Video)
+                val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
                 player
             } catch (e: Exception) {
                 Timber.tag("getVideoPlayer")
@@ -395,7 +395,7 @@ object VideoManager {
      * Only preloads videos that are not visible to avoid resource waste
      */
     @kotlin.OptIn(DelicateCoroutinesApi::class)
-    fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String) {
+    fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
         // Don't preload if video is already visible
         if (isVideoVisible(videoMid)) {
             return
@@ -416,7 +416,7 @@ object VideoManager {
                     // Throttle concurrent player creation on main thread
                     preloadSemaphore.acquire()
                     if (!isActive) return@launch
-                    val player = createExoPlayer(context, videoUrl, MediaType.Video)
+                    val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
                     // Add to cache on main thread
                     // No player count limit - let system memory warnings handle memory pressure
                     if (!isActive) {
