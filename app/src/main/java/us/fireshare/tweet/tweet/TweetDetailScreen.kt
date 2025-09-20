@@ -45,7 +45,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -104,7 +103,6 @@ fun TweetDetailScreen(
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
-    var lastLoadCommentsTime by remember { mutableLongStateOf(0L) }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -200,20 +198,15 @@ fun TweetDetailScreen(
     // Initial comment load when tweet is available
     LaunchedEffect(tweet.mid) {
         if (tweet.mid != null && isInitialLoading) {
-            lastLoadCommentsTime = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
                 viewModel.loadComments(tweet, 0)
             }
         }
     }
 
-    // Infinite scroll for comments - only when we have comments and are actually at bottom
-    LaunchedEffect(isAtBottom, comments.size) {
-        val currentTime = System.currentTimeMillis()
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && 
-            comments.isNotEmpty() && comments.size > 5 && // Only load more if we have at least 5 comments
-            (currentTime - lastLoadCommentsTime) > 2000L) { // 2 second debounce
-            lastLoadCommentsTime = currentTime
+    // Infinite scroll for comments
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {

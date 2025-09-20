@@ -507,19 +507,14 @@ fun ImageViewer(
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
 
     // Load image using two-tier system: cached placeholder first, then original quality
-    LaunchedEffect(mid, imageUrl) {
+    LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
 
             // Try to load from cache first as placeholder
-            val cachedBitmap = try {
-                ImageCacheManager.getCachedImage(context, mid)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Handle composition cancellation gracefully
-                return@LaunchedEffect
-            }
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
             
-            if (cachedBitmap != null && !cachedBitmap.isRecycled) {
+            if (cachedBitmap != null) {
                 // Show cached image immediately as placeholder
                 loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
                 onLoadComplete?.invoke()
@@ -528,41 +523,48 @@ fun ImageViewer(
                 // Load original high-quality image in background
                 try {
                     val originalBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                    if (originalBitmap != null && !originalBitmap.isRecycled) {
+                    if (originalBitmap != null) {
                         loadState = loadState.copy(bitmap = originalBitmap)
                         Timber.tag("ImageViewer").d("Replaced cached image with original: $imageUrl")
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    // Handle composition cancellation gracefully
-                    return@LaunchedEffect
                 } catch (e: Exception) {
                     Timber.tag("ImageViewer").d("Failed to load original image in background: ${e.message}")
                     // Keep showing cached image if original loading fails
                 }
             } else {
                 // No cached image available, show loading and load original directly
-                // Let ImageCacheManager handle retries with proper debouncing
-                try {
-                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                    if (downloadedBitmap == null || downloadedBitmap.isRecycled) {
-                        loadState = loadState.copy(
-                            isLoading = false, 
-                            hasError = true
-                        )
-                        Timber.tag("ImageViewer").d("Failed to load original image: $imageUrl")
-                    } else {
-                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                        onLoadComplete?.invoke()
+                var downloadedBitmap: android.graphics.Bitmap? = null
+                var attempt = 0
+                val maxAttempts = 2 // Fewer retries for preview images
+                
+                while (downloadedBitmap == null && attempt < maxAttempts) {
+                    attempt++
+                    try {
+                        downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                        if (downloadedBitmap == null) {
+                            Timber.tag("ImageViewer").w("Attempt $attempt failed to load original image: $imageUrl")
+                            if (attempt < maxAttempts) {
+                                delay(500L * attempt) // Shorter backoff for preview images
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("ImageViewer").d(e, "Attempt $attempt failed to load original image: $imageUrl")
+                        if (attempt < maxAttempts) {
+                            delay(500L * attempt) // Shorter backoff for preview images
+                        }
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    // Handle composition cancellation gracefully
-                    return@LaunchedEffect
-                } catch (e: Exception) {
+                }
+
+                if (downloadedBitmap == null) {
                     loadState = loadState.copy(
                         isLoading = false, 
-                        hasError = true
+                        hasError = true,
+                        retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("ImageViewer").d("Error loading original image: ${e.message}")
+                    Timber.tag("ImageViewer").d("All attempts failed to load original image: $imageUrl")
+                } else {
+                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                    onLoadComplete?.invoke()
                 }
             }
         } catch (e: Exception) {
@@ -596,8 +598,8 @@ fun ImageViewer(
         modifier = baseModifier,
         contentAlignment = if (isFullScreen) Alignment.Center else Alignment.Center
     ) {
-        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
-            // Show image - check if bitmap is not recycled
+        if (loadState.bitmap != null) {
+            // Show image
             Image(
                 bitmap = loadState.bitmap!!.asImageBitmap(),
                 contentDescription = null,
@@ -609,15 +611,38 @@ fun ImageViewer(
                 modifier = Modifier.fillMaxSize()
             )
         } else if (loadState.hasError) {
-            // Show simple error state - no retry UI to avoid complexity
+            // Show error state with retry option for full screen
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = stringResource(R.string.failed_to_load_image),
-                    color = if (isFullScreen) Color.White else Color.Unspecified
-                )
+                if (isFullScreen) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.failed_to_load_image),
+                            color = Color.White
+                        )
+                        if (loadState.retryCount < 2) {
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    loadState = loadState.copy(
+                                        hasError = false,
+                                        retryCount = loadState.retryCount + 1
+                                    )
+                                }
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.failed_to_load_image),
+                        color = Color.Unspecified
+                    )
+                }
             }
         } else if (loadState.isLoading) {
             // Show loading state
