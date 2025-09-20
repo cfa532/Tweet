@@ -5,9 +5,6 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,7 +17,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,8 +25,6 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,12 +47,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -96,7 +87,6 @@ fun TweetDetailScreen(
 
     // Grid columns state for media layout
     var gridColumns by remember { mutableStateOf(1) }
-    var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }
 
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -241,9 +231,6 @@ fun TweetDetailScreen(
         viewModel.startListeningToNotifications()
     }
 
-    fun Offset.toIntOffset(): IntOffset {
-        return IntOffset(x.toInt(), y.toInt())
-    }
 
     Scaffold(
         topBar = {
@@ -293,31 +280,6 @@ fun TweetDetailScreen(
                 )
             }
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },
-                modifier = Modifier
-                    .offset { fabOffset.toIntOffset() }
-                    .draggable(
-                        state = rememberDraggableState { delta ->
-                            fabOffset = fabOffset.copy(y = fabOffset.y + delta)
-                        },
-                        orientation = Orientation.Vertical
-                    )
-                    .size(40.dp),
-                shape = CircleShape,
-                containerColor = Color.White.copy(alpha = 0.7f)
-            ) {
-                Icon(
-                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(
-                        R.drawable.ic_grid_layout
-                    ),
-                    contentDescription = stringResource(R.string.switch_layout),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        },
-        floatingActionButtonPosition = FabPosition.End
     ) { innerPadding ->
         Box(
             modifier = Modifier

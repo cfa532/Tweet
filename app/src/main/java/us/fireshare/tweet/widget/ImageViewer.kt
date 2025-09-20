@@ -278,7 +278,7 @@ fun AdvancedImageViewer(
                         alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                     }
             )
-        } else if (loadState.bitmap != null) {
+        } else if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
             // Fallback to regular Image if no file is available
             Image(
                 bitmap = loadState.bitmap!!.asImageBitmap(),
@@ -498,6 +498,7 @@ fun ImageViewer(
     isFullScreen: Boolean = false,
     enableLongPress: Boolean = true,
     useFillMode: Boolean = false,
+    inPreviewGrid: Boolean = true,
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null
 ) {
@@ -598,15 +599,16 @@ fun ImageViewer(
         modifier = baseModifier,
         contentAlignment = if (isFullScreen) Alignment.Center else Alignment.Center
     ) {
-        if (loadState.bitmap != null) {
-            // Show image
+        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
+            // Show image with safety check
             Image(
                 bitmap = loadState.bitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = when {
                     isFullScreen && useFillMode -> ContentScale.Crop
                     isFullScreen -> ContentScale.Fit
-                    else -> ContentScale.Crop
+                    inPreviewGrid -> ContentScale.Crop
+                    else -> ContentScale.Fit
                 },
                 modifier = Modifier.fillMaxSize()
             )

@@ -95,12 +95,15 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             try {
                 // Check memory cache first
-                memoryCache.get(mid)?.let {
-                    if (!it.isRecycled) {
-                        return@withContext it
+                memoryCache.get(mid)?.let { bitmap ->
+                    if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                        return@withContext bitmap
                     } else {
-                        // Remove recycled bitmap from cache
+                        // Remove invalid bitmap from cache
                         memoryCache.remove(mid)
+                        if (bitmap.isRecycled) {
+                            Timber.tag("ImageCacheManager").w("Found recycled bitmap in cache for: $mid")
+                        }
                     }
                 }
 
@@ -109,9 +112,11 @@ object ImageCacheManager {
                 if (file.exists()) {
                     try {
                         val bitmap = decodeBitmapFromFileWithCorrectOrientation(file.absolutePath)
-                        if (bitmap != null && !bitmap.isRecycled) {
+                        if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                             memoryCache.put(mid, bitmap)
                             return@withContext bitmap
+                        } else if (bitmap != null && bitmap.isRecycled) {
+                            Timber.tag("ImageCacheManager").w("Loaded recycled bitmap from disk for: $mid")
                         }
                     } catch (e: OutOfMemoryError) {
                         Timber.tag("ImageCacheManager")
@@ -544,7 +549,7 @@ object ImageCacheManager {
             }
 
             val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
-            if (bitmap != null) {
+            if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                 // Apply EXIF orientation correction
                 val correctedBitmap = applyExifOrientation(byteArray, bitmap)
                 if (correctedBitmap != bitmap) {
@@ -554,8 +559,11 @@ object ImageCacheManager {
                 Timber.tag("ImageCacheManager")
                     .d("Successfully decoded bitmap with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
+            } else {
+                Timber.tag("ImageCacheManager")
+                    .d("Failed to decode bitmap from stream - bitmap: $bitmap, recycled: ${bitmap?.isRecycled}, dimensions: ${bitmap?.width}x${bitmap?.height}")
             }
-            bitmap
+            null
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error decoding bitmap with orientation: $e")
             null
@@ -585,7 +593,7 @@ object ImageCacheManager {
             }
 
             val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
-            if (bitmap != null) {
+            if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                 // Apply EXIF orientation correction
                 val correctedBitmap = applyExifOrientation(byteArray, bitmap)
                 if (correctedBitmap != bitmap) {
@@ -593,11 +601,11 @@ object ImageCacheManager {
                     bitmap.recycle()
                 }
                 Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded original bitmap from byte array: ${bitmap.width}x${bitmap.height}")
+                    .d("Successfully decoded original bitmap from byte array: ${correctedBitmap.width}x${correctedBitmap.height}")
                 correctedBitmap
             } else {
                 Timber.tag("ImageCacheManager")
-                    .d("Failed to decode original bitmap from byte array")
+                    .d("Failed to decode original bitmap from byte array - bitmap: $bitmap, recycled: ${bitmap?.isRecycled}, dimensions: ${bitmap?.width}x${bitmap?.height}")
                 null
             }
         } catch (e: Exception) {

@@ -165,7 +165,8 @@ fun MediaItemView(
                     ImageViewer(
                         attachment.url,
                         modifier = Modifier.fillMaxSize(),
-                        enableLongPress = false // Disable long press to allow clickable to work
+                        enableLongPress = false, // Disable long press to allow clickable to work
+                        inPreviewGrid = inPreviewGrid
                     )
                 }
             }
