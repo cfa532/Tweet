@@ -164,24 +164,46 @@ fun VideoPreview(
                     // Player is ready, just start playing if needed
                     exoPlayer.playWhenReady = autoPlay
                     isLoading = false
+                    hasError = false // Clear any previous errors when becoming visible
                 }
                 androidx.media3.common.Player.STATE_IDLE -> {
-                    // Player is idle, prepare it first
-                    exoPlayer.prepare()
-                    // Don't set playWhenReady yet, wait for STATE_READY
+                    // Player is idle, check if we have media items
+                    if (exoPlayer.mediaItemCount == 0) {
+                        // Player was stopped completely, need to recreate media source
+                        Timber.tag("VideoPreview").d("Player has no media items, recreating for video: $videoMid")
+                        isLoading = true
+                        hasError = false
+                        
+                        // Attempt recovery to recreate the media source
+                        videoMid?.let { mid ->
+                            VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                        }
+                    } else {
+                        // Player has media items, just prepare
+                        exoPlayer.prepare()
+                    }
                 }
                 androidx.media3.common.Player.STATE_BUFFERING -> {
                     // Player is buffering, just set play state
                     exoPlayer.playWhenReady = autoPlay
+                    isLoading = true
+                    hasError = false
                 }
                 androidx.media3.common.Player.STATE_ENDED -> {
                     // Video ended, seek to beginning and start if needed
                     exoPlayer.seekTo(0)
                     exoPlayer.playWhenReady = autoPlay
+                    hasError = false
                 }
                 else -> {
-                    // For other states, just set play state
-                    exoPlayer.playWhenReady = autoPlay
+                    // For other states, try to recover
+                    Timber.tag("VideoPreview").d("Player in unexpected state ${exoPlayer.playbackState}, attempting recovery for video: $videoMid")
+                    isLoading = true
+                    hasError = false
+                    
+                    videoMid?.let { mid ->
+                        VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                    }
                 }
             }
         } else {
@@ -206,15 +228,41 @@ fun VideoPreview(
         try {
             // Always keep repeat mode off for previews
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
-            if (autoPlay) {
-                if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
-                    exoPlayer.prepare()
+            
+            // Check if player is in a valid state before attempting to play
+            when (exoPlayer.playbackState) {
+                androidx.media3.common.Player.STATE_READY -> {
+                    // Player is ready, safe to play/pause
+                    exoPlayer.playWhenReady = autoPlay
                 }
-                exoPlayer.playWhenReady = true
-            } else {
-                exoPlayer.playWhenReady = false
+                androidx.media3.common.Player.STATE_IDLE -> {
+                    // Player is idle, check if we have media items
+                    if (exoPlayer.mediaItemCount > 0) {
+                        exoPlayer.prepare()
+                        // Don't set playWhenReady yet, wait for STATE_READY
+                    } else {
+                        // No media items, need to recover
+                        videoMid?.let { mid ->
+                            VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                        }
+                    }
+                }
+                androidx.media3.common.Player.STATE_BUFFERING -> {
+                    // Player is buffering, safe to set play state
+                    exoPlayer.playWhenReady = autoPlay
+                }
+                androidx.media3.common.Player.STATE_ENDED -> {
+                    // Video ended, seek to beginning first
+                    exoPlayer.seekTo(0)
+                    exoPlayer.playWhenReady = autoPlay
+                }
+                else -> {
+                    // For other states, just set play state
+                    exoPlayer.playWhenReady = autoPlay
+                }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Timber.tag("VideoPreview").d("Error handling autoPlay change: ${e.message}")
         }
     }
 
@@ -319,7 +367,7 @@ fun VideoPreview(
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                         delay(2000) // Wait 2 seconds before retry
                         if (isLoading && !hasError) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url)
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
                         }
                     }
                 } else {
@@ -432,7 +480,7 @@ fun VideoPreview(
                                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                                     try {
                                         // Try gentle recovery first
-                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
+                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
                                         if (!success) {
                                             // If gentle recovery failed, try a more thorough reset
                                             exoPlayer.stop()
@@ -442,7 +490,7 @@ fun VideoPreview(
                                             delay(500)
                                             
                                             // Try recovery again after reset
-                                            val retrySuccess = VideoManager.attemptVideoRecovery(context, videoMid, url)
+                                            val retrySuccess = VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
                                             if (!retrySuccess) {
                                                 // If recovery failed, show error again
                                                 hasError = true

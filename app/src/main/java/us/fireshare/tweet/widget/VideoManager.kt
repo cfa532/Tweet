@@ -160,13 +160,15 @@ object VideoManager {
         if (!isVideoInFullScreen(videoMid)) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
-            // Stop buffering/loading to free up resources
+            // Pause the video but don't stop it completely to avoid state issues
             videoPlayers[videoMid]?.let { player ->
                 try {
                     player.playWhenReady = false
-                    player.stop()
+                    // Don't call stop() as it clears the media source and causes issues
+                    // when the video becomes visible again. Just pause playback.
+                    Timber.d("VideoManager - Paused video playback for $videoMid (kept media source)")
                 } catch (e: Exception) {
-                    Timber.d("VideoManager - Error stopping non-visible video $videoMid: $e")
+                    Timber.d("VideoManager - Error pausing non-visible video $videoMid: $e")
                 }
             }
         } else {
@@ -578,8 +580,11 @@ object VideoManager {
 
     /**
      * Attempt to recover a video that has stopped loading with thorough reset
+     * Properly recreates the media source using the same logic as createExoPlayer
+     * For HLS videos: tries master.m3u8, then playlist.m3u8
+     * For regular videos: plays the URL directly
      */
-    fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
+    fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): Boolean {
         val player = videoPlayers[videoMid] ?: return false
 
         Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid")
@@ -594,26 +599,39 @@ object VideoManager {
             player.playWhenReady = false
             player.pause()
 
-            // Create a new media source with extended timeouts and retry configuration
+            // Recreate the media source using the same logic as createExoPlayer
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(45000) // 45 seconds connection timeout for thorough retry
                 .setReadTimeoutMs(45000)    // 45 seconds read timeout for thorough retry
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("TweetApp/1.0")
 
-            val dataSourceFactory =
-                androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
-            val mediaSourceFactory =
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-            val mediaSource = mediaSourceFactory.createMediaSource(
-                androidx.media3.common.MediaItem.fromUri(videoUrl)
-            )
+            val upstreamFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val cache = getCache(context)
+            val cacheDataSourceFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+            // Use DefaultMediaSourceFactory backed by CacheDataSource which handles both HLS and progressive
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+            
+            val mediaSource = if (videoType == MediaType.HLS_VIDEO) {
+                // For HLS videos: try master.m3u8 first
+                val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                val masterUrl = "${baseUrl}master.m3u8"
+                Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
+                mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+            } else {
+                // For regular videos: play the URL directly
+                Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
+                mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+            }
 
             // Set the new media source and prepare
             player.setMediaSource(mediaSource)
             player.prepare()
 
-            Timber.d("VideoManager - Thorough recovery attempted for video: $videoMid")
             return true
         } catch (e: Exception) {
             // Only log recovery failures at debug level to avoid noise during trials
