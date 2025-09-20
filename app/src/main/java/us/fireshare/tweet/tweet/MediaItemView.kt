@@ -164,7 +164,7 @@ fun MediaItemView(
                 ) {
                     ImageViewer(
                         attachment.url,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = if (inPreviewGrid) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = inPreviewGrid
                     )
