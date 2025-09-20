@@ -46,13 +46,43 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
     val player = ExoPlayer.Builder(context)
         .build()
         .apply {
-            // Add listener for debugging and HLS fallback only
+            // Add comprehensive listener for debugging and fallback
             addListener(object : androidx.media3.common.Player.Listener {
                 private var hasTriedPlaylist = false
                 private var hasTriedOriginal = false
+                private var retryCount = 0
+                private val maxRetries = 2
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    // Only handle HLS fallback, let VideoPreview handle retries
+                    // Check if it's a network-related error
+                    val isNetworkError =
+                        error.cause?.message?.contains("network", ignoreCase = true) == true ||
+                                error.cause?.message?.contains(
+                                    "timeout",
+                                    ignoreCase = true
+                                ) == true ||
+                                error.cause?.message?.contains(
+                                    "connection",
+                                    ignoreCase = true
+                                ) == true
+
+                    if (isNetworkError && retryCount < maxRetries) {
+                        retryCount++
+                        Timber.tag("createExoPlayer")
+                            .d("Network error detected, retrying (attempt $retryCount)")
+
+                        // Wait a bit before retrying to allow network to recover
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            try {
+                                prepare()
+                            } catch (e: Exception) {
+                                // Only log retry failures at debug level to avoid noise
+                                Timber.tag("createExoPlayer").d("Retry failed: ${e.message}")
+                            }
+                        }, 2000) // Wait 2 seconds before retry
+                        return
+                    }
+
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
                         Timber.tag("createExoPlayer").d("Trying playlist.m3u8 fallback")
@@ -74,10 +104,11 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                         setMediaSource(originalMediaSource)
                         prepare()
                     } else {
-                        // Log the final failure - VideoPreview will handle retries
+                        // Only log the final failure as an error
                         Timber.tag("createExoPlayer")
-                            .d("All fallback attempts failed for URL: $url")
-                        Timber.tag("createExoPlayer").d("Final error: ${error.message}")
+                            .e("All fallback attempts failed for URL: $url")
+                        Timber.tag("createExoPlayer").e("Final error: ${error.message}")
+                        Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
                     }
                 }
 
