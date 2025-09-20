@@ -93,6 +93,7 @@ fun TweetDetailScreen(
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
+    var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -142,6 +143,7 @@ fun TweetDetailScreen(
                     withContext(Dispatchers.IO) {
                         currentPage = 0 // Reset to page 0 for refresh
                         viewModel.loadComments(tweet, 0)
+                        lastLoadedPage = 0
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -190,19 +192,22 @@ fun TweetDetailScreen(
         if (tweet.mid != null && isInitialLoading) {
             withContext(Dispatchers.IO) {
                 viewModel.loadComments(tweet, 0)
+                lastLoadedPage = 0
             }
         }
     }
 
     // Infinite scroll for comments
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && currentPage > lastLoadedPage) {
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage += 1 // Increment page for load more
-                        viewModel.loadComments(tweet, currentPage)
+                        val pageToLoad = currentPage + 1
+                        viewModel.loadComments(tweet, pageToLoad)
+                        lastLoadedPage = pageToLoad
+                        currentPage = pageToLoad
                     }
                 } finally {
                     isRefreshingAtBottom = false

@@ -173,7 +173,10 @@ class TweetViewModel @AssistedInject constructor(
         _comments.update { currentComments ->
             val mergedComments = newComments + currentComments.filter { it.mid !in newComments.map { new -> new.mid } }
             val finalComments = mergedComments.sortedByDescending { it.timestamp }
-            Timber.tag("TweetViewModel").d("Merged to ${finalComments.size} total comments")
+            // Only log when there are actually new comments or when comments count changes significantly
+            if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
+                Timber.tag("TweetViewModel").d("Merged to ${finalComments.size} total comments (${newComments.size} new)")
+            }
             finalComments
         }
     }
