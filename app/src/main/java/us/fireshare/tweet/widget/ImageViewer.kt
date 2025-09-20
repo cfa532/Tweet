@@ -519,7 +519,7 @@ fun ImageViewer(
                         Timber.tag("ImageViewer").d("Failed to load original image: $imageUrl")
                     } else {
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                        onLoadComplete?.invoke()
+                        // Don't call onLoadComplete from callback to avoid coroutine conflicts
                     }
                 }
             }

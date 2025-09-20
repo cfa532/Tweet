@@ -45,7 +45,7 @@ object ImageCacheManager {
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - faster failure detection
     private const val READ_TIMEOUT = 15000 // 15 seconds - allow for large files but not too long
-    private const val MAX_CONCURRENT_DOWNLOADS = 4 // Limit concurrent downloads
+    private const val MAX_CONCURRENT_DOWNLOADS = 8 // Limit concurrent downloads
     private const val MAX_RETRY_ATTEMPTS = 2
     private const val PROGRESSIVE_LOAD_CHUNK_SIZE = 64 * 1024 // 64KB chunks for progressive loading
 
@@ -294,26 +294,9 @@ object ImageCacheManager {
                 FileOutputStream(file).use { out ->
                     out.write(imageData)
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Saved original image data (${imageSize} bytes) for: $mid")
 
-                // Log response headers and content type for debugging
-                val contentType = connection.contentType
-                val contentEncoding = connection.contentEncoding
-                val contentLength = connection.contentLength
-                Timber.tag("ImageCacheManager")
-                    .d("Response headers - Content-Type: $contentType, Content-Encoding: $contentEncoding, Content-Length: $contentLength")
-                
-                // Check if we got compressed data but didn't decompress it
-                if (contentEncoding != null && (contentEncoding.contains("gzip") || contentEncoding.contains("deflate"))) {
-                    Timber.tag("ImageCacheManager")
-                        .d("Received compressed data but may not have been properly decompressed")
-                }
                 
                 // Log first few bytes to check image format
-                val firstBytes = imageData.take(16).joinToString(" ") { "%02X".format(it) }
-                Timber.tag("ImageCacheManager")
-                    .d("First 16 bytes of downloaded data: $firstBytes")
 
                 // Decode bitmap from the data with original quality
                 val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
@@ -370,7 +353,11 @@ object ImageCacheManager {
                 getCachedImage(context, originalMid)?.let { return@withContext it }
 
                 // Acquire semaphore to limit concurrent downloads globally
+                val currentActive = activeDownloads.get()
+                val currentQueued = downloadQueue.size
+                Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (active: $currentActive/${MAX_CONCURRENT_DOWNLOADS}, queued: $currentQueued)")
                 downloadSemaphore.acquire()
+                Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
                 // Check if already downloading this image (inside semaphore to prevent race condition)
                 if (downloadQueue.containsKey(originalMid)) {
@@ -394,7 +381,7 @@ object ImageCacheManager {
                 downloadQueue[originalMid] = true
                 activeDownloads.incrementAndGet()
                 
-                Timber.tag("ImageCacheManager").d("Starting download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS})")
+                Timber.tag("ImageCacheManager").d("Starting download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
                 // Add delay to spread out requests and avoid overwhelming server
                 delay(200L)
@@ -434,7 +421,7 @@ object ImageCacheManager {
                     downloadQueue.remove(originalMid)
                     activeDownloads.decrementAndGet()
                     downloadSemaphore.release()
-                    Timber.tag("ImageCacheManager").d("Completed download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS})")
+                    Timber.tag("ImageCacheManager").d("Completed download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 }
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadOriginalImage: $e")
@@ -556,10 +543,23 @@ object ImageCacheManager {
         imageLoadingScope.launch {
             try {
                 val result = loadOriginalImage(context, imageUrl, mid)
-                onComplete(result)
+                // Use withContext to ensure callback runs on main thread safely
+                withContext(Dispatchers.Main) {
+                    try {
+                        onComplete(result)
+                    } catch (e: Exception) {
+                        Timber.tag("ImageCacheManager").d("Error in callback: $e")
+                    }
+                }
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadOriginalImageWithScope: $e")
-                onComplete(null)
+                withContext(Dispatchers.Main) {
+                    try {
+                        onComplete(null)
+                    } catch (e: Exception) {
+                        Timber.tag("ImageCacheManager").d("Error in error callback: $e")
+                    }
+                }
             } finally {
                 // Remove from tracking when done
                 activeDownloadsByContext[contextKey]?.remove(mid)
@@ -824,8 +824,6 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded original bitmap from byte array: ${correctedBitmap.width}x${correctedBitmap.height}")
                 correctedBitmap
             } else {
                 Timber.tag("ImageCacheManager")

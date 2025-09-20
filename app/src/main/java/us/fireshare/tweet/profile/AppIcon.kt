@@ -80,15 +80,19 @@ fun UserAvatar(
                 // Try to load from cache first
                 val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
 
-                // If not cached, download and cache
+                // If not cached, download and cache using the new scope-based approach
                 if (cachedBitmap == null && !newAvatarUrl.isNullOrEmpty()) {
-                    val downloadedBitmap = ImageCacheManager.loadImage(context, newAvatarUrl, mid)
-
-                    if (downloadedBitmap == null) {
-                        loadState = loadState.copy(isLoading = false, hasError = true)
-                        Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
-                    } else {
-                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                    ImageCacheManager.loadOriginalImageWithScope(
+                        context = context,
+                        imageUrl = newAvatarUrl,
+                        mid = mid
+                    ) { downloadedBitmap ->
+                        if (downloadedBitmap == null) {
+                            loadState = loadState.copy(isLoading = false, hasError = true)
+                            Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
+                        } else {
+                            loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                        }
                     }
                 } else {
                     loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
