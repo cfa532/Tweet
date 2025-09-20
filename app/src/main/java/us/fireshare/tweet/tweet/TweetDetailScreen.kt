@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -63,6 +64,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.ImageCacheManager
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -81,6 +83,13 @@ fun TweetDetailScreen(
     val comments by viewModel.comments.collectAsState()
     val navController = LocalNavController.current
     val context = LocalContext.current
+
+    // Cancel image loading when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
+        }
+    }
 
     // ReplyEditorBox state management
     var isReplyBoxExpanded by remember { mutableStateOf(false) }

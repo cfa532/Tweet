@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,6 +58,7 @@ import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.ImageCacheManager
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -68,6 +70,13 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
+
+    // Cancel image loading when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
+        }
+    }
 
     // Create ViewModel - move hiltViewModel outside of remember
     val viewModel = if (userId == appUser.mid) appUserViewModel

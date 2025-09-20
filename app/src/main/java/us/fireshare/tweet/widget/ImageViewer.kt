@@ -107,27 +107,8 @@ fun AdvancedImageViewer(
                 
                 // Load original high-resolution image in background
                 try {
-                    var downloadedBitmap: android.graphics.Bitmap? = null
-                    var attempt = 0
-                    val maxAttempts = 3
-                    
-                    while (downloadedBitmap == null && attempt < maxAttempts) {
-                        attempt++
-                        try {
-                            downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                            if (downloadedBitmap == null) {
-                                Timber.tag("AdvancedImageViewer").w("Background load attempt $attempt failed to load original image: $imageUrl")
-                                if (attempt < maxAttempts) {
-                                    delay(1000L * attempt) // Exponential backoff
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("AdvancedImageViewer").e(e, "Background load attempt $attempt failed to load original image: $imageUrl")
-                            if (attempt < maxAttempts) {
-                                delay(1000L * attempt) // Exponential backoff
-                            }
-                        }
-                    }
+                    // For background loading, use single attempt to avoid overwhelming server
+                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
                     
                     if (downloadedBitmap != null) {
                         // Update with original high-resolution image
@@ -150,27 +131,12 @@ fun AdvancedImageViewer(
                     // Keep the cached version if original loading fails
                 }
             } else {
-                // No cached image available, load directly with retry logic
-                var downloadedBitmap: android.graphics.Bitmap? = null
-                var attempt = 0
-                val maxAttempts = 3
-                
-                while (downloadedBitmap == null && attempt < maxAttempts) {
-                    attempt++
-                    try {
-                        downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                        if (downloadedBitmap == null) {
-                            Timber.tag("AdvancedImageViewer").w("Attempt $attempt failed to load original image: $imageUrl")
-                            if (attempt < maxAttempts) {
-                                delay(1000L * attempt) // Exponential backoff
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("AdvancedImageViewer").e(e, "Attempt $attempt failed to load original image: $imageUrl")
-                        if (attempt < maxAttempts) {
-                            delay(1000L * attempt) // Exponential backoff
-                        }
-                    }
+                // No cached image available, load directly with single attempt
+                val downloadedBitmap = try {
+                    ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                } catch (e: Exception) {
+                    Timber.tag("AdvancedImageViewer").e(e, "Failed to load original image: $imageUrl")
+                    null
                 }
                 
                 if (downloadedBitmap == null) {
@@ -179,7 +145,7 @@ fun AdvancedImageViewer(
                         hasError = true,
                         retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("AdvancedImageViewer").e("All attempts failed to load original image: $imageUrl")
+                    Timber.tag("AdvancedImageViewer").e("Failed to load original image: $imageUrl")
                 } else {
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                     
@@ -521,51 +487,40 @@ fun ImageViewer(
                 onLoadComplete?.invoke()
                 Timber.tag("ImageViewer").d("Showing cached image as placeholder: $imageUrl")
                 
-                // Load original high-quality image in background
-                try {
-                    val originalBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                // Load original high-quality image in background using dedicated scope
+                ImageCacheManager.loadOriginalImageWithScope(
+                    context = context,
+                    imageUrl = imageUrl,
+                    mid = mid
+                ) { originalBitmap ->
                     if (originalBitmap != null) {
                         loadState = loadState.copy(bitmap = originalBitmap)
                         Timber.tag("ImageViewer").d("Replaced cached image with original: $imageUrl")
+                    } else {
+                        Timber.tag("ImageViewer").d("Failed to load original image in background: $imageUrl")
+                        // Keep showing cached image if original loading fails
                     }
-                } catch (e: Exception) {
-                    Timber.tag("ImageViewer").d("Failed to load original image in background: ${e.message}")
-                    // Keep showing cached image if original loading fails
                 }
             } else {
-                // No cached image available, show loading and load original directly
-                var downloadedBitmap: android.graphics.Bitmap? = null
-                var attempt = 0
-                val maxAttempts = 2 // Fewer retries for preview images
+                // No cached image available, use dedicated scope to avoid UI cancellation issues
+                loadState = loadState.copy(isLoading = true)
                 
-                while (downloadedBitmap == null && attempt < maxAttempts) {
-                    attempt++
-                    try {
-                        downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                        if (downloadedBitmap == null) {
-                            Timber.tag("ImageViewer").w("Attempt $attempt failed to load original image: $imageUrl")
-                            if (attempt < maxAttempts) {
-                                delay(500L * attempt) // Shorter backoff for preview images
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("ImageViewer").d(e, "Attempt $attempt failed to load original image: $imageUrl")
-                        if (attempt < maxAttempts) {
-                            delay(500L * attempt) // Shorter backoff for preview images
-                        }
+                ImageCacheManager.loadOriginalImageWithScope(
+                    context = context,
+                    imageUrl = imageUrl,
+                    mid = mid
+                ) { downloadedBitmap ->
+                    if (downloadedBitmap == null) {
+                        loadState = loadState.copy(
+                            isLoading = false, 
+                            hasError = true,
+                            retryCount = loadState.retryCount + 1
+                        )
+                        Timber.tag("ImageViewer").d("Failed to load original image: $imageUrl")
+                    } else {
+                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                        onLoadComplete?.invoke()
                     }
-                }
-
-                if (downloadedBitmap == null) {
-                    loadState = loadState.copy(
-                        isLoading = false, 
-                        hasError = true,
-                        retryCount = loadState.retryCount + 1
-                    )
-                    Timber.tag("ImageViewer").d("All attempts failed to load original image: $imageUrl")
-                } else {
-                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                    onLoadComplete?.invoke()
                 }
             }
         } catch (e: Exception) {
