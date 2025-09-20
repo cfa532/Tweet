@@ -164,12 +164,17 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
-        _comments.value = HproseInstance.getComments(tweet)?.map {
+        val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
             it.author = HproseInstance.getUser(it.authorId)
             it
         } ?: emptyList()
-        _comments.update { list ->
-            list.sortedByDescending { it.timestamp }
+
+        // Always merge new comments with existing ones, keeping newly fetched ones over existing duplicates
+        _comments.update { currentComments ->
+            val mergedComments = newComments + currentComments.filter { it.mid !in newComments.map { new -> new.mid } }
+            val finalComments = mergedComments.sortedByDescending { it.timestamp }
+            Timber.tag("TweetViewModel").d("Merged to ${finalComments.size} total comments")
+            finalComments
         }
     }
 
