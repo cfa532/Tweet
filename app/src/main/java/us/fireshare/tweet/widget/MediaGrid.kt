@@ -73,8 +73,6 @@ fun MediaGrid(
         derivedStateOf { mediaItems.take(maxItems) }
     }
 
-    // Track visible items for lazy loading optimization
-    var visibleItemIndices by remember { mutableStateOf(setOf<Int>()) }
     val gridState = rememberLazyGridState()
 
     // Helper: get aspect ratio for an item, using Compose state for images
