@@ -306,14 +306,26 @@ object VideoManager {
                 return
             }
 
-            // Stop playback and reset to beginning
-            player.stop()
-            player.seekTo(0)
-            player.playWhenReady = false
-
-            // Clear any error state
-            if (player.playbackState == Player.STATE_IDLE) {
-                player.prepare()
+            // Only reset if player is in a problematic state
+            when (player.playbackState) {
+                Player.STATE_IDLE -> {
+                    // Player is idle, just ensure it's paused
+                    player.playWhenReady = false
+                }
+                Player.STATE_ENDED -> {
+                    // Video ended, seek to beginning and pause
+                    player.seekTo(0)
+                    player.playWhenReady = false
+                }
+                Player.STATE_BUFFERING -> {
+                    // Player is buffering, just pause it
+                    player.playWhenReady = false
+                }
+                else -> {
+                    // For other states, do a gentle reset
+                    player.playWhenReady = false
+                    player.seekTo(0)
+                }
             }
         } catch (e: Exception) {
             Timber.e("VideoManager - Error resetting player state: $e")
@@ -582,42 +594,52 @@ object VideoManager {
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String): Boolean {
         val player = videoPlayers[videoMid] ?: return false
 
-        Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid")
+        Timber.d("VideoManager - Attempting recovery for video: $videoMid")
 
         try {
-            // Thorough reset: stop, clear, and reset player state
-            player.stop()
-            player.clearMediaItems()
-            player.seekTo(0)
-            
-            // Reset playback state
+            // Check if player is already in a good state
+            if (player.playbackState == Player.STATE_READY) {
+                Timber.d("VideoManager - Player already ready, no recovery needed for: $videoMid")
+                return true
+            }
+
+            // Gentle recovery: only reset if necessary
+            if (player.playbackState == Player.STATE_IDLE) {
+                // Player is idle, just prepare it
+                player.prepare()
+                return true
+            }
+
+            // For other states, do a minimal reset
             player.playWhenReady = false
-            player.pause()
+            
+            // Only do a full reset if player is in an error state
+            if (player.playbackState == Player.STATE_IDLE) {
+                // Create a new media source with extended timeouts
+                val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                    .setConnectTimeoutMs(30000) // 30 seconds connection timeout
+                    .setReadTimeoutMs(30000)    // 30 seconds read timeout
+                    .setAllowCrossProtocolRedirects(true)
+                    .setUserAgent("TweetApp/1.0")
 
-            // Create a new media source with extended timeouts and retry configuration
-            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(45000) // 45 seconds connection timeout for thorough retry
-                .setReadTimeoutMs(45000)    // 45 seconds read timeout for thorough retry
-                .setAllowCrossProtocolRedirects(true)
-                .setUserAgent("TweetApp/1.0")
+                val dataSourceFactory =
+                    androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+                val mediaSourceFactory =
+                    androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+                val mediaSource = mediaSourceFactory.createMediaSource(
+                    androidx.media3.common.MediaItem.fromUri(videoUrl)
+                )
 
-            val dataSourceFactory =
-                androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
-            val mediaSourceFactory =
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-            val mediaSource = mediaSourceFactory.createMediaSource(
-                androidx.media3.common.MediaItem.fromUri(videoUrl)
-            )
+                // Set the new media source and prepare
+                player.setMediaSource(mediaSource)
+                player.prepare()
+            }
 
-            // Set the new media source and prepare
-            player.setMediaSource(mediaSource)
-            player.prepare()
-
-            Timber.d("VideoManager - Thorough recovery attempted for video: $videoMid")
+            Timber.d("VideoManager - Recovery attempted for video: $videoMid")
             return true
         } catch (e: Exception) {
             // Only log recovery failures at debug level to avoid noise during trials
-            Timber.d("VideoManager - Thorough recovery failed for video: $videoMid, error: ${e.message}")
+            Timber.d("VideoManager - Recovery failed for video: $videoMid, error: ${e.message}")
             return false
         }
     }
