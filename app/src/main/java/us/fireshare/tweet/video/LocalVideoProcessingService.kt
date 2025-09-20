@@ -89,11 +89,30 @@ class LocalVideoProcessingService(
                                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
                                         Timber.tag(TAG).d("Video aspect ratio calculated: $aspectRatio for URI: $uri")
                                         
+                                        // Calculate file size from the original URI
+                                        val fileSize = withContext(Dispatchers.IO) {
+                                            try {
+                                                var size: Long = 0L
+                                                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                                    val buffer = ByteArray(8192) // 8KB buffer
+                                                    var bytesRead: Int
+                                                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                                        size += bytesRead
+                                                    }
+                                                }
+                                                Timber.tag(TAG).d("Video file size calculated: $size bytes for URI: $uri")
+                                                size
+                                            } catch (e: Exception) {
+                                                Timber.tag(TAG).e(e, "Failed to calculate video file size for URI: $uri")
+                                                0L
+                                            }
+                                        }
+                                        
                                         VideoProcessingResult.Success(
                                             MimeiFileType(
                                                 processingResult.cid,
                                                 MediaType.HLS_VIDEO,
-                                                0L, // File size not provided
+                                                fileSize,
                                                 fileName,
                                                 fileTimestamp,
                                                 aspectRatio

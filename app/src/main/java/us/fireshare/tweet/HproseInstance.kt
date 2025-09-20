@@ -1910,12 +1910,16 @@ object HproseInstance {
                         
                         @OptIn(UnstableApi::class)
                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+                        
+                        // Calculate file size from the original URI
+                        val fileSize = getFileSize(context, uri) ?: 0L
+                        Timber.tag("pollVideoConversionStatus").d("Video file size calculated: $fileSize bytes for URI: $uri")
 
                         Timber.tag("pollVideoConversionStatus").d("Video conversion completed successfully: $cid")
                         return MimeiFileType(
                             cid,
                             us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
-                            0L, // File size not provided in new response format
+                            fileSize,
                             fileName,
                             fileTimestamp,
                             aspectRatio
@@ -2028,6 +2032,10 @@ object HproseInstance {
 
             Timber.tag("uploadToIPFSOriginal").d("Upload successful, CID: $cid")
 
+            // Calculate file size - use the offset which represents total bytes uploaded
+            val fileSize = offset
+            Timber.tag("uploadToIPFSOriginal").d("File size: $fileSize bytes for URI: $uri")
+
             // Calculate aspect ratio for image or video
             val aspectRatio = when (mediaType) {
                 us.fireshare.tweet.datamodel.MediaType.Image -> {
@@ -2052,13 +2060,38 @@ object HproseInstance {
                 }
             }
 
-            Timber.tag("uploadToIPFSOriginal").d("Final MimeiFileType created with aspect ratio: $aspectRatio")
-            return MimeiFileType(cid, mediaType, offset, fileName, fileTimestamp, aspectRatio)
+            Timber.tag("uploadToIPFSOriginal").d("Final MimeiFileType created with file size: $fileSize, aspect ratio: $aspectRatio")
+            return MimeiFileType(cid, mediaType, fileSize, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
             Timber.tag("uploadToIPFSOriginal()").e(e, "Error: ${e.message}")
         }
         return null
     }
+
+    /**
+     * Calculate file size from URI
+     * @param context Android context
+     * @param uri File URI
+     * @return File size in bytes, or null if calculation fails
+     */
+    suspend fun getFileSize(context: Context, uri: Uri): Long? =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                var fileSize: Long = 0L
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val buffer = ByteArray(8192) // 8KB buffer
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        fileSize += bytesRead
+                    }
+                }
+                Timber.tag("getFileSize").d("File size calculated: $fileSize bytes for URI: $uri")
+                fileSize
+            } catch (e: Exception) {
+                Timber.tag("getFileSize").e(e, "Failed to calculate file size for URI: $uri")
+                null
+            }
+        }
 
     suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? =
         withContext(Dispatchers.IO) {
