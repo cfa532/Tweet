@@ -73,26 +73,14 @@ object ImageCacheManager {
      * Acquire download slot with smart priority - visible images get priority, but invisible images can use all slots when no visible ones are running
      */
     private suspend fun acquireDownloadSlotWithSmartPriority(mid: String, isVisible: Boolean) {
-        priorityMutex.lock()
-        try {
-            if (isVisible) {
-                // Visible images: can always start if there are slots available
-                while (activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS) {
-                    priorityCondition.await()
-                }
-                activeVisibleDownloads++
-                downloadSemaphore.acquire()
-            } else {
-                // Invisible images: can start if there are slots available AND no visible images are waiting
-                while (activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS || 
-                       (activeVisibleDownloads > 0 && activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS - 2)) {
-                    priorityCondition.await()
-                }
-                activeInvisibleDownloads++
-                downloadSemaphore.acquire()
-            }
-        } finally {
-            priorityMutex.unlock()
+        if (isVisible) {
+            // Visible images: use simple semaphore with higher priority (shorter delay)
+            downloadSemaphore.acquire()
+            activeVisibleDownloads++
+        } else {
+            // Invisible images: use simple semaphore with lower priority (longer delay)
+            downloadSemaphore.acquire()
+            activeInvisibleDownloads++
         }
     }
     
@@ -100,18 +88,12 @@ object ImageCacheManager {
      * Release download slot and signal waiting requests
      */
     private fun releaseDownloadSlotWithSmartPriority(isVisible: Boolean) {
-        priorityMutex.lock()
-        try {
-            if (isVisible) {
-                activeVisibleDownloads--
-            } else {
-                activeInvisibleDownloads--
-            }
-            downloadSemaphore.release()
-            priorityCondition.signalAll()
-        } finally {
-            priorityMutex.unlock()
+        if (isVisible) {
+            activeVisibleDownloads--
+        } else {
+            activeInvisibleDownloads--
         }
+        downloadSemaphore.release()
     }
 
     // Connection pool for better performance
@@ -440,14 +422,14 @@ object ImageCacheManager {
                 // Add to priority queue
                 downloadPriorityQueue[originalMid] = isVisible
                 
-                // Use simple semaphore acquisition (temporarily disable smart priority for debugging)
+                // Use simple semaphore with priority-based delays
                 val currentActive = activeDownloads.get()
                 val currentQueued = downloadQueue.size
                 val priority = if (isVisible) "HIGH" else "LOW"
                 
                 Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (priority: $priority, active: $currentActive/${MAX_CONCURRENT_DOWNLOADS}, queued: $currentQueued)")
                 
-                // Simple semaphore acquisition instead of smart priority
+                // Simple semaphore acquisition - priority is handled by delays
                 downloadSemaphore.acquire()
                 
                 Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (priority: $priority, active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
@@ -484,7 +466,9 @@ object ImageCacheManager {
                 Timber.tag("ImageCacheManager").d("Starting download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
                 // Add delay to spread out requests and avoid overwhelming server
-                delay(200L)
+                // Longer delay for invisible images to prioritize visible ones
+                val delayTime = if (isVisible) 100L else 500L
+                delay(delayTime)
 
                 try {
                     var bitmap: Bitmap? = null
@@ -500,6 +484,12 @@ object ImageCacheManager {
                                 // Store result for waiting requests
                                 downloadResults[originalMid] = bitmap
                                 resultTimestamps[originalMid] = System.currentTimeMillis()
+                                
+                                // Clean up old results periodically to prevent memory buildup
+                                if (downloadResults.size > 50) {
+                                    cleanupOldResults()
+                                }
+                                
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
@@ -520,7 +510,6 @@ object ImageCacheManager {
                 } finally {
                     // Always release the download slot and clean up
                     val wasVisible = downloadPriorityQueue[originalMid] ?: false
-                    // Simple semaphore release instead of smart priority
                     downloadSemaphore.release()
                     
                     downloadQueueMutex.lock()
