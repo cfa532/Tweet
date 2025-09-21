@@ -161,15 +161,16 @@ fun MediaItemView(
         when (attachment.type) {
             MediaType.Image -> {
                 // Track visibility for priority-based loading
-                var isVisible by remember { mutableStateOf(false) }
+                var isVisible by remember { mutableStateOf(true) } // Default to true since images in feed are likely visible
                 
                 // Use a Box with clickable modifier to handle image clicks
                 Box(
                     modifier = modifier
                         .clipToBounds()
                         .onGloballyPositioned { layoutCoordinates ->
-                            // Simple visibility detection - if the item has a size, it's likely visible
-                            isVisible = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                            // Update visibility based on actual layout - if item has size, it's visible
+                            val hasSize = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                            isVisible = hasSize
                         }
                         .clickable {
                             goto(index)

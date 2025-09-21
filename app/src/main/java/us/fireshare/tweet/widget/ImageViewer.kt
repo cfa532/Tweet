@@ -181,7 +181,7 @@ fun AdvancedImageViewer(
             // Step 2: Load original image from server (only if no cached images found)
             try {
                 val originalMid = "${mid}_original"
-                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
                 
                 if (downloadedBitmap != null) {
                     // Update with original high-resolution image
