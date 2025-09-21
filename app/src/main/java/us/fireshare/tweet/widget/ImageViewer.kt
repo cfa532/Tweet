@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -95,9 +96,40 @@ fun AdvancedImageViewer(
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
+    var retryCount by remember { mutableStateOf(0) }
+    var isVisible by remember { mutableStateOf(true) }
+    var lastRetryTime by remember { mutableStateOf(0L) }
+
+    // Function to check if retry should be attempted (debounced and with available slots)
+    fun shouldRetry(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val timeSinceLastRetry = currentTime - lastRetryTime
+        val minRetryInterval = 1000L // 1 second minimum between retries
+        
+        // Check if enough time has passed since last retry
+        if (timeSinceLastRetry < minRetryInterval) {
+            Timber.tag("ImageViewer").d("Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining")
+            return false
+        }
+        
+        // Check if there are available download slots
+        val hasSlots = ImageCacheManager.hasAvailableDownloadSlots()
+        if (!hasSlots) {
+            Timber.tag("ImageViewer").d("Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}")
+            return false
+        }
+        
+        Timber.tag("ImageViewer").d("Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}")
+        return true
+    }
 
     // Load image using ImageCacheManager with proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, imageUrl, loadState.retryCount) {
+    LaunchedEffect(mid, imageUrl, retryCount) {
+        // Only attempt loading if retry count is within limit
+        if (retryCount > 3) {
+            return@LaunchedEffect
+        }
+        
         try {
             var compressedBitmap: android.graphics.Bitmap? = null
             
@@ -166,10 +198,16 @@ fun AdvancedImageViewer(
                     if (compressedBitmap == null) {
                         loadState = loadState.copy(
                             isLoading = false, 
-                            hasError = true,
-                            retryCount = loadState.retryCount + 1
+                            hasError = true
                         )
                         Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl")
+                        
+                        // Auto-retry if within limit and debounced
+                        if (retryCount < 3 && shouldRetry()) {
+                            delay(2000L) // Wait 2 seconds before retry
+                            retryCount++
+                            lastRetryTime = System.currentTimeMillis()
+                        }
                     } else {
                         // Keep showing compressed version if original loading fails
                         Timber.tag("ImageViewer").w("Failed to load original image from server, keeping compressed version: $imageUrl")
@@ -180,21 +218,39 @@ fun AdvancedImageViewer(
                 if (compressedBitmap == null) {
                     loadState = loadState.copy(
                         isLoading = false, 
-                        hasError = true,
-                        retryCount = loadState.retryCount + 1
+                        hasError = true
                     )
+                    
+                    // Auto-retry if within limit and debounced
+                    if (retryCount < 3 && shouldRetry()) {
+                        delay(2000L) // Wait 2 seconds before retry
+                        retryCount++
+                        lastRetryTime = System.currentTimeMillis()
+                    }
                 } else {
                     // Keep showing compressed version if original loading fails
                     Timber.tag("ImageViewer").w("Error loading original image from server, keeping compressed version: $imageUrl")
                 }
             }
         } catch (e: Exception) {
+            // Handle cancellation gracefully - don't retry on cancellation
+            if (e is kotlinx.coroutines.CancellationException) {
+                Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                return@LaunchedEffect
+            }
+            
             loadState = loadState.copy(
                 isLoading = false, 
-                hasError = true,
-                retryCount = loadState.retryCount + 1
+                hasError = true
             )
             Timber.tag("ImageViewer").e("Error loading image: $e")
+            
+            // Auto-retry if within limit and debounced
+            if (retryCount < 3 && shouldRetry()) {
+                delay(2000L) // Wait 2 seconds before retry
+                retryCount++
+                lastRetryTime = System.currentTimeMillis()
+            }
         }
     }
 
@@ -204,6 +260,9 @@ fun AdvancedImageViewer(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onGloballyPositioned { 
+                isVisible = true 
+            }
             .pointerInput(enableLongPress) {
                 if (enableLongPress) {
                     detectTapGestures(
@@ -286,26 +345,10 @@ fun AdvancedImageViewer(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.failed_to_load_image),
-                        color = Color.White
-                    )
-                    if (loadState.retryCount < 3) {
-                        androidx.compose.material3.Button(
-                            onClick = {
-                                loadState = loadState.copy(
-                                    hasError = false,
-                                    retryCount = loadState.retryCount + 1
-                                )
-                            }
-                        ) {
-                            Text("Retry")
-                        }
-                    }
-                }
+                Text(
+                    text = stringResource(R.string.failed_to_load_image),
+                    color = Color.White
+                )
             }
         } else if (loadState.isLoading) {
             // Show loading state
@@ -374,40 +417,6 @@ fun AdvancedImageViewer(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         
-                        // Reload option
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    loadState = loadState.copy(
-                                        isLoading = true,
-                                        hasError = false,
-                                        retryCount = loadState.retryCount + 1
-                                    )
-                                    showMenu = false
-                                }
-                                .padding(vertical = 8.dp, horizontal = 12.dp)
-                                .background(
-                                    color = Color(0xFFF5F5F5),
-                                    shape = RoundedCornerShape(6.dp)
-                                ),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                tint = Color(0xFF2196F3),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Reload Image",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Black
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(6.dp))
                         
                         // Download option
                         Row(
@@ -503,6 +512,31 @@ fun ImageViewer(
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
+    var retryCount by remember { mutableStateOf(0) }
+    var lastRetryTime by remember { mutableStateOf(0L) }
+
+    // Function to check if retry should be attempted (debounced and with available slots)
+    fun shouldRetry(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val timeSinceLastRetry = currentTime - lastRetryTime
+        val minRetryInterval = 1000L // 1 second minimum between retries
+        
+        // Check if enough time has passed since last retry
+        if (timeSinceLastRetry < minRetryInterval) {
+            Timber.tag("ImageViewer").d("Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining")
+            return false
+        }
+        
+        // Check if there are available download slots
+        val hasSlots = ImageCacheManager.hasAvailableDownloadSlots()
+        if (!hasSlots) {
+            Timber.tag("ImageViewer").d("Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}")
+            return false
+        }
+        
+        Timber.tag("ImageViewer").d("Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}")
+        return true
+    }
 
     // Update visibility state when it changes
     LaunchedEffect(isVisible) {
@@ -510,7 +544,7 @@ fun ImageViewer(
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, imageUrl, loadState.retryCount, isVisible) {
+    LaunchedEffect(mid, imageUrl, retryCount) {
         try {
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
@@ -558,7 +592,7 @@ fun ImageViewer(
             
             // Step 3: Load original image from server (always attempt this if not cached)
             try {
-                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
+                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
                 
                 if (downloadedBitmap != null) {
                     // Update with original high-resolution image
@@ -577,10 +611,16 @@ fun ImageViewer(
                     if (initialBitmap == null) {
                         loadState = loadState.copy(
                             isLoading = false, 
-                            hasError = true,
-                            retryCount = loadState.retryCount + 1
+                            hasError = true
                         )
                         Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl")
+                        
+                        // Auto-retry if within limit, visible, and debounced
+                        if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                            delay(2000L) // Wait 2 seconds before retry
+                            retryCount++
+                            lastRetryTime = System.currentTimeMillis()
+                        }
                     } else {
                         // Keep showing initial bitmap if original loading fails
                         Timber.tag("ImageViewer").w("Failed to load original image from server, keeping initial bitmap: $imageUrl")
@@ -591,21 +631,39 @@ fun ImageViewer(
                 if (initialBitmap == null) {
                     loadState = loadState.copy(
                         isLoading = false, 
-                        hasError = true,
-                        retryCount = loadState.retryCount + 1
+                        hasError = true
                     )
+                    
+                    // Auto-retry if within limit, visible, and debounced
+                    if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                        delay(2000L) // Wait 2 seconds before retry
+                        retryCount++
+                        lastRetryTime = System.currentTimeMillis()
+                    }
                 } else {
                     // Keep showing initial bitmap if original loading fails
                     Timber.tag("ImageViewer").w("Error loading original image from server, keeping initial bitmap: $imageUrl")
                 }
             }
         } catch (e: Exception) {
+            // Handle cancellation gracefully - don't retry on cancellation
+            if (e is kotlinx.coroutines.CancellationException) {
+                Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                return@LaunchedEffect
+            }
+            
             loadState = loadState.copy(
                 isLoading = false, 
-                hasError = true,
-                retryCount = loadState.retryCount + 1
+                hasError = true
             )
             Timber.tag("ImageViewer").d("Error loading image: $e")
+            
+            // Auto-retry if within limit, visible, and debounced
+            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                delay(2000L) // Wait 2 seconds before retry
+                retryCount++
+                lastRetryTime = System.currentTimeMillis()
+            }
         }
     }
 
@@ -725,18 +783,6 @@ fun ImageViewer(
                             text = stringResource(R.string.failed_to_load_image),
                             color = Color.White
                         )
-                        if (loadState.retryCount < 2) {
-                            androidx.compose.material3.Button(
-                                onClick = {
-                                    loadState = loadState.copy(
-                                        hasError = false,
-                                        retryCount = loadState.retryCount + 1
-                                    )
-                                }
-                            ) {
-                                Text("Retry")
-                            }
-                        }
                     }
                 } else {
                     Text(
