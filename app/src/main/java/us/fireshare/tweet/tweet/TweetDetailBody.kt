@@ -291,6 +291,7 @@ fun MediaGrid(
                     0,
                     autoPlay = true,
                     inPreviewGrid = false,
+                    loadOriginalImage = false, // Use compressed preview in detail view
                     viewModel
                 )
             }

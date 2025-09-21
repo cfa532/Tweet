@@ -258,6 +258,7 @@ fun MediaGrid(
                     numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
                     autoPlay = isAutoPlayForGridIndex(0),
                     inPreviewGrid = true,
+                    loadOriginalImage = true, // Load original high-res image for single image
                     viewModel = viewModel,
                     onVideoCompleted = { onVideoCompleted(0) }
                 )

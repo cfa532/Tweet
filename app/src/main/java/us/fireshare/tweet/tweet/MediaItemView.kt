@@ -69,12 +69,15 @@ fun MediaItemView(
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
+    loadOriginalImage: Boolean = false, // load original high-res image instead of compressed preview
     viewModel: TweetViewModel,
     onVideoCompleted: (() -> Unit)? = null
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
+    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -97,6 +100,7 @@ fun MediaItemView(
             MediaType.Image -> {
                 // Show full-screen image directly
                 fullScreenImageMid = mediaItems[idx].mid
+                fullScreenBitmap = currentBitmap // Pass the current bitmap to fullscreen
                 showFullScreenImage = true
             }
             MediaType.Audio -> {
@@ -179,7 +183,11 @@ fun MediaItemView(
                             Modifier.fillMaxWidth(),
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = inPreviewGrid,
-                        isVisible = isVisible
+                        isVisible = isVisible,
+                        loadOriginalImage = loadOriginalImage,
+                        onBitmapLoaded = { bitmap ->
+                            currentBitmap = bitmap
+                        }
                     )
                 }
             }
@@ -280,6 +288,7 @@ fun MediaItemView(
                 AdvancedImageViewer(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
+                    initialBitmap = fullScreenBitmap,
                     onClose = { showFullScreenImage = false },
                     modifier = Modifier.fillMaxSize()
                 )
