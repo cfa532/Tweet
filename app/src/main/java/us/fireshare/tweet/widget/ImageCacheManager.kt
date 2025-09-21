@@ -88,11 +88,6 @@ object ImageCacheManager {
      * Release download slot and signal waiting requests
      */
     private fun releaseDownloadSlotWithSmartPriority(isVisible: Boolean) {
-        if (isVisible) {
-            activeVisibleDownloads--
-        } else {
-            activeInvisibleDownloads--
-        }
         downloadSemaphore.release()
     }
 
@@ -439,7 +434,7 @@ object ImageCacheManager {
                 try {
                     if (downloadQueue.containsKey(originalMid)) {
                         Timber.tag("ImageCacheManager").d("Duplicate request blocked for $mid - already downloading (race condition)")
-                        releaseDownloadSlotWithSmartPriority(isVisible)
+                        downloadSemaphore.release()
                         
                         // Wait for the download to complete and return the result
                         var attempts = 0
