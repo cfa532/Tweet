@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -88,84 +89,44 @@ fun AdvancedImageViewer(
     var imageFile by remember { mutableStateOf<File?>(null) }
 
     // Load image using ImageCacheManager with placeholder functionality
+    // Use dedicated scope to avoid composition cancellation issues
     LaunchedEffect(mid, imageUrl, loadState.retryCount) {
-        try {
-            loadState = loadState.copy(isLoading = true, hasError = false)
-            
-            // Try to load from cache first as placeholder
-            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-            
-            if (cachedBitmap != null) {
-                // Show cached image immediately as placeholder
-                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
+        loadState = loadState.copy(isLoading = true, hasError = false)
+        
+        // Use dedicated scope to avoid composition cancellation
+        ImageCacheManager.loadOriginalImageWithScope(
+            context = context,
+            imageUrl = imageUrl,
+            mid = mid,
+            isVisible = true
+        ) { bitmap ->
+            if (bitmap != null) {
+                loadState = loadState.copy(bitmap = bitmap, isLoading = false)
                 
-                // Get the cached file for SubsamplingScaleImageView
-                val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
-                if (cachedFile != null && cachedFile.exists()) {
+                // Get the cached file for SubsamplingScaleImageView (use sync approach)
+                val originalMid = "${mid}_original"
+                val cachedFile = File(context.cacheDir, "image_cache/$originalMid.jpg")
+                if (cachedFile.exists()) {
                     imageFile = cachedFile
                 }
                 
-                // Load original high-resolution image in background
-                try {
-                    // For background loading, use single attempt to avoid overwhelming server
-                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                    
-                    if (downloadedBitmap != null) {
-                        // Update with original high-resolution image
-                        loadState = loadState.copy(bitmap = downloadedBitmap)
-                        
-                        // Update file for SubsamplingScaleImageView (use original cache key)
-                        val originalMid = "${mid}_original"
-                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
-                            imageFile = updatedCachedFile
-                        }
-                        
-                        onLoadComplete?.invoke()
-                        Timber.tag("AdvancedImageViewer").d("Successfully loaded original high-resolution image: $imageUrl")
-                    } else {
-                        Timber.tag("AdvancedImageViewer").w("Failed to load original image, keeping cached version: $imageUrl")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("AdvancedImageViewer").e(e, "Error loading original image in background: $imageUrl")
-                    // Keep the cached version if original loading fails
-                }
+                onLoadComplete?.invoke()
+                Timber.tag("AdvancedImageViewer").d("Successfully loaded image: $imageUrl")
             } else {
-                // No cached image available, load directly with single attempt
-                val downloadedBitmap = try {
-                    ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                } catch (e: Exception) {
-                    Timber.tag("AdvancedImageViewer").e(e, "Failed to load original image: $imageUrl")
-                    null
-                }
-                
-                if (downloadedBitmap == null) {
-                    loadState = loadState.copy(
-                        isLoading = false, 
-                        hasError = true,
-                        retryCount = loadState.retryCount + 1
-                    )
-                    Timber.tag("AdvancedImageViewer").e("Failed to load original image: $imageUrl")
-                } else {
-                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                    
-                    // Get the cached file for SubsamplingScaleImageView (use original cache key)
-                    val originalMid = "${mid}_original"
-                    val cachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                    if (cachedFile != null && cachedFile.exists()) {
-                        imageFile = cachedFile
-                    }
-                    
-                    onLoadComplete?.invoke()
-                }
+                loadState = loadState.copy(
+                    isLoading = false, 
+                    hasError = true,
+                    retryCount = loadState.retryCount + 1
+                )
+                Timber.tag("AdvancedImageViewer").d("Failed to load image: $imageUrl")
             }
-        } catch (e: Exception) {
-            loadState = loadState.copy(
-                isLoading = false, 
-                hasError = true,
-                retryCount = loadState.retryCount + 1
-            )
-            Timber.tag("AdvancedImageViewer").e("Error loading image: $e")
+        }
+    }
+
+    // Clean up image loading when composable is disposed
+    DisposableEffect(context) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
         }
     }
 
@@ -668,6 +629,13 @@ fun ImageViewer(
                     }
                 )
             }
+        }
+    }
+
+    // Clean up image loading when composable is disposed
+    DisposableEffect(context) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
         }
     }
 }
