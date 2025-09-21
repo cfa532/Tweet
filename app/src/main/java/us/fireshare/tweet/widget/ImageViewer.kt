@@ -87,17 +87,15 @@ fun AdvancedImageViewer(
     var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
     var imageFile by remember { mutableStateOf<File?>(null) }
 
-    // Load image using ImageCacheManager with placeholder functionality
+    // Load image using ImageCacheManager with proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, loadState.retryCount) {
         try {
-            loadState = loadState.copy(isLoading = true, hasError = false)
+            // Step 1: Check for compressed image in disk cache first
+            val compressedBitmap = ImageCacheManager.getCachedImage(context, mid)
             
-            // Try to load from cache first as placeholder
-            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-            
-            if (cachedBitmap != null) {
-                // Show cached image immediately as placeholder
-                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
+            if (compressedBitmap != null) {
+                // Show compressed image immediately - no loading state needed
+                loadState = loadState.copy(bitmap = compressedBitmap, isLoading = false, hasError = false)
                 
                 // Get the cached file for SubsamplingScaleImageView
                 val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
@@ -105,58 +103,72 @@ fun AdvancedImageViewer(
                     imageFile = cachedFile
                 }
                 
-                // Load original high-resolution image in background
+                Timber.tag("AdvancedImageViewer").d("Showing compressed cached image as placeholder: $imageUrl")
+            } else {
+                // No cached image, set loading state
+                loadState = loadState.copy(isLoading = true, hasError = false)
+            }
+            
+            // Step 2: Check for original image in cache
+            val originalMid = "${mid}_original"
+            val originalCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
+            
+            if (originalCachedFile != null && originalCachedFile.exists()) {
                 try {
-                    // For background loading, use single attempt to avoid overwhelming server
-                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                    
-                    if (downloadedBitmap != null) {
-                        // Update with original high-resolution image
-                        loadState = loadState.copy(bitmap = downloadedBitmap)
-                        
-                        // Update file for SubsamplingScaleImageView (use original cache key)
-                        val originalMid = "${mid}_original"
-                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
-                            imageFile = updatedCachedFile
-                        }
-                        
+                    val originalBitmap = ImageCacheManager.getCachedImage(context, originalMid)
+                    if (originalBitmap != null) {
+                        loadState = loadState.copy(bitmap = originalBitmap, isLoading = false, hasError = false)
+                        imageFile = originalCachedFile
                         onLoadComplete?.invoke()
-                        Timber.tag("AdvancedImageViewer").d("Successfully loaded original high-resolution image: $imageUrl")
-                    } else {
-                        Timber.tag("AdvancedImageViewer").w("Failed to load original image, keeping cached version: $imageUrl")
+                        Timber.tag("AdvancedImageViewer").d("Using cached original image: $imageUrl")
+                        return@LaunchedEffect
                     }
                 } catch (e: Exception) {
-                    Timber.tag("AdvancedImageViewer").e(e, "Error loading original image in background: $imageUrl")
-                    // Keep the cached version if original loading fails
+                    Timber.tag("AdvancedImageViewer").w("Failed to load cached original image: $e")
                 }
-            } else {
-                // No cached image available, load directly with single attempt
-                val downloadedBitmap = try {
-                    ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
-                } catch (e: Exception) {
-                    Timber.tag("AdvancedImageViewer").e(e, "Failed to load original image: $imageUrl")
-                    null
-                }
+            }
+            
+            // Step 3: Load original image from server (always attempt this if not cached)
+            try {
+                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid)
                 
-                if (downloadedBitmap == null) {
+                if (downloadedBitmap != null) {
+                    // Update with original high-resolution image
+                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                    
+                    // Update file for SubsamplingScaleImageView (use original cache key)
+                    val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
+                    if (updatedCachedFile != null && updatedCachedFile.exists()) {
+                        imageFile = updatedCachedFile
+                    }
+                    
+                    onLoadComplete?.invoke()
+                    Timber.tag("AdvancedImageViewer").d("Successfully loaded original image from server: $imageUrl")
+                } else {
+                    // Server load failed - show error or fallback to compressed
+                    if (compressedBitmap == null) {
+                        loadState = loadState.copy(
+                            isLoading = false, 
+                            hasError = true,
+                            retryCount = loadState.retryCount + 1
+                        )
+                        Timber.tag("AdvancedImageViewer").e("Failed to load original image from server: $imageUrl")
+                    } else {
+                        // Keep showing compressed version if original loading fails
+                        Timber.tag("AdvancedImageViewer").w("Failed to load original image from server, keeping compressed version: $imageUrl")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("AdvancedImageViewer").e(e, "Error loading original image from server: $imageUrl")
+                if (compressedBitmap == null) {
                     loadState = loadState.copy(
                         isLoading = false, 
                         hasError = true,
                         retryCount = loadState.retryCount + 1
                     )
-                    Timber.tag("AdvancedImageViewer").e("Failed to load original image: $imageUrl")
                 } else {
-                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                    
-                    // Get the cached file for SubsamplingScaleImageView (use original cache key)
-                    val originalMid = "${mid}_original"
-                    val cachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                    if (cachedFile != null && cachedFile.exists()) {
-                        imageFile = cachedFile
-                    }
-                    
-                    onLoadComplete?.invoke()
+                    // Keep showing compressed version if original loading fails
+                    Timber.tag("AdvancedImageViewer").w("Error loading original image from server, keeping compressed version: $imageUrl")
                 }
             }
         } catch (e: Exception) {
@@ -203,8 +215,8 @@ fun AdvancedImageViewer(
                 )
             }
     ) {
-        if (imageFile != null) {
-            // Use SubsamplingScaleImageView for efficient large image handling
+        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
+            // Always use SubsamplingScaleImageView for consistent rendering and built-in operations
             AndroidView(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
@@ -223,33 +235,23 @@ fun AdvancedImageViewer(
                     }
                 },
                 update = { imageView ->
-                    imageFile?.let { file ->
+                    loadState.bitmap?.let { bitmap ->
                         try {
-                            imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(file.toUri()))
+                            // Use cached file if available, otherwise create temp file from bitmap
+                            val fileToUse = imageFile ?: run {
+                                val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
+                                tempFile.outputStream().use { out ->
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
+                                }
+                                tempFile
+                            }
+                            imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(fileToUse.toUri()))
                         } catch (e: Exception) {
                             Timber.tag("AdvancedImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
-                            // Fallback to regular Image if SubsamplingScaleImageView fails
                             loadState = loadState.copy(hasError = true)
                         }
                     }
                 },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationY = dragOffset
-                        // Add some scaling effect as the image is dragged down
-                        scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                        scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                        // Add alpha effect for fade out
-                        alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                    }
-            )
-        } else if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
-            // Fallback to regular Image if no file is available
-            Image(
-                bitmap = loadState.bitmap!!.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
