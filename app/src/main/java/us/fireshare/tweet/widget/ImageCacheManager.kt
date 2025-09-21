@@ -76,6 +76,10 @@ object ImageCacheManager {
     
     // Mutex to prevent race conditions in download queue
     private val downloadQueueMutex = Any()
+    
+    // Pause/resume mechanism
+    private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
+    private val pausedDownloadMutex = Any()
 
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
@@ -306,6 +310,11 @@ object ImageCacheManager {
             var inputStream: InputStream? = null
 
             try {
+                // Check if download is paused before starting
+                if (isDownloadPaused(mid)) {
+                    Timber.tag("ImageCacheManager").d("Download paused for $mid, skipping")
+                    return@withContext null
+                }
                 val url = URL(imageUrl)
                 connection = url.openConnection() as HttpURLConnection
                 connection.connectTimeout = CONNECTION_TIMEOUT
@@ -324,6 +333,13 @@ object ImageCacheManager {
 
                 // Read the image data to check size
                 val imageData = inputStream.readBytes()
+                
+                // Check if download was paused during reading
+                if (isDownloadPaused(mid)) {
+                    Timber.tag("ImageCacheManager").d("Download paused during read for $mid, aborting")
+                    return@withContext null
+                }
+                
                 val imageSize = imageData.size
 
                 // Save original data directly (for original images, always save original data)
@@ -611,7 +627,71 @@ object ImageCacheManager {
      * Get current download status for debugging
      */
     fun getDownloadStatus(): String {
-        return "Available: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}, Queued: ${downloadQueue.size}"
+        return "Available: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}, Queued: ${downloadQueue.size}, Paused: ${pausedDownloads.size}"
+    }
+    
+    /**
+     * Pause a download by marking it as paused
+     */
+    fun pauseDownload(mid: String) {
+        synchronized(pausedDownloadMutex) {
+            pausedDownloads[mid] = true
+            Timber.tag("ImageCacheManager").d("Paused download for $mid")
+        }
+    }
+    
+    /**
+     * Resume a download by removing it from paused state
+     */
+    fun resumeDownload(mid: String) {
+        synchronized(pausedDownloadMutex) {
+            pausedDownloads.remove(mid)
+            Timber.tag("ImageCacheManager").d("Resumed download for $mid")
+        }
+    }
+    
+    /**
+     * Check if a download is paused
+     */
+    fun isDownloadPaused(mid: String): Boolean {
+        synchronized(pausedDownloadMutex) {
+            return pausedDownloads.containsKey(mid)
+        }
+    }
+    
+    /**
+     * Start background task to periodically resume paused downloads
+     */
+    private fun startPausedDownloadResumer() {
+        GlobalScope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(5000L) // Check every 5 seconds
+                
+                synchronized(pausedDownloadMutex) {
+                    if (pausedDownloads.isNotEmpty()) {
+                        Timber.tag("ImageCacheManager").d("Found ${pausedDownloads.size} paused downloads, attempting to resume")
+                        
+                        // Resume paused downloads if we have available slots
+                        if (downloadSemaphore.availablePermits > 0) {
+                            val pausedMids = pausedDownloads.keys.toList()
+                            for (mid in pausedMids) {
+                                if (downloadSemaphore.availablePermits > 0) {
+                                    pausedDownloads.remove(mid)
+                                    Timber.tag("ImageCacheManager").d("Auto-resumed paused download for $mid")
+                                } else {
+                                    break // No more slots available
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Initialize the paused download resumer
+    init {
+        startPausedDownloadResumer()
     }
 
     /**

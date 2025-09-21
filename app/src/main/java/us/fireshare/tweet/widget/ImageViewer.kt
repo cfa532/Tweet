@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
@@ -99,6 +101,7 @@ fun AdvancedImageViewer(
     var retryCount by remember { mutableStateOf(0) }
     var isVisible by remember { mutableStateOf(true) }
     var lastRetryTime by remember { mutableStateOf(0L) }
+    var currentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -125,6 +128,8 @@ fun AdvancedImageViewer(
 
     // Load image using ImageCacheManager with proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
+        // Store the current job for potential cancellation
+        currentJob = coroutineContext[Job]
         // Only attempt loading if retry count is within limit
         if (retryCount > 3) {
             return@LaunchedEffect
@@ -263,10 +268,19 @@ fun AdvancedImageViewer(
     LaunchedEffect(isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
         
-        // If image becomes visible again and previous load failed, retry
-        if (isVisible && loadState.hasError && retryCount <= 3) {
-            Timber.tag("ImageViewer").d("AdvancedImageViewer reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
-            retryCount++
+        if (isVisible) {
+            // If image becomes visible again, resume any paused download
+            ImageCacheManager.resumeDownload(mid)
+            
+            // If previous load failed, retry
+            if (loadState.hasError && retryCount <= 3) {
+                Timber.tag("ImageViewer").d("AdvancedImageViewer reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+                retryCount++
+            }
+        } else {
+            // If image becomes invisible, pause the download instead of cancelling
+            ImageCacheManager.pauseDownload(mid)
+            Timber.tag("ImageViewer").d("AdvancedImageViewer became invisible, paused download: $imageUrl")
         }
     }
 
@@ -532,6 +546,7 @@ fun ImageViewer(
     var dragOffset by remember { mutableStateOf(0f) }
     var retryCount by remember { mutableStateOf(0) }
     var lastRetryTime by remember { mutableStateOf(0L) }
+    var currentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -560,15 +575,26 @@ fun ImageViewer(
     LaunchedEffect(isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
         
-        // If image becomes visible again and previous load failed, retry
-        if (isVisible && loadState.hasError && retryCount <= 3) {
-            Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
-            retryCount++
+        if (isVisible) {
+            // If image becomes visible again, resume any paused download
+            ImageCacheManager.resumeDownload(mid)
+            
+            // If previous load failed, retry
+            if (loadState.hasError && retryCount <= 3) {
+                Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+                retryCount++
+            }
+        } else {
+            // If image becomes invisible, pause the download instead of cancelling
+            ImageCacheManager.pauseDownload(mid)
+            Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
         }
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
+        // Store the current job for potential cancellation
+        currentJob = coroutineContext[Job]
         try {
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
