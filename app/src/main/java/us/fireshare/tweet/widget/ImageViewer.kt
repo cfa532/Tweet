@@ -56,6 +56,10 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
@@ -71,6 +75,44 @@ data class ImageLoadState(
     val retryCount: Int = 0,
     val isVisible: Boolean = false
 )
+
+/**
+ * Animated loading text with moving dots
+ */
+@Composable
+fun AnimatedLoadingText(
+    text: String = "Loading",
+    color: Color = Color.White,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
+    
+    // Animate the number of dots (0 to 3)
+    val dotCount by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = androidx.compose.animation.core.LinearEasing)
+        ),
+        label = "dot_count"
+    )
+    
+    val dots = ".".repeat(dotCount.toInt())
+    
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            color = color
+        )
+        Text(
+            text = dots,
+            color = color
+        )
+    }
+}
 
 /**
  * Advanced ImageViewer using SubsamplingScaleImageView for efficient large image handling
@@ -369,24 +411,13 @@ fun AdvancedImageViewer(
                         alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                     }
             )
-        } else if (loadState.hasError) {
-            // Show error state with retry option
+        } else if (loadState.isLoading || loadState.hasError) {
+            // Show loading state (even when there's an error, keep showing loading)
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = stringResource(R.string.failed_to_load_image),
-                    color = Color.White
-                )
-            }
-        } else if (loadState.isLoading) {
-            // Show loading state
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
+                AnimatedLoadingText(
                     text = stringResource(R.string.loading),
                     color = Color.White
                 )
@@ -835,36 +866,13 @@ fun ImageViewer(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-        } else if (loadState.hasError) {
-            Timber.tag("ImageViewer").d("Rendering error state: hasError: ${loadState.hasError}, isLoading: ${loadState.isLoading}, bitmap: ${loadState.bitmap}")
-            // Show error state with retry option for full screen
+        } else if (loadState.isLoading || loadState.hasError) {
+            // Show loading state (even when there's an error, keep showing loading)
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                if (isFullScreen) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.failed_to_load_image),
-                            color = Color.White
-                        )
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.failed_to_load_image),
-                        color = Color.Unspecified
-                    )
-                }
-            }
-        } else if (loadState.isLoading) {
-            // Show loading state
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
+                AnimatedLoadingText(
                     text = stringResource(R.string.loading),
                     color = if (isFullScreen) Color.White else Color.Unspecified
                 )
