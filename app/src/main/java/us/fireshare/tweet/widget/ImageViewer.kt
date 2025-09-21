@@ -88,10 +88,10 @@ fun AnimatedLoadingText(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
     
-    // Animate the number of dots (0 to 5)
+    // Animate the number of dots (0 to 7)
     val dotCount by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 5f,
+        targetValue = 7f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = androidx.compose.animation.core.LinearEasing)
         ),
@@ -108,9 +108,9 @@ fun AnimatedLoadingText(
             text = text,
             color = color
         )
-        // Container for dots taking up half the remaining width
+        // Fixed width container for dots to prevent shifting
         Box(
-            modifier = Modifier.width(80.dp), // Fixed width for 7 dots
+            modifier = Modifier.width(56.dp), // Fixed width for 7 dots
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
@@ -382,6 +382,9 @@ fun AdvancedImageViewer(
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
                         maxScale = 4f // Maximum zoom for pinch-to-zoom
+                        
+                        // Enable EXIF orientation handling
+                        setOrientation(SubsamplingScaleImageView.ORIENTATION_USE_EXIF)
                         
                         // Add long press listener for the third-party view
                         setOnLongClickListener {
