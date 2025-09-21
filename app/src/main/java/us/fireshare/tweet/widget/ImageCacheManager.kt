@@ -11,12 +11,15 @@ import androidx.core.graphics.createBitmap
 import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.Continuation
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -54,6 +57,60 @@ object ImageCacheManager {
     
     // Track active downloads by screen/context to allow selective cancellation
     private val activeDownloadsByContext = ConcurrentHashMap<String, MutableSet<String>>()
+    
+    // Priority queue for downloads (visible images get higher priority)
+    private val downloadPriorityQueue = ConcurrentHashMap<String, Boolean>() // mid -> isVisible
+    
+    // True priority system: visible images get priority, but invisible images can use all slots when visible ones aren't running
+    private val priorityMutex = java.util.concurrent.locks.ReentrantLock()
+    private val priorityCondition = priorityMutex.newCondition()
+    private var activeVisibleDownloads = 0
+    private var activeInvisibleDownloads = 0
+    
+    /**
+     * Acquire download slot with smart priority - visible images get priority, but invisible images can use all slots when no visible ones are running
+     */
+    private suspend fun acquireDownloadSlotWithSmartPriority(mid: String, isVisible: Boolean) {
+        priorityMutex.lock()
+        try {
+            if (isVisible) {
+                // Visible images: can always start if there are slots available
+                while (activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS) {
+                    priorityCondition.await()
+                }
+                activeVisibleDownloads++
+                downloadSemaphore.acquire()
+            } else {
+                // Invisible images: can start if there are slots available AND no visible images are waiting
+                while (activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS || 
+                       (activeVisibleDownloads > 0 && activeVisibleDownloads + activeInvisibleDownloads >= MAX_CONCURRENT_DOWNLOADS - 2)) {
+                    priorityCondition.await()
+                }
+                activeInvisibleDownloads++
+                downloadSemaphore.acquire()
+            }
+        } finally {
+            priorityMutex.unlock()
+        }
+    }
+    
+    /**
+     * Release download slot and signal waiting requests
+     */
+    private fun releaseDownloadSlotWithSmartPriority(isVisible: Boolean) {
+        priorityMutex.lock()
+        try {
+            if (isVisible) {
+                activeVisibleDownloads--
+            } else {
+                activeInvisibleDownloads--
+            }
+            downloadSemaphore.release()
+            priorityCondition.signalAll()
+        } finally {
+            priorityMutex.unlock()
+        }
+    }
 
     // Connection pool for better performance
     private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
@@ -343,7 +400,7 @@ object ImageCacheManager {
      * Load original image without compression for high-quality display
      * Uses GlobalScope to avoid cancellation when UI changes
      */
-    suspend fun loadOriginalImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+    suspend fun loadOriginalImage(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true): Bitmap? =
         withContext(Dispatchers.IO) {
             try {
                 // Use separate cache key for original images
@@ -352,17 +409,24 @@ object ImageCacheManager {
                 // Check if original image is already cached first
                 getCachedImage(context, originalMid)?.let { return@withContext it }
 
-                // Acquire semaphore to limit concurrent downloads globally
+                // Add to priority queue
+                downloadPriorityQueue[originalMid] = isVisible
+                
+                // Use smart priority-based slot acquisition - visible images get priority, but invisible images can use all slots when no visible ones are running
                 val currentActive = activeDownloads.get()
                 val currentQueued = downloadQueue.size
-                Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (active: $currentActive/${MAX_CONCURRENT_DOWNLOADS}, queued: $currentQueued)")
-                downloadSemaphore.acquire()
-                Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
+                val priority = if (isVisible) "HIGH" else "LOW"
+                
+                Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (priority: $priority, active: $currentActive/${MAX_CONCURRENT_DOWNLOADS}, queued: $currentQueued)")
+                
+                acquireDownloadSlotWithSmartPriority(mid, isVisible)
+                
+                Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (priority: $priority, active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
                 // Check if already downloading this image (inside semaphore to prevent race condition)
                 if (downloadQueue.containsKey(originalMid)) {
                     Timber.tag("ImageCacheManager").d("Duplicate request blocked for $mid - already downloading")
-                    downloadSemaphore.release()
+                    releaseDownloadSlotWithSmartPriority(isVisible)
                     
                     // Wait for the download to complete and return the result
                     var attempts = 0
@@ -418,10 +482,23 @@ object ImageCacheManager {
                     return@withContext null
 
                 } finally {
+                    // Always release the download slot and clean up
+                    val wasVisible = downloadPriorityQueue[originalMid] ?: false
+                    releaseDownloadSlotWithSmartPriority(wasVisible)
+                    
                     downloadQueue.remove(originalMid)
                     activeDownloads.decrementAndGet()
-                    downloadSemaphore.release()
-                    Timber.tag("ImageCacheManager").d("Completed download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
+                    downloadResults.remove(originalMid)
+                    downloadPriorityQueue.remove(originalMid)
+                    
+                    val priority = if (wasVisible) "HIGH" else "LOW"
+                    Timber.tag("ImageCacheManager").d("Completed download for $mid (priority: $priority, active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
+                    
+                    // Clean up download results after a delay to allow other requests to get the result
+                    GlobalScope.launch {
+                        delay(5000L)
+                        downloadResults.remove(originalMid)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadOriginalImage: $e")
@@ -534,7 +611,7 @@ object ImageCacheManager {
      * Load original image using a dedicated scope that can be cancelled when screen is disposed
      * This avoids cancellation during UI recomposition but allows cancellation when leaving screen
      */
-    fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String, onComplete: (Bitmap?) -> Unit) {
+    fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true, onComplete: (Bitmap?) -> Unit) {
         val contextKey = context.toString()
         
         // Track this download for the context

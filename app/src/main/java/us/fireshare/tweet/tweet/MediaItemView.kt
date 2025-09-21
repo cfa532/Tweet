@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
@@ -155,10 +156,17 @@ fun MediaItemView(
     }
         when (attachment.type) {
             MediaType.Image -> {
+                // Track visibility for priority-based loading
+                var isVisible by remember { mutableStateOf(false) }
+                
                 // Use a Box with clickable modifier to handle image clicks
                 Box(
                     modifier = modifier
                         .clipToBounds()
+                        .onGloballyPositioned { layoutCoordinates ->
+                            // Simple visibility detection - if the item has a size, it's likely visible
+                            isVisible = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                        }
                         .clickable {
                             goto(index)
                         }
@@ -170,7 +178,8 @@ fun MediaItemView(
                         else 
                             Modifier.fillMaxWidth(),
                         enableLongPress = false, // Disable long press to allow clickable to work
-                        inPreviewGrid = inPreviewGrid
+                        inPreviewGrid = inPreviewGrid,
+                        isVisible = isVisible
                     )
                 }
             }

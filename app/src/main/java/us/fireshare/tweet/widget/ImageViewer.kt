@@ -465,16 +465,22 @@ fun ImageViewer(
     enableLongPress: Boolean = true,
     useFillMode: Boolean = false,
     inPreviewGrid: Boolean = true,
+    isVisible: Boolean = true,
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
-    var loadState by remember(mid) { mutableStateOf(ImageLoadState()) }
+    var loadState by remember(mid) { mutableStateOf(ImageLoadState(isVisible = isVisible)) }
+
+    // Update visibility state when it changes
+    LaunchedEffect(isVisible) {
+        loadState = loadState.copy(isVisible = isVisible)
+    }
 
     // Load image using two-tier system: cached placeholder first, then original quality
-    LaunchedEffect(mid, imageUrl, loadState.retryCount) {
+    LaunchedEffect(mid, imageUrl, loadState.retryCount, isVisible) {
         try {
             loadState = loadState.copy(isLoading = true, hasError = false)
 
@@ -491,7 +497,8 @@ fun ImageViewer(
                 ImageCacheManager.loadOriginalImageWithScope(
                     context = context,
                     imageUrl = imageUrl,
-                    mid = mid
+                    mid = mid,
+                    isVisible = isVisible
                 ) { originalBitmap ->
                     if (originalBitmap != null) {
                         loadState = loadState.copy(bitmap = originalBitmap)
@@ -508,7 +515,8 @@ fun ImageViewer(
                 ImageCacheManager.loadOriginalImageWithScope(
                     context = context,
                     imageUrl = imageUrl,
-                    mid = mid
+                    mid = mid,
+                    isVisible = isVisible
                 ) { downloadedBitmap ->
                     if (downloadedBitmap == null) {
                         loadState = loadState.copy(
