@@ -136,6 +136,7 @@ fun AdvancedImageViewer(
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
                 Timber.tag("ImageViewer").d("Using initial bitmap from preview: $imageUrl")
+                loadState = loadState.copy(bitmap = initialBitmap, isLoading = false, hasError = false)
                 onLoadComplete?.invoke()
             } else {
                 // Step 1: Check for compressed image in cache first (memory + disk)
@@ -255,6 +256,17 @@ fun AdvancedImageViewer(
                 retryCount++
                 lastRetryTime = System.currentTimeMillis()
             }
+        }
+    }
+
+    // Update visibility state when it changes and retry if needed
+    LaunchedEffect(isVisible) {
+        loadState = loadState.copy(isVisible = isVisible)
+        
+        // If image becomes visible again and previous load failed, retry
+        if (isVisible && loadState.hasError && retryCount <= 3) {
+            Timber.tag("ImageViewer").d("AdvancedImageViewer reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+            retryCount++
         }
     }
 
@@ -544,9 +556,15 @@ fun ImageViewer(
         return true
     }
 
-    // Update visibility state when it changes
+    // Update visibility state when it changes and retry if needed
     LaunchedEffect(isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
+        
+        // If image becomes visible again and previous load failed, retry
+        if (isVisible && loadState.hasError && retryCount <= 3) {
+            Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+            retryCount++
+        }
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
@@ -555,6 +573,7 @@ fun ImageViewer(
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
                 Timber.tag("ImageViewer").d("Using initial bitmap from preview: $imageUrl")
+                loadState = loadState.copy(bitmap = initialBitmap, isLoading = false, hasError = false)
                 onLoadComplete?.invoke()
             } else {
                 if (loadOriginalImage) {
@@ -604,34 +623,28 @@ fun ImageViewer(
             }
             
             // Step 2: Load image from server (only if no cached images found)
+            // Note: Server only has original images, so always load original from server
             try {
-                val downloadedBitmap = if (loadOriginalImage) {
-                    // Load original high-resolution image
-                    val originalMid = "${mid}_original"
-                    ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
-                } else {
-                    // Load compressed image
-                    ImageCacheManager.loadImage(context, imageUrl, mid)
-                }
+                val originalMid = "${mid}_original"
+                // Always load original from server since that's all the server has
+                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
                 
                 if (downloadedBitmap != null) {
-                    // Update with loaded image
+                    // Update with loaded original image (server only has original images)
                     loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
                     onBitmapLoaded?.invoke(downloadedBitmap)
                     
                     // Reset retry count on successful load
                     retryCount = 0
                     
-                    // Update file for SubsamplingScaleImageView (use appropriate cache key)
-                    val cacheKey = if (loadOriginalImage) "${mid}_original" else mid
-                    val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, cacheKey)
+                    // Update file for SubsamplingScaleImageView (always use original cache key since we load original from server)
+                    val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
                     if (updatedCachedFile != null && updatedCachedFile.exists()) {
                         imageFile = updatedCachedFile
                     }
                     
                     onLoadComplete?.invoke()
-                    val imageType = if (loadOriginalImage) "original" else "compressed"
-                    Timber.tag("ImageViewer").d("Successfully loaded $imageType image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
+                    Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
                 } else {
                     // Server load failed - show error or fallback to compressed
                     if (initialBitmap == null) {

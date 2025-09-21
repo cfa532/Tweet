@@ -440,14 +440,15 @@ object ImageCacheManager {
                 // Add to priority queue
                 downloadPriorityQueue[originalMid] = isVisible
                 
-                // Use smart priority-based slot acquisition - visible images get priority, but invisible images can use all slots when no visible ones are running
+                // Use simple semaphore acquisition (temporarily disable smart priority for debugging)
                 val currentActive = activeDownloads.get()
                 val currentQueued = downloadQueue.size
                 val priority = if (isVisible) "HIGH" else "LOW"
                 
                 Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (priority: $priority, active: $currentActive/${MAX_CONCURRENT_DOWNLOADS}, queued: $currentQueued)")
                 
-                acquireDownloadSlotWithSmartPriority(mid, isVisible)
+                // Simple semaphore acquisition instead of smart priority
+                downloadSemaphore.acquire()
                 
                 Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (priority: $priority, active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
@@ -473,10 +474,12 @@ object ImageCacheManager {
                     }
                     
                     downloadQueue[originalMid] = true
-                    activeDownloads.incrementAndGet()
                 } finally {
                     downloadQueueMutex.unlock()
                 }
+                
+                // Increment active downloads counter
+                activeDownloads.incrementAndGet()
                 
                 Timber.tag("ImageCacheManager").d("Starting download for $mid (active: ${activeDownloads.get()}/${MAX_CONCURRENT_DOWNLOADS}, queued: ${downloadQueue.size})")
                 
@@ -517,7 +520,8 @@ object ImageCacheManager {
                 } finally {
                     // Always release the download slot and clean up
                     val wasVisible = downloadPriorityQueue[originalMid] ?: false
-                    releaseDownloadSlotWithSmartPriority(wasVisible)
+                    // Simple semaphore release instead of smart priority
+                    downloadSemaphore.release()
                     
                     downloadQueueMutex.lock()
                     try {
@@ -557,7 +561,7 @@ object ImageCacheManager {
                             downloadPriorityQueue.remove(originalMid)
                             
                             // Release the download slot
-                            releaseDownloadSlotWithSmartPriority(wasVisible)
+                            downloadSemaphore.release()
                             
                             Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
                         }
