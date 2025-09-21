@@ -18,4 +18,135 @@
     
     <!-- Error Messages -->
     <string name="delete_failed">ツイートの削除に失敗しました。もう一度お試しください。</string>
+    
+    <!-- Image Loading -->
+    <string name="failed_to_load_image">画像の読み込みに失敗しました</string>
+    <string name="loading">読み込み中</string>
+    <string name="save_image">画像を保存</string>
+    <string name="share_image">画像を共有</string>
+    
+    <!-- Cache Management -->
+    <string name="image_cache_stats">画像キャッシュ：%s</string>
+    <string name="clear_all_cached_data">すべてのキャッシュデータをクリア</string>
+    <string name="clear_again">再度クリア</string>
+    <string name="cloud_port">クラウドポート</string>
+    
+    <!-- Notification Permission Strings -->
+    <string name="notification_permission_title">通知を有効にする</string>
+    <string name="notification_permission_message">新しいチャットメッセージの通知を受信し、会話を最新の状態に保つために、このアプリの通知を有効にしてください。</string>
+    <string name="notification_permission_enable">有効にする</string>
+    <string name="notification_permission_not_now">今はしない</string>
+    <string name="notification_permission_settings_title">通知設定</string>
+    <string name="notification_permission_settings_message">チャットメッセージのアラートを受信するために、デバイス設定でこのアプリの通知を有効にしてください。</string>
+    <string name="notification_permission_open_settings">設定を開く</string>
+    
+    <!-- Notification Channel Names -->
+    <string name="notification_channel_chat_messages">チャットメッセージ</string>
+    <string name="notification_channel_chat_messages_desc">新しいチャットメッセージと会話の通知</string>
+    <string name="notification_channel_new_tweets">新しいツイート</string>
+    <string name="notification_channel_new_tweets_desc">フォローしているユーザーからの新しいツイートの通知</string>
+    <string name="notification_channel_system_updates">システム更新</string>
+    <string name="notification_channel_system_updates_desc">システム通知とアプリの更新</string>
+    <string name="notification_channel_default_desc">チャットメッセージの通知と重要な更新</string>
+    
+    <!-- Notification Messages -->
+    <string name="notification_new_message_title">%sからの新しいメッセージ</string>
+    <string name="notification_new_messages_title" formatted="false">%sからの%d件の新しいメッセージ</string>
+    <string name="notification_new_chat_message_simple">新しいチャットメッセージ</string>
+    <string name="notification_new_chat_messages_simple" formatted="false">%d件の新しいチャットメッセージ</string>
+    <string name="notification_tap_to_view">タップして表示</string>
+    <string name="notification_new_tweets_title" formatted="false">%d件の新しいツイート</string>
+    <string name="notification_new_tweets_single_user">%sからの新しいツイート</string>
+    <string name="notification_new_tweets_multiple_users">%sからの新しいツイート</string>
+    <string name="notification_new_tweets_many_users" formatted="false">%d人のユーザーからの新しいツイート</string>
+    
+    <!-- Common Actions -->
+    <string name="download">ダウンロード</string>
+    <string name="type_message">メッセージを入力...</string>
+    <string name="recommended_tweets">おすすめツイート</string>
+    <string name="discard_tweet">ツイートを破棄しますか？</string>
+    <string name="discard_comment">コメントを破棄しますか？</string>
+    <string name="discard_reply">返信を破棄しますか？</string>
+    <string name="unsaved_content_warning">未保存のコンテンツがあります。本当に終了しますか？</string>
+    <string name="discard">破棄</string>
+    <string name="keep_editing">編集を続ける</string>
+    <string name="back">戻る</string>
+    <string name="send">送信</string>
+    <string name="more">その他</string>
+    <string name="pin_to_top">トップにピン留め</string>
+    <string name="share">共有</string>
+    <string name="like">いいね</string>
+    <string name="comments">コメント</string>
+    <string name="forward">転送</string>
+    <string name="switch_layout">レイアウトを切り替え</string>
+    <string name="open_camera">カメラを開く</string>
+    <string name="upload_file">ファイルをアップロード</string>
+    <string name="close_suggestions">提案を閉じる</string>
+    <string name="settings">設定</string>
+    <string name="expand">展開</string>
+    <string name="close">閉じる</string>
+    <string name="take_photo_video">写真/動画を撮影</string>
+    <string name="add_attachment">添付ファイルを追加</string>
+    <string name="message">メッセージ</string>
+    <string name="change_avatar">アバターを変更</string>
+    <string name="mail">メール</string>
+    <string name="orientation">向き</string>
+    <string name="attached_file">添付ファイル</string>
+    <string name="app_icon">アプリアイコン</string>
+    <string name="user_avatar">ユーザーアバター</string>
+    <string name="play">再生</string>
+    <string name="pause">一時停止</string>
+    <string name="search">検索</string>
+    <string name="share_via">共有先</string>
+    <string name="hide">非表示</string>
+    <string name="show">表示</string>
+    <string name="cleared">クリアしました！</string>
+    <string name="clear">クリア</string>
+    <string name="search_placeholder">@ユーザー名または#ハッシュタグを検索</string>
+    <string name="content_to_share">共有するコンテンツ</string>
+    <string name="yesterday">昨日</string>
+    
+    <!-- Chat-related strings -->
+    <string name="uploading_attachment">アップロード中もチャットを続けることができます</string>
+    <string name="attachment_sent">添付ファイルを送信しました</string>
+    <string name="attachment_received">添付ファイルを受信しました</string>
+    <string name="unknown_file">不明なファイル</string>
+    <string name="new_chat_started">新しいチャットを開始しました</string>
+    <string name="no_one">誰もいません</string>
+    <string name="remove_attachment">添付ファイルを削除</string>
+    <string name="file_attachment">ファイル添付</string>
+    <string name="no_more_messages">これ以上メッセージはありません</string>
+    <string name="loading_older_messages">古いメッセージを読み込み中...</string>
+    
+    <!-- Toast messages -->
+    <string name="failed_to_send_message">メッセージの送信に失敗しました：%s</string>
+    <string name="uploading_attachment_background">添付ファイルをバックグラウンドでアップロード中...</string>
+    <string name="image_saved_to_gallery">画像をギャラリーに保存しました</string>
+    <string name="failed_to_save_image">画像の保存に失敗しました</string>
+    <string name="permission_granted">権限が許可されました</string>
+    <string name="permission_denied">権限が拒否されました</string>
+    
+    <!-- UI elements -->
+    <string name="tweet">ツイート</string>
+    <string name="private_tweet">非公開</string>
+    <string name="post_as_tweet">ツイートとして投稿</string>
+    
+    <!-- Service names -->
+    <string name="message_check_service">メッセージチェックサービス</string>
+    <string name="background_service_description">新しいメッセージをチェックするバックグラウンドサービス</string>
+    
+    <!-- Error messages -->
+    <string name="content_empty_text_message">テキストメッセージのコンテンツは空にできません</string>
+    <string name="attachments_empty_media_message">メディアメッセージの添付ファイルは空にできません</string>
+    <string name="content_empty_mixed_message">混合メッセージのコンテンツは空にできません</string>
+    <string name="attachments_empty_mixed_message">混合メッセージの添付ファイルは空にできません</string>
+    <string name="invalid_json">無効なJSON</string>
+    <string name="timestamp_must_be_number">タイムスタンプは数値である必要があります</string>
+    <string name="timestamp_required">タイムスタンプが必要です</string>
+    <string name="cannot_convert_dict_to_tweet">辞書をツイートに変換できません</string>
+    <string name="cannot_update_tweet_from_dict">辞書からツイートを更新できません</string>
+    <string name="cannot_decode_dict_to_user">辞書をユーザーにデコードできません</string>
+    
+    <!-- Clipboard/Share -->
+    <string name="shared_text">共有テキスト</string>
 </resources>

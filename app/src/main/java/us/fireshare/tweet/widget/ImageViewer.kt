@@ -88,10 +88,10 @@ fun AnimatedLoadingText(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
     
-    // Animate the number of dots (0 to 7)
+    // Animate the number of dots (0 to 5)
     val dotCount by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 7f,
+        targetValue = 5f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = androidx.compose.animation.core.LinearEasing)
         ),
@@ -110,7 +110,7 @@ fun AnimatedLoadingText(
         )
         // Fixed width container for dots to prevent shifting
         Box(
-            modifier = Modifier.width(56.dp), // Fixed width for 7 dots
+            modifier = Modifier.width(80.dp), // Fixed width for 5 dots
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
