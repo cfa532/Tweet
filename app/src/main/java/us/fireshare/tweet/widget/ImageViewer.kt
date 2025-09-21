@@ -116,7 +116,7 @@ fun AnimatedLoadingText(
             Text(
                 text = dots,
                 color = color,
-                fontSize = 18.sp // Larger dots
+                fontSize = 12.sp // Larger dots
             )
         }
     }
