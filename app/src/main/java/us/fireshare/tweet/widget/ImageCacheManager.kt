@@ -210,51 +210,6 @@ object ImageCacheManager {
         }
 
     /**
-     * Non-suspend version of getCachedImage for use within global scope to avoid cancellation issues
-     */
-    private fun getCachedImageSync(context: Context, mid: String): Bitmap? {
-        try {
-            // Check memory cache first
-            memoryCache.get(mid)?.let { bitmap ->
-                if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
-                    return bitmap
-                } else {
-                    // Remove invalid bitmap from cache
-                    memoryCache.remove(mid)
-                    if (bitmap.isRecycled) {
-                        Timber.tag("ImageCacheManager").w("Found recycled bitmap in cache for: $mid")
-                    }
-                }
-            }
-
-            // Check disk cache
-            val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
-            if (file.exists()) {
-                try {
-                    val bitmap = decodeBitmapFromFileWithCorrectOrientation(file.absolutePath)
-                    if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
-                        addToMemoryCache(mid, bitmap)
-                        return bitmap
-                    } else if (bitmap != null && bitmap.isRecycled) {
-                        Timber.tag("ImageCacheManager").w("Loaded recycled bitmap from disk for: $mid")
-                    }
-                } catch (e: OutOfMemoryError) {
-                    Timber.tag("ImageCacheManager")
-                        .d("OutOfMemoryError loading cached image: $e")
-                    clearMemoryCache()
-                    return null
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error loading cached image: $e")
-                }
-            }
-            return null
-        } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error in getCachedImageSync: $e")
-            return null
-        }
-    }
-
-    /**
      * Download and cache image from URL with improved error handling and retry logic
      */
     suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
@@ -451,8 +406,8 @@ object ImageCacheManager {
                 // Use separate cache key for original images
                 val originalMid = "${mid}_original"
 
-                // Check if original image is already cached first (use sync version to avoid cancellation)
-                getCachedImageSync(context, originalMid)?.let { return@withContext it }
+                // Check if original image is already cached first
+                getCachedImage(context, originalMid)?.let { return@withContext it }
 
                 // Add to priority queue
                 downloadPriorityQueue[originalMid] = isVisible
@@ -658,35 +613,9 @@ object ImageCacheManager {
      */
     fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true, onComplete: (Bitmap?) -> Unit) {
         val contextKey = context.toString()
-        val originalMid = "${mid}_original"
-        
-        // Quick sync cache check first - check both regular and original cache
-        val originalCachedBitmap = getCachedImageSync(context, originalMid)
-        if (originalCachedBitmap != null) {
-            try {
-                onComplete(originalCachedBitmap)
-                return
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in immediate original cache callback: $e")
-            }
-        }
-        
-        // Check regular cache for placeholder
-        val regularCachedBitmap = getCachedImageSync(context, mid)
-        if (regularCachedBitmap != null) {
-            try {
-                onComplete(regularCachedBitmap)
-                Timber.tag("ImageCacheManager").d("Showing regular cached image as placeholder for: $mid")
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in immediate regular cache callback: $e")
-            }
-        }
         
         // Track this download for the context
         activeDownloadsByContext.computeIfAbsent(contextKey) { ConcurrentHashMap.newKeySet() }.add(mid)
-        
-        // Check if we already showed a placeholder (regular cached image)
-        val showedPlaceholder = regularCachedBitmap != null
         
         imageLoadingScope.launch {
             try {
@@ -694,26 +623,18 @@ object ImageCacheManager {
                 // Use withContext to ensure callback runs on main thread safely
                 withContext(Dispatchers.Main) {
                     try {
-                        // Only call callback again if we didn't show a placeholder, or if we successfully loaded the original
-                        if (!showedPlaceholder || result != null) {
-                            onComplete(result)
-                        }
-                        // If we showed placeholder and failed to load original, don't call callback again
-                        // (keep showing the placeholder)
+                        onComplete(result)
                     } catch (e: Exception) {
                         Timber.tag("ImageCacheManager").d("Error in callback: $e")
                     }
                 }
             } catch (e: Exception) {
                 Timber.tag("ImageCacheManager").d("Error in loadOriginalImageWithScope: $e")
-                // Only call error callback if we didn't show a placeholder
-                if (!showedPlaceholder) {
-                    withContext(Dispatchers.Main) {
-                        try {
-                            onComplete(null)
-                        } catch (e: Exception) {
-                            Timber.tag("ImageCacheManager").d("Error in error callback: $e")
-                        }
+                withContext(Dispatchers.Main) {
+                    try {
+                        onComplete(null)
+                    } catch (e: Exception) {
+                        Timber.tag("ImageCacheManager").d("Error in error callback: $e")
                     }
                 }
             } finally {
