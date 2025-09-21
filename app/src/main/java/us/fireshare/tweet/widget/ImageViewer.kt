@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
@@ -82,22 +83,22 @@ data class ImageLoadState(
 @Composable
 fun AnimatedLoadingText(
     text: String = "Loading",
-    color: Color = Color.White,
+    color: Color = Color.Gray,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
     
-    // Animate the number of dots (0 to 3)
+    // Animate the number of dots (0 to 5)
     val dotCount by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 3f,
+        targetValue = 5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = androidx.compose.animation.core.LinearEasing)
+            animation = tween(2000, easing = androidx.compose.animation.core.LinearEasing)
         ),
         label = "dot_count"
     )
     
-    val dots = ".".repeat(dotCount.toInt())
+    val dots = "•".repeat(dotCount.toInt())
     
     Row(
         modifier = modifier,
@@ -107,10 +108,17 @@ fun AnimatedLoadingText(
             text = text,
             color = color
         )
-        Text(
-            text = dots,
-            color = color
-        )
+        // Container for dots taking up half the remaining width
+        Box(
+            modifier = Modifier.width(80.dp), // Fixed width for 7 dots
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = dots,
+                color = color,
+                fontSize = 18.sp // Larger dots
+            )
+        }
     }
 }
 
@@ -419,7 +427,7 @@ fun AdvancedImageViewer(
             ) {
                 AnimatedLoadingText(
                     text = stringResource(R.string.loading),
-                    color = Color.White
+                    color = Color.Gray
                 )
             }
         }
@@ -874,7 +882,7 @@ fun ImageViewer(
             ) {
                 AnimatedLoadingText(
                     text = stringResource(R.string.loading),
-                    color = if (isFullScreen) Color.White else Color.Unspecified
+                    color = if (isFullScreen) Color.Gray else Color.Gray
                 )
             }
         }
