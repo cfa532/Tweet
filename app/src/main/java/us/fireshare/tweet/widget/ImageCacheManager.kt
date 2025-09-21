@@ -50,7 +50,7 @@ object ImageCacheManager {
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - faster failure detection
     private const val READ_TIMEOUT = 15000 // 15 seconds - allow for large files but not too long
-    private const val MAX_CONCURRENT_DOWNLOADS = 8 // Limit concurrent downloads
+    private const val MAX_CONCURRENT_DOWNLOADS = 16 // Increase concurrent downloads for faster loading
     private const val MAX_RETRY_ATTEMPTS = 2
     private const val PROGRESSIVE_LOAD_CHUNK_SIZE = 64 * 1024 // 64KB chunks for progressive loading
 
@@ -269,6 +269,9 @@ object ImageCacheManager {
                 // connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
                 connection.setRequestProperty("Connection", "keep-alive")
                 connection.setRequestProperty("Cache-Control", "no-cache")
+                connection.setRequestProperty("Accept", "image/*,*/*;q=0.8")
+                connection.setAllowUserInteraction(false)
+                connection.setInstanceFollowRedirects(true)
 
                 // Add connection to pool
                 connectionPool[mid] = connection
@@ -325,6 +328,9 @@ object ImageCacheManager {
                 // connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
                 connection.setRequestProperty("Connection", "keep-alive")
                 connection.setRequestProperty("Cache-Control", "no-cache")
+                connection.setRequestProperty("Accept", "image/*,*/*;q=0.8")
+                connection.setAllowUserInteraction(false)
+                connection.setInstanceFollowRedirects(true)
 
                 // Add connection to pool
                 connectionPool[mid] = connection
@@ -416,12 +422,12 @@ object ImageCacheManager {
                 }
                 
                 if (isDuplicate) {
-                    Timber.tag("ImageCacheManager").d("Duplicate request blocked for $mid - already downloading")
+                    Timber.tag("ImageCacheManager").d("Duplicate request detected for $mid - waiting for existing download")
                     
                     // Wait for the download to complete and return the result
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 30 && shouldContinue) { // Wait up to 3 seconds
+                    while (attempts < 50 && shouldContinue) { // Wait up to 5 seconds
                         delay(100L)
                         attempts++
                         
@@ -434,7 +440,14 @@ object ImageCacheManager {
                     cleanupOldResults()
                     
                     // Return the result if available
-                    return@withContext downloadResults[originalMid]
+                    val result = downloadResults[originalMid]
+                    if (result != null) {
+                        Timber.tag("ImageCacheManager").d("Got result from existing download for $mid")
+                        return@withContext result
+                    } else {
+                        Timber.tag("ImageCacheManager").d("No result from existing download for $mid, proceeding with new download")
+                        // Continue with new download attempt
+                    }
                 }
                 
                 // Add to priority queue
@@ -469,7 +482,7 @@ object ImageCacheManager {
                 }
                 
                 if (isRaceConditionDuplicate) {
-                    Timber.tag("ImageCacheManager").d("Duplicate request blocked for $mid - already downloading (race condition)")
+                    Timber.tag("ImageCacheManager").d("Race condition detected for $mid - waiting for existing download")
                     
                     // Update priority counters
                     if (isVisible) {
@@ -485,7 +498,7 @@ object ImageCacheManager {
                     // Wait for the download to complete and return the result
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 30 && shouldContinue) { // Wait up to 3 seconds
+                    while (attempts < 50 && shouldContinue) { // Wait up to 5 seconds
                         delay(100L)
                         attempts++
                         
@@ -498,15 +511,23 @@ object ImageCacheManager {
                     cleanupOldResults()
                     
                     // Return the result if available
-                    return@withContext downloadResults[originalMid]
+                    val result = downloadResults[originalMid]
+                    if (result != null) {
+                        Timber.tag("ImageCacheManager").d("Got result from race condition download for $mid")
+                        return@withContext result
+                    } else {
+                        Timber.tag("ImageCacheManager").d("No result from race condition download for $mid")
+                        return@withContext null
+                    }
                 }
                 
                 Timber.tag("ImageCacheManager").d("Starting download for $mid (queued: ${downloadQueue.size})")
                 
-                // Add minimal delay to spread out requests and avoid overwhelming server
-                // Very short delay for visible images, longer for invisible ones
-                val delayTime = if (isVisible) 50L else 200L
-                delay(delayTime)
+                // Remove artificial delays for visible images to improve loading speed
+                // Only add minimal delay for invisible images to avoid overwhelming server
+                if (!isVisible) {
+                    delay(100L) // Minimal delay only for background downloads
+                }
 
                 try {
                     var bitmap: Bitmap? = null
@@ -558,8 +579,8 @@ object ImageCacheManager {
                     
                     synchronized(downloadQueueMutex) {
                         downloadQueue.remove(originalMid)
-                        downloadResults.remove(originalMid)
                         downloadPriorityQueue.remove(originalMid)
+                        // Don't remove downloadResults immediately - let other waiting requests get the result
                     }
                     
                     // Release semaphore only if we acquired it
@@ -573,8 +594,9 @@ object ImageCacheManager {
                     
                     // Clean up download results after a delay to allow other requests to get the result
                     GlobalScope.launch {
-                        delay(5000L)
+                        delay(10000L) // Increased delay to 10 seconds
                         downloadResults.remove(originalMid)
+                        resultTimestamps.remove(originalMid)
                     }
                 }
             } catch (e: Exception) {
@@ -660,7 +682,7 @@ object ImageCacheManager {
     }
     
     /**
-     * Start background task to periodically resume paused downloads
+     * Start background task to periodically resume paused downloads and clean up stuck downloads
      */
     private fun startPausedDownloadResumer() {
         GlobalScope.launch(Dispatchers.IO) {
@@ -685,6 +707,9 @@ object ImageCacheManager {
                         }
                     }
                 }
+                
+                // Clean up stuck downloads
+                cleanupStuckDownloads()
             }
         }
     }
@@ -873,6 +898,31 @@ object ImageCacheManager {
     }
 
     /**
+     * Clean up stuck downloads that have been in the queue too long
+     */
+    private fun cleanupStuckDownloads() {
+        val currentTime = System.currentTimeMillis()
+        val thirtySecondsAgo = currentTime - 30000L // 30 seconds timeout
+        
+        synchronized(downloadQueueMutex) {
+            val stuckDownloads = downloadQueue.keys.filter { mid ->
+                val timestamp = resultTimestamps[mid] ?: 0L
+                timestamp < thirtySecondsAgo
+            }
+            
+            if (stuckDownloads.isNotEmpty()) {
+                Timber.tag("ImageCacheManager").w("Cleaning up ${stuckDownloads.size} stuck downloads")
+                stuckDownloads.forEach { mid ->
+                    downloadQueue.remove(mid)
+                    downloadResults.remove(mid)
+                    downloadPriorityQueue.remove(mid)
+                    resultTimestamps.remove(mid)
+                }
+            }
+        }
+    }
+
+    /**
      * Progressive image loading - downloads and displays image in chunks
      * This allows images to appear progressively like in web browsers
      */
@@ -986,6 +1036,23 @@ object ImageCacheManager {
             }
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error clearing all cached images: $e")
+        }
+    }
+
+    /**
+     * Preload images for faster loading (similar to video preloading)
+     */
+    suspend fun preloadImages(context: Context, mid: String, imageUrl: String) = withContext(Dispatchers.IO) {
+        try {
+            // Check if already cached
+            if (getCachedImage(context, mid) != null) {
+                return@withContext
+            }
+            
+            // Start downloading in background
+            downloadAndCacheImage(context, imageUrl, mid)
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").d("Error preloading image: $e")
         }
     }
 

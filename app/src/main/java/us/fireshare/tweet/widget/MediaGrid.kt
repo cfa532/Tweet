@@ -181,6 +181,28 @@ fun MediaGrid(
                 }
             }
         }
+        
+        // Preload images for faster loading
+        val imageMids = limitedMediaList.mapNotNull { item ->
+            val mediaType = inferMediaTypeFromAttachment(item)
+            if (mediaType == MediaType.Image) item.mid else null
+        }
+        
+        imageMids.forEach { imageMid ->
+            val mediaItem = limitedMediaList.find { it.mid == imageMid }
+            mediaItem?.let { item ->
+                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                // Use application scope to avoid blocking the UI thread
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        ImageCacheManager.preloadImages(context, imageMid, mediaUrl)
+                    } catch (e: Exception) {
+                        // Log error but don't block UI
+                        Timber.tag("MediaGrid").e(e, "Failed to preload image: $imageMid")
+                    }
+                }
+            }
+        }
     }
     
     // Handle sequential video completion
