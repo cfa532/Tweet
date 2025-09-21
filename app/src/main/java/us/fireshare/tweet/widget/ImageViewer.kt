@@ -422,8 +422,8 @@ fun AdvancedImageViewer(
                         alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                     }
             )
-        } else if (loadState.isLoading || loadState.hasError) {
-            // Show loading state (even when there's an error, keep showing loading)
+        } else if (loadState.isLoading) {
+            // Show loading state only when actually loading
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -877,8 +877,8 @@ fun ImageViewer(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-        } else if (loadState.isLoading || loadState.hasError) {
-            // Show loading state (even when there's an error, keep showing loading)
+        } else if (loadState.isLoading) {
+            // Show loading state only when actually loading
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
