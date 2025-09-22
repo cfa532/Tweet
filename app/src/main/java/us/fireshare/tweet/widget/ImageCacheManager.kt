@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -346,8 +347,6 @@ object ImageCacheManager {
                     return@withContext null
                 }
                 
-                val imageSize = imageData.size
-
                 // Save original data directly (for original images, always save original data)
                 val dir = File(context.cacheDir, CACHE_DIR)
                 if (!dir.exists()) dir.mkdirs()
@@ -356,9 +355,6 @@ object ImageCacheManager {
                 FileOutputStream(file).use { out ->
                     out.write(imageData)
                 }
-
-                
-                // Log first few bytes to check image format
 
                 // Decode bitmap from the data with original quality
                 val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
@@ -385,26 +381,10 @@ object ImageCacheManager {
         }
 
     /**
-     * Load image from URL or cache with prioritization
-     */
-    suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? =
-        withContext(Dispatchers.IO) {
-            try {
-                // First try to get from cache
-                getCachedImage(context, mid)?.let { return@withContext it }
-
-                // If not in cache, download and cache
-                downloadAndCacheImage(context, imageUrl, mid)
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in loadImage: $e")
-                null
-            }
-        }
-
-    /**
      * Load original image without compression for high-quality display
      * Handles cancellation properly by cleaning up download queue
      */
+    @OptIn(DelicateCoroutinesApi::class)
     suspend fun loadOriginalImage(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true): Bitmap? =
         withContext(Dispatchers.IO) {
             var semaphoreAcquired = false
@@ -491,7 +471,7 @@ object ImageCacheManager {
                         activeInvisibleDownloads--
                     }
                     
-                    // Release semaphore
+                    // Release semaphore immediately for race condition case
                     downloadSemaphore.release()
                     semaphoreAcquired = false
                     
@@ -583,11 +563,9 @@ object ImageCacheManager {
                         // Don't remove downloadResults immediately - let other waiting requests get the result
                     }
                     
-                    // Release semaphore only if we acquired it
-                    if (semaphoreAcquired) {
-                        downloadSemaphore.release()
-                        semaphoreAcquired = false
-                    }
+                    // Release semaphore (we always acquire it in the normal path)
+                    downloadSemaphore.release()
+                    semaphoreAcquired = false
                     
                     val priority = if (wasVisible) "HIGH" else "LOW"
                     Timber.tag("ImageCacheManager").d("Completed download for $mid (priority: $priority, queued: ${downloadQueue.size})")
