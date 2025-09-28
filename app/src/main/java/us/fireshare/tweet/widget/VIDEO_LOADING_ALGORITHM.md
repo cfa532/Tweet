@@ -6,13 +6,17 @@ This document describes the unified video loading and caching strategy used in t
 
 ## Core Requirements
 
-### 1. **HLS Fallback Sequence (NO RETRIES)**
-The system MUST follow this exact sequence for ALL videos:
+### 1. **Video Type-Based Playback Strategy**
+The system determines playback strategy based on the attachment's `Type` field:
 
+#### **For HLS Videos (`MediaType.HLS_VIDEO`):**
 1. **Start with `master.m3u8`** (HLS master playlist)
 2. **If that fails → try `playlist.m3u8`** (HLS playlist) 
-3. **If that fails → try original URL** (progressive video)
-4. **If all fail → stop player** (no more retries)
+3. **If that fails → stop player** (NO fallback to progressive video)
+
+#### **For Regular Videos (`MediaType.Video`):**
+1. **Play original URL directly** as progressive video
+2. **No HLS attempts** - plays as standard MP4/WebM/etc.
 
 ### 2. **URL Construction**
 - **Base URL**: `if (url.endsWith("/")) url else "$url/"`
@@ -20,31 +24,54 @@ The system MUST follow this exact sequence for ALL videos:
 - **Playlist URL**: `${baseUrl}playlist.m3u8`
 - **Original URL**: `url` (as provided)
 
-### 3. **No Progressive Video Detection**
-- **DO NOT** try to detect if a video is progressive
-- **DO NOT** skip HLS attempts for any video
-- **ALWAYS** try HLS first for ALL videos
-- **NO** file extension checking or URL pattern detection
+### 3. **Type-Based Video Handling**
+- **Use attachment Type field** to determine playback strategy
+- **HLS videos**: Only try HLS URLs (master.m3u8 → playlist.m3u8)
+- **Regular videos**: Only play as progressive video
+- **NO** automatic format detection or guessing
 
-### 4. **No Retries**
+### 4. **Video Playback in Different Screens**
+All screens use the same pattern based on the attachment's `Type` field:
+
+#### **MediaCell, Tweet Detail Screen, Full Screen:**
+```kotlin
+VideoPreview(
+    url = videoUrl,
+    videoType = attachment.type,  // MediaType.HLS_VIDEO or MediaType.Video
+    // ... other parameters
+)
+```
+
+#### **ChatScreen:**
+```kotlin
+VideoPreview(
+    url = mediaUrl,
+    videoType = attachment.type,  // MediaType.HLS_VIDEO or MediaType.Video
+    // ... other parameters
+)
+```
+
+The `videoType` parameter is passed to `createExoPlayer()` which determines the playback strategy.
+
+### 5. **No Retries**
 - Each format is tried **exactly once**
 - **NO** retry attempts for the same URL
 - **NO** multiple ExoPlayer instances for the same video
 - **NO** infinite loops or repeated attempts
 
-### 5. **Memory Management**
+### 6. **Memory Management**
 - Failed players MUST be properly stopped with `exoPlayer.stop()`
 - **NO** memory leaks from abandoned ExoPlayer instances
 - Clean up resources after each failed attempt
 
-### 6. **Exception Handling for Inaccessible URLs**
+### 7. **Exception Handling for Inaccessible URLs**
 - **Network errors** (500, 404, connection failures) are expected and handled gracefully
 - **No retries** for the same URL - if it fails, move to next fallback
 - **Proper logging** of all errors for debugging
 - **Graceful degradation** - if video fails, app continues to work
 - **User experience** - no crashes or freezes from video loading failures
 
-### 7. **Aspect Ratio Handling**
+### 8. **Aspect Ratio Handling**
 - **Primary source**: Each video has an `aspectRatio` file in its `MimeiFileType` attachment
 - **Fallback mechanism**: `getVideoAspectRatio(context, uri)` is only used as a fallback
 - **When to use fallback**: Only when the primary aspect ratio file is not available
@@ -87,68 +114,55 @@ ExoPlayer has **built-in, production-ready** caching for both progressive and HL
 
 #### **How It Works**
 ```kotlin
-// Single function handles both progressive and HLS
-fun createExoPlayer(context: Context, url: String): ExoPlayer {
+// Function handles both HLS and progressive videos based on MediaType
+fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
     val cache = getCache(context)
     val dataSourceFactory = DefaultDataSource.Factory(context)
-    
-    // Configure cache strategy based on network availability
-    val isOnline = isNetworkAvailable(context)
-    val cacheFlags = if (isOnline) {
-        CacheDataSource.FLAG_BLOCK_ON_CACHE
-    } else {
-        // When offline, only use cache, don't try network
-        CacheDataSource.FLAG_BLOCK_ON_CACHE or CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
-    }
     
     val cacheDataSourceFactory = CacheDataSource.Factory()
         .setCache(cache)
         .setUpstreamDataSourceFactory(dataSourceFactory)
-        .setFlags(cacheFlags)
-
-    // Use IPFS ID as cache key for all video types
-    val ipfsId = url.getMimeiKeyFromUrl()
-
-    // For data blobs, try HLS first, then fallback to original URL
-    val baseUrl = if (url.endsWith("/")) url else "$url/"
-    val masterUrl = "${baseUrl}master.m3u8"
-    val playlistUrl = "${baseUrl}playlist.m3u8"
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     val exoPlayer = ExoPlayer.Builder(context).build()
 
-    // Add listener for video events with HLS fallback mechanism (no retries)
+    // Add listener for HLS fallback (only for HLS videos)
     exoPlayer.addListener(object : Player.Listener {
         private var hasTriedPlaylist = false
-        private var hasTriedOriginal = false
 
         override fun onPlayerError(error: PlaybackException) {
-            // HLS fallback sequence: master.m3u8 -> playlist.m3u8 -> original URL
-            if (!hasTriedPlaylist) {
+            // Only try HLS fallback for HLS videos
+            if (mediaType == MediaType.HLS_VIDEO && !hasTriedPlaylist) {
                 hasTriedPlaylist = true
-                // Try playlist.m3u8
-            } else if (!hasTriedOriginal) {
-                hasTriedOriginal = true
-                // Try original URL
+                // Try playlist.m3u8 fallback
+                val baseUrl = if (url.endsWith("/")) url else "$url/"
+                val playlistUrl = "${baseUrl}playlist.m3u8"
+                val fallbackMediaSource = mediaSourceFactory.createMediaSource(
+                    MediaItem.fromUri(playlistUrl)
+                )
+                setMediaSource(fallbackMediaSource)
+                prepare()
             } else {
-                // All fallback attempts failed, stop the player
-                exoPlayer.stop()
+                // For progressive videos or after HLS fallback failed, log error
+                Timber.e("Video playback failed: ${error.message}")
             }
         }
     })
 
-    // Always start with HLS (master.m3u8) first
-    val initialMediaItem = MediaItem.Builder()
-        .setUri(masterUrl)
-        .setCustomCacheKey(ipfsId)
-        .build()
-
-    val initialMediaSource = DefaultMediaSourceFactory(cacheDataSourceFactory)
-        .createMediaSource(initialMediaItem)
+    // Create media source based on video type
+    val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
+        // For HLS videos, start with master.m3u8
+        val baseUrl = if (url.endsWith("/")) url else "$url/"
+        val masterUrl = "${baseUrl}master.m3u8"
+        mediaSourceFactory.createMediaSource(MediaItem.fromUri(masterUrl))
+    } else {
+        // For progressive videos, use original URL directly
+        mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
+    }
 
     return exoPlayer.apply {
-        setMediaSource(initialMediaSource)
+        setMediaSource(mediaSource)
         prepare()
-        volume = 0f
     }
 }
 ```
@@ -181,20 +195,27 @@ fun createExoPlayer(context: Context, url: String): ExoPlayer {
 
 ### ✅ **Correct Behavior:**
 ```kotlin
-// Always start with HLS
-val initialMediaItem = MediaItem.Builder()
-    .setUri(masterUrl)  // master.m3u8
-    .setCustomCacheKey(ipfsId)
-    .build()
-
-// Fallback sequence in onPlayerError:
-if (!hasTriedPlaylist) {
-    // Try playlist.m3u8
-} else if (!hasTriedOriginal) {
-    // Try original URL
+// Type-based video handling
+val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
+    // For HLS videos, start with master.m3u8
+    val baseUrl = if (url.endsWith("/")) url else "$url/"
+    val masterUrl = "${baseUrl}master.m3u8"
+    mediaSourceFactory.createMediaSource(MediaItem.fromUri(masterUrl))
 } else {
-    // Stop player - all attempts failed
-    exoPlayer.stop()
+    // For progressive videos, use original URL directly
+    mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
+}
+
+// HLS fallback sequence in onPlayerError (only for HLS videos):
+if (mediaType == MediaType.HLS_VIDEO && !hasTriedPlaylist) {
+    hasTriedPlaylist = true
+    // Try playlist.m3u8 fallback
+    val playlistUrl = "${baseUrl}playlist.m3u8"
+    setMediaSource(mediaSourceFactory.createMediaSource(MediaItem.fromUri(playlistUrl)))
+    prepare()
+} else {
+    // For progressive videos or after HLS fallback failed, log error
+    Timber.e("Video playback failed: ${error.message}")
 }
 
 // Exception handling for inaccessible URLs
@@ -202,13 +223,13 @@ try {
     // Video loading logic
 } catch (e: Exception) {
     Timber.e("Video loading failed: ${e.message}")
-    // Move to next fallback or stop gracefully
+    // Handle gracefully without crashes
 }
 ```
 
 ### ❌ **Incorrect Behavior:**
-- Progressive video detection
-- Skipping HLS attempts
+- Trying HLS fallback for regular videos
+- Falling back to progressive video for HLS videos
 - Multiple retries of the same URL
 - Multiple ExoPlayer instances
 - Memory leaks from failed players
@@ -231,12 +252,22 @@ Cache Key: QmVideo123 (same for both progressive and HLS)
 
 ## Expected Log Flow
 
+### **For HLS Videos:**
 ```
-1. "Created MediaSource for HLS URL: master.m3u8"
-2. If fails: "Trying fallback to playlist URL: playlist.m3u8"
-3. If fails: "Trying original URL as last resort: original_url"
-4. If all fail: "All fallback attempts failed" + stop player
-5. Error logs: "Video loading failed: [specific error message]"
+1. "Player ready for URL: [base_url]/master.m3u8"
+2. If master.m3u8 fails: "Trying playlist.m3u8 fallback for HLS video: [url]"
+3. If playlist.m3u8 fails: "All HLS fallback attempts failed for URL: [url]"
+4. Audio codec errors: "Audio codec error detected, continuing video playback in silence"
+5. VideoPreview/FullScreen: "Audio codec error detected in VideoPreview/FullScreenVideoPlayer, continuing video playback in silence"
+6. Error logs: "Final error: [specific error message]"
+```
+
+### **For Regular Videos:**
+```
+1. "Player ready for URL: [original_url]"
+2. If fails: "Progressive video error: [specific error message]"
+3. Audio codec errors: "Audio codec error detected, continuing video playback in silence"
+4. Error logs: "Final error: [specific error message]"
 ```
 
 ## Error Handling Examples
@@ -317,19 +348,20 @@ val stats = SimplifiedVideoCacheManager.getCacheStats(context)
 
 ## Key Points to Remember
 
-1. **HLS First**: Always try HLS before progressive
-2. **No Detection**: Don't try to guess video format
-3. **No Retries**: Each format once only
-4. **Clean Stop**: Properly stop failed players
-5. **IPFS URLs**: No file extensions, still try HLS first
+1. **Type-Based Strategy**: Use attachment Type field to determine playback strategy
+2. **HLS Videos**: Only try HLS URLs (master.m3u8 → playlist.m3u8), no progressive fallback
+3. **Regular Videos**: Only play as progressive video, no HLS attempts
+4. **No Retries**: Each format once only
+5. **Clean Stop**: Properly stop failed players
 6. **Exception Handling**: Graceful handling of inaccessible URLs
-7. **Aspect Ratio**: Use attachment file first, URI extraction as fallback
-8. **Leverage ExoPlayer**: Use built-in capabilities instead of custom implementations
+7. **Audio Codec Errors**: Continue video playback in silence when audio codec fails
+8. **Aspect Ratio**: Use attachment file first, URI extraction as fallback
+9. **Leverage ExoPlayer**: Use built-in capabilities instead of custom implementations
 
 ## Common Mistakes to Avoid
 
-- ❌ Adding progressive video detection
-- ❌ Skipping HLS for certain URLs
+- ❌ Trying HLS fallback for regular videos
+- ❌ Falling back to progressive video for HLS videos
 - ❌ Retrying failed URLs
 - ❌ Creating multiple players
 - ❌ Forgetting to stop failed players
