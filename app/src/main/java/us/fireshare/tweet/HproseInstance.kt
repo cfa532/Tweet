@@ -21,13 +21,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.TweetApplication
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -60,7 +59,40 @@ object HproseInstance {
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
     lateinit var preferenceHelper: PreferenceHelper
-    var appUser: User = User(mid = TW_CONST.GUEST_ID)
+    
+    // Private backing field for appUser
+    private var _appUser: User = User(mid = TW_CONST.GUEST_ID)
+    
+    /**
+     * Global app user with automatic expiration checking.
+     * When accessed, automatically checks if the user has expired (30 minutes)
+     * and refreshes from server if needed, similar to other user objects.
+     */
+    var appUser: User
+        get() {
+            // Check if appUser has expired and refresh if needed
+            if (!_appUser.isGuest() && _appUser.hasExpired) {
+                Timber.tag("appUser").d("AppUser expired, refreshing from server...")
+                // Use coroutine scope to refresh user data
+                TweetApplication.applicationScope.launch {
+                    try {
+                        val refreshedUser = getUser(_appUser.mid, _appUser.baseUrl)
+                        if (refreshedUser != null) {
+                            _appUser = refreshedUser
+                            Timber.tag("appUser").d("AppUser refreshed successfully")
+                        } else {
+                            Timber.tag("appUser").w("Failed to refresh appUser, keeping current instance")
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("appUser").e(e, "Error refreshing appUser")
+                    }
+                }
+            }
+            return _appUser
+        }
+        set(value) {
+            _appUser = value
+        }
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
@@ -1439,13 +1471,6 @@ object HproseInstance {
     }
 
     /**
-     * Update user data from server using "get_user" entry (legacy method for backward compatibility)
-     */
-    private suspend fun updateUserFromServer(user: User) {
-        updateUserFromServerWithRetry(user, 1) // Single attempt for legacy calls
-    }
-
-    /**
      * Get provider IP for a user with retry logic
      */
     private suspend fun getProviderIPWithRetry(userId: MimeiId, maxRetries: Int = 3): String? {
@@ -1543,21 +1568,6 @@ object HproseInstance {
             Timber.tag("getPinnedList").e("Error getting pinned tweets for user: ${user.mid}")
             Timber.tag("getPinnedList").e("Exception: $e")
             null
-        }
-    }
-
-    suspend fun logging(msg: String) {
-        if (appUser.isGuest()) return
-        val entry = "logging"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "msg" to msg
-        )
-        try {
-            appUser.hproseService?.runMApp<Any>(entry, params)
-        } catch (e: Exception) {
-            Timber.tag("logging").e(e)
         }
     }
 
@@ -1714,127 +1724,6 @@ object HproseInstance {
     }
 
     /**
-     * Upload video file to backend for HLS conversion using multipart form data with progress polling
-     */
-    private suspend fun uploadHLSVideo(
-        context: Context,
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        referenceId: MimeiId?,
-        noResample: Boolean = false
-    ): MimeiFileType? {
-        Timber.tag("uploadHLSVideo").d("Uploading original video to backend for HLS conversion")
-
-        // Get the user's cloudDrivePort with fallback to default
-        val cloudDrivePort = appUser.cloudDrivePort.takeIf { it > 0 } ?: 8010
-
-        // Ensure writableUrl is available
-        var writableUrl = appUser.writableUrl
-        if (writableUrl.isNullOrEmpty()) {
-            writableUrl = appUser.resolveWritableUrl()
-        }
-
-        if (writableUrl.isNullOrEmpty()) {
-            Timber.tag("uploadHLSVideo").e("Writable URL not available")
-            return null
-        }
-
-        // Construct convert-video endpoint URL
-        val scheme = if (writableUrl.startsWith("https")) "https" else "http"
-        val host = writableUrl.replace(Regex("^https?://"), "").split("/").firstOrNull()?.split(":")
-            ?.firstOrNull()
-            ?: writableUrl
-        val convertVideoURL = "$scheme://$host:$cloudDrivePort/convert-video"
-
-        Timber.tag("uploadHLSVideo").d("Convert-video URL: $convertVideoURL")
-
-        // Read the video data once
-        val videoData = context.contentResolver.openInputStream(uri)?.readBytes() ?: ByteArray(0)
-        Timber.tag("uploadHLSVideo").d("Data size: ${videoData.size} bytes")
-
-        // Determine content type based on file extension
-        val contentType = determineVideoContentType(fileName)
-        Timber.tag("uploadHLSVideo").d("Determined content type: $contentType")
-        Timber.tag("uploadHLSVideo").d("Filename: $fileName")
-        Timber.tag("uploadHLSVideo").d("ReferenceId: $referenceId")
-        Timber.tag("uploadHLSVideo").d("NoResample: $noResample")
-
-        try {
-            // Step 1: Upload video and get job ID
-            val uploadResponse = httpClient.post(convertVideoURL) {
-                setBody(
-                    io.ktor.client.request.forms.MultiPartFormDataContent(
-                        io.ktor.client.request.forms.formData {
-                            // Add filename if provided (server expects this field)
-                            fileName?.let {
-                                append("filename", it)
-                            }
-
-                            // Add reference ID if provided (server expects this field)
-                            referenceId?.let {
-                                append("referenceId", it)
-                            }
-
-                            // Add noResample parameter - use the value passed from compose view
-                            append("noResample", noResample.toString())
-
-                            // Add the video file (server expects field name "videoFile")
-                            append(
-                                "videoFile",
-                                videoData,
-                                io.ktor.http.Headers.build {
-                                    append(
-                                        "Content-Disposition",
-                                        "filename=\"${fileName ?: "video.mp4"}\""
-                                    )
-                                    append("Content-Type", contentType)
-                                }
-                            )
-                        }
-                    )
-                )
-            }
-
-            if (uploadResponse.status != HttpStatusCode.OK) {
-                throw Exception("Upload failed with status: ${uploadResponse.status}")
-            }
-
-            val uploadResponseText = uploadResponse.bodyAsText()
-            val uploadResponseData = Gson().fromJson(uploadResponseText, Map::class.java)
-            
-            val success = uploadResponseData?.get("success") as? Boolean
-            if (success != true) {
-                val errorMessage = uploadResponseData?.get("message") as? String ?: "Upload failed"
-                throw Exception(errorMessage)
-            }
-
-            val jobId = uploadResponseData["jobId"] as? String
-                ?: throw Exception("No job ID in response")
-            
-            Timber.tag("uploadHLSVideo").d("Upload started, job ID: $jobId")
-
-            // Update incomplete upload with video conversion job information
-            // This allows resuming video conversion polling if the app is backgrounded
-            updateIncompleteUploadWithVideoJob(context, jobId, "$scheme://$host:$cloudDrivePort", uri.toString())
-
-            // Step 2: Poll for progress and completion
-            return pollVideoConversionStatus(
-                context = context,
-                uri = uri,
-                fileName = fileName,
-                fileTimestamp = fileTimestamp,
-                jobId = jobId,
-                baseUrl = "$scheme://$host:$cloudDrivePort"
-            )
-
-        } catch (e: Exception) {
-            Timber.tag("uploadHLSVideo").e("Error uploading to netdisk: ${e.message}")
-            throw e
-        }
-    }
-
-    /**
      * Poll video conversion status until completion with retry logic for connection issues
      */
     private suspend fun pollVideoConversionStatus(
@@ -1955,26 +1844,6 @@ object HproseInstance {
     }
 
     /**
-     * Determine video content type based on file extension and magic bytes
-     */
-    private fun determineVideoContentType(fileName: String?): String {
-        // First try extension-based detection
-        val extensionType = when (fileName?.lowercase()?.substringAfterLast('.', "")) {
-            "mp4" -> "video/mp4"
-            "mov" -> "video/quicktime"
-            "avi" -> "video/x-msvideo"
-            "mkv" -> "video/x-matroska"
-            "webm" -> "video/webm"
-            "3gp" -> "video/3gpp"
-            "flv" -> "video/x-flv"
-            "wmv" -> "video/x-ms-wmv"
-            "m4v" -> "video/x-m4v"
-            else -> null
-        }
-        return extensionType ?: "video/mp4" // Default fallback
-    }
-
-    /**
      * Original IPFS upload method as fallback
      */
     @OptIn(UnstableApi::class)
@@ -2050,9 +1919,7 @@ object HproseInstance {
                     val ratio = VideoManager.getVideoAspectRatio(context, uri)
                     Timber.tag("uploadToIPFSOriginal").d("Video aspect ratio: $ratio for URI: $uri")
                     // Fallback to 16:9 if aspect ratio calculation fails
-                    ratio ?: (16f / 9f).also { 
-                        Timber.tag("uploadToIPFSOriginal").w("Using fallback aspect ratio 16:9 for video URI: $uri")
-                    }
+                    ratio
                 }
                 else -> {
                     Timber.tag("uploadToIPFSOriginal").d("No aspect ratio calculation for media type: $mediaType")
@@ -2121,7 +1988,7 @@ object HproseInstance {
                         val exif = ExifInterface(input)
                         
                         // Get dimensions from EXIF if BitmapFactory failed
-                        if (width == 0 || height == 0) {
+                        if (width == 0) {
                             width = exif.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
                             height = exif.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
                         }
@@ -2191,46 +2058,7 @@ object HproseInstance {
         prefs.edit { remove(workId) }
         Timber.tag("HproseInstance").d("Removed incomplete upload: $workId")
     }
-    
-    /**
-     * Update incomplete upload with video conversion job information
-     */
-    private fun updateIncompleteUploadWithVideoJob(context: Context, jobId: String, baseUrl: String, videoUri: String) {
-        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
-        val allEntries = prefs.all
-        
-        // Find the most recent incomplete upload (likely the current one)
-        var mostRecentUpload: IncompleteUpload? = null
-        var mostRecentKey: String? = null
-        var mostRecentTime = 0L
-        
-        for ((key, value) in allEntries) {
-            try {
-                val upload = Gson().fromJson(value as String, IncompleteUpload::class.java)
-                if (upload.timestamp > mostRecentTime) {
-                    mostRecentTime = upload.timestamp
-                    mostRecentUpload = upload
-                    mostRecentKey = key
-                }
-            } catch (e: Exception) {
-                Timber.tag("HproseInstance").e("Error parsing incomplete upload: $e")
-            }
-        }
-        
-        // Update the most recent upload with video job information
-        mostRecentUpload?.let { upload ->
-            val updatedUpload = upload.copy(
-                videoConversionJobId = jobId,
-                videoConversionBaseUrl = baseUrl,
-                videoConversionUri = videoUri
-            )
-            val uploadJson = Gson().toJson(updatedUpload)
-            prefs.edit { putString(mostRecentKey, uploadJson) }
-            Timber.tag("HproseInstance").d("Updated incomplete upload with video job info: $jobId")
-        }
-    }
-    
-    
+
     /**
      * Get all incomplete uploads from SharedPreferences
      */
@@ -2271,13 +2099,6 @@ object HproseInstance {
         
         Timber.tag("HproseInstance").d("Found ${incompleteUploads.size} incomplete uploads to resume")
         
-        // TEMPORARILY CLEAR ALL INCOMPLETE UPLOADS FOR TESTING
-        // This prevents old failed uploads from interfering with new video processing
-        Timber.tag("HproseInstance").d("Clearing all incomplete uploads for clean testing")
-        val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        return
-        
         for (upload in incompleteUploads) {
             try {
                 // Check original WorkManager state for this upload
@@ -2306,7 +2127,7 @@ object HproseInstance {
                     // Create a coroutine to check job status and resume if needed
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                         try {
-                            val videoUri = upload.videoConversionUri?.let { Uri.parse(it) }
+                            val videoUri = upload.videoConversionUri?.toUri()
                             val fileName = videoUri?.lastPathSegment
                             val fileTimestamp = System.currentTimeMillis()
                             
