@@ -7,6 +7,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.widget.VideoManager
 import java.io.File
 import java.io.FileOutputStream
 
@@ -38,6 +39,12 @@ class LocalHLSConverter(private val context: Context) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
             
+            // Check video resolution to determine if we should use COPY preset
+            val videoResolution = VideoManager.getVideoResolution(context, inputUri)
+            val shouldUseCopyPreset = shouldUseCopyPreset(videoResolution)
+            
+            Timber.tag(TAG).d("Video resolution: $videoResolution, using COPY preset: $shouldUseCopyPreset")
+            
             // Ensure output directory exists
             if (!outputDir.exists()) {
                 outputDir.mkdirs()
@@ -65,7 +72,8 @@ class LocalHLSConverter(private val context: Context) {
                 width = 1280,
                 height = 720,
                 bitrate = "1000k",
-                audioBitrate = "128k"
+                audioBitrate = "128k",
+                useCopyPreset = shouldUseCopyPreset
             )
 
             Timber.tag(TAG).d("FFmpeg command for 720p: $ffmpegCommand720")
@@ -87,7 +95,8 @@ class LocalHLSConverter(private val context: Context) {
                 width = 854,
                 height = 480,
                 bitrate = "500k",
-                audioBitrate = "96k"
+                audioBitrate = "96k",
+                useCopyPreset = shouldUseCopyPreset
             )
 
             Timber.tag(TAG).d("FFmpeg command for 480p: $ffmpegCommand480")
@@ -136,6 +145,34 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
+     * Determine if COPY preset should be used based on video resolution
+     * For landscape videos: check if width <= 1280 (720p width)
+     * For portrait videos: check if height <= 1280 (720p height)
+     */
+    private fun shouldUseCopyPreset(videoResolution: Pair<Int, Int>?): Boolean {
+        if (videoResolution == null) {
+            Timber.tag(TAG).w("Video resolution is null, defaulting to normal conversion")
+            return false
+        }
+        
+        val (width, height) = videoResolution
+        
+        // Determine if video is landscape or portrait
+        val isLandscape = width > height
+        
+        val shouldUseCopy = if (isLandscape) {
+            // For landscape videos, check if width <= 1280 (720p width)
+            width <= 1280
+        } else {
+            // For portrait videos, check if height <= 1280 (720p height)
+            height <= 1280
+        }
+        
+        Timber.tag(TAG).d("Video resolution check: ${width}x${height}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
+        return shouldUseCopy
+    }
+
+    /**
      * Build FFmpeg command for single resolution HLS conversion
      * This method will be called twice - once for 720p and once for 480p
      */
@@ -145,16 +182,29 @@ class LocalHLSConverter(private val context: Context) {
         width: Int,
         height: Int,
         bitrate: String,
-        audioBitrate: String
+        audioBitrate: String,
+        useCopyPreset: Boolean = false
     ): String {
-        return """
-            -i "$inputPath" 
-            -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-            -c:v libx264 -preset veryfast -c:a aac -b:v $bitrate -b:a $audioBitrate 
-            -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-            -hls_flags delete_segments 
-            -f hls "$outputPath"
-        """.trimIndent().replace(Regex("\\s+"), " ")
+        return if (useCopyPreset) {
+            // Use COPY preset - no re-encoding, just copy streams
+            """
+                -i "$inputPath" 
+                -c copy 
+                -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
+                -hls_flags delete_segments 
+                -f hls "$outputPath"
+            """.trimIndent().replace(Regex("\\s+"), " ")
+        } else {
+            // Use normal conversion with scaling and encoding
+            """
+                -i "$inputPath" 
+                -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
+                -c:v libx264 -preset veryfast -c:a aac -b:v $bitrate -b:a $audioBitrate 
+                -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
+                -hls_flags delete_segments 
+                -f hls "$outputPath"
+            """.trimIndent().replace(Regex("\\s+"), " ")
+        }
     }
 
     /**

@@ -806,4 +806,50 @@ object VideoManager {
             16f / 9f // Default aspect ratio on error
         }
     }
+
+    /**
+     * Get video resolution (width x height) using MediaMetadataRetriever
+     * Returns a Pair<Int, Int> representing (width, height)
+     * Considers video rotation for proper orientation
+     */
+    fun getVideoResolution(context: Context, uri: Uri): Pair<Int, Int>? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull() ?: 0
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toIntOrNull() ?: 0
+
+            // Check for rotation metadata (some videos have rotation info)
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull() ?: 0
+
+            retriever.release()
+
+            if (width > 0 && height > 0) {
+                // Return dimensions considering video rotation
+                val (finalWidth, finalHeight) = when (rotation) {
+                    90, 270 -> {
+                        // For 90/270 degree rotations, swap width and height
+                        Pair(height, width)
+                    }
+                    else -> {
+                        // For normal orientation, use original dimensions
+                        Pair(width, height)
+                    }
+                }
+                
+                Timber.tag("VideoManager").d("Video resolution: ${finalWidth}x${finalHeight} (original: ${width}x${height}, rotation: ${rotation}°) for URI: $uri")
+                Pair(finalWidth, finalHeight)
+            } else {
+                Timber.tag("VideoManager").w("Could not determine video resolution for URI: $uri")
+                null
+            }
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").e(e, "Error getting video resolution for URI: $uri")
+            null
+        }
+    }
 }
