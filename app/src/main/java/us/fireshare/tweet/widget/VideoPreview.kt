@@ -266,8 +266,7 @@ fun VideoPreview(
         }
     }
 
-    // Note: Video loading issue monitoring removed as modern memory management
-    // relies on system memory warnings and automatic cleanup
+    // Note: Stream parsing error monitoring removed - errors are now ignored to keep playback continuous
 
     LaunchedEffect(isMuted) {
         try {
@@ -359,10 +358,24 @@ fun VideoPreview(
                         errorMessage.contains("503", ignoreCase = true) ||
                         errorMessage.contains("504", ignoreCase = true) ||
                         errorMessage.contains("InvalidResponseCodeException", ignoreCase = true) ||
-                        errorMessage.contains("HttpDataSource", ignoreCase = true)
+                        errorMessage.contains("HttpDataSource", ignoreCase = true) ||
+                        errorMessage.contains("Unexpected start code", ignoreCase = true) ||
+                        errorMessage.contains("PesReader", ignoreCase = true) ||
+                        errorMessage.contains("start code prefix", ignoreCase = true)
                 
-                // Only retry for recoverable errors and if we haven't exceeded max retries
-                if (isRecoverableError && retryCount < maxRetries && videoMid != null) {
+                // Check if this is a stream parsing error that we should ignore
+                val isStreamParsingError = errorMessage.contains("Unexpected start code", ignoreCase = true) ||
+                        errorMessage.contains("PesReader", ignoreCase = true) ||
+                        errorMessage.contains("start code prefix", ignoreCase = true)
+                
+                if (isStreamParsingError) {
+                    // For stream parsing errors, just ignore and keep playing
+                    Timber.tag("VideoPreview").d("Ignoring stream parsing error and continuing playback for video: $videoMid - ${error.message}")
+                    isLoading = false
+                    hasError = false
+                    // Don't increment retry count for parsing errors
+                } else if (isRecoverableError && retryCount < maxRetries && videoMid != null) {
+                    // Only retry for non-parsing recoverable errors
                     retryCount++
                     Timber.tag("VideoPreview").d("Attempting automatic retry $retryCount/$maxRetries for video: $videoMid")
                     
@@ -370,7 +383,7 @@ fun VideoPreview(
                     isLoading = true
                     hasError = false
                     
-                    // Retry after a short delay
+                    // Retry after a delay
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                         delay(2000) // Wait 2 seconds before retry
                         if (isLoading && !hasError) {

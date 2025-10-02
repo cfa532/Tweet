@@ -68,53 +68,41 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper 720p dimensions based on aspect ratio
             val (width720, height720) = calculateActualResolution(720, videoResolution)
             
-            // Execute FFmpeg command for 720p
-            val ffmpegCommand720 = buildSingleResolutionFFmpegCommand(
+            // Execute FFmpeg command for 720p with fallback
+            val success720 = executeFFmpegWithFallback(
                 inputPath = tempInputFile.absolutePath,
                 outputPath = playlist720Path,
                 width = width720,
                 height = height720,
                 bitrate = "1000k",
                 audioBitrate = "128k",
-                useCopyPreset = shouldUseCopyCodec
+                shouldUseCopyCodec = shouldUseCopyCodec,
+                resolution = "720p"
             )
 
-            Timber.tag(TAG).d("FFmpeg command for 720p: $ffmpegCommand720")
-
-            val session720 = FFmpegKit.execute(ffmpegCommand720)
-            val returnCode720 = session720.returnCode
-
-            if (!ReturnCode.isSuccess(returnCode720)) {
-                val logs = session720.allLogsAsString
-                Timber.tag(TAG).e("FFmpeg 720p conversion failed: $logs")
+            if (!success720) {
                 tempInputFile.delete()
-                return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed: $logs")
+                return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed with both COPY and libx264")
             }
 
             // Calculate proper 480p dimensions based on aspect ratio
             val (width480, height480) = calculateActualResolution(480, videoResolution)
             
-            // Execute FFmpeg command for 480p
-            val ffmpegCommand480 = buildSingleResolutionFFmpegCommand(
+            // Execute FFmpeg command for 480p with fallback
+            val success480 = executeFFmpegWithFallback(
                 inputPath = tempInputFile.absolutePath,
                 outputPath = playlist480Path,
                 width = width480,
                 height = height480,
                 bitrate = "500k",
                 audioBitrate = "96k",
-                useCopyPreset = shouldUseCopyCodec
+                shouldUseCopyCodec = shouldUseCopyCodec,
+                resolution = "480p"
             )
 
-            Timber.tag(TAG).d("FFmpeg command for 480p: $ffmpegCommand480")
-
-            val session480 = FFmpegKit.execute(ffmpegCommand480)
-            val returnCode480 = session480.returnCode
-
-            if (!ReturnCode.isSuccess(returnCode480)) {
-                val logs = session480.allLogsAsString
-                Timber.tag(TAG).e("FFmpeg 480p conversion failed: $logs")
+            if (!success480) {
                 tempInputFile.delete()
-                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed: $logs")
+                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed with both COPY and libx264")
             }
 
             // Clean up temporary input file
@@ -151,6 +139,76 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
+     * Execute FFmpeg command with fallback from COPY codec to libx264
+     * If COPY codec fails, automatically retry with libx264 encoding
+     */
+    private fun executeFFmpegWithFallback(
+        inputPath: String,
+        outputPath: String,
+        width: Int,
+        height: Int,
+        bitrate: String,
+        audioBitrate: String,
+        shouldUseCopyCodec: Boolean,
+        resolution: String
+    ): Boolean {
+        // First, try with the recommended codec (COPY if applicable, libx264 otherwise)
+        val firstCommand = buildSingleResolutionFFmpegCommand(
+            inputPath = inputPath,
+            outputPath = outputPath,
+            width = width,
+            height = height,
+            bitrate = bitrate,
+            audioBitrate = audioBitrate,
+            useCopyPreset = shouldUseCopyCodec
+        )
+
+        Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
+
+        val firstSession = FFmpegKit.execute(firstCommand)
+        val firstReturnCode = firstSession.returnCode
+
+        if (ReturnCode.isSuccess(firstReturnCode)) {
+            Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with first attempt")
+            return true
+        }
+
+        // If COPY codec failed and we should have used it, try libx264 fallback
+        if (shouldUseCopyCodec) {
+            Timber.tag(TAG).w("COPY codec failed for $resolution, falling back to libx264")
+            
+            val fallbackCommand = buildSingleResolutionFFmpegCommand(
+                inputPath = inputPath,
+                outputPath = outputPath,
+                width = width,
+                height = height,
+                bitrate = bitrate,
+                audioBitrate = audioBitrate,
+                useCopyPreset = false // Force libx264
+            )
+
+            Timber.tag(TAG).d("FFmpeg command for $resolution (fallback): $fallbackCommand")
+
+            val fallbackSession = FFmpegKit.execute(fallbackCommand)
+            val fallbackReturnCode = fallbackSession.returnCode
+
+            if (ReturnCode.isSuccess(fallbackReturnCode)) {
+                Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with libx264 fallback")
+                return true
+            } else {
+                val logs = fallbackSession.allLogsAsString
+                Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 fallback: $logs")
+                return false
+            }
+        } else {
+            // If libx264 failed, no fallback available
+            val logs = firstSession.allLogsAsString
+            Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264: $logs")
+            return false
+        }
+    }
+
+    /**
      * Calculate actual resolution based on target resolution and aspect ratio
      * Similar to Swift version's calculateActualResolution function
      */
@@ -182,8 +240,8 @@ class LocalHLSConverter(private val context: Context) {
 
     /**
      * Determine if COPY codec should be used based on video resolution
-     * For landscape videos: check if width <= 720 (720p width)
-     * For portrait videos: check if height <= 720 (720p height)
+     * For landscape videos: check if width <= 1280 AND height <= 720 (720p resolution)
+     * For portrait videos: check if width <= 720 AND height <= 1280 (720p resolution)
      */
     private fun shouldUseCopyCodec(videoResolution: Pair<Int, Int>?): Boolean {
         if (videoResolution == null) {
@@ -196,12 +254,13 @@ class LocalHLSConverter(private val context: Context) {
         // Determine if video is landscape or portrait
         val isLandscape = width > height
         
+        // Use COPY codec only if both dimensions are <= 720p resolution
+        // For landscape: width <= 1280 (720p width), height <= 720 (720p height)
+        // For portrait: width <= 720 (720p width), height <= 1280 (720p height)
         val shouldUseCopy = if (isLandscape) {
-            // For landscape videos, check if width <= 720 (720p width)
-            width <= 720
+            width <= 1280 && height <= 720
         } else {
-            // For portrait videos, check if height <= 720 (720p height)
-            height <= 720
+            width <= 720 && height <= 1280
         }
         
         Timber.tag(TAG).d("Video resolution check: ${width}x${height}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
