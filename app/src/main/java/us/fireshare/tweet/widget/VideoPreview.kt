@@ -349,10 +349,17 @@ fun VideoPreview(
                 Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
                 
                 // Check if this is a recoverable error
-                val isRecoverableError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("server", ignoreCase = true) == true
+                val errorMessage = error.cause?.message ?: ""
+                val isRecoverableError = errorMessage.contains("network", ignoreCase = true) ||
+                        errorMessage.contains("timeout", ignoreCase = true) ||
+                        errorMessage.contains("connection", ignoreCase = true) ||
+                        errorMessage.contains("server", ignoreCase = true) ||
+                        errorMessage.contains("500", ignoreCase = true) ||
+                        errorMessage.contains("502", ignoreCase = true) ||
+                        errorMessage.contains("503", ignoreCase = true) ||
+                        errorMessage.contains("504", ignoreCase = true) ||
+                        errorMessage.contains("InvalidResponseCodeException", ignoreCase = true) ||
+                        errorMessage.contains("HttpDataSource", ignoreCase = true)
                 
                 // Only retry for recoverable errors and if we haven't exceeded max retries
                 if (isRecoverableError && retryCount < maxRetries && videoMid != null) {
