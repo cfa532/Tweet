@@ -66,7 +66,7 @@ fun FullScreenVideoPlayer(
     
     // Add player listener to handle state changes
     DisposableEffect(existingPlayer) {
-        val listener = object : androidx.media3.common.Player.Listener {
+        val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_IDLE -> {

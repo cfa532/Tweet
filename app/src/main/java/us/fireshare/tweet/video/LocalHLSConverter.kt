@@ -39,11 +39,11 @@ class LocalHLSConverter(private val context: Context) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
             
-            // Check video resolution to determine if we should use COPY preset
+            // Check video resolution to determine if we should use COPY codec
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
-            val shouldUseCopyPreset = shouldUseCopyPreset(videoResolution)
+            val shouldUseCopyCodec = shouldUseCopyCodec(videoResolution)
             
-            Timber.tag(TAG).d("Video resolution: $videoResolution, using COPY preset: $shouldUseCopyPreset")
+            Timber.tag(TAG).d("Video resolution: $videoResolution, using COPY codec: $shouldUseCopyCodec")
             
             // Ensure output directory exists
             if (!outputDir.exists()) {
@@ -65,15 +65,18 @@ class LocalHLSConverter(private val context: Context) {
             val playlist720Path = File(dir720, "playlist.m3u8").absolutePath
             val playlist480Path = File(dir480, "playlist.m3u8").absolutePath
 
+            // Calculate proper 720p dimensions based on aspect ratio
+            val (width720, height720) = calculateActualResolution(720, videoResolution)
+            
             // Execute FFmpeg command for 720p
             val ffmpegCommand720 = buildSingleResolutionFFmpegCommand(
                 inputPath = tempInputFile.absolutePath,
                 outputPath = playlist720Path,
-                width = 1280,
-                height = 720,
+                width = width720,
+                height = height720,
                 bitrate = "1000k",
                 audioBitrate = "128k",
-                useCopyPreset = shouldUseCopyPreset
+                useCopyPreset = shouldUseCopyCodec
             )
 
             Timber.tag(TAG).d("FFmpeg command for 720p: $ffmpegCommand720")
@@ -88,15 +91,18 @@ class LocalHLSConverter(private val context: Context) {
                 return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed: $logs")
             }
 
+            // Calculate proper 480p dimensions based on aspect ratio
+            val (width480, height480) = calculateActualResolution(480, videoResolution)
+            
             // Execute FFmpeg command for 480p
             val ffmpegCommand480 = buildSingleResolutionFFmpegCommand(
                 inputPath = tempInputFile.absolutePath,
                 outputPath = playlist480Path,
-                width = 854,
-                height = 480,
+                width = width480,
+                height = height480,
                 bitrate = "500k",
                 audioBitrate = "96k",
-                useCopyPreset = shouldUseCopyPreset
+                useCopyPreset = shouldUseCopyCodec
             )
 
             Timber.tag(TAG).d("FFmpeg command for 480p: $ffmpegCommand480")
@@ -118,7 +124,7 @@ class LocalHLSConverter(private val context: Context) {
             Timber.tag(TAG).d("Multi-resolution HLS conversion completed successfully")
             
             // Create master playlist manually to ensure proper structure
-            createMasterPlaylist(outputDir)
+            createMasterPlaylist(outputDir, width720, height720, width480, height480)
             
             // Verify that required files were created
             val masterFile = File(masterPlaylistPath)
@@ -145,11 +151,41 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Determine if COPY preset should be used based on video resolution
-     * For landscape videos: check if width <= 1280 (720p width)
-     * For portrait videos: check if height <= 1280 (720p height)
+     * Calculate actual resolution based on target resolution and aspect ratio
+     * Similar to Swift version's calculateActualResolution function
      */
-    private fun shouldUseCopyPreset(videoResolution: Pair<Int, Int>?): Boolean {
+    private fun calculateActualResolution(targetResolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, Int> {
+        if (videoResolution == null) {
+            // Default to landscape if no aspect ratio
+            return if (targetResolution == 720) Pair(1280, 720) else Pair(854, 480)
+        }
+        
+        val (width, height) = videoResolution
+        val aspectRatio = width.toFloat() / height.toFloat()
+        
+        return if (aspectRatio < 1.0f) {
+            // Portrait: scale to target width, calculate height
+            val targetWidth = targetResolution
+            val targetHeight = (targetResolution / aspectRatio).toInt()
+            // Ensure height is even
+            val evenHeight = if (targetHeight % 2 == 0) targetHeight else targetHeight - 1
+            Pair(targetWidth, evenHeight)
+        } else {
+            // Landscape: scale to target height, calculate width
+            val targetHeight = targetResolution
+            val targetWidth = (targetResolution * aspectRatio).toInt()
+            // Ensure width is even
+            val evenWidth = if (targetWidth % 2 == 0) targetWidth else targetWidth - 1
+            Pair(evenWidth, targetHeight)
+        }
+    }
+
+    /**
+     * Determine if COPY codec should be used based on video resolution
+     * For landscape videos: check if width <= 720 (720p width)
+     * For portrait videos: check if height <= 720 (720p height)
+     */
+    private fun shouldUseCopyCodec(videoResolution: Pair<Int, Int>?): Boolean {
         if (videoResolution == null) {
             Timber.tag(TAG).w("Video resolution is null, defaulting to normal conversion")
             return false
@@ -161,11 +197,11 @@ class LocalHLSConverter(private val context: Context) {
         val isLandscape = width > height
         
         val shouldUseCopy = if (isLandscape) {
-            // For landscape videos, check if width <= 1280 (720p width)
-            width <= 1280
+            // For landscape videos, check if width <= 720 (720p width)
+            width <= 720
         } else {
-            // For portrait videos, check if height <= 1280 (720p height)
-            height <= 1280
+            // For portrait videos, check if height <= 720 (720p height)
+            height <= 720
         }
         
         Timber.tag(TAG).d("Video resolution check: ${width}x${height}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
@@ -186,22 +222,39 @@ class LocalHLSConverter(private val context: Context) {
         useCopyPreset: Boolean = false
     ): String {
         return if (useCopyPreset) {
-            // Use COPY preset - no re-encoding, just copy streams
+            // Use COPY codec - no re-encoding, just copy streams
             """
                 -i "$inputPath" 
                 -c copy 
+                -fflags +genpts+igndts
+                -avoid_negative_ts make_zero
+                -max_interleave_delta 0
+                -max_muxing_queue_size 512
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments 
+                -hls_flags delete_segments+independent_segments 
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
             // Use normal conversion with scaling and encoding
             """
                 -i "$inputPath" 
+                -c:v libx264
+                -c:a aac
                 -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -c:v libx264 -preset veryfast -c:a aac -b:v $bitrate -b:a $audioBitrate 
+                -b:v $bitrate
+                -b:a $audioBitrate
+                -preset fast
+                -tune zerolatency
+                -threads 2
+                -max_muxing_queue_size 512
+                -fflags +genpts+igndts
+                -avoid_negative_ts make_zero
+                -max_interleave_delta 0
+                -bufsize $bitrate
+                -maxrate $bitrate
+                -metadata:s:v:0 rotate=0
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments 
+                -hls_flags delete_segments+independent_segments 
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         }
@@ -211,14 +264,14 @@ class LocalHLSConverter(private val context: Context) {
      * Create master playlist file for videoPreview compatibility
      * videoPreview expects master.m3u8 in root with folder-based structure
      */
-    private fun createMasterPlaylist(outputDir: File) {
-        // Create master.m3u8 with folder-based resolution references
+    private fun createMasterPlaylist(outputDir: File, width720: Int, height720: Int, width480: Int, height480: Int) {
+        // Create master.m3u8 with calculated resolution references
         val masterPlaylistContent = """
             #EXTM3U
             #EXT-X-VERSION:3
-            #EXT-X-STREAM-INF:BANDWIDTH=1128000,RESOLUTION=1280x720
+            #EXT-X-STREAM-INF:BANDWIDTH=1128000,RESOLUTION=${width720}x${height720}
             720/playlist.m3u8
-            #EXT-X-STREAM-INF:BANDWIDTH=596000,RESOLUTION=854x480
+            #EXT-X-STREAM-INF:BANDWIDTH=596000,RESOLUTION=${width480}x${height480}
             480/playlist.m3u8
         """.trimIndent()
 
@@ -226,6 +279,7 @@ class LocalHLSConverter(private val context: Context) {
         masterFile.writeText(masterPlaylistContent)
         
         Timber.tag(TAG).d("Created master playlist: ${masterFile.absolutePath}")
+        Timber.tag(TAG).d("720p resolution: ${width720}x${height720}, 480p resolution: ${width480}x${height480}")
     }
 
     /**
