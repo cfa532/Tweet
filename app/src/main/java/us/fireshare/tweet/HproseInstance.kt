@@ -26,6 +26,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import us.fireshare.tweet.TweetApplication
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -1340,6 +1342,10 @@ object HproseInstance {
         return null
     }
 
+    // Track ongoing user updates to prevent concurrent calls for the same user
+    private val ongoingUserUpdates = mutableSetOf<String>()
+    private val userUpdateMutex = kotlinx.coroutines.sync.Mutex()
+
     /**
      * Given userId, get baseUrl where user data can be accessed.
      * An user mimei may be stored on many nodes.
@@ -1364,31 +1370,57 @@ object HproseInstance {
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null && cachedUser.baseUrl != null) {
+            Timber.tag("getUser").d("Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}")
             return cachedUser
         }
 
-        // Step 2: Create user instance, which was either expired or not found in cache.
-        val user = getUserInstance(userId)
+        Timber.tag("getUser").d("Cache miss for userId: $userId, username: ${cachedUser?.username ?: "nil"}, hasExpired: ${cachedUser?.hasExpired ?: true}")
 
-        // Step 3: Determine the base URL to use with retry logic
-        val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
-            // Get provider IP for the user with retry logic
-            getProviderIPWithRetry(userId, maxRetries)?.let { "http://$it" } ?: return null
-        } else {
-            baseUrl
+        // Check if we're already updating this user
+        val shouldProceed = userUpdateMutex.withLock {
+            if (ongoingUserUpdates.contains(userId)) {
+                false
+            } else {
+                ongoingUserUpdates.add(userId)
+                true
+            }
         }
 
-        // Step 4: Set the base URL and fetch user data with retry logic
-        user.baseUrl = finalBaseUrl
-        val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
+        // If another update is in progress, wait for it and return cached result
+        if (!shouldProceed) {
+            Timber.tag("updateUserFromServer").d("Update already in progress for userId: $userId, returning cached user")
+            return TweetCacheManager.getCachedUser(userId)
+        }
 
-        // Step 5: Only cache the user if fetch was successful and user data is valid
-        if (fetchSuccess && user.mid.isNotEmpty() && user.username != null) {
-            TweetCacheManager.saveUser(user)
-            return user
-        } else {
-            Timber.tag("getUser").w("Failed to fetch valid user data for $userId, not caching")
-            return null
+        try {
+            // Step 2: Create user instance, which was either expired or not found in cache.
+            val user = getUserInstance(userId)
+
+            // Step 3: Determine the base URL to use with retry logic
+            val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
+                // Get provider IP for the user with retry logic
+                getProviderIPWithRetry(userId, maxRetries)?.let { "http://$it" } ?: return null
+            } else {
+                baseUrl
+            }
+
+            // Step 4: Set the base URL and fetch user data with retry logic
+            user.baseUrl = finalBaseUrl
+            val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
+
+            // Step 5: Only cache the user if fetch was successful and user data is valid
+            if (fetchSuccess && user.mid.isNotEmpty() && user.username != null) {
+                TweetCacheManager.saveUser(user)
+                return user
+            } else {
+                Timber.tag("getUser").w("Failed to fetch valid user data for $userId, not caching")
+                return null
+            }
+        } finally {
+            // Always remove from ongoing updates
+            userUpdateMutex.withLock {
+                ongoingUserUpdates.remove(userId)
+            }
         }
     }
 
