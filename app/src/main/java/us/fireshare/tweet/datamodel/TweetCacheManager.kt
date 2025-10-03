@@ -161,6 +161,7 @@ object TweetCacheManager {
      * Save a user to cache (runs database operations on background thread)
      */
     fun saveUser(user: User) {
+        Timber.tag("TweetCacheManager").d("=== SAVING USER TO CACHE === userId: ${user.mid}, username: ${user.username}")
         try {
             synchronized(userCacheLock) {
                 val currentTime = System.currentTimeMillis()
@@ -168,12 +169,14 @@ object TweetCacheManager {
                 // Update memory cache
                 userMemoryCache[user.mid] = user
                 userCacheTimestamps[user.mid] = currentTime
+                Timber.tag("TweetCacheManager").d("💾 USER SAVED TO MEMORY CACHE: userId: ${user.mid}, timestamp: $currentTime")
 
                 // Update database cache with timestamp
                 HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user, Date(currentTime)))
+                Timber.tag("TweetCacheManager").d("💾 USER SAVED TO DATABASE CACHE: userId: ${user.mid}")
             }
         } catch (e: Exception) {
-            Timber.e("Error saving user to cache: $e")
+            Timber.tag("TweetCacheManager").e("❌ ERROR SAVING USER TO CACHE: userId: ${user.mid}, error: $e")
         }
     }
 
@@ -185,6 +188,7 @@ object TweetCacheManager {
      * since they share the same timestamp, so we clear both immediately.
      */
     fun getCachedUser(userId: MimeiId): User? {
+        Timber.tag("TweetCacheManager").d("=== GETTING CACHED USER === userId: $userId")
         return try {
             // Check memory cache first
             val memoryUser = synchronized(userCacheLock) {
@@ -193,15 +197,18 @@ object TweetCacheManager {
 
             memoryUser?.let { user ->
                 if (!isUserExpired(user)) {
+                    Timber.tag("TweetCacheManager").d("✅ MEMORY CACHE HIT: userId: $userId, username: ${user.username}")
                     return user
                 } else {
                     // Remove expired user from both memory and database cache
                     // If memory copy is expired, database copy must also be expired
+                    Timber.tag("TweetCacheManager").d("⏰ MEMORY CACHE EXPIRED: userId: $userId, removing from cache")
                     removeCachedUserInternal(userId)
                 }
             }
 
             // Check database cache (only if not found in memory)
+            Timber.tag("TweetCacheManager").d("🔍 CHECKING DATABASE CACHE: userId: $userId")
             val dbCachedUser = HproseInstance.dao.getCachedUser(userId)
             dbCachedUser?.let { cachedUser ->
                 val user = cachedUser.user
@@ -209,6 +216,7 @@ object TweetCacheManager {
                 
                 if (cacheAge < USER_CACHE_EXPIRATION_TIME) {
                     // Cache is still valid, add to memory cache for faster access
+                    Timber.tag("TweetCacheManager").d("✅ DATABASE CACHE HIT: userId: $userId, username: ${user.username}, cacheAge: ${cacheAge}ms")
                     synchronized(userCacheLock) {
                         userMemoryCache[userId] = user
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
@@ -216,14 +224,16 @@ object TweetCacheManager {
                     return user
                 } else {
                     // Cache is expired, remove from database cache
+                    Timber.tag("TweetCacheManager").d("⏰ DATABASE CACHE EXPIRED: userId: $userId, cacheAge: ${cacheAge}ms, removing from cache")
                     removeCachedUserInternal(userId)
                 }
             }
 
             // User not found in cache or was expired and removed
+            Timber.tag("TweetCacheManager").d("❌ CACHE MISS: userId: $userId not found in any cache")
             null
         } catch (e: Exception) {
-            Timber.e("Error retrieving cached user: $e")
+            Timber.tag("TweetCacheManager").e("❌ ERROR RETRIEVING CACHED USER: userId: $userId, error: $e")
             null
         }
     }

@@ -575,12 +575,13 @@ object HproseInstance {
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
     ): List<Tweet?> {
+        Timber.tag("getTweetFeed").d("=== TWEET FEED START === user: ${user.mid}, pageNumber: $pageNumber, pageSize: $pageSize, entry: $entry")
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
         
         // For guest users, if no alpha IDs are configured, return empty list
         if (user.isGuest() && alphaIds.isEmpty()) {
-            Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user, returning empty list")
+            Timber.tag("getTweetFeed").w("❌ NO ALPHA IDS: Guest user with no alpha IDs configured, returning empty list")
             return emptyList()
         }
         
@@ -598,6 +599,7 @@ object HproseInstance {
             }
         }
         return try {
+            Timber.tag("getTweetFeed").d("📡 CALLING SERVER: entry: $entry, params: $params")
             val response =
                 user.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
@@ -605,15 +607,18 @@ object HproseInstance {
             val success = response?.get("success") as? Boolean
             if (success != true) {
                 val errorMessage = response?.get("message") as? String ?: "Unknown error occurred"
-                Timber.tag("getTweetFeed").e("Tweet feed loading failed: $errorMessage")
-                Timber.tag("getTweetFeed").e("Response: $response")
-
+                Timber.tag("getTweetFeed").e("❌ TWEET FEED FAILED: $errorMessage")
+                Timber.tag("getTweetFeed").e("❌ RESPONSE: $response")
                 return emptyList()
             }
+            
+            Timber.tag("getTweetFeed").d("✅ TWEET FEED SUCCESS: Received response from server")
 
             // Extract tweets and originalTweets from the new response format
             val tweetsData = response["tweets"] as? List<Map<String, Any>?>
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
+
+            Timber.tag("getTweetFeed").d("📊 TWEET DATA RECEIVED: tweets: ${tweetsData?.size ?: 0}, originalTweets: ${originalTweetsData?.size ?: 0}")
 
             // Cache original tweets first
             originalTweetsData?.forEach { originalTweetJson ->
@@ -622,9 +627,9 @@ object HproseInstance {
                         val originalTweet = Tweet.from(originalTweetJson)
                         originalTweet.author = getUser(originalTweet.authorId)
                         TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = true)
-                        Timber.tag("getTweetFeed").d("Cached original tweet: ${originalTweet.mid}")
+                        Timber.tag("getTweetFeed").d("💾 CACHED ORIGINAL TWEET: ${originalTweet.mid}")
                     } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
+                        Timber.tag("getTweetFeed").e("❌ ERROR CACHING ORIGINAL TWEET: $e")
                     }
                 }
             }
@@ -642,21 +647,22 @@ object HproseInstance {
 
                         // Skip private tweets in feed
                         if (tweet.isPrivate) {
+                            Timber.tag("getTweetFeed").d("🔒 SKIPPING PRIVATE TWEET: ${tweet.mid}")
                             null
                         } else {
                             updateCachedTweet(tweet)
+                            Timber.tag("getTweetFeed").d("📝 PROCESSED TWEET: ${tweet.mid}, author: ${tweet.author?.username}")
                             tweet
                         }
                     } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
+                        Timber.tag("getTweetFeed").e("❌ ERROR DECODING TWEET: $e")
                         null
                     }
                 }
             } ?: emptyList()
         } catch (e: Exception) {
-            Timber.tag("getTweetFeed").e("Error fetching tweet feed: $e")
-            Timber.tag("getTweetFeed").e("Stack trace: ${e.stackTraceToString()}")
-
+            Timber.tag("getTweetFeed").e("❌ TWEET FEED EXCEPTION: $e")
+            Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
             emptyList()
         }
     }
@@ -964,6 +970,7 @@ object HproseInstance {
     }
 
     suspend fun uploadTweet(tweet: Tweet): Tweet? {
+        Timber.tag("uploadTweet").d("=== TWEET UPLOAD START === tweetId: ${tweet.mid}, author: ${tweet.authorId}, isRetweet: ${tweet.originalTweetId != null}")
         val entry = "add_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -972,6 +979,7 @@ object HproseInstance {
             "tweet" to Json.encodeToString(tweet)
         )
         return try {
+            Timber.tag("uploadTweet").d("📡 CALLING SERVER: entry: $entry, hostId: ${appUser.hostIds?.first()}")
             val response =
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
             if (response?.get("success") == true) {
@@ -982,25 +990,27 @@ object HproseInstance {
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
-                        Timber.tag("HproseInstance")
-                            .d("Posting TweetUploaded notification for original tweet: $newTweetId")
+                        Timber.tag("uploadTweet").d("📢 POSTING NOTIFICATION: TweetUploaded for original tweet: $newTweetId")
                         TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                        Timber.tag("HproseInstance")
-                            .d("TweetUploaded notification posted successfully")
+                        Timber.tag("uploadTweet").d("✅ NOTIFICATION POSTED: TweetUploaded successfully")
                     } else {
-                        Timber.tag("HproseInstance")
-                            .d("Skipping TweetUploaded notification for retweet: $newTweetId (will be handled by TweetRetweeted)")
+                        Timber.tag("uploadTweet").d("⏭️ SKIPPING NOTIFICATION: Retweet $newTweetId (will be handled by TweetRetweeted)")
                     }
 
+                    Timber.tag("uploadTweet").d("✅ TWEET UPLOAD SUCCESS: newTweetId: $newTweetId")
                     updatedTweet
-                } else null
+                } else {
+                    Timber.tag("uploadTweet").e("❌ NO TWEET ID: Response success but no mid in response")
+                    null
+                }
             } else {
                 val errorMessage = response?.get("message") as? String ?: "Unknown upload error"
-                Timber.tag("uploadTweet").e("Upload failed: $errorMessage")
+                Timber.tag("uploadTweet").e("❌ UPLOAD FAILED: $errorMessage")
+                Timber.tag("uploadTweet").e("❌ RESPONSE: $response")
                 null
             }
         } catch (e: Exception) {
-            Timber.tag("uploadTweet").e(e)
+            Timber.tag("uploadTweet").e("❌ UPLOAD EXCEPTION: $e")
             null
         }
     }
@@ -1368,56 +1378,103 @@ object HproseInstance {
         }
 
         // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
+        Timber.tag("getUser").d("=== USER FETCH START === userId: $userId, baseUrl: $baseUrl, maxRetries: $maxRetries")
         val cachedUser = TweetCacheManager.getCachedUser(userId)
         if (cachedUser != null && cachedUser.baseUrl != null) {
-            Timber.tag("getUser").d("Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}")
+            Timber.tag("getUser").d("✅ CACHE HIT: Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}, baseUrl: ${cachedUser.baseUrl}")
             return cachedUser
         }
 
-        Timber.tag("getUser").d("Cache miss for userId: $userId, username: ${cachedUser?.username ?: "nil"}, hasExpired: ${cachedUser?.hasExpired ?: true}")
+        Timber.tag("getUser").d("❌ CACHE MISS: userId: $userId, cachedUser: ${cachedUser?.username ?: "null"}, hasExpired: ${cachedUser?.hasExpired ?: true}, cachedBaseUrl: ${cachedUser?.baseUrl}")
 
         // Check if we're already updating this user
         val shouldProceed = userUpdateMutex.withLock {
             if (ongoingUserUpdates.contains(userId)) {
+                Timber.tag("getUser").d("🔄 CONCURRENT UPDATE DETECTED: userId: $userId already being updated by another thread")
                 false
             } else {
                 ongoingUserUpdates.add(userId)
+                Timber.tag("getUser").d("🚀 STARTING NEW UPDATE: userId: $userId added to ongoing updates")
                 true
             }
         }
 
-        // If another update is in progress, wait for it and return cached result
+        // If another update is in progress, wait for it to complete and return the result
         if (!shouldProceed) {
-            Timber.tag("updateUserFromServer").d("Update already in progress for userId: $userId, returning cached user")
-            return TweetCacheManager.getCachedUser(userId)
+            Timber.tag("getUser").d("⏳ WAITING FOR CONCURRENT UPDATE: userId: $userId, waiting for completion...")
+            
+            // Wait for the other thread to complete by polling the ongoingUserUpdates set
+            // Add timeout to prevent infinite waiting (max 10 seconds)
+            val maxWaitTime = 10000L // 10 seconds
+            val startTime = System.currentTimeMillis()
+            
+            while (true) {
+                kotlinx.coroutines.delay(50) // Wait 50ms between checks
+                
+                // Check if we've been waiting too long
+                if (System.currentTimeMillis() - startTime > maxWaitTime) {
+                    Timber.tag("updateUserFromServer").w("Timeout waiting for concurrent update to complete for userId: $userId")
+                    // Fall back to direct cache lookup
+                    return TweetCacheManager.getCachedUser(userId)
+                }
+                
+                // Check if the update is still in progress
+                val isStillUpdating = userUpdateMutex.withLock {
+                    ongoingUserUpdates.contains(userId)
+                }
+                
+                if (!isStillUpdating) {
+                    // The other thread has finished, try to get the cached result
+                    Timber.tag("getUser").d("✅ CONCURRENT UPDATE COMPLETED: userId: $userId, checking for cached result")
+                    val result = TweetCacheManager.getCachedUser(userId)
+                    if (result != null) {
+                        Timber.tag("getUser").d("✅ SUCCESS: Retrieved user after waiting for concurrent update - userId: $userId, username: ${result.username}")
+                        return result
+                    } else {
+                        Timber.tag("getUser").w("⚠️ CONCURRENT UPDATE FAILED: userId: $userId completed but no cached user found, retrying entire process")
+                        // If no cached result, we need to retry the entire process
+                        return getUser(userId, baseUrl, maxRetries)
+                    }
+                }
+            }
         }
 
         try {
-            // Step 2: Create user instance, which was either expired or not found in cache.
+            // Step 2: Create user instance only when we're actually going to fetch from server
+            Timber.tag("getUser").d("🔨 CREATING USER INSTANCE: userId: $userId")
             val user = getUserInstance(userId)
 
             // Step 3: Determine the base URL to use with retry logic
             val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
+                Timber.tag("getUser").d("🌐 GETTING PROVIDER IP: userId: $userId (no baseUrl provided)")
                 // Get provider IP for the user with retry logic
-                getProviderIPWithRetry(userId, maxRetries)?.let { "http://$it" } ?: return null
+                getProviderIPWithRetry(userId, maxRetries)?.let { "http://$it" } ?: run {
+                    Timber.tag("getUser").e("❌ FAILED TO GET PROVIDER IP: userId: $userId")
+                    return null
+                }
             } else {
+                Timber.tag("getUser").d("🌐 USING PROVIDED BASE URL: userId: $userId, baseUrl: $baseUrl")
                 baseUrl
             }
 
             // Step 4: Set the base URL and fetch user data with retry logic
             user.baseUrl = finalBaseUrl
+            Timber.tag("getUser").d("🚀 FETCHING USER FROM SERVER: userId: $userId, finalBaseUrl: $finalBaseUrl")
             val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
 
             // Step 5: Only cache the user if fetch was successful and user data is valid
             if (fetchSuccess && user.mid.isNotEmpty() && user.username != null) {
+                Timber.tag("getUser").d("💾 SAVING USER TO CACHE: userId: $userId, username: ${user.username}")
                 TweetCacheManager.saveUser(user)
+                Timber.tag("getUser").d("✅ USER FETCH COMPLETE: userId: $userId, username: ${user.username}")
                 return user
             } else {
-                Timber.tag("getUser").w("Failed to fetch valid user data for $userId, not caching")
+                Timber.tag("getUser").w("❌ FAILED TO FETCH VALID USER DATA: userId: $userId, fetchSuccess: $fetchSuccess, mid: ${user.mid}, username: ${user.username}")
                 return null
             }
         } finally {
             // Always remove from ongoing updates
+            Timber.tag("getUser").d("🧹 CLEANING UP ONGOING UPDATE: userId: $userId")
             userUpdateMutex.withLock {
                 ongoingUserUpdates.remove(userId)
             }
@@ -1429,6 +1486,7 @@ object HproseInstance {
      * @return true if user data was successfully fetched and updated, false otherwise
      */
     private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3): Boolean {
+        Timber.tag("updateUserFromServer").d("🔄 STARTING USER UPDATE WITH RETRY: userId: ${user.mid}, maxRetries: $maxRetries")
         repeat(maxRetries) { attempt ->
             try {
                 val entry = "get_user"
@@ -1438,23 +1496,28 @@ object HproseInstance {
                     "userid" to user.mid
                 )
                 
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT ${attempt + 1}/$maxRetries: Calling get_user for userId: ${user.mid}, baseUrl: ${user.baseUrl}")
                 val response = user.hproseService?.runMApp<Any>(entry, params)
 
                 when (response) {
                     is String -> {
                         // User data not found on this node, but IP of a valid provider is returned.
+                        Timber.tag("updateUserFromServer").d("🔄 PROVIDER IP RECEIVED: userId: ${user.mid}, providerIP: $response")
                         // Provider IP received, update baseUrl and retry
                         val providerIP = response
                         user.baseUrl = "http://$providerIP"
+                        Timber.tag("updateUserFromServer").d("🌐 RETRYING WITH NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
                         user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
                             // Record successful access
                             BlackList.recordSuccess(user.mid)
+                            Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${userData.keys}")
                             user.from(userData)
                             // Validate that user data is not null or empty
                             if (user.mid.isNotEmpty() && user.username != null) {
+                                Timber.tag("updateUserFromServer").d("✅ USER UPDATE SUCCESS: userId: ${user.mid}, username: ${user.username}")
                                 return true // Success, exit retry loop
                             } else {
-                                Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")
+                                Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
                             }
                         }
                     }
@@ -1462,23 +1525,25 @@ object HproseInstance {
                     is Map<*, *> -> {
                         // Record successful access
                         BlackList.recordSuccess(user.mid)
+                        Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${response.keys}")
                         user.from(response as Map<String, Any>)
                         // Validate that user data is not null or empty
                         if (user.mid.isNotEmpty() && user.username != null) {
+                            Timber.tag("updateUserFromServer").d("✅ USER UPDATE SUCCESS: userId: ${user.mid}, username: ${user.username}")
                             return true // Success, exit retry loop
                         } else {
-                            Timber.tag("updateUserFromServer").w("Invalid user data received for ${user.mid}")
+                            Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
                         }
                     }
                     
                     null -> {
-                        Timber.tag("updateUserFromServer").w("Null response received for user ${user.mid}")
+                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE: userId: ${user.mid}, attempt: ${attempt + 1}")
                     }
                 }
             } catch (e: Exception) {
                 // Record failed access
                 BlackList.recordFailure(user.mid)
-                Timber.tag("updateUserFromServer").e("${e.message} ${user.mid} (attempt ${attempt + 1})")
+                Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: ${attempt + 1}, error: ${e.message}")
                 
                 // Check if it's a network-related error that should be retried
                 val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
@@ -1488,17 +1553,21 @@ object HproseInstance {
                 
                 if (!isNetworkError) {
                     // Don't retry for non-network errors
+                    Timber.tag("updateUserFromServer").e("🚫 NON-NETWORK ERROR: userId: ${user.mid}, not retrying, error: ${e.message}")
                     return false
+                } else {
+                    Timber.tag("updateUserFromServer").d("🌐 NETWORK ERROR: userId: ${user.mid}, will retry, error: ${e.message}")
                 }
             }
             
             // If this isn't the last attempt, wait before retrying
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
-                Timber.tag("updateUserFromServer").d("Retrying user fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                Timber.tag("updateUserFromServer").d("⏳ RETRYING IN ${delayMs}ms: userId: ${user.mid}, attempt ${attempt + 2}/$maxRetries")
                 kotlinx.coroutines.delay(delayMs)
             }
         }
+        Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
         return false // All retries failed
     }
 

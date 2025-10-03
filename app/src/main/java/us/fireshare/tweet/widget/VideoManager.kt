@@ -267,23 +267,29 @@ object VideoManager {
      * Only creates new players for visible or preloading videos
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
+        Timber.tag("VideoManager").d("=== VIDEO PLAYER REQUEST === videoMid: $videoMid, videoType: $videoType, videoUrl: $videoUrl")
+        
         // No player count limit - let system memory warnings handle memory pressure
 
         // Mark as preloaded if it was in the preload queue
+        val wasPreloading = preloadQueue.contains(videoMid)
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
+        if (wasPreloading) {
+            Timber.tag("VideoManager").d("🎯 PRELOAD COMPLETED: videoMid: $videoMid moved from preload to active")
+        }
 
         val isReusing = videoPlayers.containsKey(videoMid)
 
         return videoPlayers.getOrPut(videoMid) {
-            Timber.tag("getVideoPlayer").d("Creating new player for $videoMid")
+            Timber.tag("VideoManager").d("🆕 CREATING NEW PLAYER: videoMid: $videoMid, videoType: $videoType")
 
             try {
                 val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
+                Timber.tag("VideoManager").d("✅ PLAYER CREATED: videoMid: $videoMid, playerState: ${player.playbackState}")
                 player
             } catch (e: Exception) {
-                Timber.tag("getVideoPlayer")
-                    .e("VideoManager - Error creating ExoPlayer for video: $videoMid")
+                Timber.tag("VideoManager").e("❌ PLAYER CREATION FAILED: videoMid: $videoMid, error: ${e.message}")
                 // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
@@ -291,7 +297,7 @@ object VideoManager {
         }.also { player ->
             // Reset player state when reusing an existing player
             if (isReusing) {
-                Timber.tag("getVideoPlayer").d("Resetting reused player")
+                Timber.tag("VideoManager").d("♻️ RESETTING REUSED PLAYER: videoMid: $videoMid")
                 resetPlayerState(player)
             }
         }
@@ -328,6 +334,7 @@ object VideoManager {
     fun markVideoActive(videoMid: MimeiId) {
         val currentCount = activeVideos.getOrDefault(videoMid, 0)
         activeVideos[videoMid] = currentCount + 1
+        Timber.tag("VideoManager").d("🎬 VIDEO ACTIVATED: videoMid: $videoMid, activeCount: ${currentCount + 1}")
     }
 
     /**
@@ -339,8 +346,10 @@ object VideoManager {
             val newCount = currentCount - 1
             if (newCount == 0) {
                 activeVideos.remove(videoMid)
+                Timber.tag("VideoManager").d("⏸️ VIDEO DEACTIVATED: videoMid: $videoMid, now inactive")
             } else {
                 activeVideos[videoMid] = newCount
+                Timber.tag("VideoManager").d("⏸️ VIDEO REFERENCE DECREASED: videoMid: $videoMid, activeCount: $newCount")
             }
         }
     }
@@ -351,7 +360,9 @@ object VideoManager {
     fun pauseVideo(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let { player ->
             player.playWhenReady = false
-            Timber.d("VideoManager - Paused video: $videoMid")
+            Timber.tag("VideoManager").d("⏸️ VIDEO PAUSED: videoMid: $videoMid")
+        } ?: run {
+            Timber.tag("VideoManager").d("⚠️ PAUSE FAILED: No player found for videoMid: $videoMid")
         }
     }
 
@@ -369,9 +380,11 @@ object VideoManager {
      * Note: This method must be called on the main thread
      */
     fun releaseAllVideos() {
+        Timber.tag("VideoManager").d("🧹 RELEASING ALL VIDEOS: playerCount: ${videoPlayers.size}, activeCount: ${activeVideos.size}")
+        
         // Ensure we're on the main thread
         if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.e("VideoManager - releaseAllVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            Timber.tag("VideoManager").e("❌ WRONG THREAD: releaseAllVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
             throw IllegalStateException("VideoManager.releaseAllVideos() must be called on the main thread")
         }
 
@@ -380,14 +393,16 @@ object VideoManager {
                 // Stop playback before releasing
                 player.stop()
                 player.release()
+                Timber.tag("VideoManager").d("✅ PLAYER RELEASED: Successfully released player")
             } catch (e: Exception) {
-                Timber.e("VideoManager - Error releasing player: $e")
+                Timber.tag("VideoManager").e("❌ PLAYER RELEASE ERROR: $e")
             }
         }
         videoPlayers.clear()
         activeVideos.clear()
         visibleVideos.clear()
         preloadedVideos.clear()
+        Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED: Cleared all video collections")
     }
 
     // ===== PRELOADING =====
