@@ -380,7 +380,9 @@ fun VideoPreview(
                 
                 if (isStreamParsingError) {
                     // For stream parsing errors, just ignore and keep playing
+                    // These are typically non-fatal warnings from PesReader about malformed start codes
                     Timber.tag("VideoPreview").d("Ignoring stream parsing error and continuing playback for video: $videoMid - ${error.message}")
+                    Timber.tag("VideoPreview").d("Stream parsing errors are common with HLS and usually don't affect playback quality")
                     isLoading = false
                     hasError = false
                     // Don't increment retry count for parsing errors

@@ -14,6 +14,10 @@ import us.fireshare.tweet.datamodel.MediaType
 /**
  * Creates an ExoPlayer instance that handles video data blobs with HLS fallback
  *
+ * Note: "Unexpected start code prefix" warnings from PesReader are common with HLS streams
+ * and typically don't affect playback quality. These warnings indicate minor stream formatting
+ * issues that ExoPlayer can handle gracefully.
+ *
  * @param context Android context
  * @param url Video URL (data blob)
  * @param mediaType Optional MediaType (not used in this system)
@@ -49,9 +53,6 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
             // Add comprehensive listener for debugging and fallback
             addListener(object : androidx.media3.common.Player.Listener {
                 private var hasTriedPlaylist = false
-                private var hasTriedOriginal = false
-                private var retryCount = 0
-                private val maxRetries = 2
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     // For progressive videos, don't try HLS fallback

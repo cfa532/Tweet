@@ -270,6 +270,7 @@ class LocalHLSConverter(private val context: Context) {
     /**
      * Build FFmpeg command for single resolution HLS conversion
      * This method will be called twice - once for 720p and once for 480p
+     * Enhanced with better stream formatting to reduce PesReader errors
      */
     private fun buildSingleResolutionFFmpegCommand(
         inputPath: String,
@@ -281,20 +282,22 @@ class LocalHLSConverter(private val context: Context) {
         useCopyPreset: Boolean = false
     ): String {
         return if (useCopyPreset) {
-            // Use COPY codec - no re-encoding, just copy streams
+            // Use COPY codec - no re-encoding, just copy streams with improved formatting
             """
                 -i "$inputPath" 
                 -c copy 
-                -fflags +genpts+igndts
+                -fflags +genpts+igndts+flush_packets
                 -avoid_negative_ts make_zero
                 -max_interleave_delta 0
-                -max_muxing_queue_size 512
+                -max_muxing_queue_size 1024
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments+independent_segments 
+                -hls_flags delete_segments+independent_segments+split_by_time
+                -hls_segment_type mpegts
+                -hls_segment_filename "%03d.ts"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
-            // Use normal conversion with scaling and encoding
+            // Use normal conversion with scaling and encoding, enhanced for better stream compatibility
             """
                 -i "$inputPath" 
                 -c:v libx264
@@ -305,15 +308,17 @@ class LocalHLSConverter(private val context: Context) {
                 -preset fast
                 -tune zerolatency
                 -threads 2
-                -max_muxing_queue_size 512
-                -fflags +genpts+igndts
+                -max_muxing_queue_size 1024
+                -fflags +genpts+igndts+flush_packets
                 -avoid_negative_ts make_zero
                 -max_interleave_delta 0
                 -bufsize $bitrate
                 -maxrate $bitrate
                 -metadata:s:v:0 rotate=0
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments+independent_segments 
+                -hls_flags delete_segments+independent_segments+split_by_time
+                -hls_segment_type mpegts
+                -hls_segment_filename "%03d.ts"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         }
