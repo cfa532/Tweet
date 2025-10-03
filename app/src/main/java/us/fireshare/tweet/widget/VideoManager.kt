@@ -31,9 +31,15 @@ import java.util.concurrent.ConcurrentHashMap
  * - ExoPlayer instance management and lifecycle
  * - Visibility-based loading control (stop videos scrolled past)
  * - Smart preloading based on scroll position
- * - Memory management and cleanup
+ * - Memory leak prevention (not aggressive cleanup)
  * - Full-screen video support
  * - Disk caching for video segments
+ * 
+ * Memory Management Philosophy:
+ * - Focus on preventing leaks rather than limiting player count
+ * - Allow many concurrent players (20+) as long as no leaks exist
+ * - Only cleanup truly inactive players (not referenced by any Composable)
+ * - Proper resource cleanup in releasePlayer() to prevent surface/buffer leaks
  */
 @OptIn(UnstableApi::class)
 object VideoManager {
@@ -44,6 +50,10 @@ object VideoManager {
 
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
+    
+    // ===== MEMORY MANAGEMENT =====
+    // Cache access synchronization to prevent concurrent access issues
+    private val cacheLock = Any()
 
     // ===== VISIBILITY TRACKING =====
     // Track which videos are currently visible (user is viewing them)
@@ -94,32 +104,36 @@ object VideoManager {
      * Get the shared video cache for both progressive and HLS videos
      */
     fun getCache(context: Context): Cache {
-        if (videoCache == null) {
-            val cacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
-            val evictor = LeastRecentlyUsedCacheEvictor(CACHE_SIZE_BYTES)
-            val databaseProvider = StandaloneDatabaseProvider(context)
-            videoCache = SimpleCache(cacheDir, evictor, databaseProvider)
+        synchronized(cacheLock) {
+            if (videoCache == null) {
+                val cacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
+                val evictor = LeastRecentlyUsedCacheEvictor(CACHE_SIZE_BYTES)
+                val databaseProvider = StandaloneDatabaseProvider(context)
+                videoCache = SimpleCache(cacheDir, evictor, databaseProvider)
+            }
+            return videoCache ?: throw IllegalStateException("Video cache was not initialized")
         }
-        return videoCache ?: throw IllegalStateException("Video cache was not initialized")
     }
 
     /**
      * Clear video cache
      */
     fun clearVideoCache(context: Context) {
-        try {
-            val cache = getCache(context)
-            cache.release()
-            videoCache = null
+        synchronized(cacheLock) {
+            try {
+                val cache = getCache(context)
+                cache.release()
+                videoCache = null
 
-            val videoCacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
-            if (videoCacheDir.exists()) {
-                videoCacheDir.deleteRecursively()
+                val videoCacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
+                if (videoCacheDir.exists()) {
+                    videoCacheDir.deleteRecursively()
+                }
+
+                Timber.d("VideoManager - Video cache cleared")
+            } catch (e: Exception) {
+                Timber.e("VideoManager - Error clearing video cache. ${e.message}")
             }
-
-            Timber.d("VideoManager - Video cache cleared")
-        } catch (e: Exception) {
-            Timber.e("VideoManager - Error clearing video cache. ${e.message}")
         }
     }
 
@@ -268,8 +282,6 @@ object VideoManager {
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
         Timber.tag("VideoManager").d("=== VIDEO PLAYER REQUEST === videoMid: $videoMid, videoType: $videoType, videoUrl: $videoUrl")
-        
-        // No player count limit - let system memory warnings handle memory pressure
 
         // Mark as preloaded if it was in the preload queue
         val wasPreloading = preloadQueue.contains(videoMid)
@@ -351,6 +363,12 @@ object VideoManager {
                 activeVideos[videoMid] = newCount
                 Timber.tag("VideoManager").d("⏸️ VIDEO REFERENCE DECREASED: videoMid: $videoMid, activeCount: $newCount")
             }
+        }
+        
+        // Clean up inactive players periodically to prevent leaks
+        // Only do this occasionally to avoid performance impact
+        if (videoPlayers.size > 10 && videoPlayers.size % 5 == 0) {
+            cleanupInactivePlayers()
         }
     }
 
@@ -670,7 +688,56 @@ object VideoManager {
             return false
         }
     }
-
+    
+    /**
+     * Clean up truly inactive video players (not being used by any Composable)
+     * This prevents memory leaks by releasing players that are no longer referenced
+     */
+    fun cleanupInactivePlayers() {
+        val inactivePlayers = videoPlayers.keys.filter { videoMid ->
+            !activeVideos.containsKey(videoMid) && !visibleVideos.contains(videoMid)
+        }
+        
+        if (inactivePlayers.isNotEmpty()) {
+            Timber.tag("VideoManager").d("🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players")
+            inactivePlayers.forEach { videoMid ->
+                releasePlayer(videoMid)
+            }
+        }
+    }
+    
+    /**
+     * Properly release a video player and clean up all associated resources
+     * This includes stopping playback, clearing media sources, and releasing buffers
+     * Focus on preventing memory leaks rather than aggressive cleanup
+     */
+    private fun releasePlayer(videoMid: MimeiId) {
+        val player = videoPlayers.remove(videoMid)
+        if (player != null) {
+            try {
+                // Stop playback and clear media sources to prevent leaks
+                player.stop()
+                player.clearMediaItems()
+                
+                // Clear video surface to prevent surface leaks
+                player.clearVideoSurface()
+                
+                // Release the player completely
+                player.release()
+                
+                Timber.tag("VideoManager").d("✅ PLAYER RELEASED: videoMid: $videoMid")
+            } catch (e: Exception) {
+                Timber.tag("VideoManager").w("⚠️ Error releasing player for $videoMid: ${e.message}")
+            }
+        }
+        
+        // Clean up tracking data
+        activeVideos.remove(videoMid)
+        visibleVideos.remove(videoMid)
+        preloadedVideos.remove(videoMid)
+        preloadQueue.remove(videoMid)
+    }
+    
     /**
      * Force recreate an ExoPlayer instance for a video (used for MediaCodec failures)
      * This completely destroys the old player and creates a new one with software decoder
