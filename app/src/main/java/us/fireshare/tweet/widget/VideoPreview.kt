@@ -179,7 +179,7 @@ fun VideoPreview(
                         
                         // Attempt recovery to recreate the media source
                         videoMid?.let { mid ->
-                            VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                            VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
                         }
                     } else {
                         // Player has media items, just prepare
@@ -205,7 +205,7 @@ fun VideoPreview(
                     hasError = false
                     
                     videoMid?.let { mid ->
-                        VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                        VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
                     }
                 }
             }
@@ -253,7 +253,7 @@ fun VideoPreview(
                     } else {
                         // No media items, need to recover
                         videoMid?.let { mid ->
-                            VideoManager.attemptVideoRecovery(context, mid, url, videoType)
+                            VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
                         }
                     }
                 }
@@ -357,8 +357,25 @@ fun VideoPreview(
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
                 
-                // Check if this is a recoverable error
+                // Check if this is a MediaCodec decoder failure
                 val errorMessage = error.cause?.message ?: ""
+                val isMediaCodecError = errorMessage.contains("MediaCodec", ignoreCase = true) ||
+                        errorMessage.contains("Decoder init failed", ignoreCase = true) ||
+                        errorMessage.contains("OMX.hisi.video.decoder", ignoreCase = true) ||
+                        errorMessage.contains("OMX.", ignoreCase = true) ||
+                        errorMessage.contains("Failed to initialize", ignoreCase = true) ||
+                        errorMessage.contains("CodecException", ignoreCase = true) ||
+                        errorMessage.contains("DecoderInitializationException", ignoreCase = true) ||
+                        errorMessage.contains("MediaCodecRenderer", ignoreCase = true) ||
+                        errorMessage.contains("error 0xfffffff4", ignoreCase = true) ||
+                        errorMessage.contains("native_setup", ignoreCase = true)
+                
+                // Check if this is a stream parsing error that we should ignore
+                val isStreamParsingError = errorMessage.contains("Unexpected start code", ignoreCase = true) ||
+                        errorMessage.contains("PesReader", ignoreCase = true) ||
+                        errorMessage.contains("start code prefix", ignoreCase = true)
+                
+                // Check if this is a recoverable error
                 val isRecoverableError = errorMessage.contains("network", ignoreCase = true) ||
                         errorMessage.contains("timeout", ignoreCase = true) ||
                         errorMessage.contains("connection", ignoreCase = true) ||
@@ -368,15 +385,7 @@ fun VideoPreview(
                         errorMessage.contains("503", ignoreCase = true) ||
                         errorMessage.contains("504", ignoreCase = true) ||
                         errorMessage.contains("InvalidResponseCodeException", ignoreCase = true) ||
-                        errorMessage.contains("HttpDataSource", ignoreCase = true) ||
-                        errorMessage.contains("Unexpected start code", ignoreCase = true) ||
-                        errorMessage.contains("PesReader", ignoreCase = true) ||
-                        errorMessage.contains("start code prefix", ignoreCase = true)
-                
-                // Check if this is a stream parsing error that we should ignore
-                val isStreamParsingError = errorMessage.contains("Unexpected start code", ignoreCase = true) ||
-                        errorMessage.contains("PesReader", ignoreCase = true) ||
-                        errorMessage.contains("start code prefix", ignoreCase = true)
+                        errorMessage.contains("HttpDataSource", ignoreCase = true)
                 
                 if (isStreamParsingError) {
                     // For stream parsing errors, just ignore and keep playing
@@ -386,8 +395,45 @@ fun VideoPreview(
                     isLoading = false
                     hasError = false
                     // Don't increment retry count for parsing errors
+                } else if (isMediaCodecError && videoMid != null && retryCount < maxRetries) {
+                    // For MediaCodec failures, force recreate with software decoder
+                    retryCount++
+                    Timber.tag("VideoPreview").w("MediaCodec decoder failure detected (attempt $retryCount/$maxRetries), force recreating with software decoder for video: $videoMid")
+                    isLoading = true
+                    hasError = false
+                    
+                    // Force recreate with software decoder with delay to prevent rapid retries
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        try {
+                            // Add delay before retry to prevent rapid retry loops
+                            delay(1000) // Wait 1 second before MediaCodec recovery attempt
+                            
+                            // Force recreate the entire player with software decoder
+                            val recreateSuccess = VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                            
+                            if (recreateSuccess) {
+                                Timber.tag("VideoPreview").d("Player force recreated with software decoder for video: $videoMid")
+                                isLoading = false
+                                hasError = false
+                            } else {
+                                Timber.tag("VideoPreview").e("Failed to force recreate player for video: $videoMid")
+                                isLoading = false
+                                hasError = true
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("VideoPreview").e("Exception during MediaCodec recovery for video: $videoMid - ${e.message}")
+                            isLoading = false
+                            hasError = true
+                        }
+                    }
+                } else if (isMediaCodecError && videoMid != null) {
+                    // MediaCodec error but exceeded retry limit
+                    Timber.tag("VideoPreview").e("MediaCodec decoder failure exceeded retry limit ($maxRetries) for video: $videoMid")
+                    Timber.tag("VideoPreview").e("This device may not support software decoders for this video format")
+                    isLoading = false
+                    hasError = true
                 } else if (isRecoverableError && retryCount < maxRetries && videoMid != null) {
-                    // Only retry for non-parsing recoverable errors
+                    // Only retry for non-parsing, non-MediaCodec recoverable errors
                     retryCount++
                     Timber.tag("VideoPreview").d("Attempting automatic retry $retryCount/$maxRetries for video: $videoMid")
                     
@@ -399,14 +445,14 @@ fun VideoPreview(
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                         delay(2000) // Wait 2 seconds before retry
                         if (isLoading && !hasError) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     }
                 } else {
                     // For non-recoverable errors or after max retries, show error state
                     isLoading = false
                     hasError = true
-                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message} (retries: $retryCount, recoverable: $isRecoverableError)")
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message} (retries: $retryCount, recoverable: $isRecoverableError, mediaCodec: $isMediaCodecError)")
                 }
             }
         }
@@ -511,36 +557,19 @@ fun VideoPreview(
                                 // Attempt recovery on the main thread (required for ExoPlayer)
                                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                                     try {
-                                        // Try gentle recovery first
-                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
-                                        if (!success) {
-                                            // If gentle recovery failed, try a more thorough reset
-                                            exoPlayer.stop()
-                                            exoPlayer.clearMediaItems()
-                                            
-                                            // Wait a moment for cleanup
-                                            delay(500)
-                                            
-                                            // Try recovery again after reset
-                                            val retrySuccess = VideoManager.attemptVideoRecovery(context, videoMid, url, videoType)
-                                            if (!retrySuccess) {
-                                                // If recovery failed, show error again
-                                                hasError = true
-                                                isLoading = false
-                                                Timber.tag("VideoPreview").w("Manual retry failed for video: $videoMid")
-                                            } else {
-                                                // Ensure playback resumes if visible and allowed
-                                                if (isVideoVisible && autoPlay) {
-                                                    exoPlayer.playWhenReady = true
-                                                }
-                                                Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
-                                            }
-                                        } else {
-                                            // Gentle recovery succeeded
+                                        // Force recreate with software decoder for manual retry
+                                        val success = VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                                        if (success) {
+                                            // Ensure playback resumes if visible and allowed
                                             if (isVideoVisible && autoPlay) {
                                                 exoPlayer.playWhenReady = true
                                             }
                                             Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
+                                        } else {
+                                            // If recovery failed, show error again
+                                            hasError = true
+                                            isLoading = false
+                                            Timber.tag("VideoPreview").w("Manual retry failed for video: $videoMid")
                                         }
                                     } catch (e: Exception) {
                                         // Only log retry failures at debug level to avoid noise

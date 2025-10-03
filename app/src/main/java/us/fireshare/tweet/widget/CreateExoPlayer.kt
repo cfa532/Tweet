@@ -12,23 +12,26 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 
 /**
- * Creates an ExoPlayer instance that handles video data blobs with HLS fallback
+ * Creates an ExoPlayer instance with type-specific video handling:
+ * - MediaType.Video: Plays URL directly as progressive video
+ * - MediaType.HLS_VIDEO: Tries master.m3u8 first, then fallback to playlist.m3u8 (no further)
  *
  * Note: "Unexpected start code prefix" warnings from PesReader are common with HLS streams
  * and typically don't affect playback quality. These warnings indicate minor stream formatting
  * issues that ExoPlayer can handle gracefully.
  *
  * @param context Android context
- * @param url Video URL (data blob)
- * @param mediaType Optional MediaType (not used in this system)
+ * @param url Video URL
+ * @param mediaType MediaType to determine playback strategy
+ * @param forceSoftwareDecoder If true, forces software decoder usage to avoid MediaCodec failures
  * @return Configured ExoPlayer instance
  */
 @OptIn(UnstableApi::class)
-fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
+fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null, forceSoftwareDecoder: Boolean = false): ExoPlayer {
     // Create HTTP data source with extended timeouts for network congestion
     val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-        .setConnectTimeoutMs(30000) // 30 seconds connection timeout (increased from default)
-        .setReadTimeoutMs(30000)    // 30 seconds read timeout (increased from default)
+        .setConnectTimeoutMs(30000) // 30 seconds connection timeout
+        .setReadTimeoutMs(30000)    // 30 seconds read timeout
         .setAllowCrossProtocolRedirects(true)
         .setUserAgent("TweetApp/1.0")
 
@@ -39,62 +42,72 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
         .setUpstreamDataSourceFactory(upstreamFactory)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-    // For data blobs, try HLS first, then fallback to original URL
-    val baseUrl = if (url.endsWith("/")) url else "$url/"
-    val masterUrl = "${baseUrl}master.m3u8"
-    val playlistUrl = "${baseUrl}playlist.m3u8"
-
     // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive
     val mediaSourceFactory = DefaultMediaSourceFactory(cacheDataSourceFactory)
 
+    // Create ExoPlayer with enhanced software decoder fallback for MediaCodec failures
+    val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context).apply {
+        if (forceSoftwareDecoder) {
+            // Force software decoder usage to avoid MediaCodec failures
+            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            setEnableDecoderFallback(false) // Disable hardware decoder fallback
+            Timber.tag("createExoPlayer").w("🔧 FORCING SOFTWARE DECODER for URL: $url")
+        } else {
+            // Prefer hardware decoders but allow software fallback
+            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            setEnableDecoderFallback(true) // Enable hardware decoder fallback
+        }
+    }
+
     val player = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(mediaSourceFactory)
+        .setRenderersFactory(renderersFactory)
         .build()
         .apply {
-            // Add comprehensive listener for debugging and fallback
+            // Add listener for HLS fallback logic
             addListener(object : androidx.media3.common.Player.Listener {
                 private var hasTriedPlaylist = false
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    // For progressive videos, don't try HLS fallback
+                    // Only handle HLS fallback for HLS_VIDEO type
                     if (mediaType != MediaType.HLS_VIDEO) {
-                        Timber.tag("createExoPlayer").d("Progressive video error: ${error.message}")
+                        Timber.tag("createExoPlayer").d("Progressive video error (no fallback): ${error.message}")
                         return
                     }
                     
-                    // For HLS videos, try playlist fallback only
+                    // For HLS videos: try playlist.m3u8 fallback only once
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
-                        Timber.tag("createExoPlayer").d("Trying playlist.m3u8 fallback")
+                        Timber.tag("createExoPlayer").d("HLS master.m3u8 failed, trying playlist.m3u8 fallback")
 
-                        // If master.m3u8 fails, try playlist.m3u8
+                        // Construct playlist URL
+                        val baseUrl = if (url.endsWith("/")) url else "$url/"
+                        val playlistUrl = "${baseUrl}playlist.m3u8"
+
+                        // Try playlist.m3u8 fallback
                         val fallbackMediaSource = mediaSourceFactory.createMediaSource(
                             androidx.media3.common.MediaItem.fromUri(playlistUrl)
                         )
                         setMediaSource(fallbackMediaSource)
                         prepare()
                     } else {
-                        // Only log the final failure as an error
-                        Timber.tag("createExoPlayer")
-                            .e("All HLS fallback attempts failed for URL: $url")
+                        // Final failure - no more fallbacks
+                        Timber.tag("createExoPlayer").e("All HLS attempts failed for URL: $url")
                         Timber.tag("createExoPlayer").e("Final error: ${error.message}")
-                        Timber.tag("createExoPlayer").e("Final error cause: ${error.cause}")
                     }
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     when (playbackState) {
                         androidx.media3.common.Player.STATE_READY -> {
-                            Timber.tag("createExoPlayer").d("Player ready for URL: $url")
+                            Timber.tag("createExoPlayer").d("Player ready for URL: $url (type: $mediaType, software: $forceSoftwareDecoder)")
                         }
-
                         androidx.media3.common.Player.STATE_BUFFERING -> {
                             Timber.tag("createExoPlayer").d("Player buffering for URL: $url")
                         }
-
                         androidx.media3.common.Player.STATE_IDLE -> {
                             Timber.tag("createExoPlayer").d("Player idle for URL: $url")
                         }
-
                         androidx.media3.common.Player.STATE_ENDED -> {
                             Timber.tag("createExoPlayer").d("Player ended for URL: $url")
                         }
@@ -102,29 +115,33 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Timber.tag("createExoPlayer")
-                        .d("Player playing state changed: $isPlaying for URL: $url")
-                }
-
-                override fun onIsLoadingChanged(isLoading: Boolean) {
-                    // Reduced logging to avoid spam during video operations
-                    // Timber.tag("createExoPlayer")
-                    //     .d("Player loading state changed: $isLoading for URL: $url")
+                    Timber.tag("createExoPlayer").d("Player playing state changed: $isPlaying for URL: $url")
                 }
             })
         }
 
     // Create media source based on video type
-    val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
-        // For HLS videos, start with master.m3u8
-        mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
-    } else {
-        // For progressive videos, use original URL directly
-        mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
+    val mediaSource = when (mediaType) {
+        MediaType.HLS_VIDEO -> {
+            // For HLS videos: start with master.m3u8
+            val baseUrl = if (url.endsWith("/")) url else "$url/"
+            val masterUrl = "${baseUrl}master.m3u8"
+            Timber.tag("createExoPlayer").d("Creating HLS media source with master URL: $masterUrl")
+            mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+        }
+        MediaType.Video -> {
+            // For progressive videos: play URL directly
+            Timber.tag("createExoPlayer").d("Creating progressive media source with URL: $url")
+            mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
+        }
+        else -> {
+            // Default to progressive video for unknown types
+            Timber.tag("createExoPlayer").d("Unknown media type '$mediaType', defaulting to progressive video: $url")
+            mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
+        }
     }
+    
     player.setMediaSource(mediaSource)
-
-    // Prepare the player immediately after setting up the listener
     player.prepare()
     return player
 }

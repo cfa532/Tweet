@@ -598,11 +598,12 @@ object VideoManager {
      * Properly recreates the media source using the same logic as createExoPlayer
      * For HLS videos: tries master.m3u8, then playlist.m3u8
      * For regular videos: plays the URL directly
+     * @param forceSoftwareDecoder If true, forces software decoder usage to avoid MediaCodec failures
      */
-    fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): Boolean {
+    fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null, forceSoftwareDecoder: Boolean = false): Boolean {
         val player = videoPlayers[videoMid] ?: return false
 
-        Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid")
+        Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid (software: $forceSoftwareDecoder)")
 
         try {
             // Thorough reset: stop, clear, and reset player state
@@ -613,6 +614,13 @@ object VideoManager {
             // Reset playback state
             player.playWhenReady = false
             player.pause()
+
+            // If we need to force software decoder, we need to recreate the entire player
+            // because we can't change the renderer factory of an existing player
+            if (forceSoftwareDecoder) {
+                Timber.d("VideoManager - Force software decoder requested, recreating player for video: $videoMid")
+                return forceRecreatePlayer(context, videoMid, videoUrl, videoType)
+            }
 
             // Recreate the media source using the same logic as createExoPlayer
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
@@ -631,16 +639,24 @@ object VideoManager {
             // Use DefaultMediaSourceFactory backed by CacheDataSource which handles both HLS and progressive
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
             
-            val mediaSource = if (videoType == MediaType.HLS_VIDEO) {
-                // For HLS videos: try master.m3u8 first
-                val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
-                val masterUrl = "${baseUrl}master.m3u8"
-                Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
-                mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
-            } else {
-                // For regular videos: play the URL directly
-                Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
-                mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+            val mediaSource = when (videoType) {
+                MediaType.HLS_VIDEO -> {
+                    // For HLS videos: try master.m3u8 first
+                    val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                    val masterUrl = "${baseUrl}master.m3u8"
+                    Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+                }
+                MediaType.Video -> {
+                    // For progressive videos: play the URL directly
+                    Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+                }
+                else -> {
+                    // Default to progressive video for unknown types
+                    Timber.d("VideoManager - Unknown media type '$videoType', defaulting to progressive video: $videoUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+                }
             }
 
             // Set the new media source and prepare
@@ -651,6 +667,50 @@ object VideoManager {
         } catch (e: Exception) {
             // Only log recovery failures at debug level to avoid noise during trials
             Timber.d("VideoManager - Thorough recovery failed for video: $videoMid, error: ${e.message}")
+            return false
+        }
+    }
+
+    /**
+     * Force recreate an ExoPlayer instance for a video (used for MediaCodec failures)
+     * This completely destroys the old player and creates a new one with software decoder
+     */
+    fun forceRecreatePlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): Boolean {
+        Timber.tag("VideoManager").w("🔄 FORCE RECREATING PLAYER: videoMid: $videoMid due to MediaCodec failure")
+        
+        try {
+            // Get the old player and release it completely
+            val oldPlayer = videoPlayers[videoMid]
+            oldPlayer?.let { player ->
+                try {
+                    player.stop()
+                    player.clearMediaItems()
+                    player.release()
+                } catch (e: Exception) {
+                    Timber.tag("VideoManager").w("Error releasing old player: ${e.message}")
+                }
+            }
+            
+            // Remove from all tracking maps
+            videoPlayers.remove(videoMid)
+            visibleVideos.remove(videoMid)
+            preloadedVideos.remove(videoMid)
+            preloadQueue.remove(videoMid)
+            
+            // Create a completely new player with software decoder to avoid MediaCodec failures
+            val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
+            videoPlayers[videoMid] = newPlayer
+            
+            Timber.tag("VideoManager").d("✅ PLAYER FORCE RECREATED WITH SOFTWARE DECODER: videoMid: $videoMid")
+            return true
+            
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").e("❌ FORCE RECREATION FAILED: videoMid: $videoMid, error: ${e.message}")
+            // Clean up any partial state
+            videoPlayers.remove(videoMid)
+            visibleVideos.remove(videoMid)
+            preloadedVideos.remove(videoMid)
+            preloadQueue.remove(videoMid)
             return false
         }
     }
