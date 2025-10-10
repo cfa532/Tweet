@@ -293,7 +293,7 @@ class LocalHLSConverter(private val context: Context) {
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
                 -hls_flags delete_segments+independent_segments+split_by_time
                 -hls_segment_type mpegts
-                -hls_segment_filename "%03d.ts"
+                -hls_segment_filename "segment%03d.ts"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
@@ -318,7 +318,7 @@ class LocalHLSConverter(private val context: Context) {
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
                 -hls_flags delete_segments+independent_segments+split_by_time
                 -hls_segment_type mpegts
-                -hls_segment_filename "%03d.ts"
+                -hls_segment_filename "segment%03d.ts"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         }
