@@ -1,7 +1,8 @@
 # Video Manager Consolidation Summary
+**Last Updated:** October 10, 2025
 
 ## Overview
-Successfully consolidated 5 separate video management classes into a single unified `VideoManager` to eliminate redundancy and improve maintainability.
+Successfully consolidated 5 separate video management classes into a single unified `VideoManager` to eliminate redundancy and improve maintainability. Enhanced with independent mute state management for better UX.
 
 ## Before Consolidation (5 Managers)
 1. **VideoManager** (554 lines) - ExoPlayer instance management
@@ -170,13 +171,38 @@ VideoManager.startPlayback(autoReplay = true)
 - **Performance metrics**: Track video loading and playback performance
 - **User experience**: Monitor video-related crashes and issues
 
+## Recent Enhancements (October 2025)
+
+### Independent Mute State Management
+**Added:** Context-aware mute behavior for different video viewing scenarios.
+
+**Implementation:**
+- `VideoPreview.kt` - Added `useIndependentMuteState` parameter
+- `MediaItemView.kt` - Pass-through for mute independence
+- `TweetDetailBody.kt` - Enabled independent mute for detail view
+
+**Behavior:**
+| Context | Mute State | Syncs with Global | Affects Global |
+|---------|------------|-------------------|----------------|
+| MediaItem (Feeds) | Global | ✅ Yes | ✅ Yes |
+| TweetDetailView | 🔊 Unmuted | ❌ No | ❌ No |
+| FullScreenPlayer | 🔊 Unmuted | ❌ No | ❌ No |
+
+**Benefits:**
+- ✅ Better UX - Videos unmuted in detail view for focused watching
+- ✅ Independent control - Detail/fullscreen doesn't interfere with feed
+- ✅ User choice preserved - Feed mute preference maintained separately
+
+---
+
 ## Conclusion
 
 The consolidation successfully eliminated the video management complexity while preserving all critical functionality. The unified `VideoManager` now provides:
 
 - **Better performance** through optimized loading strategies
 - **Improved maintainability** with centralized video logic
-- **Enhanced user experience** with visibility-based loading control
+- **Enhanced user experience** with visibility-based loading and independent mute control
 - **Reduced resource usage** through intelligent memory management
+- **Context-aware behavior** for optimal viewing in different scenarios
 
-The system is now much more manageable and should provide a significantly better video experience for users.
+The system is now much more manageable and provides a significantly better video experience for users across all viewing contexts.

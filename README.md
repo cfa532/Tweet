@@ -1,5 +1,13 @@
-# A Web3 twitter application
+# Tweet - A Web3 Distributed Social Media Application
+
 Tweet is a Web3 application that leverages blockchain technology for bookkeeping. However it does not run on blockchain, it operates on a lightweight cloud OS called Leither, which supports decentralized storage, databases and a lightweight webserver.
+
+## 📚 Documentation
+
+**Comprehensive technical documentation is available in the [`docs/`](docs/) folder:**
+- **[Documentation Index](docs/INDEX.md)** - Complete documentation catalog
+- **[Recent Changes](docs/RECENT_CHANGES.md)** - Latest updates and improvements (October 2025)
+- **[Connection Pooling Report](docs/CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Performance optimization details
 
 Unlike traditional apps, Tweet is a decentralized platform. It offers standard app features but empowers users to host their own nodes on personal devices, such as a PC, Mac, NAS, or spared Android phone, creating a IPFS based network. User accounts are decentralized, backed by the combined resources of the users and their followers.
 
