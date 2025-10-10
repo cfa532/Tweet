@@ -23,6 +23,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.R
@@ -30,7 +31,6 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.SharedViewModel
-import timber.log.Timber
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel

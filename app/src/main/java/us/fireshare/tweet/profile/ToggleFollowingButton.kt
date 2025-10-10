@@ -21,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.R
@@ -30,7 +31,6 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import timber.log.Timber
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable

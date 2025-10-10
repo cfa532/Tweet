@@ -2,7 +2,6 @@ package us.fireshare.tweet.datamodel
 
 import android.os.Parcelable
 import com.google.gson.annotations.Expose
-import hprose.client.HproseClient
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
