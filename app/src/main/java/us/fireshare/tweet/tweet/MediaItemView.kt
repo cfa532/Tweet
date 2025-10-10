@@ -71,7 +71,8 @@ fun MediaItemView(
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
     loadOriginalImage: Boolean = false, // load original high-res image instead of compressed preview
     viewModel: TweetViewModel,
-    onVideoCompleted: (() -> Unit)? = null
+    onVideoCompleted: (() -> Unit)? = null,
+    useIndependentVideoMute: Boolean = false // For TweetDetailView - videos independent of global mute
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
@@ -208,7 +209,8 @@ fun MediaItemView(
                         callback = { goto(index) },
                         videoMid = videoMid,
                         videoType = attachment.type,
-                        onVideoCompleted = onVideoCompleted
+                        onVideoCompleted = onVideoCompleted,
+                        useIndependentMuteState = useIndependentVideoMute
                     )
                 }
             }

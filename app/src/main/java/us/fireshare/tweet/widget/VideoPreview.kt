@@ -72,13 +72,18 @@ fun VideoPreview(
     videoMid: MimeiId? = null,
     videoType: MediaType? = null,
     onLoadComplete: (() -> Unit)? = null,
-    onVideoCompleted: (() -> Unit)? = null
+    onVideoCompleted: (() -> Unit)? = null,
+    useIndependentMuteState: Boolean = false // For TweetDetailView - independent of global mute state
 ) {
     val context = LocalContext.current
 
     // Use completely stable state that doesn't change during recompositions
     var isVideoVisible by remember(videoMid) { mutableStateOf(false) }
-    var isMuted by remember(videoMid) { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    // If using independent mute state (TweetDetailView/FullScreen), start unmuted and don't sync with global state
+    // Otherwise (MediaItem in feeds), use global mute state
+    var isMuted by remember(videoMid) { 
+        mutableStateOf(if (useIndependentMuteState) false else preferenceHelper.getSpeakerMute()) 
+    }
     var isLoading by remember(videoMid) {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
@@ -281,16 +286,20 @@ fun VideoPreview(
     LaunchedEffect(isMuted) {
         try {
             exoPlayer.volume = if (isMuted) 0f else 1f
-            // Persist mute state to preferences
-            preferenceHelper.setSpeakerMute(isMuted)
+            // Only persist mute state to global preferences if NOT using independent mute state
+            // TweetDetailView and FullScreen videos should not affect global mute state
+            if (!useIndependentMuteState) {
+                preferenceHelper.setSpeakerMute(isMuted)
+            }
         } catch (e: Exception) {
             Timber.e("VideoPreview - Error setting volume: ${e.message}")
         }
     }
 
     // Watch for global mute state changes only when visible, at a relaxed cadence
-    LaunchedEffect(isVideoVisible) {
-        if (!isVideoVisible) return@LaunchedEffect
+    // Skip this synchronization if using independent mute state (TweetDetailView/FullScreen)
+    LaunchedEffect(isVideoVisible, useIndependentMuteState) {
+        if (!isVideoVisible || useIndependentMuteState) return@LaunchedEffect
         while (isVideoVisible) {
             val globalMuteState = preferenceHelper.getSpeakerMute()
             if (isMuted != globalMuteState) {
