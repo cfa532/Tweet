@@ -24,13 +24,15 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.Continuation
 import timber.log.Timber
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -68,8 +70,20 @@ object ImageCacheManager {
     private var activeVisibleDownloads = 0
     private var activeInvisibleDownloads = 0
 
-    // Connection pool for better performance
-    private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
+    // OkHttp client with connection pooling for efficient network operations
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(
+            maxIdleConnections = MAX_CONCURRENT_DOWNLOADS,
+            keepAliveDuration = 5,
+            timeUnit = TimeUnit.MINUTES
+        ))
+        .connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(true)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+    
     private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
     private val downloadResults = ConcurrentHashMap<String, Bitmap?>()
@@ -252,33 +266,37 @@ object ImageCacheManager {
         }
 
     /**
-     * Perform the actual download with connection pooling
+     * Perform the actual download with OkHttp connection pooling
      */
     private suspend fun performDownload(imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
-            var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
 
             try {
-                val url = URL(imageUrl)
-                connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = CONNECTION_TIMEOUT
-                connection.readTimeout = READ_TIMEOUT
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("User-Agent", "TweetApp/1.0")
-                // Remove gzip compression request to avoid decompression issues
-                // connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
-                connection.setRequestProperty("Connection", "keep-alive")
-                connection.setRequestProperty("Cache-Control", "no-cache")
-                connection.setRequestProperty("Accept", "image/*,*/*;q=0.8")
-                connection.setAllowUserInteraction(false)
-                connection.setInstanceFollowRedirects(true)
+                val request = Request.Builder()
+                    .url(imageUrl)
+                    .header("User-Agent", "TweetApp/1.0")
+                    .header("Accept", "image/*,*/*;q=0.8")
+                    .header("Cache-Control", "no-cache")
+                    .build()
 
-                // Add connection to pool
-                connectionPool[mid] = connection
+                val response = okHttpClient.newCall(request).execute()
 
-                inputStream = connection.inputStream
+                if (!response.isSuccessful) {
+                    Timber.tag("ImageCacheManager").d("Failed to download image: HTTP ${response.code}")
+                    response.close()
+                    return@withContext null
+                }
+
+                inputStream = response.body?.byteStream()
+                if (inputStream == null) {
+                    Timber.tag("ImageCacheManager").d("Empty response body for URL: $imageUrl")
+                    response.close()
+                    return@withContext null
+                }
+
                 val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
+                response.close()
 
                 if (bitmap != null && !bitmap.isRecycled) {
                     return@withContext bitmap
@@ -296,13 +314,11 @@ object ImageCacheManager {
                 return@withContext null
             } finally {
                 inputStream?.close()
-                connection?.disconnect()
-                connectionPool.remove(mid)
             }
         }
 
     /**
-     * Perform download for original quality images (no compression)
+     * Perform download for original quality images (no compression) using OkHttp
      */
     private suspend fun performDownloadOriginal(
         imageUrl: String,
@@ -310,7 +326,6 @@ object ImageCacheManager {
         context: Context
     ): Bitmap? =
         withContext(Dispatchers.IO) {
-            var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
 
             try {
@@ -319,27 +334,32 @@ object ImageCacheManager {
                     Timber.tag("ImageCacheManager").d("Download paused for $mid, skipping")
                     return@withContext null
                 }
-                val url = URL(imageUrl)
-                connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = CONNECTION_TIMEOUT
-                connection.readTimeout = READ_TIMEOUT
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("User-Agent", "TweetApp/1.0")
-                // Remove gzip compression request to avoid decompression issues
-                // connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
-                connection.setRequestProperty("Connection", "keep-alive")
-                connection.setRequestProperty("Cache-Control", "no-cache")
-                connection.setRequestProperty("Accept", "image/*,*/*;q=0.8")
-                connection.setAllowUserInteraction(false)
-                connection.setInstanceFollowRedirects(true)
+                
+                val request = Request.Builder()
+                    .url(imageUrl)
+                    .header("User-Agent", "TweetApp/1.0")
+                    .header("Accept", "image/*,*/*;q=0.8")
+                    .header("Cache-Control", "no-cache")
+                    .build()
 
-                // Add connection to pool
-                connectionPool[mid] = connection
+                val response = okHttpClient.newCall(request).execute()
 
-                inputStream = connection.inputStream
+                if (!response.isSuccessful) {
+                    Timber.tag("ImageCacheManager").d("Failed to download original image: HTTP ${response.code}")
+                    response.close()
+                    return@withContext null
+                }
+
+                inputStream = response.body?.byteStream()
+                if (inputStream == null) {
+                    Timber.tag("ImageCacheManager").d("Empty response body for URL: $imageUrl")
+                    response.close()
+                    return@withContext null
+                }
 
                 // Read the image data to check size
                 val imageData = inputStream.readBytes()
+                response.close()
                 
                 // Check if download was paused during reading
                 if (isDownloadPaused(mid)) {
@@ -375,8 +395,6 @@ object ImageCacheManager {
                 return@withContext null
             } finally {
                 inputStream?.close()
-                connection?.disconnect()
-                connectionPool.remove(mid)
             }
         }
 
@@ -901,7 +919,7 @@ object ImageCacheManager {
     }
 
     /**
-     * Progressive image loading - downloads and displays image in chunks
+     * Progressive image loading using OkHttp - downloads and displays image in chunks
      * This allows images to appear progressively like in web browsers
      */
     suspend fun loadImageProgressive(
@@ -910,21 +928,30 @@ object ImageCacheManager {
         mid: String,
         onProgress: (ByteArray) -> Unit
     ): Bitmap? = withContext(Dispatchers.IO) {
-        var connection: HttpURLConnection? = null
         var inputStream: InputStream? = null
         
         try {
-            val url = URL(imageUrl)
-            connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = CONNECTION_TIMEOUT
-            connection.readTimeout = READ_TIMEOUT
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("User-Agent", "TweetApp/1.0")
-            connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
-            connection.setRequestProperty("Connection", "keep-alive")
-            connection.setRequestProperty("Cache-Control", "no-cache")
+            val request = Request.Builder()
+                .url(imageUrl)
+                .header("User-Agent", "TweetApp/1.0")
+                .header("Accept-Encoding", "gzip, deflate")
+                .header("Cache-Control", "no-cache")
+                .build()
             
-            inputStream = connection.inputStream
+            val response = okHttpClient.newCall(request).execute()
+            
+            if (!response.isSuccessful) {
+                Timber.tag("ImageCacheManager").d("Progressive download failed: HTTP ${response.code}")
+                response.close()
+                return@withContext null
+            }
+            
+            inputStream = response.body?.byteStream()
+            if (inputStream == null) {
+                Timber.tag("ImageCacheManager").d("Empty response body for progressive download")
+                response.close()
+                return@withContext null
+            }
             val buffer = ByteArray(PROGRESSIVE_LOAD_CHUNK_SIZE)
             val outputStream = java.io.ByteArrayOutputStream()
             var totalBytesRead = 0
@@ -944,6 +971,8 @@ object ImageCacheManager {
                     Timber.tag("ImageCacheManager").d("Progressive download progress for $mid: ${totalBytesRead / 1024}KB")
                 }
             }
+            
+            response.close()
             
             val imageData = outputStream.toByteArray()
             Timber.tag("ImageCacheManager").d("Progressive download completed for $mid: ${imageData.size / 1024}KB")
@@ -977,9 +1006,8 @@ object ImageCacheManager {
         } finally {
             try {
                 inputStream?.close()
-                connection?.disconnect()
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error closing connection: $e")
+                Timber.tag("ImageCacheManager").e(e, "Error closing progressive download resources")
             }
         }
     }

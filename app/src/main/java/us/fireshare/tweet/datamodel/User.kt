@@ -8,6 +8,7 @@ import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.network.HproseClientPool
 
 @Parcelize
 @Serializable
@@ -157,9 +158,8 @@ data class User(
         }
     }
 
-    // Hprose service management
-    @IgnoredOnParcel
-    private var _hproseService: HproseService? = null
+    // Hprose service management using shared connection pool for distributed nodes
+    // Multiple users on the same node will share the same client instance
     @IgnoredOnParcel
     private var _lastBaseUrl: String? = null
     
@@ -167,34 +167,22 @@ data class User(
         get() {
             val baseUrl = baseUrl ?: return null
             
-            // Check if baseUrl has changed since last service creation
-            if (_hproseService != null && _lastBaseUrl == baseUrl) {
-                return _hproseService
-            } else {
-                // Clear old service if baseUrl changed
-                if (_lastBaseUrl != baseUrl) {
-                    _hproseService = null
-                    _lastBaseUrl = baseUrl
-                }
-                
-                try {
-                    // Use factory method to create client based on URL scheme
-                    val client = HproseClient.create("$baseUrl/webapi/")
-                    client.timeout = 300000
-                    _hproseService = client.useService(HproseService::class.java)
-                    return _hproseService
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to create Hprose client for baseUrl: $baseUrl")
-                    return null
-                }
-            }
+            // Use HproseClientPool for shared client management across users on same node
+            // This significantly reduces memory footprint and improves connection reuse
+            return HproseClientPool.getRegularClient(baseUrl)
         }
     
     /**
-     * Clear cached Hprose service to force recreation on next access
+     * Clear cached Hprose service from pool
+     * This will remove the client from the pool for this node
      */
     fun clearHproseService() {
-        _hproseService = null
+        val baseUrl = baseUrl ?: return
+        if (_lastBaseUrl != null && _lastBaseUrl != baseUrl) {
+            // Release old client if URL changed
+            HproseClientPool.releaseClient(_lastBaseUrl!!, isUploadClient = false)
+        }
+        HproseClientPool.clearClient(baseUrl)
         _lastBaseUrl = null
     }
     
@@ -207,8 +195,6 @@ data class User(
     }
 
     @IgnoredOnParcel
-    private var _uploadService: HproseService? = null
-    @IgnoredOnParcel
     private var _lastWritableUrl: String? = null
     
     val uploadService: HproseService?
@@ -217,34 +203,22 @@ data class User(
             // The calling code should call resolveWritableUrl() before accessing uploadService
             val currentWritableUrl = writableUrl ?: return null
             
-            // Check if writableUrl has changed since last service creation
-            if (_uploadService != null && _lastWritableUrl == currentWritableUrl) {
-                return _uploadService
-            } else {
-                // Clear old service if writableUrl changed
-                if (_lastWritableUrl != currentWritableUrl) {
-                    _uploadService = null
-                    _lastWritableUrl = currentWritableUrl
-                }
-                
-                try {
-                    // Use factory method to create client based on URL scheme
-                    val client = HproseClient.create("$currentWritableUrl/webapi/")
-                    client.timeout = 3000000   // upload takes longer
-                    _uploadService = client.useService(HproseService::class.java)
-                    return _uploadService
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to create Hprose upload client for writableUrl: $currentWritableUrl")
-                    return null
-                }
-            }
+            // Use HproseClientPool for shared upload client management
+            // Upload clients have extended timeouts for long-running operations
+            return HproseClientPool.getUploadClient(currentWritableUrl)
         }
     
     /**
-     * Clear cached upload service to force recreation on next access
+     * Clear cached upload service from pool
+     * This will remove the upload client from the pool for this node
      */
     fun clearUploadService() {
-        _uploadService = null
+        val currentWritableUrl = writableUrl ?: return
+        if (_lastWritableUrl != null && _lastWritableUrl != currentWritableUrl) {
+            // Release old client if URL changed
+            HproseClientPool.releaseClient(_lastWritableUrl!!, isUploadClient = true)
+        }
+        HproseClientPool.clearClient(currentWritableUrl)
         _lastWritableUrl = null
     }
 

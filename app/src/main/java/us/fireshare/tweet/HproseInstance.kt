@@ -2133,9 +2133,20 @@ object HproseInstance {
         }
 
 
+    /**
+     * Ktor HTTP client with optimized connection pooling for distributed nodes
+     * - Supports high concurrency for multiple node connections
+     * - Reuses connections efficiently across requests to same nodes
+     * - Proper timeout configuration for upload/download operations
+     */
     val httpClient = HttpClient(CIO) {
+        engine {
+            maxConnectionsCount = 1000 // Total connections across all nodes
+            // CIO engine handles connection pooling automatically
+            // Connections are reused efficiently per host
+        }
         install(HttpTimeout) {
-            requestTimeoutMillis = 3_000_000 // Total request timeout (5 minutes)
+            requestTimeoutMillis = 3_000_000 // Total request timeout (50 minutes for large uploads)
             connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
             socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
         }

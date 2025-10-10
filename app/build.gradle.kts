@@ -81,6 +81,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    
+    // Configure Java toolchain to use Java 17
+    kotlin {
+        jvmToolchain(17)
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -118,6 +123,7 @@ dependencies {
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+    implementation(libs.okhttp)
     implementation(libs.accompanist.systemuicontroller)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
