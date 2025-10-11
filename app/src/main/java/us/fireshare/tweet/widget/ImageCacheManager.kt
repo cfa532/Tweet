@@ -120,6 +120,26 @@ object ImageCacheManager {
     }
 
     /**
+     * Remove bitmap from memory cache with proper memory tracking
+     */
+    private fun removeFromMemoryCache(mid: String): Bitmap? {
+        val bitmap = memoryCache.remove(mid)
+        if (bitmap != null) {
+            // Update memory usage counter
+            val bitmapSize = try {
+                bitmap.byteCount
+            } catch (e: Exception) {
+                // If bitmap is already recycled, we can't get the size
+                // This is fine, just log it for debugging
+                Timber.tag("ImageCacheManager").d("Could not get byteCount for removed bitmap: $mid")
+                0
+            }
+            currentMemoryUsage.addAndGet(-bitmapSize)
+        }
+        return bitmap
+    }
+
+    /**
      * Get cached image file by mid, or null if not cached
      */
     suspend fun getCachedImageFile(context: Context, mid: String): File? =
@@ -144,8 +164,8 @@ object ImageCacheManager {
                     if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                         return@withContext bitmap
                     } else {
-                        // Remove invalid bitmap from cache
-                        memoryCache.remove(mid)
+                        // Remove invalid bitmap from cache with proper memory tracking
+                        removeFromMemoryCache(mid)
                         if (bitmap.isRecycled) {
                             Timber.tag("ImageCacheManager").w("Found recycled bitmap in cache for: $mid")
                         }
@@ -1011,8 +1031,8 @@ object ImageCacheManager {
      */
     suspend fun clearCachedImage(context: Context, mid: String) = withContext(Dispatchers.IO) {
         try {
-            // Remove from memory cache
-            memoryCache.remove(mid)
+            // Remove from memory cache with proper memory tracking
+            removeFromMemoryCache(mid)
 
             // Remove from disk cache
             val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
