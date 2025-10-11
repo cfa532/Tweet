@@ -238,4 +238,18 @@
     <string name="theme_system">System Default</string>
     <string name="theme_light">Light Mode</string>
     <string name="theme_dark">Dark Mode</string>
+    
+    <!-- HproseInstance Error Messages -->
+    <string name="error_unknown">Unknown error</string>
+    <string name="error_network">Network error</string>
+    <string name="error_send_outgoing_message">Failed to send outgoing message</string>
+    <string name="error_unknown_occurred">Unknown error occurred</string>
+    <string name="error_upload_unknown">Unknown upload error</string>
+    <string name="error_tweet_deletion_unknown">Unknown tweet deletion error</string>
+    <string name="error_video_processing_timeout">Video processing timeout after %d minutes</string>
+    <string name="error_job_id_not_found">Job ID not found: %s</string>
+    <string name="error_status_check_failed">Status check failed with status: %s</string>
+    <string name="error_no_cid_in_response">No CID in completion response</string>
+    <string name="error_video_conversion_failed">Video conversion failed</string>
+    <string name="error_poll_status_failures" formatted="false">Failed to poll status after %d consecutive failures: %s</string>
 </resources>

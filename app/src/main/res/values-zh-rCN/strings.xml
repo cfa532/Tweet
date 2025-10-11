@@ -239,4 +239,18 @@
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">浅色模式</string>
     <string name="theme_dark">深色模式</string>
+    
+    <!-- HproseInstance Error Messages -->
+    <string name="error_unknown">未知错误</string>
+    <string name="error_network">网络错误</string>
+    <string name="error_send_outgoing_message">发送消息失败</string>
+    <string name="error_unknown_occurred">发生未知错误</string>
+    <string name="error_upload_unknown">未知上传错误</string>
+    <string name="error_tweet_deletion_unknown">未知推文删除错误</string>
+    <string name="error_video_processing_timeout">视频处理超时（%d分钟后）</string>
+    <string name="error_job_id_not_found">未找到任务ID：%s</string>
+    <string name="error_status_check_failed">状态检查失败，状态：%s</string>
+    <string name="error_no_cid_in_response">完成响应中没有CID</string>
+    <string name="error_video_conversion_failed">视频转换失败</string>
+    <string name="error_poll_status_failures" formatted="false">连续%d次状态轮询失败：%s</string>
 </resources>

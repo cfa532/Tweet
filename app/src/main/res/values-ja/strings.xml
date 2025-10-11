@@ -149,4 +149,19 @@
     
     <!-- Clipboard/Share -->
     <string name="shared_text">共有テキスト</string>
+    
+    <!-- HproseInstance Error Messages -->
+    <string name="error_unknown">不明なエラー</string>
+    <string name="error_network">ネットワークエラー</string>
+    <string name="error_send_outgoing_message">メッセージの送信に失敗しました</string>
+    <string name="error_unknown_occurred">不明なエラーが発生しました</string>
+    <string name="error_upload_unknown">不明なアップロードエラー</string>
+    <string name="error_tweet_deletion_unknown">不明なツイート削除エラー</string>
+    <string name="error_video_processing_timeout">ビデオ処理がタイムアウトしました（%d分後）</string>
+    <string name="error_job_id_not_found">ジョブIDが見つかりません：%s</string>
+    <string name="error_status_check_failed">ステータスチェックが失敗しました：%s</string>
+    <string name="error_no_cid_in_response">完了応答にCIDがありません</string>
+    <string name="error_video_conversion_failed">ビデオ変換に失敗しました</string>
+    <string name="error_poll_status_failures" formatted="false">%d回連続でステータスポーリングに失敗しました：%s</string>
 </resources>
+
