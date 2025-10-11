@@ -510,9 +510,9 @@ fun TweetListView(
                         }
                     }
                 } finally {
-                    // Ensure spinner shows for at least 1 second
+                    // Ensure spinner shows for at least 0.5 seconds for smoother scrolling experience
                     val elapsedTime = System.currentTimeMillis() - spinnerStartTime
-                    val minDisplayTime = 1000L // 1 second minimum
+                    val minDisplayTime = 500L // 0.5 second minimum for smoother feel
 
                     if (elapsedTime < minDisplayTime) {
                         val remainingTime = minDisplayTime - elapsedTime
