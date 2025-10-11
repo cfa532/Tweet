@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -553,10 +554,11 @@ fun TweetListView(
                 }
             }
 
-            items(
+            itemsIndexed(
                 items = tweets,
-                key = { it.mid }
-            ) { tweet ->
+                key = { _, tweet -> tweet.mid },
+                contentType = { _, _ -> "tweet" }  // Help Compose reuse compositions efficiently
+            ) { index, tweet ->
                 if (showPrivateTweets || !tweet.isPrivate) {
                     parentEntry?.let {
                         TweetItem(
@@ -568,7 +570,8 @@ fun TweetListView(
                     }
 
                     // Add divider after each tweet item (except the last one)
-                    if (tweets.indexOf(tweet) < tweets.size - 1) {
+                    // Use index instead of indexOf for O(1) performance
+                    if (index < tweets.size - 1) {
                         HorizontalDivider(
                             modifier = Modifier
                                 .padding(bottom = 8.dp)
@@ -581,16 +584,20 @@ fun TweetListView(
             }
 
             // Loading spinner at bottom - use key to make it stable
+            // Use fixed-height container to prevent layout shifts
             if (isRefreshingAtBottom) {
                 item(key = "loading_spinner") {
-                    CircularProgressIndicator(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 40.dp, bottom = 16.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp
-                    )
+                            .padding(top = 40.dp, bottom = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
                 }
             }
         }

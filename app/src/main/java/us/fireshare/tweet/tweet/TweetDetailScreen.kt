@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
@@ -322,24 +323,29 @@ fun TweetDetailScreen(
                 }
 
                 // Show initial loading spinner for comments
+                // Use fixed-height container to prevent layout shifts
                 if (isInitialLoading) {
                     item {
-                        CircularProgressIndicator(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(48.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp
-                        )
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                        }
                     }
                 } else {
                     // Show comments when loading is complete
-                    items(
+                    itemsIndexed(
                         items = comments,
-                        key = { it.mid }
-                    ) { comment ->
+                        key = { _, comment -> comment.mid },
+                        contentType = { _, _ -> "comment" }  // Help Compose reuse compositions efficiently
+                    ) { index, comment ->
                         CommentItem(
                             comment = comment,
                             parentTweetViewModel = viewModel,
@@ -347,7 +353,8 @@ fun TweetDetailScreen(
                         )
 
                         // Add divider after each comment (except the last one)
-                        if (comments.indexOf(comment) < comments.size - 1) {
+                        // Use index instead of indexOf for O(1) performance
+                        if (index < comments.size - 1) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 1.dp),
                                 thickness = 1.dp,
@@ -357,31 +364,39 @@ fun TweetDetailScreen(
                     }
 
                     // Show top refresh spinner
+                    // Use fixed-height container to prevent layout shifts
                     if (isRefreshingAtTop) {
                         item {
-                            CircularProgressIndicator(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 60.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
-                                    .size(48.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
+                                    .padding(top = 60.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                            }
                         }
                     }
 
                     // Show bottom pagination spinner
+                    // Use fixed-height container to prevent layout shifts
                     if (isRefreshingAtBottom) {
                         item {
-                            CircularProgressIndicator(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                            }
                         }
                     }
                 }

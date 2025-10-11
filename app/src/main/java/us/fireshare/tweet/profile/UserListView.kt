@@ -260,22 +260,27 @@ fun UserListView(
         ) {
             items(
                 items = displayedUserIds,
-                key = { userId -> "${userId}_${displayedUserIds.indexOf(userId)}" }
+                key = { userId -> userId },  // userId is already unique - no need for indexOf
+                contentType = { "user" }  // Help Compose reuse compositions efficiently
             ) { userId ->
                 userItem(userId)
             }
             
             // Show loading indicator if there are more user IDs to load
+            // Use fixed-height container to prevent layout shifts
             if (isRefreshingAtBottom || (!serverDepleted && displayedUserCount < allUserIds.size)) {
                 item {
-                    CircularProgressIndicator(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp
-                    )
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
                 }
             }
         }

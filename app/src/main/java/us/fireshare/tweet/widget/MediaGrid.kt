@@ -75,36 +75,31 @@ fun MediaGrid(
 
     val gridState = rememberLazyGridState()
 
-    // Helper: get aspect ratio for an item, using Compose state for images
-    @OptIn(UnstableApi::class)
-    @Composable
+    // Optimize: Pre-compute aspect ratios once instead of on every recomposition
+    // This function is NOT @Composable to avoid unnecessary recomposition checks
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
-        if (itemType == MediaType.Video || itemType == MediaType.HLS_VIDEO) {
-            // For videos, try to get aspect ratio from stored value first
-            val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }
-            if (storedAspectRatio != null) {
-                return storedAspectRatio
+        return when (itemType) {
+            MediaType.Video, MediaType.HLS_VIDEO -> {
+                // For videos, try to get aspect ratio from stored value first
+                item.aspectRatio?.takeIf { it > 0 } ?: (4f / 3f) // Default to 4:3 to prevent shaking
             }
-            
-            // If stored aspect ratio is not available, use a stable default
-            // The actual aspect ratio will be calculated when the video is loaded
-            return 4f / 3f // Default to 4:3 to prevent shaking
-        }
-        if (itemType == MediaType.Image) {
-            // Use a stable approach that doesn't cause recomposition issues
-            // First try to use the stored aspect ratio, then fallback to default
-            val storedAspectRatio = item.aspectRatio?.takeIf { it > 0 }
-            if (storedAspectRatio != null) {
-                return storedAspectRatio
+            MediaType.Image -> {
+                // For images, use stored aspect ratio or default golden ratio
+                item.aspectRatio?.takeIf { it > 0 } ?: 1.618f
             }
-            
-            // If no stored aspect ratio, use a default square ratio to prevent shaking
-            // The actual aspect ratio will be calculated when the image is loaded
-            return 1.618f
+            else -> {
+                // For other types, use golden ratio
+                1.618f
+            }
         }
-        // For other types, use square aspect ratio
-        return 1.618f
+    }
+    
+    // Optimize: Cache aspect ratios to avoid recalculation during recomposition
+    val cachedAspectRatios by remember(limitedMediaList) {
+        derivedStateOf {
+            limitedMediaList.map { item -> aspectRatioOf(item) }
+        }
     }
 
     val context = LocalContext.current
@@ -254,8 +249,9 @@ fun MediaGrid(
     ) {
         when (limitedMediaList.size) {
             1 -> {
-                val aspectRatio = if (aspectRatioOf(limitedMediaList[0]) > 0.8f) {
-                    aspectRatioOf(limitedMediaList[0])
+                // Use cached aspect ratio for better performance
+                val aspectRatio = if (cachedAspectRatios[0] > 0.8f) {
+                    cachedAspectRatios[0]
                 } else {
                     0.8f
                 }
@@ -286,8 +282,9 @@ fun MediaGrid(
                 )
             }
             2 -> {
-                val ar0 = aspectRatioOf(limitedMediaList[0])
-                val ar1 = aspectRatioOf(limitedMediaList[1])
+                // Use cached aspect ratios for better performance
+                val ar0 = cachedAspectRatios[0]
+                val ar1 = cachedAspectRatios[1]
                 val isPortrait0 = ar0 < 1f
                 val isPortrait1 = ar1 < 1f
                 val isLandscape0 = ar0 > 1f
@@ -434,9 +431,10 @@ fun MediaGrid(
                 }
             }
             3 -> {
-                val ar0 = aspectRatioOf(limitedMediaList[0])
-                val ar1 = aspectRatioOf(limitedMediaList[1])
-                val ar2 = aspectRatioOf(limitedMediaList[2])
+                // Use cached aspect ratios for better performance
+                val ar0 = cachedAspectRatios[0]
+                val ar1 = cachedAspectRatios[1]
+                val ar2 = cachedAspectRatios[2]
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
                 val isPortrait0 = ar0 < 1f
