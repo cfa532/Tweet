@@ -88,6 +88,7 @@ class UserViewModel @AssistedInject constructor(
     var name = mutableStateOf(appUser.name)
     var profile = mutableStateOf(appUser.profile)
     var hostId = mutableStateOf("")
+    var cloudDrivePort = mutableStateOf(appUser.cloudDrivePort.toString())
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
@@ -966,7 +967,8 @@ class UserViewModel @AssistedInject constructor(
             baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim()
+            profile = profile.value?.trim(),
+            cloudDrivePort = cloudDrivePort.value.toIntOrNull() ?: TW_CONST.CLOUD_PORT
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
@@ -1201,6 +1203,15 @@ class UserViewModel @AssistedInject constructor(
         hostId.value = value
         isLoading.value = false
         loginError.value = ""
+    }
+    
+    fun onCloudDrivePortChange(value: String) {
+        // Only allow digits and limit to 5 digits
+        if (value.isEmpty() || (value.all { it.isDigit() } && value.length <= 5)) {
+            cloudDrivePort.value = value
+            isLoading.value = false
+            loginError.value = ""
+        }
     }
 
     fun onPasswordChange(pwd: String) {

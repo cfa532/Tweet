@@ -82,6 +82,7 @@ fun EditProfileScreen(
     val name by viewModel.name
     val profile by viewModel.profile
     val hostId by viewModel.hostId
+    val cloudDrivePort by viewModel.cloudDrivePort
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
@@ -93,7 +94,8 @@ fun EditProfileScreen(
         derivedStateOf {
             name != appUser.name || 
             profile != appUser.profile || 
-            password.isNotEmpty()
+            password.isNotEmpty() ||
+            cloudDrivePort != appUser.cloudDrivePort.toString()
         }
     }
     
@@ -150,7 +152,7 @@ fun EditProfileScreen(
                 .imePadding()
                 .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             IconButton(
                 onClick = { 
                     if (hasUnsavedChanges.value) {
@@ -255,6 +257,16 @@ fun EditProfileScreen(
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     singleLine = false
+                )
+                OutlinedTextField(
+                    value = cloudDrivePort,
+                    onValueChange = { viewModel.onCloudDrivePortChange(it) },
+                    label = { Text(stringResource(R.string.cloud_port)) },
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true
                 )
             }
             Button(
