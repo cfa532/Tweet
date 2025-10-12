@@ -1728,19 +1728,27 @@ object HproseInstance {
             mimeType?.startsWith("video/") == true -> us.fireshare.tweet.datamodel.MediaType.Video
             mimeType?.startsWith("audio/") == true -> us.fireshare.tweet.datamodel.MediaType.Audio
             mimeType == "application/pdf" -> us.fireshare.tweet.datamodel.MediaType.PDF
-            mimeType == "application/zip" || mimeType == "application/x-zip-compressed" -> us.fireshare.tweet.datamodel.MediaType.Zip
+            mimeType == "application/zip" || mimeType == "application/x-zip-compressed" || 
+            mimeType == "application/x-rar-compressed" || mimeType == "application/x-7z-compressed" -> us.fireshare.tweet.datamodel.MediaType.Zip
             mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> us.fireshare.tweet.datamodel.MediaType.Word
-            // ... add more mappings for other MediaType values ...
+            mimeType == "application/vnd.ms-excel" || mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> us.fireshare.tweet.datamodel.MediaType.Excel
+            mimeType == "application/vnd.ms-powerpoint" || mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> us.fireshare.tweet.datamodel.MediaType.PPT
+            mimeType?.startsWith("text/plain") == true -> us.fireshare.tweet.datamodel.MediaType.Txt
+            mimeType?.startsWith("text/html") == true -> us.fireshare.tweet.datamodel.MediaType.Html
             else -> {
                 // Fallback: try to determine type from file extension
                 val extension = fileName?.substringAfterLast('.', "")?.lowercase()
                 val extensionType = when (extension) {
-                    "jpg", "jpeg", "png", "gif", "webp" -> us.fireshare.tweet.datamodel.MediaType.Image
-                    "mp4", "avi", "mov", "mkv" -> us.fireshare.tweet.datamodel.MediaType.Video
-                    "mp3", "wav", "aac" -> us.fireshare.tweet.datamodel.MediaType.Audio
+                    "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif" -> us.fireshare.tweet.datamodel.MediaType.Image
+                    "mp4", "avi", "mov", "mkv", "webm", "m4v", "3gp" -> us.fireshare.tweet.datamodel.MediaType.Video
+                    "mp3", "wav", "aac", "ogg", "flac", "m4a" -> us.fireshare.tweet.datamodel.MediaType.Audio
                     "pdf" -> us.fireshare.tweet.datamodel.MediaType.PDF
-                    "zip" -> us.fireshare.tweet.datamodel.MediaType.Zip
+                    "zip", "rar", "7z" -> us.fireshare.tweet.datamodel.MediaType.Zip
                     "doc", "docx" -> us.fireshare.tweet.datamodel.MediaType.Word
+                    "xls", "xlsx" -> us.fireshare.tweet.datamodel.MediaType.Excel
+                    "ppt", "pptx" -> us.fireshare.tweet.datamodel.MediaType.PPT
+                    "txt", "rtf", "csv" -> us.fireshare.tweet.datamodel.MediaType.Txt
+                    "html", "htm" -> us.fireshare.tweet.datamodel.MediaType.Html
                     else -> us.fireshare.tweet.datamodel.MediaType.Unknown
                 }
                 
