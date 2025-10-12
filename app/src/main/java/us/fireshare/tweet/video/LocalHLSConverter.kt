@@ -281,6 +281,10 @@ class LocalHLSConverter(private val context: Context) {
         audioBitrate: String,
         useCopyPreset: Boolean = false
     ): String {
+        // Extract directory from outputPath to create absolute path for segments
+        val outputDir = File(outputPath).parent ?: ""
+        val segmentPath = "$outputDir/segment%03d.ts"
+        
         return if (useCopyPreset) {
             // Use COPY codec - no re-encoding, just copy streams with improved formatting
             """
@@ -293,7 +297,7 @@ class LocalHLSConverter(private val context: Context) {
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
                 -hls_flags delete_segments+independent_segments+split_by_time
                 -hls_segment_type mpegts
-                -hls_segment_filename "segment%03d.ts"
+                -hls_segment_filename "$segmentPath"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
@@ -318,7 +322,7 @@ class LocalHLSConverter(private val context: Context) {
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
                 -hls_flags delete_segments+independent_segments+split_by_time
                 -hls_segment_type mpegts
-                -hls_segment_filename "segment%03d.ts"
+                -hls_segment_filename "$segmentPath"
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         }
