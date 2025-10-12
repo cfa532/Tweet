@@ -1,5 +1,5 @@
 # Tweet App Documentation Index
-**Last Updated:** October 10, 2025
+**Last Updated:** October 12, 2025
 
 ---
 
@@ -7,8 +7,8 @@
 
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
-**Total Documents:** 27 markdown files  
-**Last Updated:** October 10, 2025
+**Total Documents:** 30 markdown files  
+**Last Updated:** October 12, 2025
 
 ---
 
@@ -107,6 +107,20 @@ This folder contains all technical documentation for the Tweet distributed socia
 ### 🎥 Video & Media Handling
 
 #### **Video Player & Playback**
+- **[VIDEO_LOADING_ALGORITHM.md](VIDEO_LOADING_ALGORITHM.md)** 🆕
+  - Unified video loading and caching strategy
+  - Type-based playback strategy (HLS vs Progressive)
+  - ExoPlayer integration and caching
+  - Aspect ratio handling
+  - Error handling and graceful degradation
+
+- **[FULLSCREEN_VIDEO_PLAYER.md](FULLSCREEN_VIDEO_PLAYER.md)** 🆕
+  - Full-screen video viewing experience
+  - Auto-replay functionality
+  - Independent mute state management
+  - Efficient player reuse
+  - Gesture controls and user interaction
+
 - **[VIDEO_PLAYER_REFACTORING.md](VIDEO_PLAYER_REFACTORING.md)**
   - ExoPlayer architecture
   - Video player lifecycle management
@@ -184,6 +198,14 @@ This folder contains all technical documentation for the Tweet distributed socia
 ---
 
 ### 🎨 UI Features & Components
+
+- **[TWEET_LIST_VIEW.md](TWEET_LIST_VIEW.md)** 🆕
+  - Self-contained tweet list component
+  - iOS-like infinite scroll
+  - Pull-to-refresh functionality
+  - Advanced gesture detection
+  - Smart debouncing and pagination
+  - Profile screen integration
 
 - **[BADGE_IMPLEMENTATION_SUMMARY.md](BADGE_IMPLEMENTATION_SUMMARY.md)**
   - Launcher badge implementation
@@ -321,7 +343,7 @@ The Tweet app is a distributed social media application that connects to multipl
 
 ---
 
-**Total Documents:** 29 files (22 original + 7 new)  
-**Last Review:** October 10, 2025  
+**Total Documents:** 30 markdown files  
+**Last Review:** October 12, 2025  
 **Maintainer:** Development Team
 
