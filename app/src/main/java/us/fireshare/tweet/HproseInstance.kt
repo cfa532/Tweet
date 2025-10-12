@@ -180,17 +180,16 @@ object HproseInstance {
                         /**
                          * The code above makes a call to base URL of the app, get a html page
                          * and tries to extract appId and host IP addresses from source code.
-                         * */
-                        Timber.tag("initAppEntry").d("$paramMap")
-                        val bestIp = filterIpAddresses(paramMap["addrs"] as List<String>)
-
-                        /**
+                         *
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
                          * Each pair is an ArrayList of two elements. The first is the IP address,
                          * and the second is the time spent to get response from the IP.
                          *
                          * bestIp is the IP with the smallest response time from valid public IPs.
-                         */
+                         * */
+                        Timber.tag("initAppEntry").d("$paramMap")
+                        val bestIp = filterIpAddresses(paramMap["addrs"] as List<String>)
+
                         appUser = appUser.copy(baseUrl = "http://$bestIp")
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
