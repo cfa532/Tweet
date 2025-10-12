@@ -872,6 +872,7 @@ class UserViewModel @AssistedInject constructor(
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
+                cloudDrivePort.value = appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
                 
                 // Reset and refresh tweet feed after successful login
@@ -1028,6 +1029,12 @@ class UserViewModel @AssistedInject constructor(
                                 _followingsCount.value = appUser.followingCount
                                 _tweetCount.value = appUser.tweetCount
                                 
+                                // Update profile state variables to match saved values
+                                name.value = appUser.name
+                                profile.value = appUser.profile
+                                hostId.value = appUser.hostIds?.firstOrNull() ?: ""
+                                cloudDrivePort.value = appUser.cloudDrivePort.toString()
+                                
                                 // Also update the user state to reflect the new profile data
                                 _user.value = appUser
                                 
@@ -1051,6 +1058,8 @@ class UserViewModel @AssistedInject constructor(
                                     context.getString(R.string.profile_update_ok),
                                     Toast.LENGTH_SHORT
                                 ).show()
+                                // Auto exit after successful save
+                                popBack()
                             }
                         }
                     } else {
@@ -1085,6 +1094,7 @@ class UserViewModel @AssistedInject constructor(
                                 appUser = appUser.copy(
                                     name = updatedUser.name, profile = updatedUser.profile,
                                     username = updatedUser.username, hostIds = updatedUser.hostIds,
+                                    cloudDrivePort = updatedUser.cloudDrivePort
                                 )
                                 _user.value = appUser
                                 
@@ -1096,6 +1106,12 @@ class UserViewModel @AssistedInject constructor(
                                     _followersCount.value = appUser.followersCount
                                     _followingsCount.value = appUser.followingCount
                                     _tweetCount.value = appUser.tweetCount
+                                    
+                                    // Update profile state variables to match saved values
+                                    name.value = appUser.name
+                                    profile.value = appUser.profile
+                                    hostId.value = appUser.hostIds?.firstOrNull() ?: ""
+                                    cloudDrivePort.value = appUser.cloudDrivePort.toString()
                                     
                                     // Also update the user state to reflect the new profile data
                                     _user.value = appUser
@@ -1120,6 +1136,8 @@ class UserViewModel @AssistedInject constructor(
                                         context.getString(R.string.profile_update_ok),
                                         Toast.LENGTH_SHORT
                                     ).show()
+                                    // Auto exit after successful save
+                                    popBack()
                                 }
                             }
                         } catch (e: Exception) {
