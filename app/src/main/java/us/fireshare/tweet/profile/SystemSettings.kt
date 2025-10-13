@@ -444,13 +444,10 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                             if (!appUser.isGuest()) {
                                 try {
-                                    appUser.cloudDrivePort = cloudPort?.toInt() ?: 8010
+                                    appUser.cloudDrivePort = cloudPort?.toIntOrNull()
                                     applicationScope.launch(Dispatchers.IO) {
                                         HproseInstance.setUserData(appUser)
                                     }
-                                } catch (e: NumberFormatException) {
-                                    Timber.tag("SystemSettings")
-                                        .e("Invalid cloudPort value: $cloudPort - ${e.message}")
                                 } catch (e: Exception) {
                                     Timber.tag("SystemSettings")
                                         .e("An unexpected error occurred: $e")

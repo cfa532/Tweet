@@ -23,7 +23,7 @@ data class User(
     @Expose var profile: String? = null,
     @Expose var timestamp: Long = System.currentTimeMillis(),
     @Expose var lastLogin: Long? = System.currentTimeMillis(),
-    @Expose var cloudDrivePort: Int = TW_CONST.CLOUD_PORT,
+    @Expose var cloudDrivePort: Int? = null,
 
     @Expose var tweetCount: Int = 0,
     @Expose var followingCount: Int = 0,
@@ -445,7 +445,8 @@ data class User(
                     host
                 }
                 
-                "$scheme://$hostPart:${TW_CONST.CLOUD_PORT}$path$query$fragment"
+                val port = cloudDrivePort ?: TW_CONST.CLOUD_PORT
+                "$scheme://$hostPart:$port$path$query$fragment"
             } catch (e: Exception) {
                 Timber.w(e, "Failed to parse baseUrl for cloud port replacement: $baseUrl")
                 baseUrl

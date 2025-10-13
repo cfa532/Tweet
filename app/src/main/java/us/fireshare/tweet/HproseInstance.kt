@@ -49,8 +49,10 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.video.LocalVideoProcessingService
+import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
+import java.io.File
 import java.util.UUID
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
@@ -1798,7 +1800,50 @@ object HproseInstance {
     }
 
     /**
-     * Process video locally using FFmpeg Kit: convert to HLS, compress, and upload to /process-zip
+     * Check if conversion server is available at netDiskUrl
+     */
+    private suspend fun isConversionServerAvailable(): Boolean {
+        return try {
+            // First check if cloudDrivePort is valid
+            if (appUser.cloudDrivePort == null) {
+                Timber.tag("isConversionServerAvailable").d("cloudDrivePort is not set")
+                return false
+            }
+            
+            val netDiskUrl = appUser.netDiskUrl
+            if (netDiskUrl.isNullOrEmpty()) {
+                Timber.tag("isConversionServerAvailable").d("netDiskUrl is not available")
+                return false
+            }
+            
+            // Try to ping the /process-zip endpoint
+            val healthCheckUrl = "$netDiskUrl/process-zip/health"
+            Timber.tag("isConversionServerAvailable").d("Checking server availability at: $healthCheckUrl")
+            
+            val response = withContext(Dispatchers.IO) {
+                try {
+                    httpClient.get(healthCheckUrl)
+                } catch (e: Exception) {
+                    Timber.tag("isConversionServerAvailable").w("Health check request failed: ${e.message}")
+                    return@withContext null
+                }
+            }
+            
+            val isAvailable = response?.status == HttpStatusCode.OK
+            Timber.tag("isConversionServerAvailable").d("Server available: $isAvailable")
+            isAvailable
+        } catch (e: Exception) {
+            Timber.tag("isConversionServerAvailable").w("Error checking conversion server: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Process video locally using FFmpeg Kit
+     * Strategy:
+     * 1. Check if cloudDrivePort is valid and conversion server is available
+     * 2. If available: convert to HLS, compress, and upload to /process-zip
+     * 3. If not available: normalize to mp4 (resample to 720p if > 720p) and upload to IPFS
      */
     private suspend fun processVideoLocally(
         context: Context,
@@ -1810,22 +1855,81 @@ object HproseInstance {
         return try {
             Timber.tag("processVideoLocally").d("Starting local video processing for: $fileName")
             
-            val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
-            val result = localProcessingService.processVideo(
-                uri = uri,
-                fileName = fileName ?: "video",
-                fileTimestamp = fileTimestamp,
-                referenceId = referenceId
-            )
+            // Check if conversion server is available
+            val serverAvailable = isConversionServerAvailable()
+            Timber.tag("processVideoLocally").d("Conversion server available: $serverAvailable")
             
-            when (result) {
-                is LocalVideoProcessingService.VideoProcessingResult.Success -> {
-                    Timber.tag("processVideoLocally").d("Local processing successful: ${result.mimeiFile.mid}")
-                    result.mimeiFile
+            if (serverAvailable) {
+                // Use HLS conversion and upload to process-zip endpoint
+                Timber.tag("processVideoLocally").d("Using HLS conversion with process-zip endpoint")
+                val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
+                val result = localProcessingService.processVideo(
+                    uri = uri,
+                    fileName = fileName ?: "video",
+                    fileTimestamp = fileTimestamp,
+                    referenceId = referenceId
+                )
+                
+                when (result) {
+                    is LocalVideoProcessingService.VideoProcessingResult.Success -> {
+                        Timber.tag("processVideoLocally").d("Local processing successful: ${result.mimeiFile.mid}")
+                        result.mimeiFile
+                    }
+                    is LocalVideoProcessingService.VideoProcessingResult.Error -> {
+                        Timber.tag("processVideoLocally").e("Local processing failed: ${result.message}")
+                        null
+                    }
                 }
-                is LocalVideoProcessingService.VideoProcessingResult.Error -> {
-                    Timber.tag("processVideoLocally").e("Local processing failed: ${result.message}")
-                    null
+            } else {
+                // Normalize to mp4 and upload via IPFS
+                Timber.tag("processVideoLocally").d("Conversion server not available, normalizing to mp4 and uploading via IPFS")
+                
+                // Check if video resolution is > 720p
+                val videoResolution = VideoManager.getVideoResolution(context, uri)
+                val needsResampling = if (videoResolution != null) {
+                    val (width, height) = videoResolution
+                    width > 1280 || height > 720
+                } else {
+                    false
+                }
+                
+                Timber.tag("processVideoLocally").d("Video resolution: $videoResolution, needs resampling: $needsResampling")
+                
+                // Normalize video to mp4
+                val normalizer = us.fireshare.tweet.video.VideoNormalizer(context)
+                val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
+                
+                try {
+                    val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
+                    
+                    when (normalizationResult) {
+                        is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Success -> {
+                            Timber.tag("processVideoLocally").d("Video normalization successful")
+                            
+                            // Upload normalized video via IPFS
+                            val normalizedUri = android.net.Uri.fromFile(normalizedFile)
+                            val result = uploadToIPFSOriginal(
+                                context,
+                                normalizedUri,
+                                fileName,
+                                fileTimestamp,
+                                referenceId,
+                                us.fireshare.tweet.datamodel.MediaType.Video
+                            )
+                            
+                            Timber.tag("processVideoLocally").d("IPFS upload result: ${result?.mid}")
+                            result
+                        }
+                        is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Error -> {
+                            Timber.tag("processVideoLocally").e("Video normalization failed: ${normalizationResult.message}")
+                            null
+                        }
+                    }
+                } finally {
+                    // Clean up normalized file
+                    if (normalizedFile.exists()) {
+                        normalizedFile.delete()
+                    }
                 }
             }
         } catch (e: Exception) {

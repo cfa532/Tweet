@@ -88,7 +88,7 @@ class UserViewModel @AssistedInject constructor(
     var name = mutableStateOf(appUser.name)
     var profile = mutableStateOf(appUser.profile)
     var hostId = mutableStateOf("")
-    var cloudDrivePort = mutableStateOf(appUser.cloudDrivePort.toString())
+    var cloudDrivePort = mutableStateOf(appUser.cloudDrivePort?.toString() ?: "")
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
@@ -872,7 +872,7 @@ class UserViewModel @AssistedInject constructor(
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                cloudDrivePort.value = appUser.cloudDrivePort.toString()
+                cloudDrivePort.value = appUser.cloudDrivePort?.toString() ?: ""
                 refreshFollowingsAndFans()
                 
                 // Reset and refresh tweet feed after successful login
@@ -969,7 +969,7 @@ class UserViewModel @AssistedInject constructor(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value?.trim(),
-            cloudDrivePort = cloudDrivePort.value.toIntOrNull() ?: TW_CONST.CLOUD_PORT
+            cloudDrivePort = cloudDrivePort.value.toIntOrNull()
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
@@ -1033,7 +1033,7 @@ class UserViewModel @AssistedInject constructor(
                                 name.value = appUser.name
                                 profile.value = appUser.profile
                                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                cloudDrivePort.value = appUser.cloudDrivePort.toString()
+                                cloudDrivePort.value = appUser.cloudDrivePort?.toString() ?: ""
                                 
                                 // Also update the user state to reflect the new profile data
                                 _user.value = appUser
@@ -1111,7 +1111,7 @@ class UserViewModel @AssistedInject constructor(
                                     name.value = appUser.name
                                     profile.value = appUser.profile
                                     hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                    cloudDrivePort.value = appUser.cloudDrivePort.toString()
+                                    cloudDrivePort.value = appUser.cloudDrivePort?.toString() ?: ""
                                     
                                     // Also update the user state to reflect the new profile data
                                     _user.value = appUser

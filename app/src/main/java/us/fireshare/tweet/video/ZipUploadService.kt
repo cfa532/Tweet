@@ -47,7 +47,7 @@ class ZipUploadService(
             Timber.tag(TAG).d("Starting zip upload for: $fileName")
 
             // Get the user's cloudDrivePort with fallback to default
-            val cloudDrivePort = appUser.cloudDrivePort.takeIf { it > 0 } ?: 8010
+            val cloudDrivePort = appUser.cloudDrivePort ?: 8010
 
             // Ensure writableUrl is available
             var writableUrl = appUser.writableUrl
