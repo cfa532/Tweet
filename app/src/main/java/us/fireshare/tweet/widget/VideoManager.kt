@@ -158,7 +158,6 @@ object VideoManager {
     fun markVideoVisible(videoMid: MimeiId) {
         visibleVideos.add(videoMid)
         markVideoActive(videoMid)
-        Timber.d("VideoManager - Video marked visible: $videoMid")
     }
 
     /**
@@ -168,7 +167,6 @@ object VideoManager {
     fun markVideoNotVisible(videoMid: MimeiId) {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
-        Timber.d("VideoManager - Video marked not visible: $videoMid")
 
         // Don't pause the video if it's currently in full-screen mode
         if (!isVideoInFullScreen(videoMid)) {
@@ -180,13 +178,10 @@ object VideoManager {
                     player.playWhenReady = false
                     // Don't call stop() as it clears the media source and causes issues
                     // when the video becomes visible again. Just pause playback.
-                    Timber.d("VideoManager - Paused video playback for $videoMid (kept media source)")
                 } catch (e: Exception) {
-                    Timber.d("VideoManager - Error pausing non-visible video $videoMid: $e")
+                    Timber.e("VideoManager - Error pausing video: $e")
                 }
             }
-        } else {
-            Timber.d("VideoManager - Not pausing video $videoMid because it's in full-screen mode")
         }
     }
 
@@ -247,9 +242,8 @@ object VideoManager {
 
                             preloadVideo(context, attachment.mid, mediaUrl, attachment.type)
                             addedThisCycle++
-                            Timber.d("VideoManager - Preloading video: ${attachment.mid} from tweet $i")
                         } catch (e: Exception) {
-                            Timber.e("VideoManager - Failed to preload video: ${attachment.mid}, error: ${e.message}")
+                            Timber.e("VideoManager - Failed to preload video: ${e.message}")
                         } finally {
                             preloadingVideos.remove(attachment.mid)
                         }
@@ -281,27 +275,19 @@ object VideoManager {
      * Only creates new players for visible or preloading videos
      */
     fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
-        Timber.tag("VideoManager").d("=== VIDEO PLAYER REQUEST === videoMid: $videoMid, videoType: $videoType, videoUrl: $videoUrl")
-
         // Mark as preloaded if it was in the preload queue
         val wasPreloading = preloadQueue.contains(videoMid)
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
-        if (wasPreloading) {
-            Timber.tag("VideoManager").d("🎯 PRELOAD COMPLETED: videoMid: $videoMid moved from preload to active")
-        }
 
         val isReusing = videoPlayers.containsKey(videoMid)
 
         return videoPlayers.getOrPut(videoMid) {
-            Timber.tag("VideoManager").d("🆕 CREATING NEW PLAYER: videoMid: $videoMid, videoType: $videoType")
-
             try {
                 val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
-                Timber.tag("VideoManager").d("✅ PLAYER CREATED: videoMid: $videoMid, playerState: ${player.playbackState}")
                 player
             } catch (e: Exception) {
-                Timber.tag("VideoManager").e("❌ PLAYER CREATION FAILED: videoMid: $videoMid, error: ${e.message}")
+                Timber.tag("VideoManager").e("Player creation failed: ${e.message}")
                 // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
@@ -309,7 +295,6 @@ object VideoManager {
         }.also { player ->
             // Reset player state when reusing an existing player
             if (isReusing) {
-                Timber.tag("VideoManager").d("♻️ RESETTING REUSED PLAYER: videoMid: $videoMid")
                 resetPlayerState(player)
             }
         }
@@ -346,7 +331,6 @@ object VideoManager {
     fun markVideoActive(videoMid: MimeiId) {
         val currentCount = activeVideos.getOrDefault(videoMid, 0)
         activeVideos[videoMid] = currentCount + 1
-        Timber.tag("VideoManager").d("🎬 VIDEO ACTIVATED: videoMid: $videoMid, activeCount: ${currentCount + 1}")
     }
 
     /**
@@ -358,10 +342,8 @@ object VideoManager {
             val newCount = currentCount - 1
             if (newCount == 0) {
                 activeVideos.remove(videoMid)
-                Timber.tag("VideoManager").d("⏸️ VIDEO DEACTIVATED: videoMid: $videoMid, now inactive")
             } else {
                 activeVideos[videoMid] = newCount
-                Timber.tag("VideoManager").d("⏸️ VIDEO REFERENCE DECREASED: videoMid: $videoMid, activeCount: $newCount")
             }
         }
         
@@ -378,9 +360,6 @@ object VideoManager {
     fun pauseVideo(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let { player ->
             player.playWhenReady = false
-            Timber.tag("VideoManager").d("⏸️ VIDEO PAUSED: videoMid: $videoMid")
-        } ?: run {
-            Timber.tag("VideoManager").d("⚠️ PAUSE FAILED: No player found for videoMid: $videoMid")
         }
     }
 

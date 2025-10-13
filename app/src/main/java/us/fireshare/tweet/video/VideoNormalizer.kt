@@ -34,11 +34,8 @@ class VideoNormalizer(private val context: Context) {
         resampleTo720p: Boolean = false
     ): NormalizationResult = withContext(Dispatchers.IO) {
         try {
-            Timber.tag(TAG).d("Starting video normalization, resample to 720p: $resampleTo720p")
-            
             // Get video resolution
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
-            Timber.tag(TAG).d("Video resolution: $videoResolution")
             
             // Copy input file to a temporary location for FFmpeg processing
             val tempInputFile = File(context.cacheDir, "temp_normalize_input_${System.currentTimeMillis()}.mp4")
@@ -53,14 +50,11 @@ class VideoNormalizer(private val context: Context) {
                     resampleTo720p
                 )
                 
-                Timber.tag(TAG).d("Executing FFmpeg command: $ffmpegCommand")
-                
                 // Execute FFmpeg command
                 val session = FFmpegKit.execute(ffmpegCommand)
                 val returnCode = session.returnCode
                 
                 if (ReturnCode.isSuccess(returnCode)) {
-                    Timber.tag(TAG).d("Video normalization successful")
                     NormalizationResult.Success(outputFile)
                 } else {
                     val output = session.output
@@ -96,7 +90,6 @@ class VideoNormalizer(private val context: Context) {
         return if (needsResampling) {
             // Resample to 720p while maintaining aspect ratio
             val (targetWidth, targetHeight) = calculate720pDimensions(width, height)
-            Timber.tag(TAG).d("Resampling from ${width}x${height} to ${targetWidth}x${targetHeight}")
             
             """
                 -i "$inputPath" 
@@ -111,8 +104,6 @@ class VideoNormalizer(private val context: Context) {
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
             // Just normalize to standard MP4 without resampling
-            Timber.tag(TAG).d("Normalizing to MP4 without resampling")
-            
             """
                 -i "$inputPath" 
                 -c:v libx264

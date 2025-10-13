@@ -467,24 +467,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         applicationScope.launch {
             try {
                 Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
-                Timber.tag("TweetFeedViewModel")
-                    .d("About to start collecting events from TweetNotificationCenter")
                 TweetNotificationCenter.events.collect { event ->
-                    Timber.tag("TweetFeedViewModel").d("Received notification event: $event")
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
-                            Timber.tag("TweetFeedViewModel")
-                                .d("TweetFeedViewModel received TweetUploaded notification for tweet: ${event.tweet.mid}")
-                            Timber.tag("TweetFeedViewModel")
-                                .d("Current tweets count: ${_tweets.value.size}")
 
                             // Show success toast if it's the current user's tweet
                             val context = notificationContextRef?.get()
                             if (tweetWithAuthor.authorId == appUser.mid && context != null) {
-                                Timber.tag("TweetFeedViewModel")
-                                    .d("Showing tweet upload success toast for tweet: ${event.tweet.mid}")
                                 withContext(Main) {
                                     Toast.makeText(
                                         context,
@@ -501,9 +492,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 if (tweetWithAuthor.mid !in existingTweetIds) {
                                     _tweets.value = listOf(tweetWithAuthor) + _tweets.value
                                     Timber.tag("TweetFeedViewModel")
-                                        .d("Updated tweets count: ${_tweets.value.size}")
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
+                                        .d("Tweet added: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
 
                                     // Update user's tweet count if it's the current user's tweet
                                     if (tweetWithAuthor.authorId == appUser.mid) {
@@ -511,12 +500,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                         withContext(IO) {
                                             TweetCacheManager.saveUser(appUser)
                                         }
-                                        Timber.tag("TweetFeedViewModel")
-                                            .d("Updated user tweet count to: ${appUser.tweetCount}")
                                     }
-                                } else {
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Tweet already exists in feed: ${tweetWithAuthor.mid}")
                                 }
                             }
                         }

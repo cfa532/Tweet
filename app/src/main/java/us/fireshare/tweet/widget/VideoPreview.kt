@@ -155,8 +155,6 @@ fun VideoPreview(
 
     LaunchedEffect(isVideoVisible) {
         if (isVideoVisible) {
-            Timber.tag("VideoPreview").d("=== VIDEO BECAME VISIBLE === videoMid: $videoMid, autoPlay: $autoPlay")
-            
             // Mark video as active in VideoManager
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
@@ -169,7 +167,6 @@ fun VideoPreview(
             when (exoPlayer.playbackState) {
                 androidx.media3.common.Player.STATE_READY -> {
                     // Player is ready, just start playing if needed
-                    Timber.tag("VideoPreview").d("🎬 PLAYER READY: videoMid: $videoMid, starting playback: $autoPlay")
                     exoPlayer.playWhenReady = autoPlay
                     isLoading = false
                     hasError = false // Clear any previous errors when becoming visible
@@ -178,7 +175,6 @@ fun VideoPreview(
                     // Player is idle, check if we have media items
                     if (exoPlayer.mediaItemCount == 0) {
                         // Player was stopped completely, need to recreate media source
-                        Timber.tag("VideoPreview").d("Player has no media items, recreating for video: $videoMid")
                         isLoading = true
                         hasError = false
                         
@@ -205,7 +201,6 @@ fun VideoPreview(
                 }
                 else -> {
                     // For other states, try to recover
-                    Timber.tag("VideoPreview").d("Player in unexpected state ${exoPlayer.playbackState}, attempting recovery for video: $videoMid")
                     isLoading = true
                     hasError = false
                     
@@ -215,19 +210,13 @@ fun VideoPreview(
                 }
             }
         } else {
-            Timber.tag("VideoPreview").d("=== VIDEO BECAME INVISIBLE === videoMid: $videoMid")
-            
             // Only pause if this is the only active instance of this video
             // Don't pause if the video is being used in full screen
             videoMid?.let { mid ->
                 val activeCount = VideoManager.getVideoActiveCount(mid)
                 val isInFullScreen = VideoManager.isVideoInFullScreen(mid)
-                Timber.tag("VideoPreview").d("⏸️ CHECKING PAUSE: videoMid: $mid, activeCount: $activeCount, isInFullScreen: $isInFullScreen")
                 if (activeCount <= 1 && !isInFullScreen) {
                     exoPlayer.playWhenReady = false
-                    Timber.tag("VideoPreview").d("⏸️ VIDEO PAUSED: videoMid: $mid (only instance)")
-                } else {
-                    Timber.tag("VideoPreview").d("⏸️ VIDEO NOT PAUSED: videoMid: $mid (multiple instances or fullscreen)")
                 }
             } ?: run {
                 // If no videoMid, this is a standalone player, so pause it

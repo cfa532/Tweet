@@ -585,13 +585,12 @@ object HproseInstance {
         pageSize: Int = 20,
         entry: String = "get_tweet_feed"
     ): List<Tweet?> {
-        Timber.tag("getTweetFeed").d("=== TWEET FEED START === user: ${user.mid}, pageNumber: $pageNumber, pageSize: $pageSize, entry: $entry")
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
         
         // For guest users, if no alpha IDs are configured, return empty list
         if (user.isGuest() && alphaIds.isEmpty()) {
-            Timber.tag("getTweetFeed").w("❌ NO ALPHA IDS: Guest user with no alpha IDs configured, returning empty list")
+            Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
             return emptyList()
         }
         
@@ -609,7 +608,6 @@ object HproseInstance {
             }
         }
         return try {
-            Timber.tag("getTweetFeed").d("📡 CALLING SERVER: entry: $entry, params: $params")
             val response =
                 user.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
@@ -617,18 +615,13 @@ object HproseInstance {
             val success = response?.get("success") as? Boolean
             if (success != true) {
                 val errorMessage = response?.get("message") as? String ?: applicationContext.getString(R.string.error_unknown_occurred)
-                Timber.tag("getTweetFeed").e("❌ TWEET FEED FAILED: $errorMessage")
-                Timber.tag("getTweetFeed").e("❌ RESPONSE: $response")
+                Timber.tag("getTweetFeed").e("Feed failed: $errorMessage")
                 return emptyList()
             }
-            
-            Timber.tag("getTweetFeed").d("✅ TWEET FEED SUCCESS: Received response from server")
 
             // Extract tweets and originalTweets from the new response format
             val tweetsData = response["tweets"] as? List<Map<String, Any>?>
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
-
-            Timber.tag("getTweetFeed").d("📊 TWEET DATA RECEIVED: tweets: ${tweetsData?.size ?: 0}, originalTweets: ${originalTweetsData?.size ?: 0}")
 
             // Cache original tweets first
             originalTweetsData?.forEach { originalTweetJson ->
@@ -637,9 +630,8 @@ object HproseInstance {
                         val originalTweet = Tweet.from(originalTweetJson)
                         originalTweet.author = getUser(originalTweet.authorId)
                         TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = true)
-                        Timber.tag("getTweetFeed").d("💾 CACHED ORIGINAL TWEET: ${originalTweet.mid}")
                     } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("❌ ERROR CACHING ORIGINAL TWEET: $e")
+                        Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
                     }
                 }
             }
@@ -657,21 +649,19 @@ object HproseInstance {
 
                         // Skip private tweets in feed
                         if (tweet.isPrivate) {
-                            Timber.tag("getTweetFeed").d("🔒 SKIPPING PRIVATE TWEET: ${tweet.mid}")
                             null
                         } else {
                             updateCachedTweet(tweet)
-                            Timber.tag("getTweetFeed").d("📝 PROCESSED TWEET: ${tweet.mid}, author: ${tweet.author?.username}")
                             tweet
                         }
                     } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("❌ ERROR DECODING TWEET: $e")
+                        Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
                         null
                     }
                 }
             } ?: emptyList()
         } catch (e: Exception) {
-            Timber.tag("getTweetFeed").e("❌ TWEET FEED EXCEPTION: $e")
+            Timber.tag("getTweetFeed").e("Exception: $e")
             Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
             emptyList()
         }
@@ -980,7 +970,6 @@ object HproseInstance {
     }
 
     suspend fun uploadTweet(tweet: Tweet): Tweet? {
-        Timber.tag("uploadTweet").d("=== TWEET UPLOAD START === tweetId: ${tweet.mid}, author: ${tweet.authorId}, isRetweet: ${tweet.originalTweetId != null}")
         val entry = "add_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -989,7 +978,6 @@ object HproseInstance {
             "tweet" to Json.encodeToString(tweet)
         )
         return try {
-            Timber.tag("uploadTweet").d("📡 CALLING SERVER: entry: $entry, hostId: ${appUser.hostIds?.first()}")
             val response =
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
             if (response?.get("success") == true) {
@@ -1000,27 +988,22 @@ object HproseInstance {
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
-                        Timber.tag("uploadTweet").d("📢 POSTING NOTIFICATION: TweetUploaded for original tweet: $newTweetId")
                         TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                        Timber.tag("uploadTweet").d("✅ NOTIFICATION POSTED: TweetUploaded successfully")
-                    } else {
-                        Timber.tag("uploadTweet").d("⏭️ SKIPPING NOTIFICATION: Retweet $newTweetId (will be handled by TweetRetweeted)")
                     }
 
-                    Timber.tag("uploadTweet").d("✅ TWEET UPLOAD SUCCESS: newTweetId: $newTweetId")
+                    Timber.tag("uploadTweet").d("Tweet uploaded: $newTweetId")
                     updatedTweet
                 } else {
-                    Timber.tag("uploadTweet").e("❌ NO TWEET ID: Response success but no mid in response")
+                    Timber.tag("uploadTweet").e("No tweet ID in response")
                     null
                 }
             } else {
                 val errorMessage = response?.get("message") as? String ?: applicationContext.getString(R.string.error_upload_unknown)
-                Timber.tag("uploadTweet").e("❌ UPLOAD FAILED: $errorMessage")
-                Timber.tag("uploadTweet").e("❌ RESPONSE: $response")
+                Timber.tag("uploadTweet").e("Upload failed: $errorMessage")
                 null
             }
         } catch (e: Exception) {
-            Timber.tag("uploadTweet").e("❌ UPLOAD EXCEPTION: $e")
+            Timber.tag("uploadTweet").e("Upload exception: $e")
             null
         }
     }

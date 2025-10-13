@@ -49,31 +49,22 @@ class LocalVideoProcessingService(
         referenceId: MimeiId?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
         try {
-            Timber.tag(TAG).d("Starting local video processing for: $fileName")
-
             // Create temporary directory for HLS conversion
             val tempDir = createTempDirectory()
             
             try {
-                // Step 1: Convert video to HLS format
-                Timber.tag(TAG).d("Step 1: Converting video to HLS format")
+                // Convert video to HLS format
                 val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName)
                 
                 when (hlsResult) {
                     is LocalHLSConverter.HLSConversionResult.Success -> {
-                        Timber.tag(TAG).d("HLS conversion completed successfully")
-                        
-                        // Step 2: Compress HLS files into zip
-                        Timber.tag(TAG).d("Step 2: Compressing HLS files to zip")
+                        // Compress HLS files into zip
                         val zipFile = File(tempDir.parent, "${fileName}_hls.zip")
                         val zipResult = zipCompressor.compressHLSDirectory(hlsResult.outputDirectory, zipFile)
                         
                         when (zipResult) {
                             is ZipCompressor.ZipCompressionResult.Success -> {
-                                Timber.tag(TAG).d("Zip compression completed successfully")
-                                
-                                // Step 3: Upload zip to /process-zip endpoint and poll for completion
-                                Timber.tag(TAG).d("Step 3: Uploading zip to /process-zip endpoint")
+                                // Upload zip to /process-zip endpoint and poll for completion
                                 val processingResult = zipUploadService.uploadZipFile(
                                     zipResult.zipFile,
                                     fileName,
@@ -83,11 +74,8 @@ class LocalVideoProcessingService(
                                 
                                 when (processingResult) {
                                     is ZipUploadService.ZipProcessingResult.Success -> {
-                                        Timber.tag(TAG).d("Video processing completed successfully: ${processingResult.cid}")
-                                        
                                         // Get aspect ratio for the result
                                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-                                        Timber.tag(TAG).d("Video aspect ratio calculated: $aspectRatio for URI: $uri")
                                         
                                         // Calculate file size from the original URI
                                         val fileSize = withContext(Dispatchers.IO) {
@@ -100,14 +88,14 @@ class LocalVideoProcessingService(
                                                         size += bytesRead
                                                     }
                                                 }
-                                                Timber.tag(TAG).d("Video file size calculated: $size bytes for URI: $uri")
                                                 size
                                             } catch (e: Exception) {
-                                                Timber.tag(TAG).e(e, "Failed to calculate video file size for URI: $uri")
+                                                Timber.tag(TAG).e(e, "Failed to calculate video file size")
                                                 0L
                                             }
                                         }
                                         
+                                        Timber.tag(TAG).d("HLS video processed: ${processingResult.cid}")
                                         VideoProcessingResult.Success(
                                             MimeiFileType(
                                                 processingResult.cid,
@@ -161,10 +149,9 @@ class LocalVideoProcessingService(
         try {
             if (tempDir.exists()) {
                 tempDir.deleteRecursively()
-                Timber.tag(TAG).d("Cleaned up temporary directory: ${tempDir.absolutePath}")
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).w(e, "Failed to clean up temporary directory: ${tempDir.absolutePath}")
+            Timber.tag(TAG).w(e, "Failed to clean up temporary directory")
         }
     }
 

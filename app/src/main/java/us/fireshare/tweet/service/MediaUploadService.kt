@@ -123,7 +123,6 @@ class MediaUploadService(
                 
                 // If extension detection failed, use FileTypeDetector for magic bytes detection
                 if (extensionType == MediaType.Unknown) {
-                    Timber.tag(TAG).d("Extension detection failed, using FileTypeDetector for magic bytes detection")
                     FileTypeDetector.detectFileType(context, uri, fileName)
                 } else {
                     extensionType
@@ -133,34 +132,23 @@ class MediaUploadService(
 
         // For video files, use local processing only
         if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
-            Timber.tag(TAG).d("Detected video file, attempting local processing only")
             try {
                 val localResult = processVideoLocally(uri, fileName, fileTimestamp, referenceId)
                 if (localResult != null) {
-                    Timber.tag(TAG).d("Video processed locally successfully: ${localResult.mid}")
+                    Timber.tag(TAG).d("Video processed successfully: ${localResult.mid}")
                     return localResult
                 } else {
-                    Timber.tag(TAG).e("Local video processing failed - no fallback available")
+                    Timber.tag(TAG).e("Video processing failed")
                     return null
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e("Local video processing failed with exception: ${e.message}")
+                Timber.tag(TAG).e("Video processing exception: ${e.message}")
                 return null
             }
-        } else {
-            Timber.tag(TAG).d("Non-video file, proceeding with IPFS upload")
         }
 
         // Fall back to original IPFS method for non-video files
-        Timber.tag(TAG).d("Calling uploadToIPFSOriginal with mediaType: $mediaType")
-        val result = uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, mediaType)
-        if (result != null) {
-            Timber.tag(TAG).d("uploadToIPFSOriginal succeeded: ${result.mid}")
-        } else {
-            Timber.tag(TAG).e("uploadToIPFSOriginal returned null")
-        }
-        Timber.tag(TAG).d("Returning result: ${result?.mid ?: "null"}")
-        return result
+        return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, mediaType)
     }
 
     /**
@@ -182,19 +170,17 @@ class MediaUploadService(
             
             // Try to ping the /process-zip endpoint
             val healthCheckUrl = "$netDiskUrl/process-zip/health"
-            Timber.tag(TAG).d("Checking server availability at: $healthCheckUrl")
             
             val response = withContext(Dispatchers.IO) {
                 try {
                     httpClient.get(healthCheckUrl)
                 } catch (e: Exception) {
-                    Timber.tag(TAG).w("Health check request failed: ${e.message}")
                     return@withContext null
                 }
             }
             
             val isAvailable = response?.status == HttpStatusCode.OK
-            Timber.tag(TAG).d("Server available: $isAvailable")
+            Timber.tag(TAG).d("Conversion server available: $isAvailable")
             isAvailable
         } catch (e: Exception) {
             Timber.tag(TAG).w("Error checking conversion server: ${e.message}")
@@ -216,15 +202,12 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            Timber.tag(TAG).d("Starting local video processing for: $fileName")
-            
             // Check if conversion server is available
             val serverAvailable = isConversionServerAvailable()
-            Timber.tag(TAG).d("Conversion server available: $serverAvailable")
             
             if (serverAvailable) {
                 // Use HLS conversion and upload to process-zip endpoint
-                Timber.tag(TAG).d("Using HLS conversion with process-zip endpoint")
+                Timber.tag(TAG).d("Processing video via HLS conversion server")
                 val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
                 val result = localProcessingService.processVideo(
                     uri = uri,
@@ -235,17 +218,16 @@ class MediaUploadService(
                 
                 when (result) {
                     is LocalVideoProcessingService.VideoProcessingResult.Success -> {
-                        Timber.tag(TAG).d("Local processing successful: ${result.mimeiFile.mid}")
                         result.mimeiFile
                     }
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
-                        Timber.tag(TAG).e("Local processing failed: ${result.message}")
+                        Timber.tag(TAG).e("HLS processing failed: ${result.message}")
                         null
                     }
                 }
             } else {
                 // Normalize to mp4 and upload via IPFS
-                Timber.tag(TAG).d("Conversion server not available, normalizing to mp4 and uploading via IPFS")
+                Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
                 
                 // Check if video resolution is > 720p
                 val videoResolution = VideoManager.getVideoResolution(context, uri)
@@ -256,7 +238,9 @@ class MediaUploadService(
                     false
                 }
                 
-                Timber.tag(TAG).d("Video resolution: $videoResolution, needs resampling: $needsResampling")
+                if (needsResampling) {
+                    Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
+                }
                 
                 // Normalize video to mp4
                 val normalizer = VideoNormalizer(context)
@@ -267,8 +251,6 @@ class MediaUploadService(
                     
                     when (normalizationResult) {
                         is VideoNormalizer.NormalizationResult.Success -> {
-                            Timber.tag(TAG).d("Video normalization successful")
-                            
                             // Upload normalized video via IPFS
                             val normalizedUri = Uri.fromFile(normalizedFile)
                             val result = uploadToIPFSOriginal(
@@ -279,7 +261,9 @@ class MediaUploadService(
                                 MediaType.Video
                             )
                             
-                            Timber.tag(TAG).d("IPFS upload result: ${result?.mid}")
+                            if (result != null) {
+                                Timber.tag(TAG).d("Video uploaded: ${result.mid}")
+                            }
                             result
                         }
                         is VideoNormalizer.NormalizationResult.Error -> {
@@ -317,8 +301,6 @@ class MediaUploadService(
         val maxConsecutiveFailures = 10 // Allow more failures for long processing
         val maxPollingTime = 2 * 60 * 60 * 1000L // 2 hours max polling time for very long videos
         val startTime = System.currentTimeMillis()
-        
-        Timber.tag(TAG).d("Starting to poll status for job: $jobId")
 
         while (true) {
             // Check if we've been polling too long
@@ -378,9 +360,7 @@ class MediaUploadService(
                         
                         // Calculate file size from the original URI
                         val fileSize = getFileSize(uri) ?: 0L
-                        Timber.tag(TAG).d("Video file size calculated: $fileSize bytes for URI: $uri")
-
-                        Timber.tag(TAG).d("Video conversion completed successfully: $cid")
+                        Timber.tag(TAG).d("Video conversion completed: $cid")
                         return MimeiFileType(
                             cid,
                             MediaType.HLS_VIDEO,
@@ -428,15 +408,12 @@ class MediaUploadService(
         referenceId: MimeiId?,
         mediaType: MediaType
     ): MimeiFileType? {
-        Timber.tag(TAG).d("Starting upload for URI: $uri, mediaType: $mediaType")
-
         // Resolve writableUrl before using uploadService
         val resolvedUrl = appUser.resolveWritableUrl()
         if (resolvedUrl.isNullOrEmpty()) {
             Timber.tag(TAG).e("Failed to resolve writableUrl")
             return null
         }
-        Timber.tag(TAG).d("Successfully resolved writableUrl: $resolvedUrl")
 
         var offset = 0L
         var byteRead: Int
@@ -445,13 +422,9 @@ class MediaUploadService(
         val request = Gson().fromJson(json, Map::class.java).toMutableMap()
 
         try {
-            Timber.tag(TAG).d("Opening input stream for URI: $uri")
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 inputStream.use { stream ->
-                    Timber.tag(TAG).d("Starting chunked upload")
                     while (stream.read(buffer).also { byteRead = it } != -1) {
-                        Timber.tag(TAG)
-                            .d("Uploading chunk: offset=$offset, bytes=$byteRead")
                         request["fsid"] = appUser.uploadService?.runMApp(
                             "upload_ipfs",
                             request.toMap(), listOf(buffer)
@@ -466,41 +439,29 @@ class MediaUploadService(
             // Do it later when uploading tweet.
             request["finished"] = "true"
             referenceId?.let { request["referenceid"] = it }
-            Timber.tag(TAG).d("Finalizing upload with offset: $offset")
-            Timber.tag(TAG).d("Final request: $request")
 
             val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap())
                 ?: return null
 
-            Timber.tag(TAG).d("Upload successful, CID: $cid")
-
             // Calculate file size - use the offset which represents total bytes uploaded
             val fileSize = offset
-            Timber.tag(TAG).d("File size: $fileSize bytes for URI: $uri")
 
             // Calculate aspect ratio for image or video
             val aspectRatio = when (mediaType) {
                 MediaType.Image -> {
                     val ratio = getImageAspectRatio(uri)
-                    Timber.tag(TAG).d("Image aspect ratio: $ratio for URI: $uri")
                     // Fallback to 4:3 if aspect ratio calculation fails
                     ratio ?: (4f / 3f).also { 
-                        Timber.tag(TAG).w("Using fallback aspect ratio 4:3 for image URI: $uri")
+                        Timber.tag(TAG).w("Using fallback aspect ratio 4:3 for image")
                     }
                 }
                 MediaType.Video -> {
-                    val ratio = VideoManager.getVideoAspectRatio(context, uri)
-                    Timber.tag(TAG).d("Video aspect ratio: $ratio for URI: $uri")
-                    // Fallback to 16:9 if aspect ratio calculation fails
-                    ratio
+                    VideoManager.getVideoAspectRatio(context, uri)
                 }
-                else -> {
-                    Timber.tag(TAG).d("No aspect ratio calculation for media type: $mediaType")
-                    null
-                }
+                else -> null
             }
 
-            Timber.tag(TAG).d("Final MimeiFileType created with file size: $fileSize, aspect ratio: $aspectRatio")
+            Timber.tag(TAG).d("Upload complete: $cid (${fileSize / 1024}KB)")
             return MimeiFileType(cid, mediaType, fileSize, fileName, fileTimestamp, aspectRatio)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error: ${e.message}")
@@ -524,7 +485,6 @@ class MediaUploadService(
                         fileSize += bytesRead
                     }
                 }
-                Timber.tag(TAG).d("File size calculated: $fileSize bytes for URI: $uri")
                 fileSize
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Failed to calculate file size for URI: $uri")
@@ -594,10 +554,9 @@ class MediaUploadService(
                         }
                     }
                     
-                    Timber.tag(TAG).d("Image aspect ratio: $aspectRatio (${width}x${height}, orientation: $orientation) for URI: $uri")
                     aspectRatio
                 } else {
-                    Timber.tag(TAG).w("Could not determine image dimensions for URI: $uri")
+                    Timber.tag(TAG).w("Could not determine image dimensions")
                     null
                 }
             } catch (e: Exception) {
