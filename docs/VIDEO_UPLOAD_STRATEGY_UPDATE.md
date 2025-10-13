@@ -1,5 +1,5 @@
 # Video Upload Strategy Update
-**Last Updated:** October 13, 2025
+**Last Updated:** October 13, 2025 (Updated: Health check endpoint and tusServerUrl)
 
 ## Overview
 
@@ -104,8 +104,9 @@ ffmpeg -i input.mp4 \
 
 **Checks:**
 1. CloudDrivePort is set (not null)
-2. NetDiskUrl can be constructed
-3. Health check endpoint `/process-zip/health` responds with HTTP 200
+2. WritableUrl can be resolved
+3. tusServerUrl can be constructed
+4. Health check endpoint `/health` responds with HTTP 200
 
 **Implementation:**
 ```kotlin
@@ -116,13 +117,21 @@ private suspend fun isConversionServerAvailable(): Boolean {
             return false
         }
         
-        val netDiskUrl = appUser.netDiskUrl
-        if (netDiskUrl.isNullOrEmpty()) {
+        // Ensure writableUrl is resolved
+        if (appUser.writableUrl.isNullOrEmpty()) {
+            val resolved = appUser.resolveWritableUrl()
+            if (resolved.isNullOrEmpty()) {
+                return false
+            }
+        }
+        
+        val tusServerUrl = appUser.tusServerUrl
+        if (tusServerUrl.isNullOrEmpty()) {
             return false
         }
         
-        // Try to ping the /process-zip endpoint
-        val healthCheckUrl = "$netDiskUrl/process-zip/health"
+        // Try to ping the /health endpoint
+        val healthCheckUrl = "$tusServerUrl/health"
         val response = httpClient.get(healthCheckUrl)
         response?.status == HttpStatusCode.OK
     } catch (e: Exception) {
@@ -130,6 +139,23 @@ private suspend fun isConversionServerAvailable(): Boolean {
     }
 }
 ```
+
+### 5. TUS Server URL Property
+
+**Property:** `User.tusServerUrl`
+
+A computed property that constructs the TUS (resumable upload) server URL by:
+1. Taking the user's `writableUrl`
+2. Replacing the port with `cloudDrivePort` (or `TW_CONST.CLOUD_PORT = 8010` as fallback)
+3. Preserving the full path, query, and fragment (important for servers hosted at subpaths)
+
+**Important:** Callers must ensure `writableUrl` is resolved (by calling `resolveWritableUrl()`) before accessing this property.
+
+**Example:**
+- writableUrl: `http://example.com:8081/api/v1`
+- cloudDrivePort: `8082`
+- tusServerUrl: `http://example.com:8082/api/v1`
+- Health check: `http://example.com:8082/api/v1/health`
 
 ## Benefits
 
@@ -203,9 +229,19 @@ Potential improvements:
 - No data migration required
 
 **For Server Operators:**
-- Implement `/process-zip/health` endpoint for health checks
+- Implement `/health` endpoint for health checks (not `/process-zip/health`)
 - Ensure endpoint returns HTTP 200 when service is available
-- Consider implementing detailed health status in response
+- Example implementation:
+  ```javascript
+  app.get('/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'ok', 
+      message: 'Server is running',
+      timestamp: new Date().toISOString()
+    });
+  });
+  ```
+- The TUS server may be hosted at a subpath (e.g., `/api/v1`), health check will be at `{subpath}/health`
 
 ## Testing Checklist
 

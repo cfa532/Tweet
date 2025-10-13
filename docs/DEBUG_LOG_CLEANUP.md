@@ -187,7 +187,7 @@ Typical video upload log output: **~10-15 log lines**
 MediaUploadService: Detected video file, attempting local processing only
 MediaUploadService: Starting local video processing for: video.mp4
 MediaUploadService: cloudDrivePort is not set
-MediaUploadService: netDiskUrl is not available
+MediaUploadService: tusServerUrl is not available
 MediaUploadService: Checking server availability at: http://...
 MediaUploadService: Server available: false
 MediaUploadService: Conversion server available: false

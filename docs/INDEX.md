@@ -1,5 +1,5 @@
 # Tweet App Documentation Index
-**Last Updated:** October 12, 2025
+**Last Updated:** October 13, 2025
 
 ---
 
@@ -7,8 +7,8 @@
 
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
-**Total Documents:** 30 markdown files  
-**Last Updated:** October 12, 2025
+**Total Documents:** 31 markdown files  
+**Last Updated:** October 13, 2025
 
 ---
 
@@ -146,6 +146,19 @@ This folder contains all technical documentation for the Tweet distributed socia
   - FFmpeg integration
   - Local video processing
   - HLS conversion (segment naming: segment000.ts, segment001.ts, etc.)
+
+- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)** 🆕
+  - Video upload strategy and routing
+  - TUS server integration
+  - Service availability checking
+  - Automatic fallback to IPFS
+  - Resolution-based processing
+
+- **[TUS_SERVER_NAMING_UPDATE.md](TUS_SERVER_NAMING_UPDATE.md)** 🌟 **NEW** (Oct 13, 2025)
+  - Renamed netDiskUrl to tusServerUrl
+  - Updated health check endpoint from `/process-zip/health` to `/health`
+  - Added resolveWritableUrl() requirement
+  - Server implementation examples
 
 - **[MEDIACODEC_ERROR_RECOVERY.md](MEDIACODEC_ERROR_RECOVERY.md)**
   - MediaCodec error handling
@@ -343,7 +356,7 @@ The Tweet app is a distributed social media application that connects to multipl
 
 ---
 
-**Total Documents:** 30 markdown files  
-**Last Review:** October 12, 2025  
+**Total Documents:** 31 markdown files  
+**Last Review:** October 13, 2025  
 **Maintainer:** Development Team
 
