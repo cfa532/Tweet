@@ -280,13 +280,9 @@ data class User(
                         }
                     }
                     else -> {
-                        // No port specified, use default port 8010
-                        val cleanIP = if (hostIP.startsWith("[") && hostIP.endsWith("]")) {
-                            hostIP.substring(1, hostIP.length - 1)
-                        } else {
-                            hostIP
-                        }
-                        cleanIP to "8010"
+                        // No port specified - cannot construct URL
+                        Timber.w("[resolveWritableUrl] No port specified in hostIP: $hostIP")
+                        return writableUrl
                     }
                 }
 
@@ -423,14 +419,17 @@ data class User(
     }
 
     /**
-     * Computed property that returns writableUrl with cloudDrivePort (or TW_CONST.CLOUD_PORT as fallback)
+     * Computed property that returns writableUrl with cloudDrivePort
      * Used for accessing TUS server (resumable upload server) and transcode services
      * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
-     * Important: Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
+     * Important: 
+     * - Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
+     * - Returns null if cloudDrivePort is not set (user must manually configure it)
      */
     val tusServerUrl: String?
         get() {
             val baseUrl = writableUrl ?: return null
+            val port = cloudDrivePort ?: return null  // No default - must be explicitly set by user
             
             return try {
                 val uri = java.net.URI(baseUrl)
@@ -447,11 +446,10 @@ data class User(
                     host
                 }
                 
-                val port = cloudDrivePort ?: TW_CONST.CLOUD_PORT
                 "$scheme://$hostPart:$port$path$query$fragment"
             } catch (e: Exception) {
                 Timber.w(e, "Failed to parse baseUrl for cloud port replacement: $baseUrl")
-                baseUrl
+                null
             }
         }
 
