@@ -969,7 +969,7 @@ class UserViewModel @AssistedInject constructor(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value?.trim(),
-            cloudDrivePort = cloudDrivePort.value.toIntOrNull()
+            cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else cloudDrivePort.value.toIntOrNull()
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {

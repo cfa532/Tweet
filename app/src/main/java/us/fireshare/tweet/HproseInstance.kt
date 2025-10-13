@@ -1809,9 +1809,9 @@ object HproseInstance {
         return try {
             Timber.tag("isConversionServerAvailable").d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
             
-            // First check if cloudDrivePort is valid
-            if (appUser.cloudDrivePort == null) {
-                Timber.tag("isConversionServerAvailable").d("cloudDrivePort is not set")
+            // First check if cloudDrivePort is valid (null or 0 means not set)
+            if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) {
+                Timber.tag("isConversionServerAvailable").d("cloudDrivePort is not set (value: ${appUser.cloudDrivePort})")
                 return false
             }
             

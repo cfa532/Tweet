@@ -444,7 +444,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                             if (!appUser.isGuest()) {
                                 try {
-                                    appUser.cloudDrivePort = cloudPort?.toIntOrNull()
+                                    // Send 0 if field is empty/blank to indicate removal
+                                    val portValue = cloudPort
+                                    appUser.cloudDrivePort = if (portValue.isNullOrBlank()) 0 else portValue.toIntOrNull()
                                     applicationScope.launch(Dispatchers.IO) {
                                         HproseInstance.setUserData(appUser)
                                     }

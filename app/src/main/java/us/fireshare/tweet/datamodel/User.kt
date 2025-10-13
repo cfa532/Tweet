@@ -424,12 +424,14 @@ data class User(
      * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
      * Important: 
      * - Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
-     * - Returns null if cloudDrivePort is not set (user must manually configure it)
+     * - Returns null if cloudDrivePort is not set (0 or null means not set)
      */
     val tusServerUrl: String?
         get() {
             val baseUrl = writableUrl ?: return null
-            val port = cloudDrivePort ?: return null  // No default - must be explicitly set by user
+            val port = cloudDrivePort
+            // cloudDrivePort of 0 or null means not set
+            if (port == null || port == 0) return null
             
             return try {
                 val uri = java.net.URI(baseUrl)
