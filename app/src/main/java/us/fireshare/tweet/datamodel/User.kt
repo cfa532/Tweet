@@ -423,10 +423,12 @@ data class User(
     }
 
     /**
-     * Computed property that returns writableUrl with TW_CONST.CLOUD_PORT
-     * Used for accessing netdisk and transcode services
+     * Computed property that returns writableUrl with cloudDrivePort (or TW_CONST.CLOUD_PORT as fallback)
+     * Used for accessing TUS server (resumable upload server) and transcode services
+     * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
+     * Important: Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
      */
-    val netDiskUrl: String?
+    val tusServerUrl: String?
         get() {
             val baseUrl = writableUrl ?: return null
             

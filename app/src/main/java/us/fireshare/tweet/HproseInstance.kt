@@ -1803,24 +1803,36 @@ object HproseInstance {
     }
 
     /**
-     * Check if conversion server is available at netDiskUrl
+     * Check if TUS server is available at tusServerUrl
      */
     private suspend fun isConversionServerAvailable(): Boolean {
         return try {
+            Timber.tag("isConversionServerAvailable").d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
+            
             // First check if cloudDrivePort is valid
             if (appUser.cloudDrivePort == null) {
                 Timber.tag("isConversionServerAvailable").d("cloudDrivePort is not set")
                 return false
             }
             
-            val netDiskUrl = appUser.netDiskUrl
-            if (netDiskUrl.isNullOrEmpty()) {
-                Timber.tag("isConversionServerAvailable").d("netDiskUrl is not available")
+            // Ensure writableUrl is resolved
+            if (appUser.writableUrl.isNullOrEmpty()) {
+                val resolved = appUser.resolveWritableUrl()
+                Timber.tag("isConversionServerAvailable").d("Resolved writableUrl: $resolved")
+                if (resolved.isNullOrEmpty()) {
+                    Timber.tag("isConversionServerAvailable").d("Could not resolve writableUrl")
+                    return false
+                }
+            }
+            
+            val tusServerUrl = appUser.tusServerUrl
+            if (tusServerUrl.isNullOrEmpty()) {
+                Timber.tag("isConversionServerAvailable").d("tusServerUrl is not available (cloudDrivePort=${appUser.cloudDrivePort}, writableUrl=${appUser.writableUrl})")
                 return false
             }
             
-            // Try to ping the /process-zip endpoint
-            val healthCheckUrl = "$netDiskUrl/process-zip/health"
+            // Try to ping the /health endpoint
+            val healthCheckUrl = "$tusServerUrl/health"
             Timber.tag("isConversionServerAvailable").d("Checking server availability at: $healthCheckUrl")
             
             val response = withContext(Dispatchers.IO) {

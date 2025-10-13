@@ -152,38 +152,52 @@ class MediaUploadService(
     }
 
     /**
-     * Check if conversion server is available at netDiskUrl
+     * Check if TUS server is available at tusServerUrl
      */
     private suspend fun isConversionServerAvailable(): Boolean {
         return try {
+            Timber.tag(TAG).d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
+            
             // First check if cloudDrivePort is valid
             if (appUser.cloudDrivePort == null) {
                 Timber.tag(TAG).d("cloudDrivePort is not set")
                 return false
             }
             
-            val netDiskUrl = appUser.netDiskUrl
-            if (netDiskUrl.isNullOrEmpty()) {
-                Timber.tag(TAG).d("netDiskUrl is not available")
+            // Ensure writableUrl is resolved
+            if (appUser.writableUrl.isNullOrEmpty()) {
+                val resolved = appUser.resolveWritableUrl()
+                Timber.tag(TAG).d("Resolved writableUrl: $resolved")
+                if (resolved.isNullOrEmpty()) {
+                    Timber.tag(TAG).d("Could not resolve writableUrl")
+                    return false
+                }
+            }
+            
+            val tusServerUrl = appUser.tusServerUrl
+            if (tusServerUrl.isNullOrEmpty()) {
+                Timber.tag(TAG).d("tusServerUrl is not available (cloudDrivePort=${appUser.cloudDrivePort}, writableUrl=${appUser.writableUrl})")
                 return false
             }
             
-            // Try to ping the /process-zip endpoint
-            val healthCheckUrl = "$netDiskUrl/process-zip/health"
+            // Try to ping the /health endpoint
+            val healthCheckUrl = "$tusServerUrl/health"
+            Timber.tag(TAG).d("Checking server availability at: $healthCheckUrl")
             
             val response = withContext(Dispatchers.IO) {
                 try {
                     httpClient.get(healthCheckUrl)
                 } catch (e: Exception) {
+                    Timber.tag(TAG).w("Health check request failed: ${e.message}")
                     return@withContext null
                 }
             }
             
             val isAvailable = response?.status == HttpStatusCode.OK
-            Timber.tag(TAG).d("Conversion server available: $isAvailable")
+            Timber.tag(TAG).d("TUS server available: $isAvailable")
             isAvailable
         } catch (e: Exception) {
-            Timber.tag(TAG).w("Error checking conversion server: ${e.message}")
+            Timber.tag(TAG).w("Error checking TUS server: ${e.message}")
             false
         }
     }
