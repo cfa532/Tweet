@@ -490,7 +490,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "Version: ${BuildConfig.VERSION_NAME}",
+                    "Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                     color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 4.dp)
