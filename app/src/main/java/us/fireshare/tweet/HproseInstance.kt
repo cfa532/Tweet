@@ -48,6 +48,7 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
+import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
@@ -67,6 +68,11 @@ object HproseInstance {
     
     // Private backing field for appUser
     private var _appUser: User = User(mid = TW_CONST.GUEST_ID)
+    
+    // Lazy initialization of MediaUploadService
+    private val mediaUploadService: MediaUploadService by lazy {
+        MediaUploadService(applicationContext, httpClient, appUser, appId)
+    }
     
     /**
      * Global app user with automatic expiration checking.
@@ -1678,10 +1684,24 @@ object HproseInstance {
 
     /**
      * Upload media file to node and return its IPFS cid with its media type.
-     * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
+     * Delegates to MediaUploadService for all upload operations.
      * */
     @OptIn(UnstableApi::class)
     suspend fun uploadToIPFS(
+        context: Context,
+        uri: Uri,
+        referenceId: MimeiId? = null,
+        noResample: Boolean = false
+    ): MimeiFileType? {
+        return mediaUploadService.uploadToIPFS(uri, referenceId, noResample)
+    }
+
+    /**
+     * Legacy upload method - keeping for backwards compatibility
+     * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
+     * */
+    @OptIn(UnstableApi::class)
+    private suspend fun uploadToIPFS_Legacy(
         context: Context,
         uri: Uri,
         referenceId: MimeiId? = null,
@@ -2151,31 +2171,21 @@ object HproseInstance {
     }
 
     /**
-     * Calculate file size from URI
-     * @param context Android context
-     * @param uri File URI
-     * @return File size in bytes, or null if calculation fails
+     * Calculate file size from URI - delegates to MediaUploadService
      */
     suspend fun getFileSize(context: Context, uri: Uri): Long? =
-        withContext(Dispatchers.IO) {
-            return@withContext try {
-                var fileSize: Long = 0L
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val buffer = ByteArray(8192) // 8KB buffer
-                    var bytesRead: Int
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        fileSize += bytesRead
-                    }
-                }
-                Timber.tag("getFileSize").d("File size calculated: $fileSize bytes for URI: $uri")
-                fileSize
-            } catch (e: Exception) {
-                Timber.tag("getFileSize").e(e, "Failed to calculate file size for URI: $uri")
-                null
-            }
-        }
+        mediaUploadService.getFileSize(uri)
 
+    /**
+     * Get image aspect ratio - delegates to MediaUploadService
+     */
     suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? =
+        mediaUploadService.getImageAspectRatio(uri)
+
+    /**
+     * Legacy getImageAspectRatio - keeping for reference
+     */
+    private suspend fun getImageAspectRatio_Legacy(context: Context, uri: Uri): Float? =
         withContext(Dispatchers.IO) {
             return@withContext try {
                 // Try multiple methods to get image dimensions with EXIF orientation consideration

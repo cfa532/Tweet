@@ -1,0 +1,102 @@
+> Task :clean UP-TO-DATE
+> Task :app:clean
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig
+> Task :app:processDebugNavigationResources
+> Task :app:generateDebugResValues
+> Task :app:injectCrashlyticsMappingFileIdDebug
+> Task :app:injectCrashlyticsVersionControlInfoDebug
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:processDebugGoogleServices
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:mergeDebugNativeLibs
+> Task :app:packageDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:parseDebugLocalResources
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libavcodec.so, libavcodec_neon.so, libavdevice.so, libavdevice_neon.so, libavfilter.so, libavfilter_neon.so, libavformat.so, libavformat_neon.so, libavutil.so, libavutil_neon.so, libdatastore_shared_counter.so, libffmpegkit.so, libffmpegkit_abidetect.so, libffmpegkit_armv7a_neon.so, libimage_processing_util_jni.so, libsurface_util_jni.so, libswresample.so, libswresample_neon.so, libswscale.so, libswscale_neon.so. Run with --info option to learn more.
+
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:extractDebugNativeDebugMetadata
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebug
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:checkDebugDuplicateClasses
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:mergeLibDexDebug
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:desugarDebugFileDependencies
+
+> Task :app:kspDebugKotlin
+w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
+w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
+
+> Task :app:mergeExtDexDebug
+> Task :app:compileDebugKotlin
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:539:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:629:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:129:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:197:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:193:74 Unchecked cast of 'Any?' to 'List<String>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:622:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:623:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:710:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:711:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1121:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1122:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1170:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1171:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1533:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/TweetApplication.kt:110:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/profile/SystemSettings.kt:170:38 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes ExposedDropdownMenuAnchorType and enabled parameters.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/service/NotificationPermissionManager.kt:120:55 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetDetailScreen.kt:201:13 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetFeedScreen.kt:156:21 'fun TabRow(selectedTabIndex: Int, modifier: Modifier = ..., containerColor: Color = ..., contentColor: Color = ..., indicator: @Composable() ComposableFunction1<@ParameterName(...) List<TabPosition>, Unit> = ..., divider: @Composable() ComposableFunction0<Unit> = ..., tabs: @Composable() ComposableFunction0<Unit>): Unit' is deprecated. Replaced with PrimaryTabRow and SecondaryTabRow.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItem.kt:78:17 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:72:26 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:72:52 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:74:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:114:32 'fun toggleSoftInput(p0: Int, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:127:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:128:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:171:32 'fun toggleSoftInput(p0: Int, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:183:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:184:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:197:58 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/TweetFeedViewModel.kt:115:17 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/UserViewModel.kt:699:57 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/UserViewModel.kt:978:48 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/ImageCacheManager.kt:698:9 This is a delicate API and its use requires care. Make sure you fully read and understand documentation of the declaration that is marked as a delicate API.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/MediaGrid.kt:714:9 Condition is always 'true'.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:hiltAggregateDepsDebug
+> Task :app:hiltJavaCompileDebug
+> Task :app:processDebugJavaRes
+> Task :app:transformDebugClassesWithAsm
+> Task :app:mergeDebugJavaResource
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+BUILD SUCCESSFUL in 3m 11s
+49 actionable tasks: 48 executed, 1 up-to-date
