@@ -1,4 +1,4 @@
-> Task :clean UP-TO-DATE
+> Task :clean
 > Task :app:clean
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
@@ -7,10 +7,10 @@
 > Task :app:generateDebugBuildConfig
 > Task :app:processDebugNavigationResources
 > Task :app:generateDebugResValues
-> Task :app:injectCrashlyticsMappingFileIdDebug
-> Task :app:injectCrashlyticsVersionControlInfoDebug
 > Task :app:compileDebugNavigationResources
 > Task :app:checkDebugAarMetadata
+> Task :app:injectCrashlyticsMappingFileIdDebug
+> Task :app:injectCrashlyticsVersionControlInfoDebug
 > Task :app:processDebugGoogleServices
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
@@ -19,50 +19,51 @@
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
 
 > Task :app:stripDebugDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libavcodec.so, libavcodec_neon.so, libavdevice.so, libavdevice_neon.so, libavfilter.so, libavfilter_neon.so, libavformat.so, libavformat_neon.so, libavutil.so, libavutil_neon.so, libdatastore_shared_counter.so, libffmpegkit.so, libffmpegkit_abidetect.so, libffmpegkit_armv7a_neon.so, libimage_processing_util_jni.so, libsurface_util_jni.so, libswresample.so, libswresample_neon.so, libswscale.so, libswscale_neon.so. Run with --info option to learn more.
 
-> Task :app:mergeDebugResources
-> Task :app:processDebugMainManifest
-> Task :app:processDebugManifest
-> Task :app:extractDebugNativeDebugMetadata
-> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:extractDebugNativeDebugMetadata
+> Task :app:mergeDebugResources
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugAssets
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
 > Task :app:compressDebugAssets
-> Task :app:checkDebugDuplicateClasses
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
-> Task :app:mergeLibDexDebug
 > Task :app:writeDebugSigningConfigVersions
 > Task :app:processDebugManifestForPackage
-> Task :app:processDebugResources
+> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeLibDexDebug
 > Task :app:desugarDebugFileDependencies
+> Task :app:processDebugResources
 
 > Task :app:kspDebugKotlin
 w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
 w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
 
 > Task :app:mergeExtDexDebug
+
 > Task :app:compileDebugKotlin
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:539:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:629:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:129:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/debug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:197:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:193:74 Unchecked cast of 'Any?' to 'List<String>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:622:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:623:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:710:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:711:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1121:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1122:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1170:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1171:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1533:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:199:74 Unchecked cast of 'Any?' to 'List<String>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:623:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:624:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:706:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:707:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1110:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1111:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1159:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1160:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1522:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/TweetApplication.kt:110:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/profile/SystemSettings.kt:170:38 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes ExposedDropdownMenuAnchorType and enabled parameters.
 w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/service/NotificationPermissionManager.kt:120:55 'field versionCode: Int' is deprecated. Deprecated in Java.
@@ -98,5 +99,5 @@ w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tw
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
 
-BUILD SUCCESSFUL in 3m 11s
-49 actionable tasks: 48 executed, 1 up-to-date
+BUILD SUCCESSFUL in 29s
+49 actionable tasks: 49 executed

@@ -631,6 +631,7 @@ object VideoManager {
             val cacheDataSourceFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(MediaIdCacheKeyFactory()) // Use media ID as cache key
                 .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
             // Use DefaultMediaSourceFactory backed by CacheDataSource which handles both HLS and progressive

@@ -40,6 +40,7 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null,
     val cacheDataSourceFactory = CacheDataSource.Factory()
         .setCache(cache)
         .setUpstreamDataSourceFactory(upstreamFactory)
+        .setCacheKeyFactory(MediaIdCacheKeyFactory()) // Use media ID as cache key
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive

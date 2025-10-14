@@ -52,8 +52,7 @@ class MediaUploadService(
     @OptIn(UnstableApi::class)
     suspend fun uploadToIPFS(
         uri: Uri,
-        referenceId: MimeiId? = null,
-        noResample: Boolean = false
+        referenceId: MimeiId? = null
     ): MimeiFileType? {
         // Get file name
         var fileName: String? = null

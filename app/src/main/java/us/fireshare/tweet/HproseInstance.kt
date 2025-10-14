@@ -1673,10 +1673,9 @@ object HproseInstance {
     suspend fun uploadToIPFS(
         context: Context,
         uri: Uri,
-        referenceId: MimeiId? = null,
-        noResample: Boolean = false
+        referenceId: MimeiId? = null
     ): MimeiFileType? {
-        return mediaUploadService.uploadToIPFS(uri, referenceId, noResample)
+        return mediaUploadService.uploadToIPFS(uri, referenceId)
     }
 
     /**
@@ -1687,8 +1686,7 @@ object HproseInstance {
     private suspend fun uploadToIPFS_Legacy(
         context: Context,
         uri: Uri,
-        referenceId: MimeiId? = null,
-        noResample: Boolean = false
+        referenceId: MimeiId? = null
     ): MimeiFileType? {
         // Get file name
         var fileName: String? = null
