@@ -142,11 +142,19 @@ URL: http://192.168.1.2:8080/mm/QmVideo123  (different node, same video)
 Cache Key: QmVideo123  (same cache entry ✓)
 
 URL: http://192.168.1.1:8080/mm/QmVideo123/master.m3u8
-Cache Key: QmVideo123
+Cache Key: QmVideo123/master.m3u8
 
 URL: http://192.168.1.1:8080/mm/QmVideo123/playlist.m3u8
-Cache Key: QmVideo123
+Cache Key: QmVideo123/playlist.m3u8
+
+URL: http://192.168.1.1:8080/mm/QmVideo123/segment0.ts
+Cache Key: QmVideo123/segment0.ts
+
+URL: http://192.168.1.2:8080/mm/QmVideo123/segment0.ts  (different node, same segment)
+Cache Key: QmVideo123/segment0.ts  (same cache entry ✓)
 ```
+
+**Important:** The cache key includes the path after the media ID to ensure unique keys for HLS segments while still allowing cross-node caching.
 
 ### Image URLs:
 ```

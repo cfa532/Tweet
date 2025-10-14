@@ -27,13 +27,20 @@ class MediaIdCacheKeyFactory : CacheKeyFactory {
     }
     
     /**
-     * Extract media ID from URL.
+     * Extract media ID and path from URL for cache key.
+     * 
+     * This preserves the path after media ID to ensure unique cache keys for HLS segments.
      * 
      * Examples:
      * - http://192.168.1.1:8080/mm/QmVideo123 -> QmVideo123
      * - http://192.168.1.1:8080/ipfs/QmVideo123 -> QmVideo123
-     * - http://192.168.1.1:8080/mm/QmVideo123/master.m3u8 -> QmVideo123
-     * - http://192.168.1.1:8080/mm/QmVideo123/playlist.m3u8 -> QmVideo123
+     * - http://192.168.1.1:8080/mm/QmVideo123/master.m3u8 -> QmVideo123/master.m3u8
+     * - http://192.168.1.1:8080/mm/QmVideo123/playlist.m3u8 -> QmVideo123/playlist.m3u8
+     * - http://192.168.1.1:8080/mm/QmVideo123/segment0.ts -> QmVideo123/segment0.ts
+     * 
+     * Different nodes serving the same video will share cache:
+     * - http://192.168.1.1:8080/mm/QmVideo123/master.m3u8 -> QmVideo123/master.m3u8
+     * - http://192.168.1.2:8080/mm/QmVideo123/master.m3u8 -> QmVideo123/master.m3u8 (same key!)
      */
     private fun extractMediaIdFromUrl(url: String): String {
         return try {
@@ -47,14 +54,15 @@ class MediaIdCacheKeyFactory : CacheKeyFactory {
             val mmIndex = parts.indexOfFirst { it == "mm" || it == "ipfs" }
             
             if (mmIndex >= 0 && mmIndex + 1 < parts.size) {
-                // The media ID is right after "mm" or "ipfs"
-                val mediaId = parts[mmIndex + 1]
+                // Get media ID and everything after it (for HLS segments, playlists, etc.)
+                val remainingParts = parts.subList(mmIndex + 1, parts.size)
+                val cacheKey = remainingParts.joinToString("/")
                 
                 // Remove any query parameters if present
-                val cleanMediaId = mediaId.substringBefore('?')
+                val cleanCacheKey = cacheKey.substringBefore('?')
                 
-                Timber.tag("MediaIdCacheKeyFactory").d("Extracted cache key: $cleanMediaId from URL: $url")
-                cleanMediaId
+                Timber.tag("MediaIdCacheKeyFactory").d("Extracted cache key: $cleanCacheKey from URL: $url")
+                cleanCacheKey
             } else {
                 // Fallback to URL if we can't extract media ID
                 Timber.tag("MediaIdCacheKeyFactory").w("Could not extract media ID from URL: $url, using full URL as cache key")
