@@ -229,14 +229,33 @@ The system uses configurable parameters:
 - ✅ Maintains original aspect ratio
 - ✅ Ensures even dimensions for codec compatibility
 
+## Background Processing
+
+⚠️ **IMPORTANT:** All video processing operations described in this document run in **background workers** using Android WorkManager.
+
+See **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** for complete details on:
+- Background worker architecture
+- Wake lock protection
+- Multiple video handling
+- Retry logic and error handling
+- Resource management
+
+**Key Points:**
+- ✅ All HLS conversion runs in `UploadTweetWorker` (background worker)
+- ✅ FFmpeg processing uses `Dispatchers.IO` context
+- ✅ Wake lock prevents device sleep during processing
+- ✅ Videos processed in pairs (2 at a time) for optimal performance
+- ✅ Automatic retry with exponential backoff
+- ✅ Non-blocking to UI - user can leave app during processing
+
 ## Future Enhancements
 
 Potential improvements for future versions:
 
 1. ✅ **Multiple Bitrate Support**: ✅ IMPLEMENTED (720p + 480p)
-2. **Progress Callbacks**: Real-time progress updates for UI
-3. **Background Processing**: Use WorkManager for background processing
+2. ✅ **Background Processing**: ✅ IMPLEMENTED (WorkManager with wake lock)
+3. **Progress Callbacks**: Real-time progress updates for UI
 4. **Caching**: Cache processed videos for reuse
 5. **Quality Selection**: Allow users to choose processing quality
-6. **Batch Processing**: Process multiple videos simultaneously
+6. **Increase Parallelism**: Process more than 2 videos simultaneously
 7. **Hardware Acceleration**: Utilize device GPU for faster encoding

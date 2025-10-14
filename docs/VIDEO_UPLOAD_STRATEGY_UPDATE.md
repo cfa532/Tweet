@@ -5,6 +5,8 @@
 
 This document summarizes the changes made to the video upload strategy, including removal of default cloudDrivePort values and implementation of intelligent video processing based on service availability.
 
+⚠️ **IMPORTANT:** All video processing operations run in **background workers** using Android WorkManager. See **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** for complete background processing architecture details.
+
 ## Changes Summary
 
 ### 1. CloudDrivePort Made Optional
@@ -32,7 +34,13 @@ This document summarizes the changes made to the video upload strategy, includin
 **Processing Flow:**
 
 ```
-Video Upload
+User Selects Video
+    ↓
+WorkManager Enqueues UploadTweetWorker
+    ↓
+[BACKGROUND WORKER - ALL BELOW RUNS IN BACKGROUND]
+    ↓
+Wake Lock Acquired (10 min protection)
     ↓
 Check cloudDrivePort validity
     ↓
@@ -47,18 +55,24 @@ Check cloudDrivePort validity
 │ HLS Conversion  │  │ Check video resolution    │
 │ + Process-zip   │  └───────────────────────────┘
 │ Upload          │       ↓              ↓
-└─────────────────┘   > 720p        ≤ 720p
-                        ↓              ↓
+│ (Background)    │   > 720p        ≤ 720p
+└─────────────────┘       ↓              ↓
                   ┌──────────────┐  ┌──────────────┐
                   │ Normalize +  │  │ Normalize to │
                   │ Resample to  │  │ standard MP4 │
                   │ 720p         │  │              │
+                  │ (Background) │  │ (Background) │
                   └──────────────┘  └──────────────┘
                         ↓              ↓
                   ┌──────────────────────┐
                   │ Upload via IPFS      │
+                  │ (Background)         │
                   └──────────────────────┘
+                        ↓
+                  Wake Lock Released
 ```
+
+**All operations execute in background workers with wake lock protection.**
 
 ### 3. Video Normalization Features
 

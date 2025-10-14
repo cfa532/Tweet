@@ -7,34 +7,39 @@
 
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
-**Total Documents:** 31 markdown files  
-**Last Updated:** October 13, 2025
+**Total Documents:** 24 documentation files  
+**Last Updated:** October 14, 2025  
+**Status:** ✅ Clean, Organized & Essential Only
 
 ---
 
 ## 🌟 Start Here (New Developers)
 
 ### Essential Reading (20 minutes)
-1. **[QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)** 🆕 - Get up and running in 5 minutes
-2. **[PROJECT_STATUS.md](PROJECT_STATUS.md)** 🆕 - Current project state and overview
-3. **[TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md)** 🆕 - Comprehensive architecture guide
-4. **[RECENT_CHANGES.md](RECENT_CHANGES.md)** 🆕 - Latest updates (October 2025)
+1. **[QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)** - Get up and running in 5 minutes
+2. **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current project state and overview
+3. **[TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md)** - Comprehensive architecture guide
+4. **[RECENT_CHANGES.md](RECENT_CHANGES.md)** - Latest updates (October 2025)
 
 ---
 
 ## 🚀 Recent Updates (October 2025)
 
-### New Documentation 🆕
-- **[QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)** - Developer onboarding guide
-- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Complete project status
-- **[TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md)** - Architecture deep dive
-- **[RECENT_CHANGES.md](RECENT_CHANGES.md)** - Recent updates summary
-- **[DOCUMENTATION_ORGANIZATION_SUMMARY.md](DOCUMENTATION_ORGANIZATION_SUMMARY.md)** - Organization notes
+### Documentation Cleanup (Oct 14, 2025) 🧹
+- **Consolidated duplicates:** 8 files → 3 comprehensive docs
+- **Removed temporary/minor docs:** 9 historical summaries
+- **Final reduction:** 40+ files → 24 essential docs
+- **Improved organization** with better cross-referencing
+- **New consolidated docs:**
+  - **[FILE_TYPE_DETECTION.md](FILE_TYPE_DETECTION.md)** - Merged implementation + summary
+  - **[BADGE_IMPLEMENTATION.md](BADGE_IMPLEMENTATION.md)** - Merged formatting + implementation
+  - **[PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md)** - Merged audit + improvements
 
-### Latest Changes
+### Latest Features
+- **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** - Complete background processing architecture
 - **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Major performance optimization
-- **[VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md](VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md)** - Updated with mute state
-- **[LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md](LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md)** - Updated with latest config
+- **[VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md](VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md)** - Video manager unification
+- **[LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md](LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md)** - HLS conversion with background processing
 
 ---
 
@@ -72,15 +77,6 @@ This folder contains all technical documentation for the Tweet distributed socia
   - HLS segment naming
   - Files modified list
 
-- **[SESSION_SUMMARY_OCT_2025.md](SESSION_SUMMARY_OCT_2025.md)** 🆕
-  - Complete session summary
-  - All accomplishments
-  - Performance metrics
-  - Technical achievements
-
-- **[DOCUMENTATION_ORGANIZATION_SUMMARY.md](DOCUMENTATION_ORGANIZATION_SUMMARY.md)** 🆕
-  - Documentation reorganization notes
-  - Structure explanation
 
 ---
 
@@ -89,12 +85,20 @@ This folder contains all technical documentation for the Tweet distributed socia
 ### 🌐 Network & Performance Optimization
 
 #### **Connection Pooling & Distributed Architecture**
-- **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** 🌟 **NEW**
+- **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)**
   - Comprehensive connection pooling implementation
   - Node-based client sharing (60-80% memory reduction)
   - OkHttp migration for image downloads
   - Ktor optimization for API calls
   - HproseClientPool for distributed nodes
+
+#### **Performance Optimization**
+- **[PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md)** ⭐ **CONSOLIDATED**
+  - Scroll performance improvements (10-100x faster)
+  - LazyColumn optimization with stable keys
+  - MediaGrid aspect ratio caching
+  - Layout stability fixes
+  - Best practices and metrics
 
 #### **Image Loading & Caching**
 - **[LAZY_LOADING_IMAGE_GRID_IMPROVEMENTS.md](LAZY_LOADING_IMAGE_GRID_IMPROVEMENTS.md)**
@@ -141,25 +145,35 @@ This folder contains all technical documentation for the Tweet distributed socia
   - Bug fixes and solutions
   - Performance improvements
 
-#### **Video Processing & Conversion**
-- **[LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md](LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md)**
-  - FFmpeg integration
-  - Local video processing
-  - HLS conversion (segment naming: segment000.ts, segment001.ts, etc.)
+#### **Video Processing & Upload**
+- **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** ⭐ **ESSENTIAL**
+  - Complete background processing architecture
+  - WorkManager integration and wake lock protection
+  - Multiple video handling (pair-wise processing)
+  - HLS and fallback operations in background
+  - Retry logic and error handling
+  - Resource management and cleanup
 
-- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)** 🆕
+- **[LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md](LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md)**
+  - FFmpeg integration for HLS conversion
+  - Local video processing workflow
+  - Multi-resolution HLS (720p + 480p)
+  - Segment naming: segment000.ts, segment001.ts, etc.
+
+- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)**
   - Video upload strategy and routing
   - TUS server integration
   - Service availability checking
   - Automatic fallback to IPFS
   - Resolution-based processing
 
-- **[TUS_SERVER_NAMING_UPDATE.md](TUS_SERVER_NAMING_UPDATE.md)** 🌟 **NEW** (Oct 13, 2025)
+- **[TUS_SERVER_NAMING_UPDATE.md](TUS_SERVER_NAMING_UPDATE.md)**
   - Renamed netDiskUrl to tusServerUrl
-  - Updated health check endpoint from `/process-zip/health` to `/health`
-  - Added resolveWritableUrl() requirement
+  - Health check endpoint: `/health`
+  - resolveWritableUrl() requirement
   - Server implementation examples
 
+#### **Video Error Handling**
 - **[MEDIACODEC_ERROR_RECOVERY.md](MEDIACODEC_ERROR_RECOVERY.md)**
   - MediaCodec error handling
   - Codec compatibility
@@ -174,20 +188,7 @@ This folder contains all technical documentation for the Tweet distributed socia
 
 ### 💬 Chat & Messaging
 
-- **[CHAT_SESSION_DISPLAY_LOGIC_SUMMARY.md](CHAT_SESSION_DISPLAY_LOGIC_SUMMARY.md)**
-  - Chat session management
-  - Display logic
-  - UI state handling
-
-- **[CHAT_VIDEO_LOADING_OPTIMIZATION.md](CHAT_VIDEO_LOADING_OPTIMIZATION.md)**
-  - Video in chat messages
-  - Loading optimization
-  - Performance tuning
-
-- **[CHAT_VIDEO_DISPLAY_IMPROVEMENT_SUMMARY.md](CHAT_VIDEO_DISPLAY_IMPROVEMENT_SUMMARY.md)**
-  - Video display in chat
-  - UI improvements
-  - User experience enhancements
+**Note:** Chat-specific video optimizations are documented in the main video documentation (VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md and BACKGROUND_VIDEO_PROCESSING.md)
 
 ---
 
@@ -212,7 +213,7 @@ This folder contains all technical documentation for the Tweet distributed socia
 
 ### 🎨 UI Features & Components
 
-- **[TWEET_LIST_VIEW.md](TWEET_LIST_VIEW.md)** 🆕
+- **[TWEET_LIST_VIEW.md](TWEET_LIST_VIEW.md)**
   - Self-contained tweet list component
   - iOS-like infinite scroll
   - Pull-to-refresh functionality
@@ -220,15 +221,11 @@ This folder contains all technical documentation for the Tweet distributed socia
   - Smart debouncing and pagination
   - Profile screen integration
 
-- **[BADGE_IMPLEMENTATION_SUMMARY.md](BADGE_IMPLEMENTATION_SUMMARY.md)**
-  - Launcher badge implementation
-  - Notification badges
-  - Badge state management
-
-- **[BADGE_FORMATTING_IMPLEMENTATION.md](BADGE_FORMATTING_IMPLEMENTATION.md)**
-  - Badge visual formatting
-  - UI guidelines
-  - Cross-platform support
+- **[BADGE_IMPLEMENTATION.md](BADGE_IMPLEMENTATION.md)** ⭐ **CONSOLIDATED**
+  - Launcher badge system with ShortcutBadger
+  - Badge formatting (1-9 numbers, "n" for 10+)
+  - Real-time updates and state management
+  - Device compatibility and testing
 
 - **[NIGHT_MODE_OPTIONAL_IMPLEMENTATION.md](NIGHT_MODE_OPTIONAL_IMPLEMENTATION.md)**
   - Dark mode support
@@ -239,15 +236,11 @@ This folder contains all technical documentation for the Tweet distributed socia
 
 ### 🗂️ File & Data Management
 
-- **[FILE_TYPE_DETECTION_IMPLEMENTATION.md](FILE_TYPE_DETECTION_IMPLEMENTATION.md)**
-  - File type detection logic
-  - MIME type handling
-  - Media classification
-
-- **[FILE_TYPE_DETECTION_SUMMARY.md](FILE_TYPE_DETECTION_SUMMARY.md)**
-  - File type detection summary
-  - Implementation details
-  - Edge cases
+- **[FILE_TYPE_DETECTION.md](FILE_TYPE_DETECTION.md)** ⭐ **CONSOLIDATED**
+  - Multi-method file type detection (extension, magic bytes, MIME)
+  - Supports 20+ file formats
+  - Automatic fallback mechanisms
+  - Integration with upload process
 
 ---
 
@@ -356,7 +349,46 @@ The Tweet app is a distributed social media application that connects to multipl
 
 ---
 
-**Total Documents:** 31 markdown files  
-**Last Review:** October 13, 2025  
+## 📦 Documentation Cleanup Summary
+
+### Consolidated Documents (8 → 3)
+
+| Original Files | Consolidated Into | Date |
+|----------------|-------------------|------|
+| FILE_TYPE_DETECTION_IMPLEMENTATION.md<br>FILE_TYPE_DETECTION_SUMMARY.md | **FILE_TYPE_DETECTION.md** | Oct 14, 2025 |
+| BADGE_FORMATTING_IMPLEMENTATION.md<br>BADGE_IMPLEMENTATION_SUMMARY.md | **BADGE_IMPLEMENTATION.md** | Oct 14, 2025 |
+| PERFORMANCE_AUDIT_REPORT.md<br>PERFORMANCE_IMPROVEMENTS_SUMMARY.md | **PERFORMANCE_OPTIMIZATION.md** | Oct 14, 2025 |
+
+### Removed Temporary/Minor Documentation (9 files)
+
+**Refactoring Summaries** (completed tasks):
+- MEDIA_UPLOAD_REFACTORING.md
+- VIDEO_LOADING_MANAGER_SUMMARY.md
+- VIDEO_PLAYER_REFACTORING.md
+
+**Fix Summaries** (incorporated into main docs):
+- VIDEO_LOADING_FIXES_SUMMARY.md
+- CHAT_VIDEO_DISPLAY_IMPROVEMENT_SUMMARY.md
+- CHAT_VIDEO_LOADING_OPTIMIZATION.md
+- CHAT_SESSION_DISPLAY_LOGIC_SUMMARY.md
+
+**Cleanup Records** (historical):
+- DEBUG_LOG_CLEANUP.md
+- CLEANUP_SUMMARY.md
+
+**Meta-Documentation:**
+- SESSION_SUMMARY_OCT_2025.md (redundant with RECENT_CHANGES.md)
+- DOCUMENTATION_ORGANIZATION_SUMMARY.md
+
+### Results
+- **Before:** 40+ files (with duplicates and temporary docs)
+- **After:** 24 essential files
+- **Reduction:** 40% fewer files, 100% less duplication
+
+---
+
+**Total Documents:** 24 essential documentation files  
+**Last Review:** October 14, 2025  
+**Status:** ✅ Clean, organized, essential only  
 **Maintainer:** Development Team
 
