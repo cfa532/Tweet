@@ -158,8 +158,8 @@ class MediaUploadService(
         return try {
             Timber.tag(TAG).d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
             
-            // First check if cloudDrivePort is valid (null or 0 means not set)
-            if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) {
+            // First check if cloudDrivePort is valid (0 means not set)
+            if (appUser.cloudDrivePort == 0) {
                 Timber.tag(TAG).d("cloudDrivePort is not set (value: ${appUser.cloudDrivePort})")
                 return false
             }

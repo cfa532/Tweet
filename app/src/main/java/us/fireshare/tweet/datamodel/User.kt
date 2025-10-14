@@ -23,7 +23,7 @@ data class User(
     @Expose var profile: String? = null,
     @Expose var timestamp: Long = System.currentTimeMillis(),
     @Expose var lastLogin: Long? = System.currentTimeMillis(),
-    @Expose var cloudDrivePort: Int? = null,
+    @Expose var cloudDrivePort: Int = 0,
 
     @Expose var tweetCount: Int = 0,
     @Expose var followingCount: Int = 0,
@@ -424,14 +424,14 @@ data class User(
      * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
      * Important: 
      * - Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
-     * - Returns null if cloudDrivePort is not set (0 or null means not set)
+     * - Returns null if cloudDrivePort is not set (0 means not set)
      */
     val tusServerUrl: String?
         get() {
             val baseUrl = writableUrl ?: return null
             val port = cloudDrivePort
-            // cloudDrivePort of 0 or null means not set
-            if (port == null || port == 0) return null
+            // cloudDrivePort of 0 means not set
+            if (port == 0) return null
             
             return try {
                 val uri = java.net.URI(baseUrl)

@@ -88,7 +88,7 @@ class UserViewModel @AssistedInject constructor(
     var name = mutableStateOf(appUser.name)
     var profile = mutableStateOf(appUser.profile)
     var hostId = mutableStateOf("")
-    var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
+    var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
 
@@ -872,7 +872,7 @@ class UserViewModel @AssistedInject constructor(
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                cloudDrivePort.value = if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
+                cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
                 
                 // Reset and refresh tweet feed after successful login
@@ -969,7 +969,7 @@ class UserViewModel @AssistedInject constructor(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value?.trim(),
-            cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else cloudDrivePort.value.toIntOrNull()
+            cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
             if (ret["status"] == "success") {
@@ -1033,7 +1033,7 @@ class UserViewModel @AssistedInject constructor(
                                 name.value = appUser.name
                                 profile.value = appUser.profile
                                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                cloudDrivePort.value = if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
+                                cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                 
                                 // Also update the user state to reflect the new profile data
                                 _user.value = appUser
@@ -1111,7 +1111,7 @@ class UserViewModel @AssistedInject constructor(
                                     name.value = appUser.name
                                     profile.value = appUser.profile
                                     hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                    cloudDrivePort.value = if (appUser.cloudDrivePort == null || appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
+                                    cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                     
                                     // Also update the user state to reflect the new profile data
                                     _user.value = appUser

@@ -446,7 +446,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 try {
                                     // Send 0 if field is empty/blank to indicate removal
                                     val portValue = cloudPort
-                                    appUser.cloudDrivePort = if (portValue.isNullOrBlank()) 0 else portValue.toIntOrNull()
+                                    appUser.cloudDrivePort = if (portValue.isNullOrBlank()) 0 else (portValue.toIntOrNull() ?: 0)
                                     applicationScope.launch(Dispatchers.IO) {
                                         HproseInstance.setUserData(appUser)
                                     }
