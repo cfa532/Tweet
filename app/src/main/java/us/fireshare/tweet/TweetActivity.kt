@@ -185,15 +185,17 @@ class ActivityViewModel: ViewModel() {
                 // Check if this is a mini version (has "-mini" suffix)
                 val isMiniVersion = currentVersionString.contains("-mini")
                 
-                // If mini user manually requests upgrade, always show upgrade dialog
+                // If mini user manually requests upgrade, download directly (bypass second dialog)
                 if (isMiniVersion && immediate) {
                     Timber.tag("checkForUpgrade").d("Mini user requesting upgrade: $currentVersionString")
                     // Query server for full version package
                     val versionInfo = HproseInstance.checkUpgrade()
                     if (versionInfo != null && versionInfo["packageId"] != null) {
                         appUser.baseUrl?.let { hostIp ->
-                            Timber.tag("checkForUpgrade").d("Showing upgrade dialog for mini user, packageId=${versionInfo["packageId"]}")
-                            showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
+                            val downloadUrl = "$hostIp/mm/${versionInfo["packageId"]}"
+                            Timber.tag("checkForUpgrade").d("Starting direct download for mini user, url=$downloadUrl")
+                            // Download directly, bypass confirmation dialog
+                            downloadAndInstall(context, downloadUrl)
                         }
                     } else {
                         Timber.tag("checkForUpgrade").w("Server didn't return package info for upgrade")

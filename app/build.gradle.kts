@@ -11,6 +11,13 @@ plugins {
     id("kotlin-parcelize")
 }
 
+// Load keystore properties
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = java.util.Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "us.fireshare.tweet"
     compileSdk = 36
@@ -36,14 +43,21 @@ android {
     
     signingConfigs {
         // Debug signing config (automatically available)
-        // For production, create a release signing config with your keystore
+        
         create("release") {
-            // Using debug signing for development/testing
-            // Replace with your production keystore for release builds
-            storeFile = signingConfigs.getByName("debug").storeFile
-            storePassword = signingConfigs.getByName("debug").storePassword
-            keyAlias = signingConfigs.getByName("debug").keyAlias
-            keyPassword = signingConfigs.getByName("debug").keyPassword
+            // Load from keystore.properties file or fall back to debug signing
+            if (keystorePropertiesFile.exists()) {
+                storeFile = file(keystoreProperties["KEYSTORE_FILE"] as String)
+                storePassword = keystoreProperties["KEYSTORE_PASSWORD"] as String
+                keyAlias = keystoreProperties["KEY_ALIAS"] as String
+                keyPassword = keystoreProperties["KEY_PASSWORD"] as String
+            } else {
+                // Fallback to debug signing if keystore.properties doesn't exist
+                storeFile = signingConfigs.getByName("debug").storeFile
+                storePassword = signingConfigs.getByName("debug").storePassword
+                keyAlias = signingConfigs.getByName("debug").keyAlias
+                keyPassword = signingConfigs.getByName("debug").keyPassword
+            }
         }
     }
     

@@ -20,3 +20,8 @@ local.properties
 /app/mini/release/app-mini-release.apk
 /app/mini/release/baselineProfiles/0/app-mini-release.dm
 /app/mini/release/baselineProfiles/1/app-mini-release.dm
+
+# Keystore files - DO NOT COMMIT
+keystore.properties
+*.jks
+*.keystore
