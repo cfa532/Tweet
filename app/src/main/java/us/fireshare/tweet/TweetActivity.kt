@@ -5,9 +5,12 @@ import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -222,27 +225,119 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 val currentVersionCode = packageInfo.longVersionCode.toInt()
                 
                 Timber.tag("checkForMiniUpgrade").d("Mini user requesting upgrade: $currentVersionString (code=$currentVersionCode)")
-                // Query server for full version package
-                val versionInfo = HproseInstance.checkUpgrade()
-                if (versionInfo == null || versionInfo["packageId"] == null) {
-                    Timber.tag("checkForMiniUpgrade").w("Server didn't return package info for upgrade")
-                    return@launch
-                }
                 
-                // Get provider IP and download directly
-                val packageId = versionInfo["packageId"]
-                if (packageId == null) {
-                    Timber.tag("checkForMiniUpgrade").e("No package ID available")
+                // Query server for full version package
+                Timber.tag("checkForMiniUpgrade").d("Calling HproseInstance.checkUpgrade()")
+                val versionInfo = HproseInstance.checkUpgrade()
+                Timber.tag("checkForMiniUpgrade").d("checkUpgrade() returned: $versionInfo")
+                
+                if (versionInfo == null) {
+                    Timber.tag("checkForMiniUpgrade").e("Server returned null version info")
                     withContext(Main) {
                         android.widget.Toast.makeText(context,
-                            context.getString(R.string.upgrade_failed_unknown),
+                            "Server returned null version info",
                             android.widget.Toast.LENGTH_LONG).show()
                     }
                     return@launch
                 }
                 
-                // Download APK directly for mini version users
-                downloadAndShowUpdateDialog(context, packageId, showDialog = false)
+                if (versionInfo["packageId"] == null) {
+                    Timber.tag("checkForMiniUpgrade").e("Server version info missing packageId")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            "Server missing package ID",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                val packageId = versionInfo["packageId"] as String
+                Timber.tag("checkForMiniUpgrade").d("Got packageId: $packageId")
+                
+                // Get provider IP and download APK to private directory first
+                Timber.tag("checkForMiniUpgrade").d("Calling HproseInstance.getProviderIP($packageId)")
+                val providerIp = HproseInstance.getProviderIP(packageId)
+                Timber.tag("checkForMiniUpgrade").d("getProviderIP() returned: $providerIp")
+                
+                if (providerIp == null) {
+                    Timber.tag("checkForMiniUpgrade").e("No provider IP available for packageId: $packageId")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            "No provider IP available",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                val downloadUrl = "http://$providerIp/mm/$packageId"
+                Timber.tag("checkForMiniUpgrade").d("Downloading APK to check version: $downloadUrl")
+                
+                // Use exact same download logic as working downloadAndInstall
+                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val request = DownloadManager.Request(downloadUrl.toUri())
+                    .setMimeType("application/octet-stream")
+                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "temp_upgrade.apk")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setTitle("Checking for updates")
+
+                val downloadId = downloadManager.enqueue(request)
+
+                var finishDownload = false
+                while (!finishDownload) {
+                    val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+                    if (cursor.moveToFirst()) {
+                        val columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        val status = cursor.getInt(columnIndex)
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            finishDownload = true
+                            
+                            // Get the downloaded APK file URI from the download record
+                            val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                            val localUri = cursor.getString(localUriIndex)
+                            val apkFile = File(Uri.parse(localUri).path ?: "")
+                            
+                            Timber.tag("checkForMiniUpgrade").d("Downloaded file path: ${apkFile.absolutePath}")
+                            Timber.tag("checkForMiniUpgrade").d("Downloaded file exists: ${apkFile.exists()}")
+                            Timber.tag("checkForMiniUpgrade").d("Downloaded file size: ${apkFile.length()} bytes")
+                            
+                            // Get versionCode from downloaded APK
+                            val downloadedPackageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                            if (downloadedPackageInfo != null) {
+                                val downloadedVersionCode = downloadedPackageInfo.longVersionCode.toInt()
+                                Timber.tag("checkForMiniUpgrade").d("Version comparison: current=$currentVersionCode, downloaded=$downloadedVersionCode")
+                                
+                                if (downloadedVersionCode > currentVersionCode) {
+                                    Timber.tag("checkForMiniUpgrade").d("Update available, starting installation")
+                                    // Install the downloaded APK
+                                    installApkFromFile(context, apkFile)
+                                } else {
+                                    Timber.tag("checkForMiniUpgrade").d("No update needed: current version is up to date")
+                                    withContext(Main) {
+                                        android.widget.Toast.makeText(context,
+                                            "You already have the latest version",
+                                            android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                    // Clean up temp file
+                                    apkFile.delete()
+                                }
+                            } else {
+                                Timber.tag("checkForMiniUpgrade").e("Failed to read package info from downloaded APK")
+                                withContext(Main) {
+                                    android.widget.Toast.makeText(context,
+                                        "Failed to verify downloaded package",
+                                        android.widget.Toast.LENGTH_LONG).show()
+                                }
+                                apkFile.delete()
+                            }
+                        } else if (status == DownloadManager.STATUS_FAILED) {
+                            finishDownload = true
+                            // Handle download failure
+                        }
+                    }
+                    cursor.close()
+                    delay(1000)
+                }
+                
             } catch (e: Exception) {
                 Timber.tag("checkForMiniUpgrade").e(e, "Unexpected error during upgrade check")
                 withContext(Main) {
@@ -373,6 +468,49 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
     
+    /**
+     * Install APK from file using FileProvider
+     */
+    private suspend fun installApkFromFile(context: Context, apkFile: File) {
+        try {
+            Timber.tag("installApkFromFile").d("Installing APK from: ${apkFile.absolutePath}")
+            Timber.tag("installApkFromFile").d("APK file size: ${apkFile.length()} bytes")
+            Timber.tag("installApkFromFile").d("APK file exists: ${apkFile.exists()}")
+            
+            // Verify APK is valid before trying to install
+            val packageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            if (packageInfo == null) {
+                Timber.tag("installApkFromFile").e("APK file is corrupted or invalid")
+                withContext(Main) {
+                    android.widget.Toast.makeText(context,
+                        "Downloaded APK is corrupted. Please try again.",
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+                return
+            }
+            
+            val apkUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                FileProvider.getUriForFile(context, "${context.packageName}.provider", apkFile)
+            } else {
+                Uri.fromFile(apkFile)
+            }
+            
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            }
+            
+            Timber.tag("installApkFromFile").d("Starting installation with URI: $apkUri")
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            Timber.tag("installApkFromFile").e(e, "Failed to install APK: ${e.message}")
+            withContext(Main) {
+                android.widget.Toast.makeText(context,
+                    "Installation failed: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
 }
 
