@@ -31,7 +31,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.async
@@ -41,7 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
@@ -184,17 +182,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         viewModelScope.launch(IO) {
             try {
                 delay(15000)    // delay 15s before checking for upgrade
-                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                val currentVersionCode = packageInfo.longVersionCode.toInt()
-                
-                // Compare versionName (works for both mini and full versions)
-                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-                val packageId = versionInfo["packageId"]
-                // Get provider IP and download directly (same logic as checkForMiniUpgrade)
-                if (packageId == null) {
-                    Timber.tag("checkForUpgrade").e("No package ID available")
-                    return@launch
-                }
 
                 val mid = BuildConfig.ENTRY_URLS
                 HproseInstance.getProviderIP(mid)?.let { ip ->
@@ -207,8 +194,20 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     }
                 }
 
+                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                val currentVersionCode = packageInfo.longVersionCode.toInt()
+                
+                // Compare versionName (works for both mini and full versions)
+                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
+                val packageId = versionInfo["packageId"]
+                // Get provider IP and download directly (same logic as checkForMiniUpgrade)
+                if (packageId == null) {
+                    Timber.tag("checkForUpgrade").e("No package ID available")
+                    return@launch
+                }
+
                 // Download and show update dialog for full version users
-                downloadAndShowUpdateDialog(context, packageId, currentVersionCode, showDialog = true)
+                downloadAndShowUpdateDialog(context, packageId, showDialog = true)
             } catch (e: Exception) {
                 Timber.tag("checkForUpgrade").e(e)
             }
@@ -237,7 +236,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 val packageId = versionInfo["packageId"]
                 if (packageId == null) {
                     Timber.tag("checkForMiniUpgrade").e("No package ID available")
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    withContext(Main) {
                         android.widget.Toast.makeText(context,
                             context.getString(R.string.upgrade_failed_unknown),
                             android.widget.Toast.LENGTH_LONG).show()
@@ -246,10 +245,10 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 }
                 
                 // Download APK directly for mini version users
-                downloadAndShowUpdateDialog(context, packageId, currentVersionCode, showDialog = false)
+                downloadAndShowUpdateDialog(context, packageId, showDialog = false)
             } catch (e: Exception) {
                 Timber.tag("checkForMiniUpgrade").e(e, "Unexpected error during upgrade check")
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Main) {
                     android.widget.Toast.makeText(context,
                         context.getString(R.string.upgrade_failed_unknown),
                         android.widget.Toast.LENGTH_LONG).show()
@@ -263,13 +262,11 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
      * Shared download logic for both checkForUpgrade and checkForMiniUpgrade
      * @param context Android context
      * @param packageId Package ID from server
-     * @param currentVersionCode Current app version code
      * @param showDialog Whether to show update dialog (true for full version, false for mini)
      */
     private fun downloadAndShowUpdateDialog(
         context: Context, 
         packageId: String, 
-        currentVersionCode: Int, 
         showDialog: Boolean
     ) {
         viewModelScope.launch(IO) {

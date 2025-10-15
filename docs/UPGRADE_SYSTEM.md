@@ -2,10 +2,22 @@
 
 ## Overview
 
-The app implements a sophisticated upgrade system that supports:
-1. **Mini to Full Version Upgrade** - Background download and installation
-2. **Tweet Count Requirements** - Automatic upgrade enforcement based on user activity
-3. **Node Requirements** - Alerts for users needing their own infrastructure
+The app implements a unified upgrade system that supports:
+1. **Mini to Full Version Upgrade** - Direct download and installation using DownloadManager
+2. **Full Version Updates** - Automatic upgrade checks with user confirmation
+3. **Tweet Count Requirements** - Automatic upgrade enforcement based on user activity
+4. **Node Requirements** - Alerts for users needing their own infrastructure
+
+## Current Implementation (Final)
+
+The upgrade system now uses a simplified, reliable approach based on Android's DownloadManager:
+
+### Key Features
+- **Unified Download Logic** - Same code for both mini and full version upgrades
+- **System Integration** - Uses Android's built-in DownloadManager
+- **Reliable Downloads** - Handles network issues, pauses, and resumes automatically
+- **User Notifications** - System download notifications with progress
+- **Simple Code** - Minimal complexity, easy to maintain
 
 ## How User Requests to Upgrade to Full Version
 
