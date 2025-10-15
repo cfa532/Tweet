@@ -25,6 +25,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.lifecycle.HiltViewModel
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -45,6 +46,7 @@ import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.ThemeManager
 import us.fireshare.tweet.ui.theme.TweetTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
@@ -169,7 +171,8 @@ class TweetActivity : ComponentActivity() {
     }
 }
 
-class ActivityViewModel: ViewModel() {
+@HiltViewModel
+class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
 
@@ -258,7 +261,7 @@ class ActivityViewModel: ViewModel() {
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(downloadUrl.toUri())
             .setMimeType("application/vnd.android.package-archive")
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
+            .setDestinationInExternalFilesDir(context, null, "fireshare.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setTitle("Downloading Update")
 
@@ -279,23 +282,35 @@ class ActivityViewModel: ViewModel() {
                         // Get the downloaded APK file URI
                         val downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
                         
-                        // Get file path to check versionCode
-                        val downloadedFilePath = Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS).toString() + "/fireshare.apk"
+                        // Get file path to check versionCode (use app's private directory)
+                        val downloadedFilePath = context.getExternalFilesDir(null)?.absolutePath + "/fireshare.apk"
                         val apkFile = java.io.File(downloadedFilePath)
                         
                         if (apkFile.exists()) {
+                            Timber.tag("checkForUpgrade").d("APK file exists at: ${apkFile.absolutePath}, size: ${apkFile.length()} bytes")
+                            
                             // Read versionCode from the downloaded APK
                             val apkPackageInfo = context.packageManager.getPackageArchiveInfo(
                                 apkFile.absolutePath,
                                 0
                             )
                             
-                            val apkVersionCode = apkPackageInfo?.longVersionCode?.toInt()
+                            if (apkPackageInfo == null) {
+                                Timber.tag("checkForUpgrade").e("getPackageArchiveInfo returned null for: ${apkFile.absolutePath}")
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    android.widget.Toast.makeText(context,
+                                        "Failed to read APK file",
+                                        android.widget.Toast.LENGTH_LONG).show()
+                                }
+                                return@launch
+                            }
                             
-                            Timber.tag("checkForUpgrade").d("Downloaded APK versionCode: $apkVersionCode, current: $currentVersionCode")
+                            val apkVersionCode = apkPackageInfo.longVersionCode.toInt()
+                            val apkVersionName = apkPackageInfo.versionName
                             
-                            if (apkVersionCode != null && apkVersionCode > currentVersionCode) {
+                            Timber.tag("checkForUpgrade").d("Downloaded APK - versionCode: $apkVersionCode, versionName: $apkVersionName, current: $currentVersionCode")
+                            
+                            if (apkVersionCode > currentVersionCode) {
                                 // ✅ Version code is higher - proceed with installation
                                 Timber.tag("checkForUpgrade").d("APK versionCode ($apkVersionCode) > current ($currentVersionCode), installing")
                                 

@@ -61,7 +61,7 @@ val LocalNavController = compositionLocalOf<NavController> {
 fun TweetNavGraph(
     appLinkIntent: Intent,
     modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
+    navController: NavHostController = rememberNavController()
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
     val sharedViewModel: SharedViewModel = hiltViewModel()

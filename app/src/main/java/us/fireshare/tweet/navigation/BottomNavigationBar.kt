@@ -40,9 +40,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import timber.log.Timber
+import us.fireshare.tweet.ActivityViewModel
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.service.BadgeStateManager
@@ -61,9 +64,9 @@ data class BottomNavigationItem(
 fun BottomNavigationBar(
     modifier: Modifier = Modifier,
     navController: NavController,
-    selectedIndex: Int = 100,
-    activityViewModel: us.fireshare.tweet.ActivityViewModel = viewModel()
+    selectedIndex: Int = 100
 ) {
+    val activityViewModel = hiltViewModel<ActivityViewModel>()
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
     var showUpgradeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -183,10 +186,17 @@ fun BottomNavigationBar(
                             }
                             
                             // Check upgrade requirement before navigating to compose
-                            if (item.route == NavTweet.ComposeTweet && BuildConfig.IS_MINI_VERSION && 
-                                !appUser.isGuest() && appUser.tweetCount > 5) {
-                                showUpgradeDialog = true
-                                return@clickable
+                            if (item.route == NavTweet.ComposeTweet && BuildConfig.IS_MINI_VERSION) {
+                                Timber.tag("UpgradeCheck")
+                                    .d("Mini version detected - isGuest: ${appUser.isGuest()}, tweetCount: ${appUser.tweetCount}")
+                                if (!appUser.isGuest() && appUser.tweetCount > 5) {
+                                    Timber.tag("UpgradeCheck").d("Showing upgrade dialog")
+                                    showUpgradeDialog = true
+                                    return@clickable
+                                } else {
+                                    Timber.tag("UpgradeCheck")
+                                        .d("Upgrade not required - isGuest: ${appUser.isGuest()}, tweetCount: ${appUser.tweetCount}")
+                                }
                             }
                             
                             onNavigationClick(item.route)

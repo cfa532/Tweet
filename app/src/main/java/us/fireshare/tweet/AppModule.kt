@@ -39,7 +39,11 @@ object AppModule {
         return SharedViewModel()
     }
 
-
+    @Provides
+    @Singleton
+    fun provideActivityViewModel(): ActivityViewModel {
+        return ActivityViewModel()
+    }
 
     @Provides
     @Singleton
