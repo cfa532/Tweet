@@ -183,9 +183,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     // Use GlobalScope instead of viewModelScope to avoid cancellation issues
     @OptIn(DelicateCoroutinesApi::class)
     fun checkForUpgrade(context: Context, immediate: Boolean = false) {
-        Timber.tag("checkForUpgrade").d("Function called - immediate: $immediate")
         kotlinx.coroutines.GlobalScope.launch(IO) {
-            Timber.tag("checkForUpgrade").d("Coroutine started")
             try {
                 if (!immediate) {
                     delay(15000)    // delay 15s before checking for upgrade (automatic check only)
@@ -268,7 +266,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(downloadUrl.toUri())
             .setMimeType("application/vnd.android.package-archive")
-            .setDestinationInExternalFilesDir(context, null, "fireshare.apk")
+            .setDestinationInExternalFilesDir(context, null, "tweet_install.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setTitle("Downloading Update")
 
@@ -290,7 +288,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                         val downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
                         
                         // Get file path to check versionCode (use app's private directory)
-                        val downloadedFilePath = context.getExternalFilesDir(null)?.absolutePath + "/fireshare.apk"
+                        val downloadedFilePath = context.getExternalFilesDir(null)?.absolutePath + "/tweet_install.apk"
                         val apkFile = java.io.File(downloadedFilePath)
                         
                         if (apkFile.exists()) {
