@@ -71,7 +71,22 @@ android {
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
         }
     }
+    
     flavorDimensions += "version"
+    
+    productFlavors {
+        create("full") {
+            dimension = "version"
+            versionNameSuffix = ""
+            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+        }
+        
+        create("mini") {
+            dimension = "version"
+            versionNameSuffix = "-mini"
+            buildConfigField("Boolean", "IS_MINI_VERSION", "true")
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -118,8 +133,9 @@ android {
 
 dependencies {
     // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
-    implementation(files("libs/ffmpeg-kit-16kb-minimal.aar"))
-    implementation("com.arthenica:smart-exception-java:0.2.1")
+    // Only included in full version, excluded in mini version
+    "fullImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
+    "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

@@ -90,6 +90,7 @@ class TweetActivity : ComponentActivity() {
                 // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
 
+                // Check for server upgrades (works for both mini and full versions)
                 launch {
                     delay(15000)
                     activityViewModel.checkForUpgrade(this@TweetActivity)
@@ -175,13 +176,24 @@ class ActivityViewModel: ViewModel() {
             try {
                 delay(15000)    // delay 15s before checking for upgrade.
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-                val currentVersion =
+                val currentVersionString =
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName
                         ?: return@launch
+                
+                // Strip "-mini" suffix if present for version comparison
+                // Mini version: "38-mini" -> 38, Full version: "38" -> 38
+                val currentVersion = currentVersionString.replace("-mini", "").toIntOrNull() ?: return@launch
+                val serverVersion = versionInfo["version"]?.toIntOrNull() ?: return@launch
+                
                 appUser.baseUrl?.let { hostIp ->
-                    if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
+                    if (currentVersion < serverVersion) {
+                        // Server has newer version - works for both mini and full versions
+                        // Mini version users will get full version from server
+                        // Full version users will get newer full version from server
+                        Timber.tag("checkForUpgrade").d("Update available: current=$currentVersion, server=$serverVersion")
                         showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
                     } else {
+                        Timber.tag("checkForUpgrade").d("No update needed: current=$currentVersion, server=$serverVersion")
                         // check for mimei of available App entry Urls. Update records in
                         // preference each time the app is run.
                         val mid = BuildConfig.ENTRY_URLS
