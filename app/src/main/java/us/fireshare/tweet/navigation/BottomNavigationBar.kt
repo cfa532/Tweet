@@ -253,6 +253,7 @@ fun BottomNavigationBar(
                 Button(
                     onClick = {
                         // Trigger immediate server upgrade check (no delay)
+                        Timber.tag("UpgradeButton").d("Upgrade button clicked")
                         activityViewModel.checkForUpgrade(context, immediate = true)
                         showUpgradeDialog = false
                     }

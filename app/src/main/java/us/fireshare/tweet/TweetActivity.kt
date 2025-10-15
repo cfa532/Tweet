@@ -31,6 +31,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.async
@@ -97,7 +98,10 @@ class TweetActivity : ComponentActivity() {
                 // Check for server upgrades (works for both mini and full versions)
                 launch {
                     delay(15000)
-                    activityViewModel.checkForUpgrade(this@TweetActivity)
+                    // For mini users, use immediate=true to trigger the mini upgrade logic
+                    val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                    val isMiniVersion = packageInfo.versionName?.contains("-mini") == true
+                    activityViewModel.checkForUpgrade(this@TweetActivity, immediate = isMiniVersion)
                 }
 
                 setContent {
@@ -175,14 +179,17 @@ class TweetActivity : ComponentActivity() {
 class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
-
+    
+    // Use GlobalScope instead of viewModelScope to avoid cancellation issues
+    @OptIn(DelicateCoroutinesApi::class)
     fun checkForUpgrade(context: Context, immediate: Boolean = false) {
-        viewModelScope.launch(IO) {
+        Timber.tag("checkForUpgrade").d("Function called - immediate: $immediate")
+        kotlinx.coroutines.GlobalScope.launch(IO) {
+            Timber.tag("checkForUpgrade").d("Coroutine started")
             try {
                 if (!immediate) {
                     delay(15000)    // delay 15s before checking for upgrade (automatic check only)
                 }
-                
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                 val currentVersionString = packageInfo.versionName ?: return@launch
                 val currentVersionCode = packageInfo.longVersionCode.toInt()
@@ -309,6 +316,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                             val apkVersionName = apkPackageInfo.versionName
                             
                             Timber.tag("checkForUpgrade").d("Downloaded APK - versionCode: $apkVersionCode, versionName: $apkVersionName, current: $currentVersionCode")
+                            Timber.tag("checkForUpgrade").d("Version comparison: APK($apkVersionCode) > Current($currentVersionCode) = ${apkVersionCode > currentVersionCode}")
                             
                             if (apkVersionCode > currentVersionCode) {
                                 // ✅ Version code is higher - proceed with installation
