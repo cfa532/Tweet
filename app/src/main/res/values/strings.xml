@@ -252,4 +252,7 @@
     <string name="error_no_cid_in_response">No CID in completion response</string>
     <string name="error_video_conversion_failed">Video conversion failed</string>
     <string name="error_poll_status_failures" formatted="false">Failed to poll status after %d consecutive failures: %s</string>
+    
+    <!-- Upgrade messages -->
+    <string name="no_upgrade_available">No upgrade available (version already up to date)</string>
 </resources>

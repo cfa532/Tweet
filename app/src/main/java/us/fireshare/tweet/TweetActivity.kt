@@ -31,10 +31,12 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
@@ -178,24 +180,35 @@ class ActivityViewModel: ViewModel() {
                     delay(15000)    // delay 15s before checking for upgrade (automatic check only)
                 }
                 
-                val currentVersionString =
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                        ?: return@launch
+                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                val currentVersionString = packageInfo.versionName ?: return@launch
+                val currentVersionCode = packageInfo.longVersionCode.toInt()
                 
                 // Check if this is a mini version (has "-mini" suffix)
                 val isMiniVersion = currentVersionString.contains("-mini")
                 
                 // If mini user manually requests upgrade, download directly (bypass second dialog)
                 if (isMiniVersion && immediate) {
-                    Timber.tag("checkForUpgrade").d("Mini user requesting upgrade: $currentVersionString")
+                    Timber.tag("checkForUpgrade").d("Mini user requesting upgrade: $currentVersionString (code=$currentVersionCode)")
                     // Query server for full version package
                     val versionInfo = HproseInstance.checkUpgrade()
                     if (versionInfo != null && versionInfo["packageId"] != null) {
                         appUser.baseUrl?.let { hostIp ->
-                            val downloadUrl = "$hostIp/mm/${versionInfo["packageId"]}"
-                            Timber.tag("checkForUpgrade").d("Starting direct download for mini user, url=$downloadUrl")
-                            // Download directly, bypass confirmation dialog
-                            downloadAndInstall(context, downloadUrl)
+                            // Verify server version code is higher
+                            val serverVersionCode = versionInfo["versionCode"]?.toIntOrNull()
+                            if (serverVersionCode != null && serverVersionCode > currentVersionCode) {
+                                val downloadUrl = "$hostIp/mm/${versionInfo["packageId"]}"
+                                Timber.tag("checkForUpgrade").d("Starting download: server versionCode=$serverVersionCode > current=$currentVersionCode")
+                                // Download directly, bypass confirmation dialog
+                                downloadAndInstall(context, downloadUrl)
+                            } else {
+                                Timber.tag("checkForUpgrade").w("Server versionCode ($serverVersionCode) not higher than current ($currentVersionCode), skipping upgrade")
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    android.widget.Toast.makeText(context, 
+                                        context.getString(R.string.no_upgrade_available), 
+                                        android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
                         }
                     } else {
                         Timber.tag("checkForUpgrade").w("Server didn't return package info for upgrade")
@@ -203,15 +216,25 @@ class ActivityViewModel: ViewModel() {
                     return@launch
                 }
                 
-                // For full version or automatic checks, compare version numbers
+                // For full version or automatic checks, compare version numbers AND version codes
                 val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
                 val currentVersion = currentVersionString.replace("-mini", "").toIntOrNull() ?: return@launch
                 val serverVersion = versionInfo["version"]?.toIntOrNull() ?: return@launch
+                val serverVersionCode = versionInfo["versionCode"]?.toIntOrNull()
                 
                 appUser.baseUrl?.let { hostIp ->
-                    if (currentVersion < serverVersion) {
+                    // Check both version name AND version code
+                    val shouldUpgrade = currentVersion < serverVersion || 
+                                       (serverVersionCode != null && serverVersionCode > currentVersionCode)
+                    
+                    if (shouldUpgrade) {
+                        // Verify versionCode is actually higher (safety check)
+                        if (serverVersionCode != null && serverVersionCode <= currentVersionCode) {
+                            Timber.tag("checkForUpgrade").w("Server versionCode ($serverVersionCode) not higher than current ($currentVersionCode), skipping")
+                            return@let
+                        }
                         // Server has newer version
-                        Timber.tag("checkForUpgrade").d("Update available: current=$currentVersion, server=$serverVersion")
+                        Timber.tag("checkForUpgrade").d("Update available: current=$currentVersion (code=$currentVersionCode), server=$serverVersion (code=$serverVersionCode)")
                         showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
                     } else {
                         Timber.tag("checkForUpgrade").d("No update needed: current=$currentVersion, server=$serverVersion")

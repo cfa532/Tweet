@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chinese (Traditional) translations -->
+    <string name="no_upgrade_available">沒有可用的升級（版本已是最新）</string>
+</resources>
+
