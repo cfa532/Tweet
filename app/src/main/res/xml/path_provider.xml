@@ -4,4 +4,5 @@
     <external-files-path name="my_videos" path="Movies" />
     <external-files-path name="apk" path="apk" />
     <cache-path name="cache" path="." />
+    <external-path name="downloads" path="Download" />
 </paths>
