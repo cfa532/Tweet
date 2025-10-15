@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,8 +50,7 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposeTweetScreen(
-    navController: NavHostController,
-    activityViewModel: us.fireshare.tweet.ActivityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    navController: NavHostController
 ) {
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -69,7 +66,6 @@ fun ComposeTweetScreen(
     var isPrivate by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var showExitConfirmation by remember { mutableStateOf(false) }
-    var showUpgradeRequiredDialog by remember { mutableStateOf(false) }
     var showNodeRequiredDialog by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
@@ -140,12 +136,8 @@ fun ComposeTweetScreen(
     // Handle send action
     val onSendClick = {
         if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-            // Check mini version: if non-guest user has > 5 tweets, require upgrade
-            if (BuildConfig.IS_MINI_VERSION && !appUser.isGuest() && appUser.tweetCount > 5) {
-                showUpgradeRequiredDialog = true
-            }
             // Check full version: if non-guest user has > 10 tweets and no cloudDrivePort, require node setup
-            else if (!BuildConfig.IS_MINI_VERSION && !appUser.isGuest() && appUser.tweetCount > 10 && appUser.cloudDrivePort == 0) {
+            if (!BuildConfig.IS_MINI_VERSION && !appUser.isGuest() && appUser.tweetCount > 10 && appUser.cloudDrivePort == 0) {
                 showNodeRequiredDialog = true
             }
             else {
@@ -261,55 +253,6 @@ fun ComposeTweetScreen(
         onDismiss = { showCamera = false },
         modifier = Modifier.fillMaxSize()
     )
-    
-    // Upgrade required dialog (mini version, > 5 tweets)
-    if (showUpgradeRequiredDialog) {
-        AlertDialog(
-            onDismissRequest = { showUpgradeRequiredDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Upgrade,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = {
-                Text(
-                    text = if (isJapanese) "アップグレードが必要です" else "需要升級",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
-            text = {
-                Text(
-                    text = if (isJapanese) {
-                        "新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。完全版では、オフラインで動画を処理し、より多くの機能を利用できます。"
-                    } else {
-                        "您已發布超過5條推文，需要升級到完整版才能繼續發布。完整版可以離線處理視頻並提供更多功能。"
-                    }
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        // Trigger server upgrade check
-                        // This uses the same package as the automatic upgrade check
-                        // Mini users will get full version from server
-                        activityViewModel.checkForUpgrade(context)
-                        showUpgradeRequiredDialog = false
-                    }
-                ) {
-                    Text(if (isJapanese) "今すぐアップグレード" else "立即升級")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showUpgradeRequiredDialog = false }
-                ) {
-                    Text(if (isJapanese) "キャンセル" else "取消")
-                }
-            }
-        )
-    }
     
     // Node required dialog (full version, > 10 tweets, no cloudDrivePort)
     if (showNodeRequiredDialog) {

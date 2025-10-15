@@ -33,6 +33,20 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
     }
+    
+    signingConfigs {
+        // Debug signing config (automatically available)
+        // For production, create a release signing config with your keystore
+        create("release") {
+            // Using debug signing for development/testing
+            // Replace with your production keystore for release builds
+            storeFile = signingConfigs.getByName("debug").storeFile
+            storePassword = signingConfigs.getByName("debug").storePassword
+            keyAlias = signingConfigs.getByName("debug").keyAlias
+            keyPassword = signingConfigs.getByName("debug").keyPassword
+        }
+    }
+    
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -53,6 +67,7 @@ android {
             buildConfigField("String", "ENTRY_URLS", "\"1x7Dh9mJfN5zSyPM5TRX3Sro_wQna\"")
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
 //            isDebuggable = true

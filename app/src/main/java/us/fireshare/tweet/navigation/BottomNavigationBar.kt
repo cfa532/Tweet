@@ -15,27 +15,35 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
@@ -53,9 +61,16 @@ data class BottomNavigationItem(
 fun BottomNavigationBar(
     modifier: Modifier = Modifier,
     navController: NavController,
-    selectedIndex: Int = 100
+    selectedIndex: Int = 100,
+    activityViewModel: us.fireshare.tweet.ActivityViewModel = viewModel()
 ) {
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
+    var showUpgradeDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // Locale for translations
+    val locale = androidx.compose.ui.text.intl.Locale.current
+    val isJapanese = locale.language == "ja"
 
     // Stabilize the items list to prevent unnecessary recompositions
     val items = remember {
@@ -166,6 +181,14 @@ fun BottomNavigationBar(
                                     }
                                 return@clickable
                             }
+                            
+                            // Check upgrade requirement before navigating to compose
+                            if (item.route == NavTweet.ComposeTweet && BuildConfig.IS_MINI_VERSION && 
+                                !appUser.isGuest() && appUser.tweetCount > 5) {
+                                showUpgradeDialog = true
+                                return@clickable
+                            }
+                            
                             onNavigationClick(item.route)
                         },
                     contentAlignment = Alignment.Center
@@ -193,5 +216,52 @@ fun BottomNavigationBar(
                 }
             }
         }
+    }
+    
+    // Upgrade required dialog
+    if (showUpgradeDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpgradeDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Upgrade,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = if (isJapanese) "アップグレードが必要です" else "需要升級",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            },
+            text = {
+                Text(
+                    text = if (isJapanese) {
+                        "新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。"
+                    } else {
+                        "您已發布超過5條推文，需要升級到完整版才能繼續發布。將從服務器下載最新版本。"
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Trigger immediate server upgrade check (no delay)
+                        activityViewModel.checkForUpgrade(context, immediate = true)
+                        showUpgradeDialog = false
+                    }
+                ) {
+                    Text(if (isJapanese) "今すぐアップグレード" else "立即升級")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showUpgradeDialog = false }
+                ) {
+                    Text(if (isJapanese) "キャンセル" else "取消")
+                }
+            }
+        )
     }
 }

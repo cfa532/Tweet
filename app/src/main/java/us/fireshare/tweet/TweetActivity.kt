@@ -171,25 +171,44 @@ class ActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
 
-    fun checkForUpgrade(context: Context) {
+    fun checkForUpgrade(context: Context, immediate: Boolean = false) {
         viewModelScope.launch(IO) {
             try {
-                delay(15000)    // delay 15s before checking for upgrade.
-                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
+                if (!immediate) {
+                    delay(15000)    // delay 15s before checking for upgrade (automatic check only)
+                }
+                
                 val currentVersionString =
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName
                         ?: return@launch
                 
-                // Strip "-mini" suffix if present for version comparison
-                // Mini version: "38-mini" -> 38, Full version: "38" -> 38
+                // Check if this is a mini version (has "-mini" suffix)
+                val isMiniVersion = currentVersionString.contains("-mini")
+                
+                // If mini user manually requests upgrade, always show upgrade dialog
+                if (isMiniVersion && immediate) {
+                    Timber.tag("checkForUpgrade").d("Mini user requesting upgrade: $currentVersionString")
+                    // Query server for full version package
+                    val versionInfo = HproseInstance.checkUpgrade()
+                    if (versionInfo != null && versionInfo["packageId"] != null) {
+                        appUser.baseUrl?.let { hostIp ->
+                            Timber.tag("checkForUpgrade").d("Showing upgrade dialog for mini user, packageId=${versionInfo["packageId"]}")
+                            showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
+                        }
+                    } else {
+                        Timber.tag("checkForUpgrade").w("Server didn't return package info for upgrade")
+                    }
+                    return@launch
+                }
+                
+                // For full version or automatic checks, compare version numbers
+                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
                 val currentVersion = currentVersionString.replace("-mini", "").toIntOrNull() ?: return@launch
                 val serverVersion = versionInfo["version"]?.toIntOrNull() ?: return@launch
                 
                 appUser.baseUrl?.let { hostIp ->
                     if (currentVersion < serverVersion) {
-                        // Server has newer version - works for both mini and full versions
-                        // Mini version users will get full version from server
-                        // Full version users will get newer full version from server
+                        // Server has newer version
                         Timber.tag("checkForUpgrade").d("Update available: current=$currentVersion, server=$serverVersion")
                         showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
                     } else {
