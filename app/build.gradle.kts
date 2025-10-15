@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 67    // Google Play store version code
+        versionCode = 68    // Google Play store version code
         versionName = "38"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -111,12 +111,15 @@ android {
         create("full") {
             dimension = "version"
             versionNameSuffix = ""
+            // Full version has higher versionCode so it can replace mini version
+            versionCode = 68
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
         }
         
         create("mini") {
             dimension = "version"
             versionNameSuffix = "-mini"
+            versionCode = 67
             buildConfigField("Boolean", "IS_MINI_VERSION", "true")
         }
     }
@@ -152,9 +155,7 @@ android {
             excludes += "**/mac/dump_syms.bin"
             excludes += "**/win32/dump_syms.exe"
             excludes += "**/win64/dump_syms.exe"
-            // Exclude other potential problematic binaries
-            excludes += "**/*.so"
-            excludes += "**/lib/**"
+            // Note: .so files in lib/ are needed for FFmpeg, only exclude dump_syms
             pickFirsts += "**/lib/**"
         }
         // Enable 16 KB page size compatibility
