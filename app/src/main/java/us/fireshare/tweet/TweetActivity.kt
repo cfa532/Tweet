@@ -349,52 +349,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
 
-    
-    /**
-     * Shared download logic for both checkForUpgrade and checkForMiniUpgrade
-     * @param context Android context
-     * @param packageId Package ID from server
-     * @param showDialog Whether to show update dialog (true for full version, false for mini)
-     */
-    private fun downloadAndShowUpdateDialog(
-        context: Context, 
-        packageId: String, 
-        showDialog: Boolean
-    ) {
-        viewModelScope.launch(IO) {
-            try {
-                val providerIp = HproseInstance.getProviderIP(packageId)
-                if (providerIp == null) {
-                    Timber.tag("downloadAndShowUpdateDialog").e("No provider IP available")
-                    withContext(Main) {
-                        android.widget.Toast.makeText(context,
-                            context.getString(R.string.upgrade_failed_unknown),
-                            android.widget.Toast.LENGTH_LONG).show()
-                    }
-                    return@launch
-                }
-                
-                val downloadUrl = "http://$providerIp/mm/$packageId"
-                Timber.tag("downloadAndShowUpdateDialog").d("Download URL: $downloadUrl")
-                
-                if (showDialog) {
-                    // Show update dialog for full version users, then download and install
-                    showUpdateDialog(context, downloadUrl)
-                } else {
-                    // Download directly for mini version users
-                    downloadAndInstall(context, downloadUrl)
-                }
-            } catch (e: Exception) {
-                Timber.tag("downloadAndShowUpdateDialog").e(e, "Download setup failed")
-                withContext(Main) {
-                    android.widget.Toast.makeText(context,
-                        context.getString(R.string.upgrade_failed_unknown),
-                        android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
     /**
      * Show update dialog for full version users
      */
