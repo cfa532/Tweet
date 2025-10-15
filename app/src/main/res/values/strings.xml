@@ -255,4 +255,7 @@
     
     <!-- Upgrade messages -->
     <string name="no_upgrade_available">No upgrade available (version already up to date)</string>
+    <string name="upgrade_required_title">Upgrade Required</string>
+    <string name="upgrade_required_message">You have more than 5 tweets and need to upgrade to the full version to continue posting. The latest version will be downloaded from the server.</string>
+    <string name="upgrade_now">Upgrade Now</string>
 </resources>

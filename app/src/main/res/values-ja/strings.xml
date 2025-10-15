@@ -2,4 +2,7 @@
 <resources>
     <!-- Japanese translations -->
     <string name="no_upgrade_available">利用可能なアップグレードはありません（バージョンは最新です）</string>
+    <string name="upgrade_required_title">アップグレードが必要です</string>
+    <string name="upgrade_required_message">新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。</string>
+    <string name="upgrade_now">今すぐアップグレード</string>
 </resources>

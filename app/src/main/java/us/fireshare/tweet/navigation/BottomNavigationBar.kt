@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -48,6 +49,7 @@ import timber.log.Timber
 import us.fireshare.tweet.ActivityViewModel
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
 
@@ -71,9 +73,6 @@ fun BottomNavigationBar(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
-    // Locale for translations
-    val locale = androidx.compose.ui.text.intl.Locale.current
-    val isJapanese = locale.language == "ja"
 
     // Stabilize the items list to prevent unnecessary recompositions
     val items = remember {
@@ -241,17 +240,13 @@ fun BottomNavigationBar(
             },
             title = {
                 Text(
-                    text = if (isJapanese) "アップグレードが必要です" else "需要升級",
+                    text = stringResource(R.string.upgrade_required_title),
                     style = MaterialTheme.typography.headlineSmall
                 )
             },
             text = {
                 Text(
-                    text = if (isJapanese) {
-                        "新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。"
-                    } else {
-                        "您已發布超過5條推文，需要升級到完整版才能繼續發布。將從服務器下載最新版本。"
-                    }
+                    text = stringResource(R.string.upgrade_required_message)
                 )
             },
             confirmButton = {
@@ -262,14 +257,14 @@ fun BottomNavigationBar(
                         showUpgradeDialog = false
                     }
                 ) {
-                    Text(if (isJapanese) "今すぐアップグレード" else "立即升級")
+                    Text(stringResource(R.string.upgrade_now))
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { showUpgradeDialog = false }
                 ) {
-                    Text(if (isJapanese) "キャンセル" else "取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )

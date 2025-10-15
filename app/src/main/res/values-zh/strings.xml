@@ -2,5 +2,8 @@
 <resources>
     <!-- Chinese (Traditional) translations -->
     <string name="no_upgrade_available">沒有可用的升級（版本已是最新）</string>
+    <string name="upgrade_required_title">需要升級</string>
+    <string name="upgrade_required_message">您已發布超過5條推文，需要升級到完整版才能繼續發布。將從服務器下載最新版本。</string>
+    <string name="upgrade_now">立即升級</string>
 </resources>
 
