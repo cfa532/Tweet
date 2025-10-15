@@ -50,7 +50,6 @@ import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.video.LocalVideoProcessingService
-import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
@@ -1608,17 +1607,17 @@ object HproseInstance {
     /**
      * Get provider IP for a user using "get_provider" entry
      */
-    suspend fun getProviderIP(userId: MimeiId): String? {
+    suspend fun getProviderIP(mid: MimeiId): String? {
         val entry = "get_provider_ip"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "mid" to userId
+            "mid" to mid
         )
         return try {
             appUser.hproseService?.runMApp<String>(entry, params)
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("Error getting provider IP for user: $userId")
+            Timber.tag("getProviderIP").e("Error getting provider IP for user: $mid")
             Timber.tag("getProviderIP").e("Exception: $e")
             null
         }

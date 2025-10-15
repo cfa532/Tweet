@@ -5,4 +5,9 @@
     <string name="upgrade_required_title">アップグレードが必要です</string>
     <string name="upgrade_required_message">新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。</string>
     <string name="upgrade_now">今すぐアップグレード</string>
+    <string name="upgrade_failed_no_server">アップグレードに失敗しました：どのサーバーからもダウンロードできません</string>
+    <string name="upgrade_failed_server_error">ダウンロードに失敗しました：サーバーが %1$s を返しました</string>
+    <string name="upgrade_failed_read_apk">APKファイルを読み取れませんでした</string>
+    <string name="upgrade_failed_download">ダウンロードに失敗しました：%1$s</string>
+    <string name="upgrade_failed_unknown">アップグレードに失敗しました：不明なエラー</string>
 </resources>

@@ -98,10 +98,8 @@ class TweetActivity : ComponentActivity() {
                 // Check for server upgrades (works for both mini and full versions)
                 launch {
                     delay(15000)
-                    // For mini users, use immediate=true to trigger the mini upgrade logic
-                    val packageInfo = packageManager.getPackageInfo(packageName, 0)
-                    val isMiniVersion = packageInfo.versionName?.contains("-mini") == true
-                    activityViewModel.checkForUpgrade(this@TweetActivity, immediate = isMiniVersion)
+                    // All versions use checkForUpgrade for automatic checks
+                    activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
 
                 setContent {
@@ -180,172 +178,199 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
     
-    // Use GlobalScope instead of viewModelScope to avoid cancellation issues
-    @OptIn(DelicateCoroutinesApi::class)
-    fun checkForUpgrade(context: Context, immediate: Boolean = false) {
-        kotlinx.coroutines.GlobalScope.launch(IO) {
+    
+    // Check for upgrade using versionName comparison (for all versions)
+    fun checkForUpgrade(context: Context) {
+        viewModelScope.launch(IO) {
             try {
-                if (!immediate) {
-                    delay(15000)    // delay 15s before checking for upgrade (automatic check only)
-                }
+                delay(15000)    // delay 15s before checking for upgrade
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                val currentVersionString = packageInfo.versionName ?: return@launch
                 val currentVersionCode = packageInfo.longVersionCode.toInt()
                 
-                // Check if this is a mini version (has "-mini" suffix)
-                val isMiniVersion = currentVersionString.contains("-mini")
-                
-                // If mini user manually requests upgrade, download and verify versionCode from APK
-                if (isMiniVersion && immediate) {
-                    Timber.tag("checkForUpgrade").d("Mini user requesting upgrade: $currentVersionString (code=$currentVersionCode)")
-                    // Query server for full version package
-                    val versionInfo = HproseInstance.checkUpgrade()
-                    if (versionInfo != null && versionInfo["packageId"] != null) {
-                        appUser.baseUrl?.let { hostIp ->
-                            val downloadUrl = "$hostIp/mm/${versionInfo["packageId"]}"
-                            Timber.tag("checkForUpgrade").d("Starting download to verify versionCode: $downloadUrl")
-                            // Download and verify versionCode from APK file before installing
-                            downloadAndVerifyBeforeInstall(context, downloadUrl, currentVersionCode)
-                        }
-                    } else {
-                        Timber.tag("checkForUpgrade").w("Server didn't return package info for upgrade")
-                    }
+                // Compare versionName (works for both mini and full versions)
+                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
+                val packageId = versionInfo["packageId"]
+                // Get provider IP and download directly (same logic as checkForMiniUpgrade)
+                if (packageId == null) {
+                    Timber.tag("checkForUpgrade").e("No package ID available")
                     return@launch
                 }
-                
-                // For full version or automatic checks, compare version numbers
-                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-                val currentVersion = currentVersionString.replace("-mini", "").toIntOrNull() ?: return@launch
-                val serverVersion = versionInfo["version"]?.toIntOrNull() ?: return@launch
-                
-                appUser.baseUrl?.let { hostIp ->
-                    if (currentVersion < serverVersion) {
-                        // Server has newer version
-                        Timber.tag("checkForUpgrade").d("Update available: current=$currentVersion (code=$currentVersionCode), server=$serverVersion")
-                        // For automatic checks, show dialog and verify versionCode after download
-                        val downloadUrl = "$hostIp/mm/${versionInfo["packageId"]}"
-                        showUpdateDialogWithVerification(context, downloadUrl, currentVersionCode)
-                    } else {
-                        Timber.tag("checkForUpgrade").d("No update needed: current=$currentVersion, server=$serverVersion")
-                        // check for mimei of available App entry Urls. Update records in
-                        // preference each time the app is run.
-                        val mid = BuildConfig.ENTRY_URLS
-                        HproseInstance.getProviderIP(mid)?.let { ip ->
-                            val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
-                            if (response.status == HttpStatusCode.OK) {
-                                val newUrls =
-                                    response.bodyAsText().split(System.lineSeparator()).toSet()
-                                HproseInstance.preferenceHelper.setAppUrls(newUrls)
-                            }
-                        }
+
+                val mid = BuildConfig.ENTRY_URLS
+                HproseInstance.getProviderIP(mid)?.let { ip ->
+                    val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                    if (response.status == HttpStatusCode.OK) {
+                        val newUrls =
+                            response.bodyAsText().split(System.lineSeparator()).toSet()
+                        Timber.tag("checkForUpgrade").d("$newUrls")
+                        HproseInstance.preferenceHelper.setAppUrls(newUrls)
                     }
                 }
+
+                // Download and show update dialog for full version users
+                downloadAndShowUpdateDialog(context, packageId, currentVersionCode, showDialog = true)
             } catch (e: Exception) {
                 Timber.tag("checkForUpgrade").e(e)
             }
         }
     }
+    
+    // Check for upgrade using versionCode comparison (for mini version users)
+    fun checkForMiniUpgrade(context: Context) {
+        Timber.tag("checkForMiniUpgrade").d("Function called")
+        viewModelScope.launch(IO) {
+            Timber.tag("checkForMiniUpgrade").d("Coroutine started")
+            try {
+                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                val currentVersionString = packageInfo.versionName ?: return@launch
+                val currentVersionCode = packageInfo.longVersionCode.toInt()
+                
+                Timber.tag("checkForMiniUpgrade").d("Mini user requesting upgrade: $currentVersionString (code=$currentVersionCode)")
+                // Query server for full version package
+                val versionInfo = HproseInstance.checkUpgrade()
+                if (versionInfo == null || versionInfo["packageId"] == null) {
+                    Timber.tag("checkForMiniUpgrade").w("Server didn't return package info for upgrade")
+                    return@launch
+                }
+                
+                // Get provider IP and download directly
+                val packageId = versionInfo["packageId"]
+                if (packageId == null) {
+                    Timber.tag("checkForMiniUpgrade").e("No package ID available")
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(context,
+                            context.getString(R.string.upgrade_failed_unknown),
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                // Download APK directly for mini version users
+                downloadAndShowUpdateDialog(context, packageId, currentVersionCode, showDialog = false)
+            } catch (e: Exception) {
+                Timber.tag("checkForMiniUpgrade").e(e, "Unexpected error during upgrade check")
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(context,
+                        context.getString(R.string.upgrade_failed_unknown),
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
-    private fun showUpdateDialogWithVerification(context: Context, downloadUrl: String, currentVersionCode: Int) {
+    
+    /**
+     * Shared download logic for both checkForUpgrade and checkForMiniUpgrade
+     * @param context Android context
+     * @param packageId Package ID from server
+     * @param currentVersionCode Current app version code
+     * @param showDialog Whether to show update dialog (true for full version, false for mini)
+     */
+    private fun downloadAndShowUpdateDialog(
+        context: Context, 
+        packageId: String, 
+        currentVersionCode: Int, 
+        showDialog: Boolean
+    ) {
+        viewModelScope.launch(IO) {
+            try {
+                val providerIp = HproseInstance.getProviderIP(packageId)
+                if (providerIp == null) {
+                    Timber.tag("downloadAndShowUpdateDialog").e("No provider IP available")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            context.getString(R.string.upgrade_failed_unknown),
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                val downloadUrl = "http://$providerIp/mm/$packageId"
+                Timber.tag("downloadAndShowUpdateDialog").d("Download URL: $downloadUrl")
+                
+                if (showDialog) {
+                    // Show update dialog for full version users, then download and install
+                    showUpdateDialog(context, downloadUrl)
+                } else {
+                    // Download directly for mini version users
+                    downloadAndInstall(context, downloadUrl)
+                }
+            } catch (e: Exception) {
+                Timber.tag("downloadAndShowUpdateDialog").e(e, "Download setup failed")
+                withContext(Main) {
+                    android.widget.Toast.makeText(context,
+                        context.getString(R.string.upgrade_failed_unknown),
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Show update dialog for full version users
+     */
+    private fun showUpdateDialog(context: Context, downloadUrl: String) {
         (context as Activity).runOnUiThread {
             AlertDialog.Builder(context)
                 .setTitle(getString(context, R.string.update_available))
                 .setMessage(getString(context, R.string.update_message))
                 .setPositiveButton(getString(context, R.string.update)) { _, _ ->
-                    downloadAndVerifyBeforeInstall(context, downloadUrl, currentVersionCode)
+                    downloadAndInstall(context, downloadUrl)
                 }
                 .setNegativeButton(getString(context, R.string.cancel), null)
                 .show()
         }
     }
-    
+
     /**
-     * Download APK, verify versionCode from the file, then install only if higher
+     * Download and install APK using DownloadManager (simple approach from MiniVersion branch)
      */
-    private fun downloadAndVerifyBeforeInstall(context: Context, downloadUrl: String, currentVersionCode: Int) {
+    private fun downloadAndInstall(context: Context, downloadUrl: String) {
+        Timber.tag("downloadAndInstall").d("Function called with URL: $downloadUrl")
+        
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(downloadUrl.toUri())
-            .setMimeType("application/vnd.android.package-archive")
-            .setDestinationInExternalFilesDir(context, null, "tweet_install.apk")
+            .setMimeType("application/octet-stream") // Set appropriate MIME type if known
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setTitle("Downloading Update")
 
         val downloadId = downloadManager.enqueue(request)
+        Timber.tag("downloadAndInstall").d("Download started with ID: $downloadId")
 
         viewModelScope.launch(IO) {
             var finishDownload = false
             while (!finishDownload) {
-                val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+                val cursor =
+                    downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
                 if (cursor.moveToFirst()) {
                     val columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                     val status = cursor.getInt(columnIndex)
-                    
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
                         finishDownload = true
                         _isDownloading.value = false
+                        Timber.tag("downloadAndInstall").d("Download completed successfully")
 
                         // Get the downloaded APK file URI
                         val downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
-                        
-                        // Get file path to check versionCode (use app's private directory)
-                        val downloadedFilePath = context.getExternalFilesDir(null)?.absolutePath + "/tweet_install.apk"
-                        val apkFile = java.io.File(downloadedFilePath)
-                        
-                        if (apkFile.exists()) {
-                            Timber.tag("checkForUpgrade").d("APK file exists at: ${apkFile.absolutePath}, size: ${apkFile.length()} bytes")
-                            
-                            // Read versionCode from the downloaded APK
-                            val apkPackageInfo = context.packageManager.getPackageArchiveInfo(
-                                apkFile.absolutePath,
-                                0
+
+                        // Create an intent to install the APK
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(
+                                downloadedApkUri,
+                                "application/vnd.android.package-archive"
                             )
-                            
-                            if (apkPackageInfo == null) {
-                                Timber.tag("checkForUpgrade").e("getPackageArchiveInfo returned null for: ${apkFile.absolutePath}")
-                                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    android.widget.Toast.makeText(context,
-                                        "Failed to read APK file",
-                                        android.widget.Toast.LENGTH_LONG).show()
-                                }
-                                return@launch
-                            }
-                            
-                            val apkVersionCode = apkPackageInfo.longVersionCode.toInt()
-                            val apkVersionName = apkPackageInfo.versionName
-                            
-                            Timber.tag("checkForUpgrade").d("Downloaded APK - versionCode: $apkVersionCode, versionName: $apkVersionName, current: $currentVersionCode")
-                            Timber.tag("checkForUpgrade").d("Version comparison: APK($apkVersionCode) > Current($currentVersionCode) = ${apkVersionCode > currentVersionCode}")
-                            
-                            if (apkVersionCode > currentVersionCode) {
-                                // ✅ Version code is higher - proceed with installation
-                                Timber.tag("checkForUpgrade").d("APK versionCode ($apkVersionCode) > current ($currentVersionCode), installing")
-                                
-                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(downloadedApkUri, "application/vnd.android.package-archive")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                                           Intent.FLAG_GRANT_READ_URI_PERMISSION or 
-                                           Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                                }
-                                context.startActivity(installIntent)
-                            } else {
-                                // ❌ Version code is not higher - deny installation
-                                Timber.tag("checkForUpgrade").w("APK versionCode ($apkVersionCode) not higher than current ($currentVersionCode), deleting file")
-                                apkFile.delete()
-                                
-                                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    android.widget.Toast.makeText(context,
-                                        context.getString(R.string.no_upgrade_available),
-                                        android.widget.Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        } else {
-                            Timber.tag("checkForUpgrade").e("Downloaded APK file not found")
+                            flags =
+                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                         }
-                        
+                        // Start the installation activity
+                        context.startActivity(installIntent)
+
                     } else if (status == DownloadManager.STATUS_FAILED) {
                         finishDownload = true
                         _isDownloading.value = false
-                        Timber.tag("checkForUpgrade").e("Download failed")
+                        Timber.tag("downloadAndInstall").e("Download failed")
+                        // Handle download failure
                     }
                 }
                 cursor.close()
@@ -353,5 +378,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
             }
         }
     }
+    
 
 }
+

@@ -5,5 +5,10 @@
     <string name="upgrade_required_title">需要升級</string>
     <string name="upgrade_required_message">您已發布超過5條推文，需要升級到完整版才能繼續發布。將從服務器下載最新版本。</string>
     <string name="upgrade_now">立即升級</string>
+    <string name="upgrade_failed_no_server">升級失敗：無法從任何服務器下載</string>
+    <string name="upgrade_failed_server_error">下載失敗：服務器返回 %1$s</string>
+    <string name="upgrade_failed_read_apk">無法讀取APK文件</string>
+    <string name="upgrade_failed_download">下載失敗：%1$s</string>
+    <string name="upgrade_failed_unknown">升級失敗：未知錯誤</string>
 </resources>
 

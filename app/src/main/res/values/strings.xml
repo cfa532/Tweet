@@ -258,4 +258,9 @@
     <string name="upgrade_required_title">Upgrade Required</string>
     <string name="upgrade_required_message">You have more than 5 tweets and need to upgrade to the full version to continue posting. The latest version will be downloaded from the server.</string>
     <string name="upgrade_now">Upgrade Now</string>
+    <string name="upgrade_failed_no_server">Upgrade failed: Unable to download from any server</string>
+    <string name="upgrade_failed_server_error">Download failed: Server returned %1$s</string>
+    <string name="upgrade_failed_read_apk">Failed to read APK file</string>
+    <string name="upgrade_failed_download">Download failed: %1$s</string>
+    <string name="upgrade_failed_unknown">Upgrade failed: Unknown error</string>
 </resources>
