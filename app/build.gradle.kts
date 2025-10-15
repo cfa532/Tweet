@@ -1,4 +1,7 @@
 
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -13,9 +16,9 @@ plugins {
 
 // Load keystore properties
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = java.util.Properties()
+val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -47,10 +50,11 @@ android {
         create("release") {
             // Load from keystore.properties file or fall back to debug signing
             if (keystorePropertiesFile.exists()) {
-                storeFile = file(keystoreProperties["KEYSTORE_FILE"] as String)
-                storePassword = keystoreProperties["KEYSTORE_PASSWORD"] as String
-                keyAlias = keystoreProperties["KEY_ALIAS"] as String
-                keyPassword = keystoreProperties["KEY_PASSWORD"] as String
+                // Use rootProject.file() since keystore is in project root, not app/ directory
+                storeFile = rootProject.file(keystoreProperties["KEYSTORE_FILE"].toString())
+                storePassword = keystoreProperties["KEYSTORE_PASSWORD"].toString()
+                keyAlias = keystoreProperties["KEY_ALIAS"].toString()
+                keyPassword = keystoreProperties["KEY_PASSWORD"].toString()
             } else {
                 // Fallback to debug signing if keystore.properties doesn't exist
                 storeFile = signingConfigs.getByName("debug").storeFile
