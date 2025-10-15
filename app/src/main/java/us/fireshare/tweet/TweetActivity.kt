@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
@@ -181,33 +182,29 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     fun checkForUpgrade(context: Context) {
         viewModelScope.launch(IO) {
             try {
-                delay(15000)    // delay 15s before checking for upgrade
-
-                val mid = BuildConfig.ENTRY_URLS
-                HproseInstance.getProviderIP(mid)?.let { ip ->
-                    val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
-                    if (response.status == HttpStatusCode.OK) {
-                        val newUrls =
-                            response.bodyAsText().split(System.lineSeparator()).toSet()
-                        Timber.tag("checkForUpgrade").d("$newUrls")
-                        HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                delay(15000)    // delay 15s before checking for upgrade.
+                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
+                val currentVersion =
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                        ?.removeSuffix("-mini") ?: return@launch
+                
+                HproseInstance.appUser.baseUrl?.let { hostIp ->
+                    if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
+                        showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
+                    } else {
+                        // check for mimei of available App entry Urls. Update records in
+                        // preference each time the app is run.
+                        val mid = BuildConfig.ENTRY_URLS
+                        HproseInstance.getProviderIP(mid)?.let { ip ->
+                            val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                            if (response.status == HttpStatusCode.OK) {
+                                val newUrls =
+                                    response.bodyAsText().split(System.lineSeparator()).toSet()
+                                HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                            }
+                        }
                     }
                 }
-
-                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                val currentVersionCode = packageInfo.longVersionCode.toInt()
-                
-                // Compare versionName (works for both mini and full versions)
-                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-                val packageId = versionInfo["packageId"]
-                // Get provider IP and download directly (same logic as checkForMiniUpgrade)
-                if (packageId == null) {
-                    Timber.tag("checkForUpgrade").e("No package ID available")
-                    return@launch
-                }
-
-                // Download and show update dialog for full version users
-                downloadAndShowUpdateDialog(context, packageId, showDialog = true)
             } catch (e: Exception) {
                 Timber.tag("checkForUpgrade").e(e)
             }
