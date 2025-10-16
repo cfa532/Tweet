@@ -181,8 +181,12 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     private val _isDownloading = MutableStateFlow(false)
     
     
-    // Check for upgrade using versionName comparison (for all versions)
+    // Check for upgrade using versionName comparison (for all versions except play)
     fun checkForUpgrade(context: Context) {
+        // Play version doesn't support upgrades
+        if (BuildConfig.IS_PLAY_VERSION) {
+            return
+        }
         viewModelScope.launch(IO) {
             try {
                 delay(15000)    // delay 15s before checking for upgrade.
@@ -214,8 +218,12 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
     
-    // Check for upgrade using versionCode comparison (for mini version users)
+    // Check for upgrade using versionCode comparison (for mini version users, not play)
     fun checkForMiniUpgrade(context: Context) {
+        // Play version doesn't support upgrades
+        if (BuildConfig.IS_PLAY_VERSION) {
+            return
+        }
         Timber.tag("checkForMiniUpgrade").d("Function called")
         viewModelScope.launch(IO) {
             Timber.tag("checkForMiniUpgrade").d("Coroutine started")

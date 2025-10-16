@@ -115,6 +115,7 @@ android {
             // Full version uses default versionCode from defaultConfig (currently 69)
             // No override - will use defaultConfig versionCode
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
         }
         
         create("mini") {
@@ -122,6 +123,16 @@ android {
             versionNameSuffix = "-mini"
             versionCode = 67  // Mini stays at 67
             buildConfigField("Boolean", "IS_MINI_VERSION", "true")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+        }
+        
+        create("play") {
+            dimension = "version"
+            versionNameSuffix = "-play"
+            versionCode = 70  // Play version gets versionCode 70
+            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
+            // Play version is based on full version but with different settings
         }
     }
 
@@ -168,9 +179,11 @@ android {
 
 dependencies {
     // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
-    // Only included in full version, excluded in mini version
+    // Included in full and play versions, excluded in mini version
     "fullImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
     "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
+    "playImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
+    "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

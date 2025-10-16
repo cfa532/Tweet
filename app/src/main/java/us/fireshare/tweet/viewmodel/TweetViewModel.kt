@@ -18,6 +18,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import us.fireshare.tweet.BuildConfig
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -263,13 +264,17 @@ class TweetViewModel @AssistedInject constructor(
         // No need to observe work status - UI will update via notification system
     }
 
-    suspend fun shareTweet(context: Context) {
+    open suspend fun shareTweet(context: Context) {
         /**
          * Call to checkUpgrade() also returns a map of environmental variables,
          * which includes environment variables of the App.
          * */
         val map = HproseInstance.checkUpgrade() ?: return
-        val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+        val deepLink = if (BuildConfig.IS_PLAY_VERSION) {
+            "http://gplay.fireshare.us/tweet/${tweet.mid}/${tweet.authorId}"
+        } else {
+            "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+        }
 //            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
 //                    "${tweet.mid}/${tweet.authorId}"
 
