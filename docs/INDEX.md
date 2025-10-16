@@ -7,9 +7,9 @@
 
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
-**Total Documents:** 24 documentation files  
-**Last Updated:** October 14, 2025  
-**Status:** ✅ Clean, Organized & Essential Only
+**Total Documents:** 68 documentation files  
+**Last Updated:** December 17, 2025  
+**Status:** ✅ All Documentation Organized in docs/ folder
 
 ---
 
@@ -258,6 +258,56 @@ This folder contains all technical documentation for the Tweet distributed socia
 
 ---
 
+## 🆕 Recently Moved Documentation (December 2025)
+
+All documentation files have been consolidated into the `docs/` folder for better organization:
+
+### 🔧 Build & Development Setup
+- **[ANDROID_STUDIO_BUILD_GUIDE.md](ANDROID_STUDIO_BUILD_GUIDE.md)** - Android Studio setup guide
+- **[DEBUG_SETUP_AND_LOGGING_GUIDE.md](DEBUG_SETUP_AND_LOGGING_GUIDE.md)** - Debug setup and logcat monitoring
+- **[VIEW_LOGS_GUIDE.md](VIEW_LOGS_GUIDE.md)** - Log viewing and debugging guide
+
+### 📦 Version Management & Builds
+- **[BUILD_SUCCESS.md](BUILD_SUCCESS.md)** - Build success documentation
+- **[BUILD_FLAVORS_QUICK_REFERENCE.md](BUILD_FLAVORS_QUICK_REFERENCE.md)** - Build flavor reference
+- **[APK_VERSION_CHECK_COMMANDS.md](APK_VERSION_CHECK_COMMANDS.md)** - APK version checking
+- **[APK_VERSION_VERIFICATION.md](APK_VERSION_VERIFICATION.md)** - Version verification process
+- **[CHECK_APK_VERSION.md](CHECK_APK_VERSION.md)** - APK version checking guide
+- **[VERSION_CODE_FIX.md](VERSION_CODE_FIX.md)** - Version code fixes
+- **[VERSION_CODE_VALIDATION.md](VERSION_CODE_VALIDATION.md)** - Version validation
+- **[UPDATE_VERSION_CODES.md](UPDATE_VERSION_CODES.md)** - Version code updates
+- **[HOW_TO_CHANGE_VERSION_CODE.md](HOW_TO_CHANGE_VERSION_CODE.md)** - Version code management
+
+### 🔐 Signing & Security
+- **[KEYSTORE_SETUP.md](KEYSTORE_SETUP.md)** - Keystore configuration
+- **[KEYSTORE_CONFIGURED.md](KEYSTORE_CONFIGURED.md)** - Keystore setup status
+- **[QUICK_KEYSTORE_SETUP.md](QUICK_KEYSTORE_SETUP.md)** - Quick keystore setup
+- **[SIGNING_CONFIGURATION.md](SIGNING_CONFIGURATION.md)** - App signing configuration
+
+### 🚀 Upgrade & Release Management
+- **[UPGRADE_SYSTEM.md](UPGRADE_SYSTEM.md)** - Upgrade system overview
+- **[UPGRADE_SYSTEM_SUCCESS.md](UPGRADE_SYSTEM_SUCCESS.md)** - Upgrade success documentation
+- **[UPGRADE_ALGORITHM_FINAL.md](UPGRADE_ALGORITHM_FINAL.md)** - Final upgrade algorithm
+- **[UPGRADE_LOGIC_FIX.md](UPGRADE_LOGIC_FIX.md)** - Upgrade logic fixes
+- **[UPGRADE_FIX_SUMMARY.md](UPGRADE_FIX_SUMMARY.md)** - Upgrade fixes summary
+- **[UPGRADE_QUICK_REFERENCE.md](UPGRADE_QUICK_REFERENCE.md)** - Upgrade quick reference
+- **[CURRENT_UPGRADE_IMPLEMENTATION.md](CURRENT_UPGRADE_IMPLEMENTATION.md)** - Current upgrade implementation
+- **[UNIFIED_UPGRADE_FLOW.md](UNIFIED_UPGRADE_FLOW.md)** - Unified upgrade flow
+- **[SIMPLIFIED_UPGRADE_SYSTEM.md](SIMPLIFIED_UPGRADE_SYSTEM.md)** - Simplified upgrade system
+- **[SERVER_UPGRADE_SYSTEM.md](SERVER_UPGRADE_SYSTEM.md)** - Server upgrade system
+- **[MINI_UPGRADE_SYSTEM_FINAL.md](MINI_UPGRADE_SYSTEM_FINAL.md)** - Mini upgrade system
+- **[DEBUG_UPGRADE_ISSUE.md](DEBUG_UPGRADE_ISSUE.md)** - Upgrade debugging
+
+### 🏗️ Implementation & Configuration
+- **[FINAL_IMPLEMENTATION.md](FINAL_IMPLEMENTATION.md)** - Final implementation details
+- **[FINAL_SUMMARY.md](FINAL_SUMMARY.md)** - Final project summary
+- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Implementation completion
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Implementation summary
+- **[FULL_VERSION_FIX.md](FULL_VERSION_FIX.md)** - Full version fixes
+- **[DIRECT_DOWNLOAD_FIX.md](DIRECT_DOWNLOAD_FIX.md)** - Direct download fixes
+
+---
+
 ## 🏗️ Architecture Overview
 
 ### **Distributed Architecture**
@@ -387,8 +437,8 @@ The Tweet app is a distributed social media application that connects to multipl
 
 ---
 
-**Total Documents:** 24 essential documentation files  
-**Last Review:** October 14, 2025  
-**Status:** ✅ Clean, organized, essential only  
+**Total Documents:** 68 documentation files  
+**Last Review:** December 17, 2025  
+**Status:** ✅ All documentation organized in docs/ folder  
 **Maintainer:** Development Team
 
