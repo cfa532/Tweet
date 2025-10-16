@@ -294,7 +294,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                             // Get the downloaded APK file URI from the download record
                             val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
                             val localUri = cursor.getString(localUriIndex)
-                            val apkFile = File(Uri.parse(localUri).path ?: "")
+                            val apkFile = File(localUri.toUri().path ?: "")
                             
                             Timber.tag("checkForMiniUpgrade").d("Downloaded file path: ${apkFile.absolutePath}")
                             Timber.tag("checkForMiniUpgrade").d("Downloaded file exists: ${apkFile.exists()}")
