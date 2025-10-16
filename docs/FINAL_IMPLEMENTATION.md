@@ -145,12 +145,23 @@ productFlavors {
         dimension = "version"
         versionNameSuffix = ""
         buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+        buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
     }
     
     create("mini") {
         dimension = "version"
         versionNameSuffix = "-mini"
+        versionCode = 67
         buildConfigField("Boolean", "IS_MINI_VERSION", "true")
+        buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+    }
+    
+    create("play") {
+        dimension = "version"
+        versionNameSuffix = "-play"
+        versionCode = 70
+        buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+        buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
     }
 }
 ```
@@ -164,12 +175,16 @@ productFlavors {
 
 # Full version (54 MB)
 ./gradlew assembleFullRelease
+
+# Play version (54 MB) - Google Play Store
+./gradlew assemblePlayRelease
 ```
 
 ### APK Sizes
 - **Mini**: 10 MB
 - **Full**: 54 MB
-- **Reduction**: 81%
+- **Play**: 54 MB
+- **Reduction**: 81% (mini vs full/play)
 
 ### Server Setup
 1. Upload full version APK to server
@@ -243,11 +258,15 @@ adb logcat | grep -E "checkForUpgrade|Update available"
 |---------|----------------|
 | **Mini APK Size** | 10 MB (81% smaller) |
 | **Full APK Size** | 54 MB |
-| **Upgrade Source** | Server only |
+| **Play APK Size** | 54 MB (Google Play Store) |
+| **Upgrade Source** | Server only (Full/Mini) |
+| **Play Store Updates** | Google Play Store (Play) |
 | **Posting Limit (Mini)** | 5 tweets |
 | **Node Requirement (Full)** | 10 tweets |
 | **Upgrade Trigger** | Compose button click |
 | **Response Time** | Immediate (no delay) |
+| **Deep Links (Play)** | `gplay.fireshare.us` |
+| **Deep Links (Others)** | Dynamic from server |
 
 ---
 
