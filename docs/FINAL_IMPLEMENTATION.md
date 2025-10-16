@@ -268,6 +268,36 @@ adb logcat | grep -E "checkForUpgrade|Update available"
 | **Deep Links (Play)** | `gplay.fireshare.us` |
 | **Deep Links (Others)** | Dynamic from server |
 
+## Quick Reference: Editing Flavor-Specific Code
+
+### How to Edit Play Variant Only
+```bash
+# Create play-specific file
+mkdir -p app/src/play/java/us/fireshare/tweet/
+cp app/src/main/java/us/fireshare/tweet/SomeClass.kt app/src/play/java/us/fireshare/tweet/SomeClass.kt
+
+# Edit the play-specific file
+# This will ONLY affect the play variant
+```
+
+### How to Edit All Variants
+```kotlin
+// Edit app/src/main/java/us/fireshare/tweet/SomeClass.kt
+// This affects ALL variants (full, mini, play)
+```
+
+### How to Edit with Conditional Logic
+```kotlin
+// In app/src/main/java/us/fireshare/tweet/SomeClass.kt
+if (BuildConfig.IS_PLAY_VERSION) {
+    // Play-specific code
+} else {
+    // Code for other variants
+}
+```
+
+**See**: `docs/FLAVOR_EDITING_GUIDE.md` for detailed instructions.
+
 ---
 
 **Implementation Date**: October 14, 2025
