@@ -162,12 +162,13 @@ fun AttachmentPreviewRow(
 }
 
 /**
- * Composable for the action buttons row (private checkbox, camera, file picker, send)
+ * Composable for the action buttons row (checkbox, camera, file picker, send)
  */
 @Composable
 fun ActionButtonsRow(
-    isPrivate: Boolean,
-    onPrivateChange: (Boolean) -> Unit,
+    isChecked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    checkboxLabel: String,
     onCameraClick: () -> Unit,
     onFilePickerClick: () -> Unit,
     onSendClick: () -> Unit,
@@ -187,11 +188,11 @@ fun ActionButtonsRow(
                 .size(40.dp)
         ) {
             Checkbox(
-                checked = isPrivate,
-                onCheckedChange = onPrivateChange
+                checked = isChecked,
+                onCheckedChange = onCheckedChange
             )
             Text(
-                text = "Private",
+                text = checkboxLabel,
                 style = MaterialTheme.typography.bodyMedium
             )
         }

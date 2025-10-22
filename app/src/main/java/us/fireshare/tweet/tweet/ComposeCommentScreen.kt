@@ -200,10 +200,11 @@ fun ComposeCommentScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Action buttons row (with "Post as Tweet" checkbox)
+                // Action buttons row (with "Quote Original" checkbox)
                 ActionButtonsRow(
-                    isPrivate = isCheckedToTweet,
-                    onPrivateChange = { tweetViewModel.onCheckedChange(it) },
+                    isChecked = isCheckedToTweet,
+                    onCheckedChange = { tweetViewModel.onCheckedChange(it) },
+                    checkboxLabel = "Quote Original",
                     onCameraClick = onCameraClick,
                     onFilePickerClick = onFilePickerClick,
                     onSendClick = onSendClick,

@@ -227,8 +227,9 @@ fun ComposeTweetScreen(
 
                 // Action buttons row
                 ActionButtonsRow(
-                    isPrivate = isPrivate,
-                    onPrivateChange = { isPrivate = it },
+                    isChecked = isPrivate,
+                    onCheckedChange = { isPrivate = it },
+                    checkboxLabel = "Private",
                     onCameraClick = onCameraClick,
                     onFilePickerClick = onFilePickerClick,
                     onSendClick = onSendClick,
