@@ -8,8 +8,6 @@ import kotlinx.serialization.json.Json
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MimeiId
 
-@Serializable
-object NavTwee
 
 @Serializable
 data class ComposeComment(val tweetId: MimeiId)
