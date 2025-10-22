@@ -128,7 +128,7 @@ fun TweetDetailBody(
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 0.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
+                    .padding(start = 4.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
                      tweet.content?.let {

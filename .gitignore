@@ -26,3 +26,4 @@ keystore.properties
 *.jks
 *.keystore
 /app/full/release/app-full-release.apk
+/app/mini/release/output-metadata.json
