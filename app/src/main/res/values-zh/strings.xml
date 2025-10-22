@@ -10,5 +10,6 @@
     <string name="upgrade_failed_read_apk">無法讀取APK文件</string>
     <string name="upgrade_failed_download">下載失敗：%1$s</string>
     <string name="upgrade_failed_unknown">升級失敗：未知錯誤</string>
+    <string name="download_in_progress">下載正在進行中，請等待完成。</string>
 </resources>
 

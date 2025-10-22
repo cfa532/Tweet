@@ -1,9 +1,6 @@
 package us.fireshare.tweet.video
 
-import android.content.Context
-import io.ktor.client.HttpClient
 import org.junit.Test
-import us.fireshare.tweet.datamodel.User
 
 /**
  * Test class for LocalVideoProcessingService

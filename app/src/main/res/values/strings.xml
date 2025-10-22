@@ -263,4 +263,5 @@
     <string name="upgrade_failed_read_apk">Failed to read APK file</string>
     <string name="upgrade_failed_download">Download failed: %1$s</string>
     <string name="upgrade_failed_unknown">Upgrade failed: Unknown error</string>
+    <string name="download_in_progress">Download is already in progress. Please wait for it to complete.</string>
 </resources>

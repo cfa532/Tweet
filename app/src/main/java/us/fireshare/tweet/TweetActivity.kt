@@ -5,12 +5,9 @@ import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import androidx.core.content.FileProvider
-import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat.getString
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
@@ -43,12 +41,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.ThemeManager
 import us.fireshare.tweet.ui.theme.TweetTheme
+import java.io.File
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -179,8 +177,7 @@ class TweetActivity : ComponentActivity() {
 class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
-    
-    
+
     // Check for upgrade using versionName comparison (for all versions except play)
     fun checkForUpgrade(context: Context) {
         // Play version doesn't support upgrades
@@ -224,6 +221,16 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         if (BuildConfig.IS_PLAY_VERSION) {
             return
         }
+        
+        // Check if download is already in progress
+        if (_isDownloading.value) {
+            Timber.tag("checkForMiniUpgrade").d("Download already in progress, showing toast")
+            android.widget.Toast.makeText(context,
+                context.getString(R.string.download_in_progress),
+                android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        
         Timber.tag("checkForMiniUpgrade").d("Function called")
         viewModelScope.launch(IO) {
             Timber.tag("checkForMiniUpgrade").d("Coroutine started")
@@ -280,6 +287,9 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 val downloadUrl = "http://$providerIp/mm/$packageId"
                 Timber.tag("checkForMiniUpgrade").d("Downloading APK to check version: $downloadUrl")
                 
+                // Set download state to true
+                _isDownloading.value = true
+                
                 // Use exact same download logic as working downloadAndInstall
                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 val request = DownloadManager.Request(downloadUrl.toUri())
@@ -298,6 +308,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                         val status = cursor.getInt(columnIndex)
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
                             finishDownload = true
+                            // Don't reset download state yet - wait for installation to complete
                             
                             // Get the downloaded APK file URI from the download record
                             val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
@@ -318,6 +329,8 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                                     Timber.tag("checkForMiniUpgrade").d("Update available, starting installation")
                                     // Install the downloaded APK
                                     installApkFromFile(context, apkFile)
+                                    // Reset download state after installation is triggered
+                                    _isDownloading.value = false
                                 } else {
                                     Timber.tag("checkForMiniUpgrade").d("No update needed: current version is up to date")
                                     withContext(Main) {
@@ -327,6 +340,8 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                                     }
                                     // Clean up temp file
                                     apkFile.delete()
+                                    // Reset download state
+                                    _isDownloading.value = false
                                 }
                             } else {
                                 Timber.tag("checkForMiniUpgrade").e("Failed to read package info from downloaded APK")
@@ -336,9 +351,12 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                                         android.widget.Toast.LENGTH_LONG).show()
                                 }
                                 apkFile.delete()
+                                // Reset download state
+                                _isDownloading.value = false
                             }
                         } else if (status == DownloadManager.STATUS_FAILED) {
                             finishDownload = true
+                            _isDownloading.value = false
                             // Handle download failure
                         }
                     }
@@ -347,6 +365,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 }
                 
             } catch (e: Exception) {
+                _isDownloading.value = false
                 Timber.tag("checkForMiniUpgrade").e(e, "Unexpected error during upgrade check")
                 withContext(Main) {
                     android.widget.Toast.makeText(context,
@@ -378,6 +397,18 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
      */
     private fun downloadAndInstall(context: Context, downloadUrl: String) {
         Timber.tag("downloadAndInstall").d("Function called with URL: $downloadUrl")
+        
+        // Check if download is already in progress
+        if (_isDownloading.value) {
+            Timber.tag("downloadAndInstall").d("Download already in progress, showing toast")
+            android.widget.Toast.makeText(context,
+                context.getString(R.string.download_in_progress),
+                android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        // Set download state to true
+        _isDownloading.value = true
         
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(downloadUrl.toUri())
@@ -451,18 +482,20 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 return
             }
             
-            val apkUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val apkUri =
                 FileProvider.getUriForFile(context, "${context.packageName}.provider", apkFile)
-            } else {
-                Uri.fromFile(apkFile)
-            }
-            
+
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             }
             
             Timber.tag("installApkFromFile").d("Starting installation with URI: $apkUri")
+            withContext(Main) {
+                android.widget.Toast.makeText(context,
+                    "Starting installation...",
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }
             context.startActivity(installIntent)
         } catch (e: Exception) {
             Timber.tag("installApkFromFile").e(e, "Failed to install APK: ${e.message}")
