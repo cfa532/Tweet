@@ -26,6 +26,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -992,10 +993,15 @@ object HproseInstance {
                     
                     // Refresh appUser from server to get updated tweetCount and other properties
                     try {
+                        // Add a small delay to ensure server has processed the new tweet
+                        delay(500)
                         val refreshedUser = getUser(appUser.mid, maxRetries = 1)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
                             appUser = refreshedUser
                             TweetCacheManager.saveUser(appUser)
+                            
+                            // Notify other ViewModels that user data has been updated
+                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
                         }
                     } catch (e: Exception) {
                         Timber.tag("uploadTweet").w("Failed to refresh appUser after upload: $e")
@@ -1265,6 +1271,9 @@ object HproseInstance {
                     if (refreshedUser != null && !refreshedUser.isGuest()) {
                         appUser = refreshedUser
                         TweetCacheManager.saveUser(appUser)
+                        
+                        // Notify other ViewModels that user data has been updated
+                        TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
                     }
                 } catch (e: Exception) {
                     Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")

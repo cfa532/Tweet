@@ -712,7 +712,7 @@ class UserViewModel @AssistedInject constructor(
                     val mergedTweets = (currentTweets + trulyNewTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    _tweetCount.value = mergedTweets.size
+                    // Don't override tweet count - it should come from server data, not local list size
                     mergedTweets
                 } else {
                     currentTweets
@@ -901,8 +901,7 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
             }
 
-            // Update tweet count
-            _tweetCount.value = tweets.value.size
+            // Don't override tweet count - it should come from server data, not local list size
         }
     }
 
@@ -1318,10 +1317,8 @@ class UserViewModel @AssistedInject constructor(
 
                             _tweets.value = updatedTweets
                             
-                            // Update tweet count from server data (appUser)
-                            if (userId == appUser.mid) {
-                                _tweetCount.value = appUser.tweetCount
-                            }
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
                         }
                     }
 
@@ -1340,10 +1337,8 @@ class UserViewModel @AssistedInject constructor(
                             _favorites.value = updatedFavorites
                             _bookmarks.value = updatedBookmarks
 
-                            // Update tweet count from server data (appUser)
-                            if (userId == appUser.mid) {
-                                _tweetCount.value = appUser.tweetCount
-                            }
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
                         }
                     }
                     
@@ -1357,10 +1352,8 @@ class UserViewModel @AssistedInject constructor(
                                     .sortedByDescending { it.timestamp }
                             }
                             
-                            // Update tweet count from server data (appUser) instead of local list size
-                            if (userId == appUser.mid) {
-                                _tweetCount.value = appUser.tweetCount
-                            }
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
                         }
                     }
 
