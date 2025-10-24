@@ -25,6 +25,11 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.ktor.client.request.get
@@ -42,6 +47,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.navigation.TweetNavGraph
+import us.fireshare.tweet.service.AppUserRefreshWorker
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.ThemeManager
@@ -101,6 +107,9 @@ class TweetActivity : ComponentActivity() {
                     // All versions use checkForUpgrade for automatic checks
                     activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
+
+                // Start periodic appUser refresh every 30 minutes using WorkManager
+                scheduleAppUserRefresh()
 
                 setContent {
                     // Initialize theme manager with current preference
@@ -170,6 +179,29 @@ class TweetActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Schedule periodic appUser refresh using WorkManager
+     */
+    private fun scheduleAppUserRefresh() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val refreshWorkRequest = PeriodicWorkRequestBuilder<AppUserRefreshWorker>(
+            java.time.Duration.ofMinutes(30)
+        )
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "appUserRefresh",
+            ExistingPeriodicWorkPolicy.KEEP,
+            refreshWorkRequest
+        )
+
+        Timber.tag("AppUserRefresh").d("Scheduled periodic appUser refresh every 30 minutes")
     }
 }
 
