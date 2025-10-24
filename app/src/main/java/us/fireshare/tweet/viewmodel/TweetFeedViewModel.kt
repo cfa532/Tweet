@@ -358,11 +358,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         // OPTIMISTIC UPDATE: Remove tweet immediately
         removeTweet(tweetId)
 
-        // Update user's tweet count if it's the current user's tweet
-        if (tweetToDelete?.authorId == appUser.mid) {
-            appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
-            TweetCacheManager.saveUser(appUser)
-        }
+        // Note: tweetCount is updated by getUser() refresh inside deleteTweet()
 
         // Also remove from UserViewModel lists if provided (for profile screen)
         userViewModel?.removeTweetFromAllLists(tweetId)
@@ -493,14 +489,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                     _tweets.value = listOf(tweetWithAuthor) + _tweets.value
                                     Timber.tag("TweetFeedViewModel")
                                         .d("Tweet added: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
-
-                                    // Update user's tweet count if it's the current user's tweet
-                                    if (tweetWithAuthor.authorId == appUser.mid) {
-                                        appUser = appUser.copy(tweetCount = appUser.tweetCount + 1)
-                                        withContext(IO) {
-                                            TweetCacheManager.saveUser(appUser)
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -673,6 +661,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         is TweetEvent.ChatSessionUpdated -> {
                             // Chat events are handled in ChatViewModel
                             Timber.tag("TweetFeedViewModel").d("Ignoring ChatSessionUpdated event")
+                        }
+
+                        is TweetEvent.UserDataUpdated -> {
+                            // User data updates are handled in UserViewModel
+                            Timber.tag("TweetFeedViewModel").d("Ignoring UserDataUpdated event")
                         }
                     }
                 }

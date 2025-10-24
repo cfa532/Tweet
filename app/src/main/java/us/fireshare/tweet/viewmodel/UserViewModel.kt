@@ -128,7 +128,16 @@ class UserViewModel @AssistedInject constructor(
         try {
             refreshUserWithRetry(maxRetries)
 
-            // Update count variables from the refreshed user data
+            // If this is the current user's profile, update appUser from refreshed data
+            if (userId == appUser.mid) {
+                // Update appUser singleton with server data
+                User.updateFrom(user.value)
+                // Ensure appUser reference points to the updated singleton
+                appUser = User.getInstance(appUser.mid)
+                TweetCacheManager.saveUser(appUser)
+            }
+
+            // Update count variables from the refreshed user data (which now includes appUser if same user)
             _bookmarksCount.value = user.value.bookmarksCount
             _favoritesCount.value = user.value.favoritesCount
             _followersCount.value = user.value.followersCount
@@ -136,15 +145,6 @@ class UserViewModel @AssistedInject constructor(
             _tweetCount.value = user.value.tweetCount
 
             Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
-
-            // If this is the current user's profile, update from appUser
-            if (userId == appUser.mid) {
-                appUser.bookmarksCount = user.value.bookmarksCount
-                appUser.favoritesCount = user.value.favoritesCount
-                appUser.followersCount = user.value.followersCount
-                appUser.followingCount = user.value.followingCount
-                appUser.tweetCount = user.value.tweetCount
-            }
         } catch (e: Exception) {
             Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
         }
@@ -384,8 +384,16 @@ class UserViewModel @AssistedInject constructor(
      * Get bookmarks of the user
      * */
     suspend fun getBookmarks(pageNumber: Int) {
+        // Ensure we have the latest user data before loading bookmarks
+        if (userId == appUser.mid) {
+            refreshFromAppUser()
+        }
+        
+        // Use the most up-to-date user data (appUser) instead of potentially stale user.value
+        val currentUser = if (userId == appUser.mid) appUser else user.value
+        
         val tweetsWithNulls = getUserTweetsByType(
-            user.value,
+            currentUser,
             UserContentType.BOOKMARKS,
             pageNumber,
             TW_CONST.PAGE_SIZE
@@ -400,7 +408,7 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
             _bookmarks.value = validTweets
-            _bookmarksCount.value = validTweets.size
+            // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list
             _bookmarks.update { currentBookmarks ->
@@ -412,7 +420,7 @@ class UserViewModel @AssistedInject constructor(
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
 
-                _bookmarksCount.value = finalBookmarks.size
+                // Don't override the count - it should come from server data, not local list size
                 finalBookmarks
             }
         }
@@ -445,6 +453,12 @@ class UserViewModel @AssistedInject constructor(
         // Update the public bookmarks count for UI with server count
         _bookmarksCount.value = serverBookmarksCount
 
+        // Update other count variables to match appUser (but don't override bookmarks count)
+        _favoritesCount.value = appUser.favoritesCount
+        _followersCount.value = appUser.followersCount
+        _followingsCount.value = appUser.followingCount
+        _tweetCount.value = appUser.tweetCount
+
         // Update the bookmarks list based on server response
         if (isBookmarked) {
             // Add tweet to the beginning of bookmarks list if not already present
@@ -470,6 +484,9 @@ class UserViewModel @AssistedInject constructor(
                 .d("updateBookmark: Saving user to cache with bookmarksCount: ${appUser.bookmarksCount}")
             TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
+            
+            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }
 
@@ -477,8 +494,16 @@ class UserViewModel @AssistedInject constructor(
      * Get favorite Tweets of the user.
      * */
     suspend fun getFavorites(pageNumber: Int) {
+        // Ensure we have the latest user data before loading favorites
+        if (userId == appUser.mid) {
+            refreshFromAppUser()
+        }
+        
+        // Use the most up-to-date user data (appUser) instead of potentially stale user.value
+        val currentUser = if (userId == appUser.mid) appUser else user.value
+        
         val tweetsWithNulls = getUserTweetsByType(
-            user.value,
+            currentUser,
             UserContentType.FAVORITES,
             pageNumber,
             TW_CONST.PAGE_SIZE
@@ -493,7 +518,7 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list
             _favorites.value = validTweets
-            _favoritesCount.value = validTweets.size
+            // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list
             _favorites.update { currentFavorites ->
@@ -505,7 +530,7 @@ class UserViewModel @AssistedInject constructor(
                     .distinctBy { it.mid }
                     .sortedByDescending { it.timestamp }
 
-                _favoritesCount.value = finalFavorites.size
+                // Don't override the count - it should come from server data, not local list size
                 finalFavorites
             }
         }
@@ -538,6 +563,12 @@ class UserViewModel @AssistedInject constructor(
         // Update the public favorites count for UI with server count
         _favoritesCount.value = serverFavoritesCount
 
+        // Update other count variables to match appUser (but don't override favorites count)
+        _bookmarksCount.value = appUser.bookmarksCount
+        _followersCount.value = appUser.followersCount
+        _followingsCount.value = appUser.followingCount
+        _tweetCount.value = appUser.tweetCount
+
         // Update the favorites list based on server response
         if (isFavorite) {
             // Add tweet to the beginning of favorites list if not already present
@@ -563,6 +594,9 @@ class UserViewModel @AssistedInject constructor(
                 .d("updateFavorite: Saving user to cache with favoritesCount: ${appUser.favoritesCount}")
             TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateFavorite: User saved to cache successfully")
+            
+            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }
 
@@ -572,6 +606,9 @@ class UserViewModel @AssistedInject constructor(
     }
 
     init {
+        // Start listening to notifications immediately when ViewModel is created
+        startListeningToNotifications()
+        
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(Dispatchers.IO) {
                 val loadedUser =
@@ -616,6 +653,25 @@ class UserViewModel @AssistedInject constructor(
     suspend fun syncUser() {
         HproseInstance.syncUser(userId)?.let {
             _user.value = it
+        }
+    }
+
+    /**
+     * Refresh user data from appUser if this is the current user.
+     * This ensures that when appUser is updated (e.g., after favorite toggle),
+     * this ViewModel gets the updated data.
+     */
+    fun refreshFromAppUser() {
+        if (userId == appUser.mid) {
+            Timber.tag("UserViewModel").d("Refreshing user data from appUser for current user: ${appUser.mid}")
+            _user.value = appUser
+            
+            // Update all count variables to match appUser
+            _bookmarksCount.value = appUser.bookmarksCount
+            _favoritesCount.value = appUser.favoritesCount
+            _followersCount.value = appUser.followersCount
+            _followingsCount.value = appUser.followingCount
+            _tweetCount.value = appUser.tweetCount
         }
     }
 
@@ -1261,8 +1317,11 @@ class UserViewModel @AssistedInject constructor(
                                 .sortedByDescending { it.timestamp }
 
                             _tweets.value = updatedTweets
-                            _user.value = user.value.copy(tweetCount = updatedTweets.size)
-                            _tweetCount.value = updatedTweets.size
+                            
+                            // Update tweet count from server data (appUser)
+                            if (userId == appUser.mid) {
+                                _tweetCount.value = appUser.tweetCount
+                            }
                         }
                     }
 
@@ -1281,9 +1340,10 @@ class UserViewModel @AssistedInject constructor(
                             _favorites.value = updatedFavorites
                             _bookmarks.value = updatedBookmarks
 
-                            // Update user's tweet count while preserving other fields
-                            _user.value = _user.value.copy(tweetCount = updatedTweets.size)
-                            _tweetCount.value = updatedTweets.size
+                            // Update tweet count from server data (appUser)
+                            if (userId == appUser.mid) {
+                                _tweetCount.value = appUser.tweetCount
+                            }
                         }
                     }
                     
@@ -1297,8 +1357,25 @@ class UserViewModel @AssistedInject constructor(
                                     .sortedByDescending { it.timestamp }
                             }
                             
-                            // Update user's tweet count
-                            _tweetCount.value = tweets.value.size
+                            // Update tweet count from server data (appUser) instead of local list size
+                            if (userId == appUser.mid) {
+                                _tweetCount.value = appUser.tweetCount
+                            }
+                        }
+                    }
+
+                    is TweetEvent.UserDataUpdated -> {
+                        // Update user data if this is the current user
+                        if (event.user.mid == userId) {
+                            Timber.tag("UserViewModel").d("Received UserDataUpdated event for user: ${event.user.mid}")
+                            _user.value = event.user
+                            
+                            // Update all count variables to match the updated user
+                            _bookmarksCount.value = event.user.bookmarksCount
+                            _favoritesCount.value = event.user.favoritesCount
+                            _followersCount.value = event.user.followersCount
+                            _followingsCount.value = event.user.followingCount
+                            _tweetCount.value = event.user.tweetCount
                         }
                     }
 
@@ -1325,8 +1402,5 @@ class UserViewModel @AssistedInject constructor(
         _pinnedTweets.value = updatedPinnedTweets
         _favorites.value = updatedFavorites
         _bookmarks.value = updatedBookmarks
-
-        // Update user's tweet count while preserving other fields
-        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
     }
 }

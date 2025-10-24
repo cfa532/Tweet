@@ -989,6 +989,17 @@ object HproseInstance {
                     if (tweet.originalTweetId == null) {
                         TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
                     }
+                    
+                    // Refresh appUser from server to get updated tweetCount and other properties
+                    try {
+                        val refreshedUser = getUser(appUser.mid, maxRetries = 1)
+                        if (refreshedUser != null && !refreshedUser.isGuest()) {
+                            appUser = refreshedUser
+                            TweetCacheManager.saveUser(appUser)
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("uploadTweet").w("Failed to refresh appUser after upload: $e")
+                    }
 
                     Timber.tag("uploadTweet").d("Tweet uploaded: $newTweetId")
                     updatedTweet
@@ -1247,6 +1258,18 @@ object HproseInstance {
 
             if (response?.get("success") == true) {
                 val deletedTweetId = response["tweetid"] as? MimeiId
+                
+                // Refresh appUser from server to get updated tweetCount and other properties
+                try {
+                    val refreshedUser = getUser(appUser.mid, maxRetries = 1)
+                    if (refreshedUser != null && !refreshedUser.isGuest()) {
+                        appUser = refreshedUser
+                        TweetCacheManager.saveUser(appUser)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
+                }
+                
                 deletedTweetId
             } else {
                 val errorMessage =

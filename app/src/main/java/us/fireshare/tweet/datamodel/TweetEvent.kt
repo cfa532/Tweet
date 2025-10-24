@@ -20,6 +20,7 @@ sealed class TweetEvent {
     data class TweetLiked(val tweet: Tweet, val isLiked: Boolean) : TweetEvent()
     data class TweetBookmarked(val tweet: Tweet, val isBookmarked: Boolean) : TweetEvent()
     data class TweetRetweeted(val originalTweet: Tweet, val retweet: Tweet) : TweetEvent()
+    data class UserDataUpdated(val user: User) : TweetEvent()
     
     // Chat events
     data class ChatMessageSent(val message: ChatMessage) : TweetEvent()

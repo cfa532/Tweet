@@ -145,6 +145,15 @@ data class User(
                 bookmarksCount = user.bookmarksCount
                 favoritesCount = user.favoritesCount
                 commentsCount = user.commentsCount
+                
+                // Update array properties
+                fansList = user.fansList
+                followingList = user.followingList
+                bookmarkedTweets = user.bookmarkedTweets
+                favoriteTweets = user.favoriteTweets
+                repliedTweets = user.repliedTweets
+                commentsList = user.commentsList
+                topTweets = user.topTweets
             }
             
             // Clear cached services if URLs changed
@@ -154,6 +163,13 @@ data class User(
             if (oldWritableUrl != instance.writableUrl) {
                 instance.clearUploadService()
             }
+        }
+        
+        /**
+         * Update user instance from another User object (convenience method)
+         */
+        fun updateFrom(other: User) {
+            updateUserInstance(other)
         }
     }
 
