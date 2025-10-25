@@ -45,9 +45,9 @@ import us.fireshare.tweet.ui.theme.ThemeManager
 import us.fireshare.tweet.ui.theme.TweetTheme
 
 @AndroidEntryPoint
-class TweetActivity : ComponentActivity() {
+class PlayTweetActivity : ComponentActivity() {
     private lateinit var initJob: Deferred<Unit>
-    private val activityViewModel: ActivityViewModel by viewModels()
+    private val activityViewModel: PlayActivityViewModel by viewModels()
 
     // Register activity result launcher for notification permission
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -73,7 +73,7 @@ class TweetActivity : ComponentActivity() {
         }
 
         initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@TweetActivity)
+            HproseInstance.init(this@PlayTweetActivity)
         }
 
         lifecycleScope.launch {
@@ -144,9 +144,9 @@ class TweetActivity : ComponentActivity() {
             lifecycleScope.launch {
                 delay(2000) // 2 second delay
 
-                if (NotificationPermissionManager.isNotificationPermissionGranted(this@TweetActivity)) {
+                if (NotificationPermissionManager.isNotificationPermissionGranted(this@PlayTweetActivity)) {
                     // Permission already granted, just mark as asked
-                    NotificationPermissionManager.markNotificationPermissionAsked(this@TweetActivity)
+                    NotificationPermissionManager.markNotificationPermissionAsked(this@PlayTweetActivity)
                     Timber.d("Notification permission already granted")
                 } else {
                     // Request permission
@@ -161,6 +161,6 @@ class TweetActivity : ComponentActivity() {
     }
 }
 
-class ActivityViewModel: ViewModel() {
+class PlayActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
 }
