@@ -66,36 +66,48 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val mid = user.avatar ?: ""
-    // Use a more specific key that includes both user ID and avatar ID to ensure proper recomposition
-    var loadState by remember("${user.mid}_${mid}") { mutableStateOf(AvatarLoadState()) }
+    
+    // Use stable key based on avatar mid only - this ensures same avatar shares state across all instances
+    // This matches the iOS implementation approach
+    var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
 
     LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
-        loadState = loadState.copy(avatarUrl = newAvatarUrl)
+        
+        // Only update if the avatar URL has actually changed
+        if (loadState.avatarUrl != newAvatarUrl) {
+            loadState = loadState.copy(avatarUrl = newAvatarUrl)
+        }
 
         if (mid.isNotEmpty()) {
             try {
-                loadState = loadState.copy(isLoading = true, hasError = false)
-
-                // Try to load from cache first
+                // Always check cache first - this is the key to preventing reloads
                 val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
 
-                // If not cached, download and cache using the new scope-based approach
-                if (cachedBitmap == null && !newAvatarUrl.isNullOrEmpty()) {
-                    ImageCacheManager.loadOriginalImageWithScope(
-                        context = context,
-                        imageUrl = newAvatarUrl,
-                        mid = mid
-                    ) { downloadedBitmap ->
-                        if (downloadedBitmap == null) {
-                            loadState = loadState.copy(isLoading = false, hasError = true)
-                            Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
-                        } else {
-                            loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                if (cachedBitmap != null) {
+                    // Image is already cached, use it immediately
+                    loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
+                } else if (!newAvatarUrl.isNullOrEmpty()) {
+                    // Only start loading if not already loading
+                    if (!loadState.isLoading) {
+                        loadState = loadState.copy(isLoading = true, hasError = false)
+                        
+                        ImageCacheManager.loadOriginalImageWithScope(
+                            context = context,
+                            imageUrl = newAvatarUrl,
+                            mid = mid
+                        ) { downloadedBitmap ->
+                            if (downloadedBitmap == null) {
+                                loadState = loadState.copy(isLoading = false, hasError = true)
+                                Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
+                            } else {
+                                loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                            }
                         }
                     }
                 } else {
-                    loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
+                    // No avatar URL available
+                    loadState = loadState.copy(isLoading = false, hasError = true)
                 }
             } catch (e: Exception) {
                 loadState = loadState.copy(isLoading = false, hasError = true)
