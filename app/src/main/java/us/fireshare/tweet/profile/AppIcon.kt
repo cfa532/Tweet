@@ -71,6 +71,16 @@ fun UserAvatar(
     // This matches the iOS implementation approach
     var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
 
+    // Check cache immediately on composition - this is more efficient than checking in LaunchedEffect
+    LaunchedEffect(Unit) {
+        if (mid.isNotEmpty()) {
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+            if (cachedBitmap != null) {
+                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
+            }
+        }
+    }
+
     LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
         
@@ -79,33 +89,25 @@ fun UserAvatar(
             loadState = loadState.copy(avatarUrl = newAvatarUrl)
         }
 
-        if (mid.isNotEmpty()) {
+        if (mid.isNotEmpty() && loadState.bitmap == null) {
             try {
-                // Always check cache first - this is the key to preventing reloads
-                val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-
-                if (cachedBitmap != null) {
-                    // Image is already cached, use it immediately
-                    loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
-                } else if (!newAvatarUrl.isNullOrEmpty()) {
-                    // Only start loading if not already loading
-                    if (!loadState.isLoading) {
-                        loadState = loadState.copy(isLoading = true, hasError = false)
-                        
-                        ImageCacheManager.loadOriginalImageWithScope(
-                            context = context,
-                            imageUrl = newAvatarUrl,
-                            mid = mid
-                        ) { downloadedBitmap ->
-                            if (downloadedBitmap == null) {
-                                loadState = loadState.copy(isLoading = false, hasError = true)
-                                Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
-                            } else {
-                                loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
-                            }
+                // Only load if we don't already have a bitmap
+                if (!newAvatarUrl.isNullOrEmpty() && !loadState.isLoading) {
+                    loadState = loadState.copy(isLoading = true, hasError = false)
+                    
+                    ImageCacheManager.loadOriginalImageWithScope(
+                        context = context,
+                        imageUrl = newAvatarUrl,
+                        mid = mid
+                    ) { downloadedBitmap ->
+                        if (downloadedBitmap == null) {
+                            loadState = loadState.copy(isLoading = false, hasError = true)
+                            Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
+                        } else {
+                            loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
                         }
                     }
-                } else {
+                } else if (newAvatarUrl.isNullOrEmpty()) {
                     // No avatar URL available
                     loadState = loadState.copy(isLoading = false, hasError = true)
                 }
@@ -113,7 +115,7 @@ fun UserAvatar(
                 loadState = loadState.copy(isLoading = false, hasError = true)
                 Timber.e("UserAvatar - Error loading avatar: $e")
             }
-        } else {
+        } else if (mid.isEmpty()) {
             // Reset state when no avatar
             loadState = AvatarLoadState()
         }
