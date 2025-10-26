@@ -65,6 +65,78 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.viewmodel.UserViewModel
 
+// Helper functions moved to top to avoid forward reference issues
+@Composable
+fun AppUserAvatar(
+    onAvatarClick: () -> Unit,
+    viewModel: UserViewModel,
+    selectedImageUri: Uri?,
+    isUploading: Boolean,
+    uploadError: String?
+) {
+    val user by viewModel.user.collectAsState()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier.size(120.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .clickable(onClick = onAvatarClick)
+            ) {
+                // Show current avatar from server
+                UserAvatar(user = user, size = 120)
+                
+                // No loading indicator - keep selected image visible during upload
+            }
+            
+            IconButton(
+                onClick = onAvatarClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (40).dp, y = (-8).dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_photo_plus),
+                    contentDescription = stringResource(R.string.change_avatar),
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+        
+        // Show error message if upload failed
+        uploadError?.let { error ->
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun EyeSlashButton(
+    viewModel: UserViewModel,
+    isPasswordVisible: Boolean
+) {
+    IconButton(
+        onClick = { viewModel.onPasswordVisibilityChange() },
+        modifier = Modifier.size(ButtonDefaults.IconSize)
+    ) {
+        Icon(painter = painterResource(
+            if (isPasswordVisible) R.drawable.eyes else R.drawable.eye_slash
+        ), contentDescription = null)
+    }
+}
+
 /**
  * Register and edit user profile.
  * */
@@ -102,29 +174,8 @@ fun EditProfileScreen(
     // Dialog state for unsaved changes warning
     val showUnsavedChangesDialog = remember { mutableStateOf(false) }
     
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let {
-            selectedImageUri.value = it
-            isUploading.value = true
-            uploadError.value = null // Clear any previous error
-            
-            // Upload the image
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    viewModel.updateAvatar(context, it)
-                    // Upload successful, keep the selected image displayed
-                    // Don't clear selectedImageUri - let it stay as the new avatar
-                } catch (e: Exception) {
-                    // Upload failed, show error message
-                    uploadError.value = context.getString(R.string.avatar_upload_failed, e.message ?: "Unknown error")
-                } finally {
-                    isUploading.value = false
-                }
-            }
-        }
-    }
+    // State for avatar cropping
+    val showCropScreen = remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -140,11 +191,25 @@ fun EditProfileScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp)
-    ) {
+    // Show cropping screen if requested
+    if (showCropScreen.value) {
+        AvatarCropScreen(
+            user = appUser,
+            viewModel = viewModel,
+            onNavigateBack = { 
+                showCropScreen.value = false
+            },
+            onCropComplete = {
+                showCropScreen.value = false
+                // Avatar is updated in the cropping screen
+            }
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,7 +235,7 @@ fun EditProfileScreen(
             // AppUser avatar
             if (!appUser.isGuest()) {
                 AppUserAvatar(
-                    launcher = launcher,
+                    onAvatarClick = { showCropScreen.value = true },
                     viewModel = viewModel,
                     selectedImageUri = selectedImageUri.value,
                     isUploading = isUploading.value,
@@ -435,79 +500,4 @@ fun SelectedImageDisplay(uri: Uri) {
     }
 }
 
-@Composable
-fun EyeSlashButton(
-    viewModel: UserViewModel,
-    isPasswordVisible: Boolean
-) {
-    IconButton(
-        onClick = { viewModel.onPasswordVisibilityChange() },
-        modifier = Modifier.size(ButtonDefaults.IconSize)
-    ) {
-        Icon(painter = painterResource(
-            if (isPasswordVisible) R.drawable.eyes else R.drawable.eye_slash
-        ), contentDescription = null)
-    }
-}
-
-@Composable
-fun AppUserAvatar(
-    launcher: ManagedActivityResultLauncher<String, Uri?>,
-    viewModel: UserViewModel,
-    selectedImageUri: Uri?,
-    isUploading: Boolean,
-    uploadError: String?
-) {
-    val user by viewModel.user.collectAsState()
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier.size(120.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(CircleShape)
-                    .clickable(onClick = { launcher.launch("image/*") })
-            ) {
-                // Show selected image if available, otherwise show current avatar
-                if (selectedImageUri != null) {
-                    // Show the selected image immediately
-                    SelectedImageDisplay(uri = selectedImageUri)
-                } else {
-                    // Show current avatar from server
-                    UserAvatar(user = user, size = 120)
-                }
-                
-                // No loading indicator - keep selected image visible during upload
-            }
-            
-            IconButton(
-                onClick = { launcher.launch("image/*") },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (40).dp, y = (-8).dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_photo_plus),
-                    contentDescription = stringResource(R.string.change_avatar),
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-        
-        // Show error message if upload failed
-        uploadError?.let { error ->
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-    }
 }

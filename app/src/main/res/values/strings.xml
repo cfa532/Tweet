@@ -264,4 +264,9 @@
     <string name="upgrade_failed_download">Download failed: %1$s</string>
     <string name="upgrade_failed_unknown">Upgrade failed: Unknown error</string>
     <string name="download_in_progress">Download is already in progress. Please wait for it to complete.</string>
+    <string name="crop_avatar">Crop Avatar</string>
+    <string name="choose">Choose</string>
+    <string name="choose_photo">Choose Photo</string>
+    <string name="select_photo_to_crop">Select a photo to crop</string>
+    <string name="crop_instructions">Drag to reposition and pinch to zoom. The circular area will be your avatar.</string>
 </resources>
