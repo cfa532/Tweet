@@ -422,7 +422,7 @@ private fun CroppingInterface(
                 center = androidx.compose.ui.geometry.Offset(centerX, centerY),
                 radius = radius,
                 color = Color.White,
-                style = Stroke(width = 4.dp.toPx())
+                style = Stroke(width = 2.dp.toPx())
             )
         }
     }
