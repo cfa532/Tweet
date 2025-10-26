@@ -189,6 +189,7 @@ fun AvatarCropScreen(
                                             onCropComplete()
                                         } catch (e: Exception) {
                                             uploadError = "Upload failed: ${e.message}"
+                                        } finally {
                                             isUploading = false
                                         }
                                     }
@@ -197,13 +198,6 @@ fun AvatarCropScreen(
                             enabled = !isUploading,
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
-                            if (isUploading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
                             Text(stringResource(R.string.choose))
                         }
                     }
@@ -235,6 +229,7 @@ fun AvatarCropScreen(
                     onOffsetChange = { imageOffset = it },
                     onScaleChange = { imageScale = it },
                     onImageViewReady = { imageView = it },
+                    isUploading = isUploading,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -270,6 +265,33 @@ fun AvatarCropScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.choose_photo))
                     }
+                }
+            }
+        }
+        
+        // Show loading spinner overlay when uploading
+        if (isUploading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        strokeWidth = 4.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Processing...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -321,6 +343,7 @@ private fun CroppingInterface(
     onOffsetChange: (Offset) -> Unit,
     onScaleChange: (Float) -> Unit,
     onImageViewReady: (SubsamplingScaleImageView?) -> Unit,
+    isUploading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -339,28 +362,31 @@ private fun CroppingInterface(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
                         setImage(ImageSource.bitmap(bitmap))
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
                         setDoubleTapZoomDuration(300)
                         setDoubleTapZoomScale(2f)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
                         imageView = this
+                        
+                        // Set scale limits immediately
+                        val fittedScale = minOf(
+                            context.resources.displayMetrics.widthPixels.toFloat() / bitmap.width,
+                            context.resources.displayMetrics.heightPixels.toFloat() / bitmap.height
+                        )
+                        val minScale = fittedScale * 0.5f
+                        val maxScale = fittedScale * 3f
+                        setMinScale(minScale)
+                        setMaxScale(maxScale)
                         
                         // Set scale limits after image is loaded
                         setOnImageEventListener(object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                             override fun onImageLoaded() {
                                 super.onImageLoaded()
                                 post {
-                                    // Get the fitted scale that SCALE_TYPE_CENTER_INSIDE would use
-                                    val fittedScale = minOf(
-                                        width.toFloat() / bitmap.width,
-                                        height.toFloat() / bitmap.height
-                                    )
+                                    // Set initial scale to fit screen
+                                    setScaleAndCenter(fittedScale, null)
                                     
-                                    // Set min/max scale relative to the fitted scale
-                                    setMinScale(fittedScale * 0.5f)  // 0.5x of fitted size
-                                    setMaxScale(fittedScale * 3f)   // 3x of fitted size
-                                    
-                                    Timber.d("AvatarCrop: Image loaded - fitted scale: $fittedScale, min: ${fittedScale * 0.5f}, max: ${fittedScale * 3f} (view: ${width}x${height}, bitmap: ${bitmap.width}x${bitmap.height})")
+                                    Timber.d("AvatarCrop: Image loaded - fitted scale: $fittedScale, min: $minScale, max: $maxScale (view: ${width}x${height}, bitmap: ${bitmap.width}x${bitmap.height})")
                                 }
                             }
                         })
@@ -496,7 +522,7 @@ private fun transformBitmap(bitmap: Bitmap, scale: Float): Bitmap {
 }
 
 /**
- * Crop image to square area from the actual view state with black background
+ * Crop image to circular area from the actual view state, preserving aspect ratio
  */
 private fun cropCircularImageFromView(
     bitmap: Bitmap,
@@ -504,11 +530,6 @@ private fun cropCircularImageFromView(
     cropSizePx: Float
 ): Bitmap {
     val cropSize = cropSizePx.toInt()
-    val result = Bitmap.createBitmap(cropSize, cropSize, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(result)
-    
-    // Fill with black background
-    canvas.drawColor(android.graphics.Color.BLACK)
     
     if (imageView != null) {
         // Get the actual view state from SubsamplingScaleImageView
@@ -531,28 +552,38 @@ private fun cropCircularImageFromView(
         val sourceWidth = sourceSize.toInt().coerceAtMost(bitmap.width - sourceX)
         val sourceHeight = sourceSize.toInt().coerceAtMost(bitmap.height - sourceY)
         
+        // Calculate output dimensions preserving aspect ratio of the selected area
+        val selectedAspectRatio = sourceWidth.toFloat() / sourceHeight.toFloat()
+        val outputWidth: Int
+        val outputHeight: Int
+        
+        if (selectedAspectRatio > 1f) {
+            // Landscape: width is larger
+            outputWidth = cropSize
+            outputHeight = (cropSize / selectedAspectRatio).toInt()
+        } else {
+            // Portrait or square: height is larger or equal
+            outputWidth = (cropSize * selectedAspectRatio).toInt()
+            outputHeight = cropSize
+        }
+        
+        // Create result bitmap with proper aspect ratio
+        val result = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        
+        // Fill with black background
+        canvas.drawColor(android.graphics.Color.BLACK)
+        
         // Draw the cropped portion of the bitmap
         val sourceRect = android.graphics.Rect(sourceX, sourceY, sourceX + sourceWidth, sourceY + sourceHeight)
-        val destRect = android.graphics.Rect(0, 0, cropSize, cropSize)
-        
+        val destRect = android.graphics.Rect(0, 0, outputWidth, outputHeight)
         canvas.drawBitmap(bitmap, sourceRect, destRect, null)
+        
+        return result
     } else {
-        // Fallback to center crop if view is not available
-        val sourceX = (bitmap.width - cropSize) / 2f
-        val sourceY = (bitmap.height - cropSize) / 2f
-        
-        val sourceRect = android.graphics.Rect(
-            sourceX.toInt().coerceAtLeast(0), 
-            sourceY.toInt().coerceAtLeast(0), 
-            (sourceX + cropSize).toInt().coerceAtMost(bitmap.width), 
-            (sourceY + cropSize).toInt().coerceAtMost(bitmap.height)
-        )
-        val destRect = android.graphics.Rect(0, 0, cropSize, cropSize)
-        
-        canvas.drawBitmap(bitmap, sourceRect, destRect, null)
+        // Fallback: return original bitmap if imageView is null
+        return bitmap
     }
-    
-    return result
 }
 
 /**
