@@ -339,22 +339,31 @@ private fun CroppingInterface(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
                         setImage(ImageSource.bitmap(bitmap))
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
-                        setMaxScale(3f)  // 3x max zoom from fitted view
-                        setMinScale(0.5f)  // 0.5x min zoom from fitted view
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
                         setDoubleTapZoomDuration(300)
                         setDoubleTapZoomScale(2f)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
                         imageView = this
                         
-                        // Set initial scale to fit screen
-                        post {
-                            val scale = minOf(
-                                width.toFloat() / bitmap.width,
-                                height.toFloat() / bitmap.height
-                            )
-                            setScaleAndCenter(scale, null)
-                        }
+                        // Set scale limits after image is loaded
+                        setOnImageEventListener(object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
+                            override fun onImageLoaded() {
+                                super.onImageLoaded()
+                                post {
+                                    // Get the fitted scale that SCALE_TYPE_CENTER_INSIDE would use
+                                    val fittedScale = minOf(
+                                        width.toFloat() / bitmap.width,
+                                        height.toFloat() / bitmap.height
+                                    )
+                                    
+                                    // Set min/max scale relative to the fitted scale
+                                    setMinScale(fittedScale * 0.5f)  // 0.5x of fitted size
+                                    setMaxScale(fittedScale * 3f)   // 3x of fitted size
+                                    
+                                    Timber.d("AvatarCrop: Image loaded - fitted scale: $fittedScale, min: ${fittedScale * 0.5f}, max: ${fittedScale * 3f} (view: ${width}x${height}, bitmap: ${bitmap.width}x${bitmap.height})")
+                                }
+                            }
+                        })
                     }
                 },
                 modifier = Modifier.fillMaxSize()
