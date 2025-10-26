@@ -253,4 +253,7 @@
     <string name="error_no_cid_in_response">完成响应中没有CID</string>
     <string name="error_video_conversion_failed">视频转换失败</string>
     <string name="error_poll_status_failures" formatted="false">连续%d次状态轮询失败：%s</string>
+    <string name="choose">选择</string>
+    <string name="select_photo_to_crop">选择要裁剪的照片</string>
+    <string name="crop_instructions">拖拽重新定位，双指缩放。圆形区域将是您的头像。</string>
 </resources>

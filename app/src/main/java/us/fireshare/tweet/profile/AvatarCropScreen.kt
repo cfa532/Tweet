@@ -326,31 +326,47 @@ private fun CroppingInterface(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // Use SubsamplingScaleImageView for proper gestures
-        var imageView by remember { mutableStateOf<SubsamplingScaleImageView?>(null) }
-        
-        AndroidView(
-            factory = { context ->
-                SubsamplingScaleImageView(context).apply {
-                    setImage(ImageSource.bitmap(bitmap))
-                    setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
-                    setMaxScale(3f)  // 3x max zoom
-                    setMinScale(0.5f)  // 0.5x min zoom
-                    setDoubleTapZoomDuration(300)
-                    setDoubleTapZoomScale(2f)
-                    setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
-                    imageView = this
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-        
-        // Notify when imageView is ready
-        LaunchedEffect(imageView) {
-            onImageViewReady(imageView)
+        // Black background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // Use SubsamplingScaleImageView for proper gestures
+            var imageView by remember { mutableStateOf<SubsamplingScaleImageView?>(null) }
+            
+            AndroidView(
+                factory = { context ->
+                    SubsamplingScaleImageView(context).apply {
+                        setImage(ImageSource.bitmap(bitmap))
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
+                        setMaxScale(3f)  // 3x max zoom from fitted view
+                        setMinScale(0.5f)  // 0.5x min zoom from fitted view
+                        setDoubleTapZoomDuration(300)
+                        setDoubleTapZoomScale(2f)
+                        setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
+                        imageView = this
+                        
+                        // Set initial scale to fit screen
+                        post {
+                            val scale = minOf(
+                                width.toFloat() / bitmap.width,
+                                height.toFloat() / bitmap.height
+                            )
+                            setScaleAndCenter(scale, null)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+            
+            // Notify when imageView is ready
+            LaunchedEffect(imageView) {
+                onImageViewReady(imageView)
+            }
         }
         
-        // Dark overlay with 4 rectangles around the circle (no black hole)
+        // Dark overlay outside circle (shows image in circle)
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2
             val centerY = size.height / 2
