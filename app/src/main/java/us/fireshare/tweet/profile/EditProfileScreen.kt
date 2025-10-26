@@ -39,9 +39,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Alignment.Companion.TopEnd
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -74,7 +76,8 @@ fun AppUserAvatar(
     isUploading: Boolean,
     uploadError: String?
 ) {
-    val user by viewModel.user.collectAsState()
+    // Use appUser directly instead of ViewModel user data
+    val user = appUser
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -89,11 +92,13 @@ fun AppUserAvatar(
                     .clip(CircleShape)
                     .clickable(onClick = onAvatarClick)
             ) {
-                // Show current avatar from server
-                UserAvatar(user = user, size = 120)
-                
-                // No loading indicator - keep selected image visible during upload
+                // Show current avatar from appUser - key forces recomposition
+                key(user.avatar) {
+                    UserAvatar(user = user, size = 120)
+                }
             }
+            
+            // No loading indicator - keep selected image visible during upload
             
             IconButton(
                 onClick = onAvatarClick,
