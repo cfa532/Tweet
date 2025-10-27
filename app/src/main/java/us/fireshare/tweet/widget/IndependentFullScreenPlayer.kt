@@ -259,10 +259,6 @@ fun IndependentFullScreenPlayer(
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                     
-                    // Enable volume control
-                    setControllerShowTimeoutMs(3000) // Show controls for 3 seconds
-                    setControllerHideOnTouch(true) // Hide controls when touching video
-                    setControllerAutoShow(true) // Auto-show controls when user interacts
                 }
             },
             update = { playerView ->
@@ -270,19 +266,6 @@ fun IndependentFullScreenPlayer(
                 playerView.player = exoPlayer
                 // Update controller visibility when state changes
                 playerView.useController = showNativeControls
-                
-                // Ensure volume control is available
-                if (exoPlayer != null) {
-                    // Enable audio focus for proper volume control
-                    exoPlayer!!.setAudioAttributes(
-                        androidx.media3.common.AudioAttributes.Builder()
-                            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-                            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
-                            .build(),
-                        true // Handle audio focus
-                    )
-                }
-                
                 Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer, controls: $showNativeControls")
             }
         )
