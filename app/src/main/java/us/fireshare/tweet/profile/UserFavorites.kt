@@ -102,6 +102,7 @@ fun UserFavorites(
                     emptyList<Tweet?>() // Return empty list since getFavorites updates the state
                 },
                 showPrivateTweets = true, // Show private tweets in favorites since they are user's own favorites
+                context = "appUserFavorites",
                 parentEntry = parentEntry
             )
         }

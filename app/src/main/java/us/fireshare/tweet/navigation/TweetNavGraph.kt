@@ -46,6 +46,7 @@ import us.fireshare.tweet.tweet.TweetFeedScreen
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.MediaBrowser
@@ -73,6 +74,9 @@ fun TweetNavGraph(
         }
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    
+    // Initialize TweetListViewModel
+    sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
     // Handle deeplink
     if (appLinkIntent.action == Intent.ACTION_VIEW) {
@@ -241,4 +245,5 @@ class SharedViewModel @Inject constructor(
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel
+    lateinit var tweetListViewModel: TweetListViewModel
 }

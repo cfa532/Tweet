@@ -57,6 +57,8 @@ import androidx.media3.ui.PlayerView
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
+import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import kotlin.math.abs
@@ -69,17 +71,31 @@ import kotlin.math.abs
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun IndependentFullScreenPlayer(
-    tweetList: List<Tweet>,
     startIndex: Int,
+    modifier: Modifier = Modifier,
     tappedTweet: Tweet? = null, // The tweet that was actually tapped
     onClose: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val sharedViewModel: SharedViewModel = hiltViewModel()
     
-    // Use the passed tweet list directly - no context fetching
-    val actualTweetList = tweetList
-    val actualStartIndex = startIndex
+    // Observe the video list from TweetListViewModel
+    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
+    val actualVideoList = videoIndexedList // Use the full video list with MediaType info
+    val actualStartIndex = if (tappedTweet != null) {
+        // Find the video mid from the tapped tweet's attachments
+        val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
+            val mediaType = inferMediaTypeFromAttachment(attachment)
+            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+        }?.mid
+        if (videoMid != null) {
+            sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+        } else {
+            startIndex
+        }
+    } else {
+        startIndex
+    }
     val activity = context as? Activity
     
     var showControls by remember { mutableStateOf(false) }
@@ -93,39 +109,30 @@ fun IndependentFullScreenPlayer(
     
     // Initialize the singleton player
     LaunchedEffect(Unit) {
-        Timber.d("IndependentFullScreenPlayer - Initializing with ${actualTweetList.size} tweets, start index: $actualStartIndex")
+        Timber.d("IndependentFullScreenPlayer - Initializing with ${actualVideoList.size} videos, start index: $actualStartIndex")
         Timber.d("IndependentFullScreenPlayer - Tapped tweet: ${tappedTweet?.mid}")
         
         FullScreenPlayerManager.initialize(context)
         
-        // Check if tapped tweet is in the list
-        val isTappedTweetInList = tappedTweet != null && actualTweetList.any { it.mid == tappedTweet.mid }
-        
-        if (isTappedTweetInList) {
-            // Tapped tweet is in the list - use normal navigation
-            Timber.d("IndependentFullScreenPlayer - Tapped tweet found in list, using normal navigation")
-            FullScreenPlayerManager.setTweetList(actualTweetList, actualStartIndex)
-        } else {
-            // Tapped tweet is not in the list - play tapped tweet first, then allow navigation
-            Timber.d("IndependentFullScreenPlayer - Tapped tweet not in list, playing tapped tweet first")
-            val combinedList = if (tappedTweet != null) {
-                listOf(tappedTweet) + actualTweetList
-            } else {
-                actualTweetList
-            }
-            FullScreenPlayerManager.setTweetList(combinedList, 0) // Start with tapped tweet at index 0
-        }
+        // Set the video list
+        Timber.d("IndependentFullScreenPlayer - Setting video list with ${actualVideoList.size} videos")
+        FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
         
         // Set up callbacks
-        FullScreenPlayerManager.setOnVideoChanged { tweet, index ->
-            Timber.d("IndependentFullScreenPlayer - Video changed to index $index")
-            currentTweet = tweet
+        FullScreenPlayerManager.setOnVideoChanged { videoMid, index ->
+            Timber.d("IndependentFullScreenPlayer - Video changed to index $index: $videoMid")
+            // For now, we'll set currentTweet to null since we don't have tweet info
+            // TODO: Find a way to get tweet info from video mid
+            currentTweet = null
             currentIndex = index
             totalVideos = FullScreenPlayerManager.getTotalVideos()
         }
         
         // Set initial values
-        currentTweet = FullScreenPlayerManager.getCurrentTweet()
+        val currentVideoMid = FullScreenPlayerManager.getCurrentVideoMid()
+        // For now, we'll set currentTweet to null since we don't have tweet info
+        // TODO: Find a way to get tweet info from video mid
+        currentTweet = null
         currentIndex = FullScreenPlayerManager.getCurrentIndex()
         totalVideos = FullScreenPlayerManager.getTotalVideos()
     }
@@ -149,17 +156,13 @@ fun IndependentFullScreenPlayer(
     
     // Handle immersive mode
     LaunchedEffect(Unit) {
-        activity?.let { act ->
-            act.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        }
+        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
     }
     
     // Cleanup immersive mode on dispose
     DisposableEffect(Unit) {
         onDispose {
-            activity?.let { act ->
-                act.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            }
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         }
     }
     
@@ -178,7 +181,6 @@ fun IndependentFullScreenPlayer(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
-                        Timber.d("IndependentFullScreenPlayer - Drag ended, verticalDragOffset: $verticalDragOffset")
                         // Check for vertical drag gestures
                         if (abs(verticalDragOffset) > 150f && !isClosing) {
                             if (verticalDragOffset > 300f) {
@@ -186,24 +188,19 @@ fun IndependentFullScreenPlayer(
                                 Timber.d("IndependentFullScreenPlayer - Large drag down detected, closing player")
                                 isClosing = true
                                 onClose()
-                            } else if (actualTweetList.size == 1) {
+                            } else if (actualVideoList.size == 1) {
                                 // Only one video - any gesture should exit
                                 Timber.d("IndependentFullScreenPlayer - Single video detected, exiting player")
                                 isClosing = true
                                 onClose()
                             } else if (verticalDragOffset > 0) {
                                 // Small drag down - next video (newer video)
-                                Timber.d("IndependentFullScreenPlayer - Drag down detected, next video")
-                                Timber.d("IndependentFullScreenPlayer - Tweet list size: ${actualTweetList.size}")
                                 FullScreenPlayerManager.playNextVideo()
                             } else {
                                 // Drag up - previous video (older video)
-                                Timber.d("IndependentFullScreenPlayer - Drag up detected, previous video")
-                                Timber.d("IndependentFullScreenPlayer - Tweet list size: ${actualTweetList.size}")
                                 FullScreenPlayerManager.playPreviousVideo()
                             }
                         } else {
-                            Timber.d("IndependentFullScreenPlayer - Drag distance too small: ${abs(verticalDragOffset)}")
                         }
                         // Reset all gesture states
                         verticalDragOffset = 0f
@@ -215,7 +212,6 @@ fun IndependentFullScreenPlayer(
                     onDrag = { _, dragAmount ->
                         // Track vertical drag for navigation and exit
                         verticalDragOffset += dragAmount.y
-                        Timber.d("IndependentFullScreenPlayer - Drag: y=${dragAmount.y}, total offset: $verticalDragOffset")
                         
                         // Implement video shrinking gesture
                         if (verticalDragOffset < 0) {

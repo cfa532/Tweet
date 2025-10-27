@@ -275,6 +275,6 @@ private fun ProfileContentWithTweetListView(
         },
         headerContent = headerContent,
         restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
-        context = if (userId == appUser.mid) "appUserProfile" else "default"
+        context = if (userId == appUser.mid) "appUserProfile" else "userProfile"
     )
 }

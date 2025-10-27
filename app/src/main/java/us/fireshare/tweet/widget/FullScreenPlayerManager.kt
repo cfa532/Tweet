@@ -8,6 +8,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 
 /**
@@ -16,9 +17,9 @@ import us.fireshare.tweet.datamodel.Tweet
  */
 object FullScreenPlayerManager {
     private var exoPlayer: ExoPlayer? = null
-    private var currentTweetList: List<Tweet>? = null
+    private var currentVideoList: List<Pair<MimeiId, MediaType>>? = null
     private var currentVideoIndex: Int = 0
-    private var onVideoChanged: ((Tweet, Int) -> Unit)? = null
+    private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
     private var context: Context? = null
     
@@ -58,25 +59,31 @@ object FullScreenPlayerManager {
     }
     
     /**
-     * Set the tweet list context and start playing from the specified index
+     * Set the video list context and start playing from the specified index
      */
-    fun setTweetList(tweets: List<Tweet>, startIndex: Int) {
-        Timber.d("FullScreenPlayerManager - Setting tweet list with ${tweets.size} tweets, start index: $startIndex")
-        currentTweetList = tweets
-        currentVideoIndex = startIndex.coerceIn(0, tweets.size - 1)
-        playCurrentVideo()
+    fun setVideoList(videoList: List<Pair<MimeiId, MediaType>>, startIndex: Int) {
+        Timber.d("FullScreenPlayerManager - Setting video list with ${videoList.size} videos, start index: $startIndex")
+        currentVideoList = videoList
+        currentVideoIndex = startIndex.coerceIn(0, videoList.size - 1)
+        // Use runBlocking to call suspend function from non-suspend context
+        kotlinx.coroutines.runBlocking {
+            playCurrentVideo()
+        }
     }
     
     /**
      * Play the next video in the list
      */
     fun playNextVideo() {
-        val tweets = currentTweetList ?: return
+        val videoList = currentVideoList ?: return
         Timber.d("FullScreenPlayerManager - Playing next video, current index: $currentVideoIndex")
         
-        if (currentVideoIndex < tweets.size - 1) {
+        if (currentVideoIndex < videoList.size - 1) {
             currentVideoIndex++
-            playCurrentVideo()
+            // Use runBlocking to call suspend function from non-suspend context
+            kotlinx.coroutines.runBlocking {
+                playCurrentVideo()
+            }
         } else {
             // End of list - stop playing
             Timber.d("FullScreenPlayerManager - End of list, stopping playback")
@@ -88,7 +95,7 @@ object FullScreenPlayerManager {
      * Play the previous video in the list
      */
     fun playPreviousVideo() {
-        val tweets = currentTweetList ?: return
+        val videoList = currentVideoList ?: return
         Timber.d("FullScreenPlayerManager - Playing previous video, current index: $currentVideoIndex")
         
         if (currentVideoIndex > 0) {
@@ -96,38 +103,33 @@ object FullScreenPlayerManager {
         } else {
             // Beginning of list - loop to end
             Timber.d("FullScreenPlayerManager - Beginning of list, looping to end")
-            currentVideoIndex = tweets.size - 1
+            currentVideoIndex = videoList.size - 1
         }
-        playCurrentVideo()
+        // Use runBlocking to call suspend function from non-suspend context
+        kotlinx.coroutines.runBlocking {
+            playCurrentVideo()
+        }
     }
     
     /**
      * Play the video at the current index
      */
-    private fun playCurrentVideo() {
-        val tweets = currentTweetList ?: return
-        val tweet = tweets[currentVideoIndex]
+    private suspend fun playCurrentVideo() {
+        val videoList = currentVideoList ?: return
+        val (videoMid, mediaType) = videoList[currentVideoIndex]
         
-        Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex for tweet: ${tweet.mid}")
+        Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid")
         
-        // Find video attachment
-        val videoAttachment = tweet.attachments?.find { attachment ->
-            val mediaType = inferMediaTypeFromAttachment(attachment)
-            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-        }
-        
-        if (videoAttachment != null) {
-            val videoUrl = HproseInstance.getMediaUrl(videoAttachment.mid, tweet.author?.baseUrl.orEmpty())
-            if (videoUrl != null) {
-                val mediaType = inferMediaTypeFromAttachment(videoAttachment)
-                Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
-                loadVideo(videoUrl, mediaType)
-                onVideoChanged?.invoke(tweet, currentVideoIndex)
-            } else {
-                Timber.w("FullScreenPlayerManager - Could not generate video URL for attachment: ${videoAttachment.mid}")
-            }
+        // Generate video URL using the video mid with a default base URL
+        // TODO: Get base URL from TweetListViewModel or pass it as parameter
+        val baseUrl = "http://125.229.161.122:8080" // Default base URL for now
+        val videoUrl = HproseInstance.getMediaUrl(videoMid, baseUrl)
+        if (videoUrl != null) {
+            Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
+            loadVideo(videoUrl, mediaType)
+            onVideoChanged?.invoke(videoMid, currentVideoIndex)
         } else {
-            Timber.w("FullScreenPlayerManager - No video attachment found in tweet: ${tweet.mid}")
+            Timber.w("FullScreenPlayerManager - Could not generate video URL for attachment: $videoMid")
         }
     }
     
@@ -186,9 +188,9 @@ object FullScreenPlayerManager {
     fun getCurrentPlayer(): ExoPlayer? = exoPlayer
     
     /**
-     * Get the current tweet
+     * Get the current video mid
      */
-    fun getCurrentTweet(): Tweet? = currentTweetList?.getOrNull(currentVideoIndex)
+    fun getCurrentVideoMid(): MimeiId? = currentVideoList?.getOrNull(currentVideoIndex)?.first
     
     /**
      * Get the current video index
@@ -198,12 +200,12 @@ object FullScreenPlayerManager {
     /**
      * Get the total number of videos in the current list
      */
-    fun getTotalVideos(): Int = currentTweetList?.size ?: 0
+    fun getTotalVideos(): Int = currentVideoList?.size ?: 0
     
     /**
      * Set callback for when video changes
      */
-    fun setOnVideoChanged(callback: (Tweet, Int) -> Unit) {
+    fun setOnVideoChanged(callback: (MimeiId, Int) -> Unit) {
         onVideoChanged = callback
     }
     
@@ -221,7 +223,7 @@ object FullScreenPlayerManager {
         Timber.d("FullScreenPlayerManager - Cleaning up resources")
         exoPlayer?.release()
         exoPlayer = null
-        currentTweetList = null
+        currentVideoList = null
         currentVideoIndex = 0
         context = null
         onVideoChanged = null

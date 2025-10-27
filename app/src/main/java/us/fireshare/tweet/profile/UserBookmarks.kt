@@ -100,6 +100,7 @@ fun UserBookmarks(
                     viewModel.getBookmarks(pageNumber)
                     emptyList() // Return empty list since getBookmarks updates the state
                 },
+                context = "appUserBookmarks",
                 showPrivateTweets = true,
                 parentEntry = parentEntry
             )
