@@ -103,6 +103,7 @@ fun IndependentFullScreenPlayer(
     val activity = context as? Activity
     
     var showControls by remember { mutableStateOf(false) }
+    var showNativeControls by remember { mutableStateOf(false) }
     var currentTweet by remember { mutableStateOf<Tweet?>(null) }
     var currentIndex by remember { mutableIntStateOf(0) }
     var totalVideos by remember { mutableIntStateOf(0) }
@@ -178,7 +179,8 @@ fun IndependentFullScreenPlayer(
                 detectTapGestures(
                     onTap = { 
                         Timber.d("IndependentFullScreenPlayer - Tap detected, toggling controls")
-                        showControls = !showControls 
+                        showControls = !showControls
+                        showNativeControls = !showNativeControls
                     }
                 )
             }
@@ -228,9 +230,9 @@ fun IndependentFullScreenPlayer(
                             videoScale = (1f - abs(verticalDragOffset) / 1000f).coerceAtLeast(0.8f)
                             videoOffset = verticalDragOffset / 10f
                         } else if (verticalDragOffset > 0) {
-                            // Dragging down - more pronounced shrinking for exit feedback
-                            videoScale = (1f - verticalDragOffset / 500f).coerceAtLeast(0.6f)
-                            videoOffset = verticalDragOffset / 8f
+                            // Dragging down - moderate shrinking for exit feedback
+                            videoScale = (1f - verticalDragOffset / 800f).coerceAtLeast(0.8f)
+                            videoOffset = verticalDragOffset / 10f
                         }
                     }
                 )
@@ -247,7 +249,7 @@ fun IndependentFullScreenPlayer(
                 ),
             factory = {
                 PlayerView(context).apply {
-                    useController = false // We'll implement custom controls
+                    useController = showNativeControls // Show/hide native controls based on state
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
                     // Keep last frame to avoid black flashes when resetting/pausing
@@ -256,12 +258,32 @@ fun IndependentFullScreenPlayer(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                    
+                    // Enable volume control
+                    setControllerShowTimeoutMs(3000) // Show controls for 3 seconds
+                    setControllerHideOnTouch(true) // Hide controls when touching video
+                    setControllerAutoShow(true) // Auto-show controls when user interacts
                 }
             },
             update = { playerView ->
                 // Update the player when exoPlayer changes
                 playerView.player = exoPlayer
-                Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer")
+                // Update controller visibility when state changes
+                playerView.useController = showNativeControls
+                
+                // Ensure volume control is available
+                if (exoPlayer != null) {
+                    // Enable audio focus for proper volume control
+                    exoPlayer!!.setAudioAttributes(
+                        androidx.media3.common.AudioAttributes.Builder()
+                            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+                            .build(),
+                        true // Handle audio focus
+                    )
+                }
+                
+                Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer, controls: $showNativeControls")
             }
         )
         
