@@ -103,7 +103,8 @@ fun TweetListView(
     // Create our own TweetListViewModel instance
     val tweetListViewModel = hiltViewModel<TweetListViewModel>(key = context)
 
-    // Set our TweetListViewModel instance to SharedViewModel
+    // Set our TweetListViewModel instance to SharedViewModel. It will be used by MediaBrowser to
+    // play full screen videos in order.
     sharedViewModel.tweetListViewModel = tweetListViewModel
 
     // Debug logging for TweetListView recreation - only log when essential parameters change
