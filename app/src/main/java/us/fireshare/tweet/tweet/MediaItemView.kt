@@ -71,7 +71,8 @@ fun MediaItemView(
     loadOriginalImage: Boolean = false, // load original high-res image instead of compressed preview
     viewModel: TweetViewModel,
     onVideoCompleted: (() -> Unit)? = null,
-    useIndependentVideoMute: Boolean = false // For TweetDetailView - videos independent of global mute
+    useIndependentVideoMute: Boolean = false, // For TweetDetailView - videos independent of global mute
+    enableTapToShowControls: Boolean = false // For TweetDetailView - enable tap-to-show controls
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
@@ -209,7 +210,8 @@ fun MediaItemView(
                         videoMid = videoMid,
                         videoType = attachment.type,
                         onVideoCompleted = onVideoCompleted,
-                        useIndependentMuteState = useIndependentVideoMute
+                        useIndependentMuteState = useIndependentVideoMute,
+                        enableTapToShowControls = enableTapToShowControls
                     )
                 }
             }

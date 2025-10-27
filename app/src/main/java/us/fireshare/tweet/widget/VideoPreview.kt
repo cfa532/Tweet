@@ -3,6 +3,7 @@ package us.fireshare.tweet.widget
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -73,7 +75,8 @@ fun VideoPreview(
     videoType: MediaType? = null,
     onLoadComplete: (() -> Unit)? = null,
     onVideoCompleted: (() -> Unit)? = null,
-    useIndependentMuteState: Boolean = false // For TweetDetailView - independent of global mute state
+    useIndependentMuteState: Boolean = false, // For TweetDetailView - independent of global mute state
+    enableTapToShowControls: Boolean = false // New parameter for tap-to-show controls
 ) {
     val context = LocalContext.current
 
@@ -91,6 +94,7 @@ fun VideoPreview(
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
+    var showNativeControls by remember(videoMid) { mutableStateOf(false) } // State for tap-to-show controls
     val maxRetries = 3
 
     // Use VideoLoadingManager to track visibility and manage loading
@@ -306,6 +310,14 @@ fun VideoPreview(
             showTimeLabel = false
         }
     }
+    
+    // Auto-hide controls after 3 seconds when enabled
+    LaunchedEffect(showNativeControls) {
+        if (showNativeControls && enableTapToShowControls) {
+            delay(3000)
+            showNativeControls = false
+        }
+    }
 
     // Update remaining time every second when time label is shown
     LaunchedEffect(showTimeLabel) {
@@ -484,7 +496,7 @@ fun VideoPreview(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = false // No controls in preview mode
+                    useController = if (enableTapToShowControls) showNativeControls else false // Conditional controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
@@ -494,11 +506,41 @@ fun VideoPreview(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                    
+                    // Configure controller behavior for tap-to-show controls
+                    if (enableTapToShowControls) {
+                        setControllerHideOnTouch(false) // Don't hide on touch to prevent conflicts
+                        setControllerShowTimeoutMs(0) // Don't auto-hide
+                    }
+                }
+            },
+            update = { playerView ->
+                // Update controller visibility when state changes
+                if (enableTapToShowControls) {
+                    playerView.useController = showNativeControls
+                    playerView.setControllerHideOnTouch(false)
+                    playerView.setControllerShowTimeoutMs(0)
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .clipToBounds() // Ensure content is clipped to bounds
+                .then(
+                    if (enableTapToShowControls) {
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = { 
+                                    Timber.d("VideoPreview - Tap detected, toggling controls")
+                                    showNativeControls = !showNativeControls
+                                }
+                            )
+                        }
+                    } else {
+                        Modifier.clickable {
+                            callback(index)
+                        }
+                    }
+                )
         )
 
         // Show loading indicator when video is loading

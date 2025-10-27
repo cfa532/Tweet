@@ -294,7 +294,8 @@ fun MediaGrid(
                     loadOriginalImage = false, // Use compressed preview in detail view
                     viewModel,
                     onVideoCompleted = null,
-                    useIndependentVideoMute = true // TweetDetailView videos are unmuted and independent
+                    useIndependentVideoMute = true, // TweetDetailView videos are unmuted and independent
+                    enableTapToShowControls = true // Enable tap-to-show controls for TweetDetailView
                 )
             }
         }
