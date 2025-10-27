@@ -103,7 +103,6 @@ fun IndependentFullScreenPlayer(
     val activity = context as? Activity
     
     var showControls by remember { mutableStateOf(false) }
-    var showNativeControls by remember { mutableStateOf(false) }
     var currentTweet by remember { mutableStateOf<Tweet?>(null) }
     var currentIndex by remember { mutableIntStateOf(0) }
     var totalVideos by remember { mutableIntStateOf(0) }
@@ -176,15 +175,6 @@ fun IndependentFullScreenPlayer(
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { 
-                        Timber.d("IndependentFullScreenPlayer - Tap detected, toggling controls")
-                        showControls = !showControls
-                        showNativeControls = !showNativeControls
-                    }
-                )
-            }
-            .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
                         // Check for vertical drag gestures
@@ -249,7 +239,7 @@ fun IndependentFullScreenPlayer(
                 ),
             factory = {
                 PlayerView(context).apply {
-                    useController = showNativeControls // Show/hide native controls based on state
+                    useController = true // Always show native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
                     // Keep last frame to avoid black flashes when resetting/pausing
@@ -264,9 +254,7 @@ fun IndependentFullScreenPlayer(
             update = { playerView ->
                 // Update the player when exoPlayer changes
                 playerView.player = exoPlayer
-                // Update controller visibility when state changes
-                playerView.useController = showNativeControls
-                Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer, controls: $showNativeControls")
+                Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer")
             }
         )
         
