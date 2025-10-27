@@ -406,8 +406,8 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list
-            _bookmarks.value = validTweets
+            // For refresh (page 0), replace the list and sort it
+            _bookmarks.value = validTweets.sortedByDescending { it.timestamp }
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list
@@ -516,8 +516,8 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list
-            _favorites.value = validTweets
+            // For refresh (page 0), replace the list and sort it
+            _favorites.value = validTweets.sortedByDescending { it.timestamp }
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list
