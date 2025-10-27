@@ -22,6 +22,7 @@ object FullScreenPlayerManager {
     private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
     private var context: Context? = null
+    private var isManualNavigation: Boolean = false // Flag to prevent double progression
     
     /**
      * Initialize the singleton player instance
@@ -38,9 +39,14 @@ object FullScreenPlayerManager {
                     Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
                     when (playbackState) {
                         Player.STATE_ENDED -> {
-                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next")
-                            // Auto-play next video when current video ends
-                            playNextVideo()
+                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next (manual navigation: $isManualNavigation)")
+                            // Auto-play next video when current video ends, but only if not manually navigated
+                            if (!isManualNavigation) {
+                                playNextVideo()
+                            } else {
+                                Timber.d("FullScreenPlayerManager - Skipping auto-progression due to manual navigation")
+                                isManualNavigation = false // Reset flag for next video
+                            }
                         }
                         Player.STATE_READY -> {
                             Timber.d("FullScreenPlayerManager - Video ready to play")
@@ -76,10 +82,16 @@ object FullScreenPlayerManager {
      */
     fun playNextVideo() {
         val videoList = currentVideoList ?: return
-        Timber.d("FullScreenPlayerManager - Playing next video, current index: $currentVideoIndex")
+        Timber.d("FullScreenPlayerManager - Playing next video, current index: $currentVideoIndex, total videos: ${videoList.size}")
+        
+        // Set manual navigation flag to prevent double progression
+        isManualNavigation = true
         
         if (currentVideoIndex < videoList.size - 1) {
-            currentVideoIndex++
+            val nextIndex = currentVideoIndex + 1
+            val (nextVideoMid, nextMediaType) = videoList[nextIndex]
+            Timber.d("FullScreenPlayerManager - Moving from index $currentVideoIndex to $nextIndex, next video: $nextVideoMid, type: $nextMediaType")
+            currentVideoIndex = nextIndex
             // Use runBlocking to call suspend function from non-suspend context
             kotlinx.coroutines.runBlocking {
                 playCurrentVideo()
@@ -97,6 +109,9 @@ object FullScreenPlayerManager {
     fun playPreviousVideo() {
         val videoList = currentVideoList ?: return
         Timber.d("FullScreenPlayerManager - Playing previous video, current index: $currentVideoIndex")
+        
+        // Set manual navigation flag to prevent double progression
+        isManualNavigation = true
         
         if (currentVideoIndex > 0) {
             currentVideoIndex--
@@ -118,7 +133,7 @@ object FullScreenPlayerManager {
         val videoList = currentVideoList ?: return
         val (videoMid, mediaType) = videoList[currentVideoIndex]
         
-        Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid")
+        Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
         
         // Generate video URL using the video mid with a default base URL
         // TODO: Get base URL from TweetListViewModel or pass it as parameter
@@ -155,9 +170,14 @@ object FullScreenPlayerManager {
                     Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
                     when (playbackState) {
                         Player.STATE_ENDED -> {
-                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next")
-                            // Auto-play next video when current video ends
-                            playNextVideo()
+                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next (manual navigation: $isManualNavigation)")
+                            // Auto-play next video when current video ends, but only if not manually navigated
+                            if (!isManualNavigation) {
+                                playNextVideo()
+                            } else {
+                                Timber.d("FullScreenPlayerManager - Skipping auto-progression due to manual navigation")
+                                isManualNavigation = false // Reset flag for next video
+                            }
                         }
                         Player.STATE_READY -> {
                             Timber.d("FullScreenPlayerManager - Video ready to play")

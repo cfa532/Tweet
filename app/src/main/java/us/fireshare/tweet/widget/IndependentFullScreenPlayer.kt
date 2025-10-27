@@ -89,11 +89,15 @@ fun IndependentFullScreenPlayer(
             mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
         }?.mid
         if (videoMid != null) {
-            sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+            val foundIndex = sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+            Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in video list")
+            foundIndex
         } else {
+            Timber.d("IndependentFullScreenPlayer - No video found in tapped tweet, using startIndex: $startIndex")
             startIndex
         }
     } else {
+        Timber.d("IndependentFullScreenPlayer - No tapped tweet, using startIndex: $startIndex")
         startIndex
     }
     val activity = context as? Activity
@@ -193,14 +197,19 @@ fun IndependentFullScreenPlayer(
                                 Timber.d("IndependentFullScreenPlayer - Single video detected, exiting player")
                                 isClosing = true
                                 onClose()
-                            } else if (verticalDragOffset > 0) {
-                                // Small drag down - next video (newer video)
+                            } else if (verticalDragOffset < 0) {
+                                // Swipe up - next video in list (older video)
+                                Timber.d("IndependentFullScreenPlayer - Swipe up detected, playing next video")
                                 FullScreenPlayerManager.playNextVideo()
                             } else {
-                                // Drag up - previous video (older video)
-                                FullScreenPlayerManager.playPreviousVideo()
+                                // Small drag down - exit fullscreen
+                                Timber.d("IndependentFullScreenPlayer - Small drag down detected, exiting player")
+                                isClosing = true
+                                onClose()
                             }
                         } else {
+                            // No significant gesture detected
+                            Timber.d("IndependentFullScreenPlayer - No significant gesture detected")
                         }
                         // Reset all gesture states
                         verticalDragOffset = 0f
@@ -213,15 +222,15 @@ fun IndependentFullScreenPlayer(
                         // Track vertical drag for navigation and exit
                         verticalDragOffset += dragAmount.y
                         
-                        // Implement video shrinking gesture
+                        // Implement video shrinking gesture with better UX
                         if (verticalDragOffset < 0) {
                             // Dragging up - shrink video slightly for visual feedback
                             videoScale = (1f - abs(verticalDragOffset) / 1000f).coerceAtLeast(0.8f)
                             videoOffset = verticalDragOffset / 10f
                         } else if (verticalDragOffset > 0) {
-                            // Dragging down - shrink video for exit feedback
-                            videoScale = (1f - verticalDragOffset / 1000f).coerceAtLeast(0.7f)
-                            videoOffset = verticalDragOffset / 10f
+                            // Dragging down - more pronounced shrinking for exit feedback
+                            videoScale = (1f - verticalDragOffset / 500f).coerceAtLeast(0.6f)
+                            videoOffset = verticalDragOffset / 8f
                         }
                     }
                 )
