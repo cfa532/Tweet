@@ -45,7 +45,10 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.widget.rememberTweetVideoPreloader
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
+import us.fireshare.tweet.HproseInstance
 
 enum class ScrollDirection {
     UP, DOWN, NONE
@@ -88,7 +91,8 @@ fun TweetListView(
     onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
     restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
-    context: String = "default" // Context to determine where this list is shown
+    context: String = "default", // Context to determine where this list is shown
+    onVideoIndexedListChange: ((List<Pair<Tweet, Int>>) -> Unit)? = null // Callback when video list changes
 ) {
     // Debug logging for TweetListView recreation - only log when essential parameters change
     val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
@@ -101,6 +105,20 @@ fun TweetListView(
             previousTweetsSize.intValue = tweets.size
             previousUserId.value = currentUserId
         }
+    }
+
+    // Create video-indexed list that maintains feed order and handles retweets properly
+    var videoIndexedList by remember { mutableStateOf<List<Pair<Tweet, Int>>>(emptyList()) }
+    
+    // Update video-indexed list when tweets change
+    LaunchedEffect(tweets) {
+        videoIndexedList = createVideoIndexedList(tweets)
+    }
+    
+    // Notify when video-indexed list changes
+    LaunchedEffect(videoIndexedList) {
+        onVideoIndexedListChange?.invoke(videoIndexedList)
+        Timber.tag("TweetListView").d("Created video-indexed list with ${videoIndexedList.size} videos from ${tweets.size} tweets")
     }
 
     // Track tweets list changes - only when size actually changes
@@ -608,4 +626,96 @@ fun TweetListView(
             contentColor = MaterialTheme.colorScheme.primary
         )
     }
+}
+
+/**
+ * Creates a video-indexed list that maintains feed order and handles retweets properly.
+ * Returns a list of pairs: (Tweet, feedIndex) where feedIndex is the position in the original feed.
+ * Videos are sorted by their parent tweet's timestamp (newest first).
+ * 
+ * For retweets: Uses the retweet's timestamp (when it was shared), not the original tweet's timestamp
+ * This ensures videos are ordered by when they appeared in the feed, not when they were originally created
+ */
+private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Tweet, Int>> {
+    val videoIndexedList = mutableListOf<Pair<Tweet, Int>>()
+    
+    tweets.forEachIndexed { feedIndex, tweet ->
+        // Check if this tweet has videos
+        var tweetToCheck = tweet
+        var hasVideo = tweet.attachments?.any { attachment ->
+            val mediaType = inferMediaTypeFromAttachment(attachment)
+            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+        } == true
+        
+        // If this is a retweet without attachments, fetch the original tweet
+        Timber.tag("TweetListView").d("Checking retweet at feed index $feedIndex: ${tweet.mid}, hasVideo: $hasVideo, originalTweetId: ${tweet.originalTweetId}, content: '${tweet.content}', attachments: ${tweet.attachments?.size}")
+        
+        if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
+            tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
+            Timber.tag("TweetListView").d("Pure retweet detected at feed index $feedIndex: ${tweet.mid}, fetching original tweet: ${tweet.originalTweetId}")
+            
+            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) as? Tweet
+            if (originalTweet != null) {
+                tweetToCheck = originalTweet
+                hasVideo = originalTweet.attachments?.any { attachment ->
+                    val mediaType = inferMediaTypeFromAttachment(attachment)
+                    mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+                } == true
+                
+                Timber.tag("TweetListView").d("Fetched original tweet: ${originalTweet.mid}, attachments: ${originalTweet.attachments?.size}, hasVideo: $hasVideo")
+            } else {
+                Timber.tag("TweetListView").w("Failed to fetch original tweet: ${tweet.originalTweetId}")
+            }
+        }
+        
+        if (hasVideo) {
+            videoIndexedList.add(Pair(tweetToCheck, feedIndex))
+            val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
+            Timber.tag("TweetListView").d("Added video tweet at feed index $feedIndex: ${tweetToCheck.mid}, timestamp: ${tweetToCheck.timestamp}, type: $tweetType, attachments: ${tweetToCheck.attachments?.size}")
+        } else {
+            // Log why this tweet was skipped
+            val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
+            Timber.tag("TweetListView").d("Skipped $tweetType at feed index $feedIndex: ${tweet.mid}, attachments: ${tweet.attachments?.size}, originalTweetId: ${tweet.originalTweetId}")
+        }
+    }
+    
+    // Sort by timestamp (newest first) - this is the correct order for video navigation
+    // For retweets, this uses the retweet's timestamp (when it was shared), not the original tweet's timestamp
+    val sortedList = videoIndexedList.sortedByDescending { (tweet, _) -> tweet.timestamp }
+    
+    Timber.tag("TweetListView").d("Sorted ${sortedList.size} video tweets by timestamp (newest first)")
+    sortedList.forEachIndexed { index, (tweet, feedIndex) ->
+        val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
+        Timber.tag("TweetListView").d("Video $index: ${tweet.mid}, timestamp: ${tweet.timestamp}, type: $tweetType, original feed index: $feedIndex")
+    }
+    
+    return sortedList
+}
+
+/**
+ * Finds the start index for a tapped tweet in the video-indexed list.
+ * For retweets, finds the video tweet that comes after the retweet in the feed.
+ */
+fun findStartIndexForTappedTweet(videoIndexedList: List<Pair<Tweet, Int>>, tappedTweet: Tweet): Int {
+    if (videoIndexedList.isEmpty()) return 0
+    
+    // If it's a retweet, find the first video tweet that comes after this retweet in the feed
+    if (tappedTweet.originalTweetId != null) {
+        // For retweets, we need to find the video tweet that comes after the retweet's position
+        // Since we don't have the full feed here, we'll return 0 to start from the beginning
+        // The actual logic should be handled by the caller with the full feed context
+        Timber.tag("TweetListView").d("Retweet tapped, starting from beginning of video list")
+        return 0
+    }
+    
+    // For original tweets, find the exact tweet in the video list
+    val foundIndex = videoIndexedList.indexOfFirst { (tweet, _) -> tweet.mid == tappedTweet.mid }
+    if (foundIndex >= 0) {
+        Timber.tag("TweetListView").d("Found tapped tweet in video list at index: $foundIndex")
+        return foundIndex
+    }
+    
+    // Tweet not found, start from beginning
+    Timber.tag("TweetListView").d("Tapped tweet not found in video list, starting from beginning")
+    return 0
 }

@@ -87,6 +87,7 @@ import us.fireshare.tweet.tweet.ShareButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
 
@@ -113,21 +114,58 @@ fun MediaBrowser(
         factory.create(Tweet(mid = tweetId, authorId = authorId))
     }
     val tweet by viewModel.tweetState.collectAsState()
-    val tweetAttachments by viewModel.attachments.collectAsState()
     
     // Get tweet list from current context for automatic video progression
     Timber.d("MediaBrowser - About to call getTweetListFromContext for tweet: ${tweet.mid}")
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
-    val tweetList = runBlocking { getTweetListFromContext(tweet, navController, tweetFeedViewModel) }
-    val startIndex = tweetList.indexOfFirst { it.mid == tweet.mid }.coerceAtLeast(0)
+    val fullTweetList = runBlocking { getTweetListFromContext(tweet, navController, tweetFeedViewModel) }
     
+    // Use the video-indexed list from TweetListView if available
+    // For now, fallback to simple approach until TweetListView integration is complete
+    val tweetList = fullTweetList
+    val startIndex = if (fullTweetList.contains(tweet)) {
+        val foundIndex = fullTweetList.indexOfFirst { it.mid == tweet.mid }
+        Timber.d("MediaBrowser - Tweet found in list at index: $foundIndex")
+        foundIndex.coerceAtLeast(0)
+    } else {
+        Timber.d("MediaBrowser - Tweet not found in list, starting from beginning")
+        0
+    }
+    
+    Timber.d("MediaBrowser - Using tweet list with ${tweetList.size} tweets, start index: $startIndex")
+    
+    // Handle retweets by fetching the original tweet's content
+    val actualTweet = if (tweet.originalTweetId != null && tweet.originalAuthorId != null && 
+                         tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
+        // This is a pure retweet - fetch the original tweet
+        Timber.d("MediaBrowser - Pure retweet detected, fetching original tweet: ${tweet.originalTweetId}")
+        val originalTweet = runBlocking { 
+            HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+        }
+        if (originalTweet != null) {
+            Timber.d("MediaBrowser - Fetched original tweet: ${originalTweet.mid}, attachments: ${originalTweet.attachments?.size}")
+            originalTweet
+        } else {
+            Timber.w("MediaBrowser - Failed to fetch original tweet: ${tweet.originalTweetId}")
+            tweet
+        }
+    } else {
+        tweet
+    }
+    
+    Timber.d("MediaBrowser - Using tweet: ${actualTweet.mid}, attachments: ${actualTweet.attachments?.size}")
+    Timber.d("MediaBrowser - Current tweet content: ${actualTweet.content}")
+    Timber.d("MediaBrowser - Calculated startIndex: $startIndex")
+    
+    // Use actualTweet for getting attachments
+    val tweetAttachments = actualTweet.attachments
     Timber.d("MediaBrowser - tweetAttachments: $tweetAttachments")
     Timber.d("MediaBrowser - tweetAttachments size: ${tweetAttachments?.size}")
     Timber.d("MediaBrowser - Tweet list size: ${tweetList.size}, start index: $startIndex")
     Timber.d("MediaBrowser - Tweet list IDs: ${tweetList.map { it.mid }}")
     
     val mediaItems = tweetAttachments?.map {
-        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
+        val mediaUrl = HproseInstance.getMediaUrl(it.mid, actualTweet.author?.baseUrl.orEmpty())!!
         val inferredType = inferMediaTypeFromAttachment(it)
         Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
         MediaItem(mediaUrl, inferredType)
@@ -314,9 +352,13 @@ fun MediaBrowser(
                     Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
                     
                     // Use the new independent fullscreen player with full tweet list
+                    // Always use the full tweet list for navigation, even if current tweet isn't found
+                    Timber.d("MediaBrowser - Using full tweet list for navigation (${tweetList.size} tweets)")
+                    
                     IndependentFullScreenPlayer(
-                        tweetList = tweetList, // Full tweet list from current context
+                        tweetList = tweetList, // Always use full tweet list
                         startIndex = startIndex,
+                        tappedTweet = tweet, // Pass the current tweet for reference
                         onClose = {
                             Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
                             navController.popBackStack()
@@ -566,8 +608,8 @@ private suspend fun getTweetListFromContext(
                     // Filter for tweets with videos
                     val videoTweets = tweets.filter { tweet ->
                         tweet.attachments?.any { attachment ->
-                            attachment.type == MediaType.Video || 
-                            attachment.type == MediaType.HLS_VIDEO
+                            val mediaType = inferMediaTypeFromAttachment(attachment)
+                            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
                         } == true
                     }
                     
@@ -587,8 +629,8 @@ private suspend fun getTweetListFromContext(
                     // Filter for tweets with videos
                     val videoTweets = bookmarks.filter { tweet ->
                         tweet.attachments?.any { attachment ->
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                            val mediaType = inferMediaTypeFromAttachment(attachment)
+                            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
                         } == true
                     }
                     
@@ -608,8 +650,8 @@ private suspend fun getTweetListFromContext(
                     // Filter for tweets with videos
                     val videoTweets = favorites.filter { tweet ->
                         tweet.attachments?.any { attachment ->
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                            val mediaType = inferMediaTypeFromAttachment(attachment)
+                            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
                         } == true
                     }
                     
@@ -628,8 +670,8 @@ private suspend fun getTweetListFromContext(
                     // Filter for tweets with videos
                     val videoTweets = userTweets.filter { tweet ->
                         tweet.attachments?.any { attachment ->
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
-                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                            val mediaType = inferMediaTypeFromAttachment(attachment)
+                            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
                         } == true
                     }
                     

@@ -50,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import android.content.Context
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -64,12 +65,13 @@ import kotlin.math.abs
  * Independent fullscreen video player that automatically progresses through videos in a tweet list.
  * Uses the FullScreenPlayerManager singleton for video management.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 @RequiresApi(Build.VERSION_CODES.R)
-@OptIn(UnstableApi::class)
 @Composable
 fun IndependentFullScreenPlayer(
     tweetList: List<Tweet>,
     startIndex: Int,
+    tappedTweet: Tweet? = null, // The tweet that was actually tapped
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -82,17 +84,37 @@ fun IndependentFullScreenPlayer(
     
     var showControls by remember { mutableStateOf(false) }
     var currentTweet by remember { mutableStateOf<Tweet?>(null) }
-    var currentIndex by remember { mutableStateOf(0) }
-    var totalVideos by remember { mutableStateOf(0) }
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var totalVideos by remember { mutableIntStateOf(0) }
     var verticalDragOffset by remember { mutableFloatStateOf(0f) }
     var videoScale by remember { mutableFloatStateOf(1f) }
     var videoOffset by remember { mutableFloatStateOf(0f) }
+    var isClosing by remember { mutableStateOf(false) }
     
     // Initialize the singleton player
     LaunchedEffect(Unit) {
         Timber.d("IndependentFullScreenPlayer - Initializing with ${actualTweetList.size} tweets, start index: $actualStartIndex")
+        Timber.d("IndependentFullScreenPlayer - Tapped tweet: ${tappedTweet?.mid}")
+        
         FullScreenPlayerManager.initialize(context)
-        FullScreenPlayerManager.setTweetList(actualTweetList, actualStartIndex)
+        
+        // Check if tapped tweet is in the list
+        val isTappedTweetInList = tappedTweet != null && actualTweetList.any { it.mid == tappedTweet.mid }
+        
+        if (isTappedTweetInList) {
+            // Tapped tweet is in the list - use normal navigation
+            Timber.d("IndependentFullScreenPlayer - Tapped tweet found in list, using normal navigation")
+            FullScreenPlayerManager.setTweetList(actualTweetList, actualStartIndex)
+        } else {
+            // Tapped tweet is not in the list - play tapped tweet first, then allow navigation
+            Timber.d("IndependentFullScreenPlayer - Tapped tweet not in list, playing tapped tweet first")
+            val combinedList = if (tappedTweet != null) {
+                listOf(tappedTweet) + actualTweetList
+            } else {
+                actualTweetList
+            }
+            FullScreenPlayerManager.setTweetList(combinedList, 0) // Start with tapped tweet at index 0
+        }
         
         // Set up callbacks
         FullScreenPlayerManager.setOnVideoChanged { tweet, index ->
@@ -158,10 +180,16 @@ fun IndependentFullScreenPlayer(
                     onDragEnd = {
                         Timber.d("IndependentFullScreenPlayer - Drag ended, verticalDragOffset: $verticalDragOffset")
                         // Check for vertical drag gestures
-                        if (abs(verticalDragOffset) > 150f) {
+                        if (abs(verticalDragOffset) > 150f && !isClosing) {
                             if (verticalDragOffset > 300f) {
                                 // Large drag down - exit player
                                 Timber.d("IndependentFullScreenPlayer - Large drag down detected, closing player")
+                                isClosing = true
+                                onClose()
+                            } else if (actualTweetList.size == 1) {
+                                // Only one video - any gesture should exit
+                                Timber.d("IndependentFullScreenPlayer - Single video detected, exiting player")
+                                isClosing = true
                                 onClose()
                             } else if (verticalDragOffset > 0) {
                                 // Small drag down - next video (newer video)
@@ -181,6 +209,8 @@ fun IndependentFullScreenPlayer(
                         verticalDragOffset = 0f
                         videoScale = 1f
                         videoOffset = 0f
+                        // Reset isClosing flag for next gesture
+                        isClosing = false
                     },
                     onDrag = { _, dragAmount ->
                         // Track vertical drag for navigation and exit

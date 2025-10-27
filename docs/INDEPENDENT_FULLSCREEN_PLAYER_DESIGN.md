@@ -1,95 +1,116 @@
 # Independent Fullscreen Player Design
 
 ## Overview
-Remodel the fullscreen video player to be an independent singleton that automatically plays the next video in the tweet list when the current video finishes.
+The fullscreen video player has been remodeled as an independent singleton that automatically plays the next video in the tweet list when the current video finishes. This system provides seamless video-to-video transitions and enhanced user experience.
 
-## Architecture Changes
+## Current Architecture
 
 ### 1. Singleton Fullscreen Player Manager
-Create a new `FullScreenPlayerManager` singleton that:
+The `FullScreenPlayerManager` singleton:
 - Manages a single ExoPlayer instance dedicated to fullscreen playback
-- Maintains the current tweet list context
+- Maintains the current tweet list context from navigation
 - Handles automatic progression to the next video
 - Provides seamless transitions between videos
+- Supports looping back to the beginning when reaching the end of the list
 
 ### 2. Tweet List Context
-The fullscreen player needs to know:
-- Current tweet list (from which screen it was opened)
+The fullscreen player automatically determines:
+- Current tweet list based on navigation context (TweetFeed, Bookmarks, Favorites, UserProfile)
 - Current video index within that list
-- Navigation context to return to the correct screen
+- Proper handling of retweets (uses retweet's position in current context, not original tweet's context)
 
 ### 3. Automatic Video Progression
 When a video finishes:
 - Automatically load and play the next video in the list
 - Update the UI to show the new video's metadata
-- Handle end-of-list scenarios (loop back to start or close player)
+- Loop back to the beginning when reaching the end of the list
+- Handle retweet navigation correctly
 
-## Implementation Plan
+## Current Implementation
 
-### Phase 1: Create FullScreenPlayerManager
+### FullScreenPlayerManager Features
 ```kotlin
 object FullScreenPlayerManager {
-    private var exoPlayer: ExoPlayer? = null
-    private var currentTweetList: List<Tweet>? = null
-    private var currentVideoIndex: Int = 0
-    private var onVideoChanged: ((Tweet, Int) -> Unit)? = null
-    
+    // Core functionality
     fun initialize(context: Context)
     fun setTweetList(tweets: List<Tweet>, startIndex: Int)
-    fun playNextVideo()
-    fun playPreviousVideo()
+    fun playNextVideo() // Loops to beginning when reaching end
+    fun playPreviousVideo() // Loops to end when reaching beginning
+    
+    // State management
     fun getCurrentPlayer(): ExoPlayer?
+    fun getCurrentTweet(): Tweet?
+    fun getCurrentIndex(): Int
+    fun getTotalVideos(): Int
     fun cleanup()
+    
+    // Callbacks
+    fun setOnVideoChanged(callback: (Tweet, Int) -> Unit)
+    fun setOnPlayerStateChanged(callback: (PlayerState) -> Unit)
 }
 ```
 
-### Phase 2: Update FullScreenVideoPlayer Composable
-- Remove dependency on existing player instances
-- Use the singleton FullScreenPlayerManager
-- Add UI for next/previous video navigation
-- Show current video metadata (tweet content, author, etc.)
+### IndependentFullScreenPlayer Features
+- **Gesture Support**: 
+  - Swipe up for next video (newer videos)
+  - Small drag down for previous video (older videos)  
+  - Large drag down to exit player
+  - Visual feedback with video scaling and offset during gestures
+- **UI Elements**:
+  - Video counter (e.g., "2 of 5")
+  - Tweet content and author information
+  - Tap to toggle controls
+  - Immersive mode support
+- **Automatic Player Updates**: Reactive ExoPlayer updates when FullScreenPlayerManager creates new players
 
-### Phase 3: Integration Points
-- Update MediaBrowser to use the new system
-- Update MediaItemView to launch the new fullscreen player
-- Ensure proper cleanup when closing fullscreen
+### Context-Aware Tweet Fetching
+The system automatically determines the tweet list based on navigation context:
+- **TweetFeed**: Uses `TweetFeedViewModel.tweets.value`
+- **Bookmarks**: Fetches from `HproseInstance.getUserTweetsByType(UserContentType.BOOKMARKS)`
+- **Favorites**: Fetches from `HproseInstance.getUserTweetsByType(UserContentType.FAVORITES)`
+- **UserProfile**: Fetches from `HproseInstance.getTweetsByUser()`
+- **Retweets**: Special handling to use retweet's position in current context
 
-## UI/UX Enhancements
+## Current UI/UX Features
 
 ### Video Controls
-- Play/Pause button
-- Next/Previous video buttons
-- Progress bar for current video
+- Automatic play/pause
+- Next/Previous video navigation
+- Video position indicator (e.g., "2 of 5")
 - Close button
 
 ### Video Information Display
 - Tweet content
-- Author information
-- Video position in list (e.g., "2 of 5")
-- Timestamp
+- Author information (@username)
+- Video counter
+- Semi-transparent overlay
 
 ### Gesture Support
-- Swipe left/right for next/previous video
-- Tap to show/hide controls
-- Double-tap to play/pause
+- **Swipe up**: Next video (newer videos in feed)
+- **Small drag down**: Previous video (older videos in feed)
+- **Large drag down**: Exit player
+- **Tap**: Toggle controls visibility
+- **Visual feedback**: Video scales and moves during drag gestures
 
-## Benefits
-1. **Consistent Experience**: Single player instance ensures consistent behavior
-2. **Automatic Progression**: Seamless video-to-video transitions
+## Current Benefits
+1. **Automatic Progression**: Videos automatically advance when they finish
+2. **Consistent Experience**: Single player instance ensures smooth transitions
 3. **Better Performance**: No player conflicts or memory issues
-4. **Enhanced UX**: Users can binge-watch videos in a tweet list
+4. **Enhanced UX**: Users can binge-watch videos in tweet lists
 5. **Simplified Architecture**: Centralized video management
+6. **Context Awareness**: Automatically determines correct tweet list
+7. **Retweet Support**: Proper handling of retweet navigation
+8. **Gesture Navigation**: Intuitive swipe-based video navigation
 
-## Migration Strategy
-1. Implement FullScreenPlayerManager alongside existing system
-2. Update FullScreenVideoPlayer to use the new manager
-3. Test thoroughly with different tweet lists
-4. Remove old player transfer logic once stable
-5. Update all fullscreen entry points
+## Current Integration Points
+- **MediaBrowser**: Uses `IndependentFullScreenPlayer` with context-aware tweet list fetching
+- **ChatScreen**: Continues to use original `FullScreenVideoPlayer` (unchanged)
+- **MediaItemView**: Navigates to `MediaBrowser` which uses the new system
 
-## Technical Considerations
-- Memory management for the singleton player
-- Proper cleanup when app goes to background
-- Handling of different video formats (HLS vs Progressive)
-- Cache management for smooth transitions
-- Error handling and recovery
+## Technical Implementation Details
+- **Memory Management**: Proper cleanup when player is disposed
+- **Player State**: Reactive ExoPlayer updates using `mutableStateOf`
+- **Gesture Detection**: Uses `detectDragGestures` with visual feedback
+- **Context Detection**: Analyzes navigation routes to determine tweet source
+- **Video Filtering**: Only includes tweets with video attachments
+- **Looping Behavior**: Automatically loops to beginning when reaching end of list

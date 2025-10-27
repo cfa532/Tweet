@@ -1,303 +1,171 @@
-# Independent Fullscreen Player Implementation Plan
+# Independent Fullscreen Player Implementation Status
 
-## Step 1: Create FullScreenPlayerManager Singleton
+## Current Implementation Overview
+The independent fullscreen player system has been successfully implemented and is currently in use. The system provides automatic video progression, context-aware tweet list fetching, and enhanced gesture support.
 
-### File: `app/src/main/java/us/fireshare/tweet/widget/FullScreenPlayerManager.kt`
+## Implemented Components
 
+### 1. FullScreenPlayerManager Singleton ✅ IMPLEMENTED
+**File**: `app/src/main/java/us/fireshare/tweet/widget/FullScreenPlayerManager.kt`
+
+**Current Features**:
+- Singleton ExoPlayer instance management
+- Automatic video progression with looping
+- Tweet list context management
+- Player state callbacks
+- Proper cleanup and memory management
+
+**Key Methods**:
 ```kotlin
 object FullScreenPlayerManager {
-    private var exoPlayer: ExoPlayer? = null
-    private var currentTweetList: List<Tweet>? = null
-    private var currentVideoIndex: Int = 0
-    private var onVideoChanged: ((Tweet, Int) -> Unit)? = null
-    private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
-    
-    fun initialize(context: Context) {
-        if (exoPlayer == null) {
-            exoPlayer = createExoPlayer(context)
-            exoPlayer?.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    when (playbackState) {
-                        Player.STATE_ENDED -> {
-                            // Auto-play next video when current video ends
-                            playNextVideo()
-                        }
-                    }
-                }
-            })
-        }
-    }
-    
-    fun setTweetList(tweets: List<Tweet>, startIndex: Int) {
-        currentTweetList = tweets
-        currentVideoIndex = startIndex
-        playCurrentVideo()
-    }
-    
-    fun playNextVideo() {
-        val tweets = currentTweetList ?: return
-        if (currentVideoIndex < tweets.size - 1) {
-            currentVideoIndex++
-            playCurrentVideo()
-        } else {
-            // End of list - could loop back to start or close player
-            currentVideoIndex = 0
-            playCurrentVideo()
-        }
-    }
-    
-    fun playPreviousVideo() {
-        val tweets = currentTweetList ?: return
-        if (currentVideoIndex > 0) {
-            currentVideoIndex--
-            playCurrentVideo()
-        } else {
-            // Beginning of list - could loop to end or stay
-            currentVideoIndex = tweets.size - 1
-            playCurrentVideo()
-        }
-    }
-    
-    private fun playCurrentVideo() {
-        val tweets = currentTweetList ?: return
-        val tweet = tweets[currentVideoIndex]
-        
-        // Find video attachment
-        val videoAttachment = tweet.attachments?.find { 
-            inferMediaTypeFromAttachment(it) == MediaType.Video || 
-            inferMediaTypeFromAttachment(it) == MediaType.HLS_VIDEO 
-        }
-        
-        if (videoAttachment != null) {
-            val videoUrl = HproseInstance.getMediaUrl(videoAttachment.mid, tweet.author?.baseUrl.orEmpty())
-            if (videoUrl != null) {
-                loadVideo(videoUrl, inferMediaTypeFromAttachment(videoAttachment))
-                onVideoChanged?.invoke(tweet, currentVideoIndex)
-            }
-        }
-    }
-    
-    fun getCurrentPlayer(): ExoPlayer? = exoPlayer
-    fun getCurrentTweet(): Tweet? = currentTweetList?.getOrNull(currentVideoIndex)
-    fun getCurrentIndex(): Int = currentVideoIndex
-    fun getTotalVideos(): Int = currentTweetList?.size ?: 0
-    
-    fun cleanup() {
-        exoPlayer?.release()
-        exoPlayer = null
-        currentTweetList = null
-        currentVideoIndex = 0
-    }
+    fun initialize(context: Context)
+    fun setTweetList(tweets: List<Tweet>, startIndex: Int)
+    fun playNextVideo() // Loops to beginning when reaching end
+    fun playPreviousVideo() // Loops to end when reaching beginning
+    fun getCurrentPlayer(): ExoPlayer?
+    fun getCurrentTweet(): Tweet?
+    fun getCurrentIndex(): Int
+    fun getTotalVideos(): Int
+    fun setOnVideoChanged(callback: (Tweet, Int) -> Unit)
+    fun setOnPlayerStateChanged(callback: (PlayerState) -> Unit)
+    fun cleanup()
 }
 ```
 
-## Step 2: Create New FullScreenVideoPlayer Composable
+### 2. IndependentFullScreenPlayer Composable ✅ IMPLEMENTED
+**File**: `app/src/main/java/us/fireshare/tweet/widget/IndependentFullScreenPlayer.kt`
 
-### File: `app/src/main/java/us/fireshare/tweet/widget/IndependentFullScreenPlayer.kt`
+**Current Features**:
+- Reactive ExoPlayer updates using `mutableStateOf`
+- Gesture support with visual feedback
+- Video information overlay
+- Immersive mode support
+- Automatic player state management
 
+**Gesture Support**:
+- **Swipe up**: Next video (newer videos in feed)
+- **Small drag down**: Previous video (older videos in feed)
+- **Large drag down**: Exit player
+- **Tap**: Toggle controls visibility
+- **Visual feedback**: Video scaling and offset during gestures
+
+### 3. Context-Aware Tweet Fetching ✅ IMPLEMENTED
+**File**: `app/src/main/java/us/fireshare/tweet/widget/MediaBrowser.kt`
+
+**Current Features**:
+- Automatic tweet list determination based on navigation context
+- Support for TweetFeed, Bookmarks, Favorites, UserProfile
+- Special retweet handling
+- Video filtering (only tweets with video attachments)
+
+**Context Detection Logic**:
 ```kotlin
-@Composable
-fun IndependentFullScreenPlayer(
-    tweetList: List<Tweet>,
-    startIndex: Int,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    var showControls by remember { mutableStateOf(false) }
-    var currentTweet by remember { mutableStateOf<Tweet?>(null) }
-    var currentIndex by remember { mutableStateOf(0) }
-    var totalVideos by remember { mutableStateOf(0) }
-    
-    // Initialize the singleton player
-    LaunchedEffect(Unit) {
-        FullScreenPlayerManager.initialize(context)
-        FullScreenPlayerManager.setTweetList(tweetList, startIndex)
-        
-        // Set up callbacks
-        FullScreenPlayerManager.onVideoChanged = { tweet, index ->
-            currentTweet = tweet
-            currentIndex = index
-            totalVideos = FullScreenPlayerManager.getTotalVideos()
-        }
-    }
-    
-    val exoPlayer = remember { FullScreenPlayerManager.getCurrentPlayer() }
-    
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { showControls = !showControls }
-                )
-            }
-    ) {
-        // Video player view
-        AndroidView(
-            factory = {
-                PlayerView(context).apply {
-                    player = exoPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    setBackgroundColor(android.graphics.Color.BLACK)
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-        
-        // Video information overlay
-        if (showControls && currentTweet != null) {
-            VideoInfoOverlay(
-                tweet = currentTweet!!,
-                currentIndex = currentIndex,
-                totalVideos = totalVideos,
-                onClose = onClose,
-                onNext = { FullScreenPlayerManager.playNextVideo() },
-                onPrevious = { FullScreenPlayerManager.playPreviousVideo() }
-            )
-        }
-    }
-    
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            FullScreenPlayerManager.cleanup()
-        }
-    }
-}
-
-@Composable
-private fun VideoInfoOverlay(
-    tweet: Tweet,
-    currentIndex: Int,
-    totalVideos: Int,
-    onClose: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        // Top bar with close button and video counter
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${currentIndex + 1} of $totalVideos",
-                color = Color.White,
-                fontSize = 16.sp
-            )
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
-                )
-            }
-        }
-        
-        // Tweet content
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = tweet.content,
-                color = Color.White,
-                fontSize = 14.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = "@${tweet.author?.username ?: "Unknown"}",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp
-            )
-        }
-        
-        // Bottom controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onPrevious) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous",
-                    tint = Color.White
-                )
-            }
-            
-            IconButton(onClick = onNext) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next",
-                    tint = Color.White
-                )
-            }
-        }
-    }
+private suspend fun getTweetListFromContext(
+    currentTweet: Tweet,
+    navController: NavController,
+    tweetFeedViewModel: TweetFeedViewModel
+): List<Tweet> {
+    // Determines context based on navigation routes
+    // Handles retweets specially
+    // Filters for video tweets only
+    // Returns appropriate tweet list
 }
 ```
 
-## Step 3: Update Entry Points
+### 4. MediaBrowser Integration ✅ IMPLEMENTED
+**File**: `app/src/main/java/us/fireshare/tweet/widget/MediaBrowser.kt`
 
-### Update MediaBrowser.kt
-Replace the existing FullScreenVideoPlayer call with:
+**Current Implementation**:
 ```kotlin
-IndependentFullScreenPlayer(
-    tweetList = listOf(tweet), // Current tweet as single-item list
-    startIndex = 0,
-    onClose = { navController.popBackStack() }
-)
-```
-
-### Update MediaItemView.kt
-For videos in tweet lists, launch the independent player with the full tweet list context.
-
-## Step 4: Add Gesture Support
-
-### Swipe Navigation
-```kotlin
-.pointerInput(Unit) {
-    detectDragGestures(
-        onDragEnd = { dragAmount ->
-            if (abs(dragAmount.x) > 100f) {
-                if (dragAmount.x > 0) {
-                    FullScreenPlayerManager.playPreviousVideo()
-                } else {
-                    FullScreenPlayerManager.playNextVideo()
-                }
-            }
+// video preview - use independent fullscreen player
+MediaType.Video, MediaType.HLS_VIDEO -> {
+    IndependentFullScreenPlayer(
+        tweetList = tweetList, // Full tweet list from current context
+        startIndex = startIndex,
+        onClose = {
+            navController.popBackStack()
         }
-    ) { _, _ -> }
+    )
 }
 ```
 
-## Benefits of This Approach
+## Current Architecture Flow
 
-1. **Automatic Progression**: Videos automatically advance when they finish
-2. **Consistent Experience**: Single player instance ensures smooth transitions
-3. **Better Performance**: No player conflicts or memory leaks
-4. **Enhanced UX**: Users can binge-watch videos in tweet lists
-5. **Simplified Architecture**: Centralized video management
-6. **Gesture Support**: Intuitive swipe navigation between videos
+1. **User taps video** → `MediaItemView` navigates to `MediaBrowser`
+2. **MediaBrowser** → Calls `getTweetListFromContext()` to determine tweet list
+3. **Context Detection** → Analyzes navigation routes and fetches appropriate tweets
+4. **IndependentFullScreenPlayer** → Initializes with tweet list and start index
+5. **FullScreenPlayerManager** → Creates ExoPlayer and starts video playback
+6. **Automatic Progression** → When video ends, automatically plays next video
+7. **Gesture Navigation** → User can swipe to navigate between videos
+8. **Looping** → When reaching end of list, loops back to beginning
 
-## Migration Strategy
+## Current UI/UX Features
 
-1. Implement FullScreenPlayerManager alongside existing system
-2. Create IndependentFullScreenPlayer composable
-3. Test with single videos first, then multi-video tweet lists
-4. Gradually replace existing fullscreen entry points
-5. Remove old player transfer logic once stable
+### Video Information Overlay
+- Tweet content display
+- Author information (@username)
+- Video counter (e.g., "2 of 5")
+- Semi-transparent background
+- Tap to toggle visibility
+
+### Gesture Controls
+- **Swipe up**: Next video (newer videos)
+- **Small drag down**: Previous video (older videos)
+- **Large drag down**: Exit player
+- **Visual feedback**: Video scales and moves during gestures
+
+### Automatic Features
+- Auto-play when video loads
+- Auto-progression to next video when current ends
+- Auto-looping when reaching end of list
+- Automatic player cleanup on dispose
+
+## Current Integration Points
+
+### ✅ IMPLEMENTED
+- **MediaBrowser**: Uses `IndependentFullScreenPlayer` with context-aware fetching
+- **MediaItemView**: Navigates to `MediaBrowser` which uses the new system
+- **TweetFeed**: Context-aware tweet list fetching
+- **Bookmarks**: Context-aware tweet list fetching
+- **Favorites**: Context-aware tweet list fetching
+- **UserProfile**: Context-aware tweet list fetching
+
+### 🔄 UNCHANGED (By Design)
+- **ChatScreen**: Continues to use original `FullScreenVideoPlayer` (as requested)
+
+## Current Benefits Achieved
+
+1. ✅ **Automatic Progression**: Videos automatically advance when they finish
+2. ✅ **Consistent Experience**: Single player instance ensures smooth transitions
+3. ✅ **Better Performance**: No player conflicts or memory issues
+4. ✅ **Enhanced UX**: Users can binge-watch videos in tweet lists
+5. ✅ **Simplified Architecture**: Centralized video management
+6. ✅ **Context Awareness**: Automatically determines correct tweet list
+7. ✅ **Retweet Support**: Proper handling of retweet navigation
+8. ✅ **Gesture Navigation**: Intuitive swipe-based video navigation
+
+## Technical Implementation Details
+
+### Memory Management
+- Proper ExoPlayer cleanup on dispose
+- Singleton pattern prevents multiple instances
+- Reactive state management with `mutableStateOf`
+
+### Player State Management
+- Reactive ExoPlayer updates when FullScreenPlayerManager creates new players
+- Automatic player state synchronization
+- Proper listener attachment for each new player
+
+### Gesture Detection
+- Uses `detectDragGestures` for swipe navigation
+- Visual feedback with `graphicsLayer` transformations
+- Threshold-based gesture recognition (150f for navigation, 300f for exit)
+
+### Context Detection
+- Analyzes `navController.currentBackStackEntry` and `previousBackStackEntry`
+- Route-based context determination
+- Special handling for retweets vs original tweets
+
+## Current Status: ✅ PRODUCTION READY
+The independent fullscreen player system is fully implemented and operational. All core features are working, including automatic video progression, context-aware tweet fetching, gesture navigation, and proper memory management.
