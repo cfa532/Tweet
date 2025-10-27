@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +85,9 @@ import us.fireshare.tweet.tweet.LikeButton
 import us.fireshare.tweet.tweet.RetweetButton
 import us.fireshare.tweet.tweet.ShareButton
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -110,14 +114,54 @@ fun MediaBrowser(
     }
     val tweet by viewModel.tweetState.collectAsState()
     val tweetAttachments by viewModel.attachments.collectAsState()
+    
+    // Get tweet list from current context for automatic video progression
+    Timber.d("MediaBrowser - About to call getTweetListFromContext for tweet: ${tweet.mid}")
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val tweetList = runBlocking { getTweetListFromContext(tweet, navController, tweetFeedViewModel) }
+    val startIndex = tweetList.indexOfFirst { it.mid == tweet.mid }.coerceAtLeast(0)
+    
+    Timber.d("MediaBrowser - tweetAttachments: $tweetAttachments")
+    Timber.d("MediaBrowser - tweetAttachments size: ${tweetAttachments?.size}")
+    Timber.d("MediaBrowser - Tweet list size: ${tweetList.size}, start index: $startIndex")
+    Timber.d("MediaBrowser - Tweet list IDs: ${tweetList.map { it.mid }}")
+    
     val mediaItems = tweetAttachments?.map {
         val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
         val inferredType = inferMediaTypeFromAttachment(it)
         Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
         MediaItem(mediaUrl, inferredType)
-    } ?: return
+    }
 
-    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
+    // Show loading state if tweetAttachments is null
+    if (tweetAttachments == null) {
+        Timber.d("MediaBrowser - Showing loading state because tweetAttachments is null")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+                androidx.compose.material3.Text(
+                    text = "Loading...",
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+        }
+        return
+    }
+    
+    Timber.d("MediaBrowser - tweetAttachments loaded, size: ${tweetAttachments?.size}")
+
+    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems?.size ?: 0 })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
 
@@ -125,7 +169,7 @@ fun MediaBrowser(
     LaunchedEffect(pagerState.currentPage) {
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
         // Pause all videos except the current one
-        mediaItems.forEachIndexed { index, mediaItem ->
+        mediaItems?.forEachIndexed { index, mediaItem ->
             if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
                 val videoMid = mediaItem.url.getMimeiKeyFromUrl()
                 if (index == pagerState.currentPage) {
@@ -263,61 +307,21 @@ fun MediaBrowser(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            val mediaItem = mediaItems[page]
+            val mediaItem = mediaItems?.get(page) ?: return@HorizontalPager
             when (mediaItem.type) {
-                // video preview - use existing player from VideoManager
+                // video preview - use independent fullscreen player
                 MediaType.Video, MediaType.HLS_VIDEO -> {
                     Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
-                    // Extract video mid from URL for VideoManager using the same method as VideoPreview
-                    val videoMid = mediaItem.url.getMimeiKeyFromUrl()
-
-                    // Try to get existing player for seamless transition
-                    val existingPlayer = VideoManager.transferToFullScreen(videoMid)
-                    val attachments = tweetAttachments // Store in local variable for smart casting
-
-                    if (existingPlayer != null && attachments != null) {
-                        // Use existing player for seamless transition
-                        val videoItem =
-                            attachments.find { it.mid == videoMid } ?: attachments.first()
-                        FullScreenVideoPlayer(
-                            existingPlayer = existingPlayer,
-                            videoItem = videoItem,
-                            onClose = {
-                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
-                                // Return player back to VideoManager when closed
-                                VideoManager.returnFromFullScreen(videoMid)
-                                navController.popBackStack()
-                            },
-                            enableImmersiveMode = true // Enable immersive mode for orientation control
-                        )
-                    } else {
-                        // Fallback to creating new player
-                        FullScreenVideoPlayer(
-                            videoUrl = mediaItem.url,
-                            onClose = {
-                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
-                                navController.popBackStack()
-                            },
-                            enableImmersiveMode = true, // Enable immersive mode for orientation control
-                            onHorizontalSwipe = { direction ->
-                                Timber.tag("MediaBrowser")
-                                    .d("Horizontal swipe detected: $direction")
-                                animationScope.launch {
-                                    if (direction > 0) {
-                                        // Swipe right, go to next page
-                                        pagerState.animateScrollToPage(
-                                            pagerState.currentPage + 1
-                                        )
-                                    } else {
-                                        // Swipe left, go to previous page
-                                        pagerState.animateScrollToPage(
-                                            pagerState.currentPage - 1
-                                        )
-                                    }
-                                }
-                            }
-                        )
-                    }
+                    
+                    // Use the new independent fullscreen player with full tweet list
+                    IndependentFullScreenPlayer(
+                        tweetList = tweetList, // Full tweet list from current context
+                        startIndex = startIndex,
+                        onClose = {
+                            Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
+                            navController.popBackStack()
+                        }
+                    )
                 }
                 // audio preview - keep existing implementation
                 MediaType.Audio -> {
@@ -527,6 +531,122 @@ fun MediaBrowser(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Get tweet list from current navigation context for automatic video progression
+ */
+private suspend fun getTweetListFromContext(
+    currentTweet: Tweet,
+    navController: NavController,
+    tweetFeedViewModel: TweetFeedViewModel
+): List<Tweet> {
+    Timber.d("MediaBrowser - getTweetListFromContext called for tweet: ${currentTweet.mid}")
+    
+    // Get current navigation route to determine context
+    val currentRoute = navController.currentBackStackEntry?.destination?.route
+    val previousRoute = navController.previousBackStackEntry?.destination?.route
+    
+    Timber.d("MediaBrowser - Current route: $currentRoute, Previous route: $previousRoute")
+    
+    return when {
+        // If we're in MediaViewer, check where we came from
+        currentRoute?.contains("MediaViewer") == true -> {
+            Timber.d("MediaBrowser - In MediaViewer, checking previous route")
+            when {
+                previousRoute?.contains("TweetFeed") == true -> {
+                    Timber.d("MediaBrowser - Came from TweetFeed, fetching feed tweets")
+                    // We came from tweet feed - get tweets from TweetFeedViewModel
+                    val tweets = tweetFeedViewModel.tweets.value
+                    
+                    Timber.d("MediaBrowser - Raw feed tweets count: ${tweets.size}")
+                    
+                    // Filter for tweets with videos
+                    val videoTweets = tweets.filter { tweet ->
+                        tweet.attachments?.any { attachment ->
+                            attachment.type == MediaType.Video || 
+                            attachment.type == MediaType.HLS_VIDEO
+                        } == true
+                    }
+                    
+                    Timber.d("MediaBrowser - Found ${videoTweets.size} video tweets in feed")
+                    if (videoTweets.isEmpty()) listOf(currentTweet) else videoTweets
+                }
+                previousRoute?.contains("Bookmarks") == true -> {
+                    Timber.d("MediaBrowser - Came from Bookmarks, fetching bookmark tweets")
+                    // We came from bookmarks - get tweets from HproseInstance
+                    val bookmarks = us.fireshare.tweet.HproseInstance.getUserTweetsByType(
+                        us.fireshare.tweet.HproseInstance.appUser,
+                        us.fireshare.tweet.datamodel.UserContentType.BOOKMARKS,
+                        0,
+                        100 // Get more tweets for better video progression
+                    ).filterNotNull()
+                    
+                    // Filter for tweets with videos
+                    val videoTweets = bookmarks.filter { tweet ->
+                        tweet.attachments?.any { attachment ->
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                        } == true
+                    }
+                    
+                    Timber.d("MediaBrowser - Found ${videoTweets.size} video tweets in bookmarks")
+                    if (videoTweets.isEmpty()) listOf(currentTweet) else videoTweets
+                }
+                previousRoute?.contains("Favorites") == true -> {
+                    Timber.d("MediaBrowser - Came from Favorites, fetching favorite tweets")
+                    // We came from favorites - get tweets from HproseInstance
+                    val favorites = us.fireshare.tweet.HproseInstance.getUserTweetsByType(
+                        us.fireshare.tweet.HproseInstance.appUser,
+                        us.fireshare.tweet.datamodel.UserContentType.FAVORITES,
+                        0,
+                        100 // Get more tweets for better video progression
+                    ).filterNotNull()
+                    
+                    // Filter for tweets with videos
+                    val videoTweets = favorites.filter { tweet ->
+                        tweet.attachments?.any { attachment ->
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                        } == true
+                    }
+                    
+                    Timber.d("MediaBrowser - Found ${videoTweets.size} video tweets in favorites")
+                    if (videoTweets.isEmpty()) listOf(currentTweet) else videoTweets
+                }
+                previousRoute?.contains("UserProfile") == true -> {
+                    Timber.d("MediaBrowser - Came from UserProfile, fetching user tweets")
+                    // We came from user profile - get tweets from HproseInstance
+                    val userTweets = us.fireshare.tweet.HproseInstance.getTweetsByUser(
+                        us.fireshare.tweet.HproseInstance.appUser,
+                        0,
+                        100 // Get more tweets for better video progression
+                    ).filterNotNull()
+                    
+                    // Filter for tweets with videos
+                    val videoTweets = userTweets.filter { tweet ->
+                        tweet.attachments?.any { attachment ->
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.Video || 
+                            attachment.type == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO
+                        } == true
+                    }
+                    
+                    Timber.d("MediaBrowser - Found ${videoTweets.size} video tweets in user profile")
+                    if (videoTweets.isEmpty()) listOf(currentTweet) else videoTweets
+                }
+                else -> {
+                    // Default fallback - return just current tweet
+                    Timber.d("MediaBrowser - Unknown previous route: $previousRoute, returning single tweet")
+                    listOf(currentTweet)
+                }
+            }
+        }
+        else -> {
+            // Default fallback - return just current tweet
+            Timber.d("MediaBrowser - Not in MediaViewer (current route: $currentRoute), returning single tweet")
+            listOf(currentTweet)
         }
     }
 }

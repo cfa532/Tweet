@@ -98,12 +98,18 @@ class TweetViewModel @AssistedInject constructor(
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
+        Timber.d("TweetViewModel - Initializing with tweet: ${tweet.mid}, attachments: ${tweet.attachments?.size}")
         if (tweetState.value.author == null) {
+            Timber.d("TweetViewModel - Author is null, refreshing tweet")
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
-                    _tweetState.value = tweet
+                HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
+                    Timber.d("TweetViewModel - Refreshed tweet: ${refreshedTweet.mid}, attachments: ${refreshedTweet.attachments?.size}")
+                    _tweetState.value = refreshedTweet
+                    _attachments.value = refreshedTweet.attachments
                 }
             }
+        } else {
+            Timber.d("TweetViewModel - Author exists, using existing tweet data")
         }
     }
 
