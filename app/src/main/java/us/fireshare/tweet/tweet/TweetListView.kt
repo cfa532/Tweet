@@ -710,10 +710,10 @@ private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Mimei
                         mid = attachment.mid,
                         mediaType = mediaType,
                         feedIndex = feedIndex,
-                        tweetTimestamp = tweetToCheck.timestamp
+                        tweetTimestamp = tweet.timestamp // Use retweet's timestamp, not original tweet's timestamp
                     ))
                     val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
-                    Timber.tag("TweetListView").d("Added video at feed index $feedIndex: ${attachment.mid}, tweet: ${tweetToCheck.mid}, timestamp: ${tweetToCheck.timestamp}, type: $tweetType, mediaType: $mediaType")
+                    Timber.tag("TweetListView").d("Added video at feed index $feedIndex: ${attachment.mid}, tweet: ${tweetToCheck.mid}, timestamp: ${tweet.timestamp} (${tweetType}), mediaType: $mediaType")
                 }
             }
         } else {
@@ -723,15 +723,17 @@ private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Mimei
         }
     }
     
+    // Sort videos by timestamp (newest first) before converting
+    val sortedVideoInfoList = videoInfoList.sortedByDescending { it.tweetTimestamp }
+    
     // Convert VideoInfo list to the required format (MimeiId, MediaType)
-    // Videos are already in the correct order since tweets are sorted by timestamp
-    val result = videoInfoList.map { videoInfo -> 
+    val result = sortedVideoInfoList.map { videoInfo -> 
         Pair(videoInfo.mid, videoInfo.mediaType) 
     }
     
-    Timber.tag("TweetListView").d("Created video list with ${result.size} videos in feed order")
+    Timber.tag("TweetListView").d("Created video list with ${result.size} videos sorted by timestamp (newest first)")
     result.forEachIndexed { index, (videoMid, mediaType) ->
-        val videoInfo = videoInfoList[index]
+        val videoInfo = sortedVideoInfoList[index]
         val tweet = tweets.getOrNull(videoInfo.feedIndex)
         val tweetType = if (tweet?.originalTweetId != null) "retweet" else "original"
         Timber.tag("TweetListView").d("Video $index: $videoMid, timestamp: ${videoInfo.tweetTimestamp}, type: $tweetType, mediaType: $mediaType")
