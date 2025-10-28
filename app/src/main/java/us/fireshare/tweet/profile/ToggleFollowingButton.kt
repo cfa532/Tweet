@@ -133,12 +133,12 @@ fun ToggleFollowingButton(
                 }
             }
         },
-        textColor = MaterialTheme.colorScheme.primary,
+        textColor = if (localFollowState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         textStyle = MaterialTheme.typography.bodyMedium,
         modifier = Modifier
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                color = if (localFollowState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 20.dp, vertical = 6.dp)
