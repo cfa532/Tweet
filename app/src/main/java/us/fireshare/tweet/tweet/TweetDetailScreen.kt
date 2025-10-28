@@ -101,6 +101,9 @@ fun TweetDetailScreen(
     var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
+    
+    // Prevent double-exit when back button is tapped multiple times
+    var isNavigatingBack by remember { mutableStateOf(false) }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -261,8 +264,13 @@ fun TweetDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { navController.popBackStack() },
-                        enabled = topAppBarAlpha > 0.5f
+                        onClick = { 
+                            if (!isNavigatingBack) {
+                                isNavigatingBack = true
+                                navController.popBackStack()
+                            }
+                        },
+                        enabled = topAppBarAlpha > 0.5f && !isNavigatingBack
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
