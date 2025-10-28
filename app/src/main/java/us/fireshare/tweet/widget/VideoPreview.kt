@@ -94,7 +94,7 @@ fun VideoPreview(
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
-    var showNativeControls by remember(videoMid) { mutableStateOf(false) } // State for tap-to-show controls
+    var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
     val maxRetries = 3
 
     // Use VideoLoadingManager to track visibility and manage loading
@@ -312,10 +312,10 @@ fun VideoPreview(
     }
     
     // Auto-hide controls after 3 seconds when enabled
-    LaunchedEffect(showNativeControls) {
-        if (showNativeControls && enableTapToShowControls) {
-            delay(3000)
-            showNativeControls = false
+    LaunchedEffect(showControls) {
+        if (showControls && enableTapToShowControls) {
+            delay(2000)
+            showControls = false
         }
     }
 
@@ -496,7 +496,7 @@ fun VideoPreview(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = if (enableTapToShowControls) showNativeControls else false // Conditional controls
+                    useController = if (enableTapToShowControls) showControls else false // Use state for tap-to-show controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
@@ -506,20 +506,12 @@ fun VideoPreview(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                    
-                    // Configure controller behavior for tap-to-show controls
-                    if (enableTapToShowControls) {
-                        setControllerHideOnTouch(false) // Don't hide on touch to prevent conflicts
-                        setControllerShowTimeoutMs(0) // Don't auto-hide
-                    }
                 }
             },
             update = { playerView ->
                 // Update controller visibility when state changes
                 if (enableTapToShowControls) {
-                    playerView.useController = showNativeControls
-                    playerView.setControllerHideOnTouch(false)
-                    playerView.setControllerShowTimeoutMs(0)
+                    playerView.useController = showControls // Use state for tap-to-show controls
                 }
             },
             modifier = Modifier
@@ -527,13 +519,8 @@ fun VideoPreview(
                 .clipToBounds() // Ensure content is clipped to bounds
                 .then(
                     if (enableTapToShowControls) {
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = { 
-                                    Timber.d("VideoPreview - Tap detected, toggling controls")
-                                    showNativeControls = !showNativeControls
-                                }
-                            )
+                        Modifier.clickable { 
+                            showControls = !showControls
                         }
                     } else {
                         Modifier.clickable {
@@ -683,14 +670,14 @@ fun VideoPreview(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = Color.Black.copy(alpha = 0.1f),
+                            color = Color.Black.copy(alpha = 0.2f),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = formatTime(remainingTime),
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = Color.White.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp
                     )
