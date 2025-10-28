@@ -28,9 +28,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -170,16 +174,29 @@ fun FollowerItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = user.name ?: "No One",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "@${user.username}",
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
                     Text(
-                        text = user.name ?: "No One",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "@${user.username} - ${localizedTimeDifference(user.timestamp)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
+                        text = "Joined ${formatUserCreationDate(user.timestamp)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
                 ToggleFollowingButton(userId, viewModel, appUserViewModel)
@@ -193,4 +210,10 @@ fun FollowerItem(
             )
         }
     }
+}
+
+private fun formatUserCreationDate(timestamp: Long): String {
+    val date = Date(timestamp)
+    val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+    return dateFormat.format(date)
 }
