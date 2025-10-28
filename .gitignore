@@ -27,3 +27,4 @@ keystore.properties
 *.keystore
 /app/full/release/app-full-release.apk
 /app/mini/release/output-metadata.json
+/app/play/release/app-play-release.aab
