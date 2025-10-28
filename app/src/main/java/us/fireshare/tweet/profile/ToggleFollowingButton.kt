@@ -138,7 +138,7 @@ fun ToggleFollowingButton(
         modifier = Modifier
             .border(
                 width = 1.dp,
-                color = if (localFollowState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.outline,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 20.dp, vertical = 6.dp)
