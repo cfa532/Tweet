@@ -95,7 +95,8 @@ fun TweetListView(
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
     restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
     context: String = "default", // Context to determine where this list is shown
-    onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null // Callback when video list changes
+    onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
+    isInitialLoading: Boolean = false // External loading state (for ProfileScreen)
 ) {
     // Inject SharedViewModel to get TweetListViewModel
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -107,48 +108,30 @@ fun TweetListView(
     // play full screen videos in order.
     sharedViewModel.tweetListViewModel = tweetListViewModel
 
-    // Debug logging for TweetListView recreation - only log when essential parameters change
+    // Create video-indexed list that maintains feed order and handles retweets properly
+    var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }
+    var isInitialLoadingComplete by remember { mutableStateOf(false) }
+    
+    // Debug logging and state tracking
     val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
     val previousUserId = remember { mutableStateOf(currentUserId) }
 
-    LaunchedEffect(tweets.size, currentUserId) {
+    // Consolidated LaunchedEffect for tweets-related operations
+    LaunchedEffect(tweets, tweets.size, currentUserId) {
+        // Debug logging for parameter changes
         if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
             Timber.tag("TweetListView")
                 .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.value}, userId=$currentUserId->${previousUserId.value}")
             previousTweetsSize.intValue = tweets.size
             previousUserId.value = currentUserId
         }
-    }
-
-    // Create video-indexed list that maintains feed order and handles retweets properly
-    var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }
-    
-    // Update video-indexed list when tweets change
-    LaunchedEffect(tweets) {
-        videoIndexedList = createVideoIndexedList(tweets)
-    }
-    
-    // Notify when video-indexed list changes
-    LaunchedEffect(videoIndexedList) {
-        // Pass video list to our TweetListViewModel
-        tweetListViewModel.setVideoIndexedList(videoIndexedList)
         
-        // Also call the callback if provided
-        onVideoIndexedListChange?.invoke(videoIndexedList)
-        Timber.tag("TweetListView").d("Created video-indexed list with ${videoIndexedList.size} videos from ${tweets.size} tweets")
-    }
-    
-    // Update SharedViewModel's tweetListViewModel with our own instance whenever tweets change
-    LaunchedEffect(tweets) {
-
-        // Update our TweetListViewModel with the current tweets
+        // Track tweets list size changes
+        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
+        
+        // Update SharedViewModel's tweetListViewModel with the current tweets
         tweetListViewModel.setTweetList(tweets)
         Timber.tag("TweetListView").d("Updated SharedViewModel's tweetListViewModel with our instance and ${tweets.size} tweets")
-    }
-
-    // Track tweets list changes - only when size actually changes
-    LaunchedEffect(tweets.size) {
-        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
     }
 
     // Internal state management
@@ -247,13 +230,50 @@ fun TweetListView(
         }
     }
 
-    // Initialize lastLoadedPage if it's still -1 and we have tweets
-    LaunchedEffect(tweets, lastLoadedPage) {
+    // Consolidated LaunchedEffect for videolist and loading state management
+    LaunchedEffect(tweets, lastLoadedPage, currentUserId, isInitialLoading) {
+        // Initialize lastLoadedPage if it's still -1 and we have tweets
         if (lastLoadedPage == -1 && tweets.isNotEmpty()) {
             Timber.tag("TweetListView")
                 .d("Initializing lastLoadedPage from -1 to 0 since we have ${tweets.size} tweets")
             lastLoadedPage = 0
         }
+        
+        // Track when initial loading is complete
+        if (isInitialLoading) {
+            // External loading is still in progress (ProfileScreen case)
+            isInitialLoadingComplete = false
+            Timber.tag("TweetListView").d("External loading in progress, delaying videolist creation")
+        } else if (lastLoadedPage >= 0 && currentUserId == lastUserId) {
+            // Initial loading is complete - now we can create videolist in background
+            isInitialLoadingComplete = true
+            Timber.tag("TweetListView").d("Initial loading complete, will create videolist in background")
+        }
+        
+        // Create videolist in background task after initial loading is complete
+        if (isInitialLoadingComplete && tweets.isNotEmpty()) {
+            // Run videolist creation in background to avoid blocking UI
+            withContext(Dispatchers.IO) {
+                Timber.tag("TweetListView").d("Creating videolist in background for ${tweets.size} tweets")
+                val newVideoIndexedList = createVideoIndexedList(tweets)
+                
+                // Update on main thread
+                withContext(Dispatchers.Main) {
+                    videoIndexedList = newVideoIndexedList
+                    Timber.tag("TweetListView").d("Background videolist creation completed: ${newVideoIndexedList.size} videos")
+                }
+            }
+        }
+    }
+    
+    // Notify when video-indexed list changes
+    LaunchedEffect(videoIndexedList) {
+        // Pass video list to our TweetListViewModel
+        tweetListViewModel.setVideoIndexedList(videoIndexedList)
+        
+        // Also call the callback if provided
+        onVideoIndexedListChange?.invoke(videoIndexedList)
+        Timber.tag("TweetListView").d("Updated video-indexed list with ${videoIndexedList.size} videos from ${tweets.size} tweets")
     }
 
     // Track scroll state and notify parent

@@ -143,42 +143,55 @@ fun ProfileScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
             ) {
-                ProfileContentWithTweetListView(
-                    viewModel = viewModel,
-                    navController = navController,
-                    parentEntry = parentEntry,
-                    scrollBehavior = scrollBehavior,
-                    initState = initState,
-                    userId = userId,
-                    onScrollStateChange = { newScrollState ->
-                            scrollState = newScrollState
+                if (initState) {
+                    // Show loading spinner while initial data is being loaded
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
+                } else {
+                    ProfileContentWithTweetListView(
+                        viewModel = viewModel,
+                        navController = navController,
+                        parentEntry = parentEntry,
+                        scrollBehavior = scrollBehavior,
+                        initState = initState,
+                        userId = userId,
+                        onScrollStateChange = { newScrollState ->
+                                scrollState = newScrollState
 
-                            // Update bottom bar transparency based on scroll direction
-                            when (newScrollState.direction) {
-                                ScrollDirection.UP -> {
-                                    // Scroll UP (content moves down): restore header and bottom bar
-                                    bottomBarTransparency = 0.98f
-                                }
+                                // Update bottom bar transparency based on scroll direction
+                                when (newScrollState.direction) {
+                                    ScrollDirection.UP -> {
+                                        // Scroll UP (content moves down): restore header and bottom bar
+                                        bottomBarTransparency = 0.98f
+                                    }
 
-                                ScrollDirection.DOWN -> {
-                                    // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
-                                    coroutineScope.launch {
-                                        withContext(Dispatchers.Main) {
-                                            delay(100) // Small delay for smooth transition
-                                            if (scrollState.direction == ScrollDirection.DOWN) {
-                                                bottomBarTransparency = 0.2f
+                                    ScrollDirection.DOWN -> {
+                                        // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
+                                        coroutineScope.launch {
+                                            withContext(Dispatchers.Main) {
+                                                delay(100) // Small delay for smooth transition
+                                                if (scrollState.direction == ScrollDirection.DOWN) {
+                                                    bottomBarTransparency = 0.2f
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                ScrollDirection.NONE -> {
-                                    // Idle state: keep current opacity, don't restore automatically
-                                    // Only restore when user starts scrolling up
+                                    ScrollDirection.NONE -> {
+                                        // Idle state: keep current opacity, don't restore automatically
+                                        // Only restore when user starts scrolling up
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                }
             }
         }
 
@@ -275,6 +288,7 @@ private fun ProfileContentWithTweetListView(
         },
         headerContent = headerContent,
         restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
-        context = if (userId == appUser.mid) "appUserProfile" else "userProfile"
+        context = if (userId == appUser.mid) "appUserProfile" else "userProfile",
+        isInitialLoading = initState // Pass the initialization state to delay videolist creation
     )
 }
