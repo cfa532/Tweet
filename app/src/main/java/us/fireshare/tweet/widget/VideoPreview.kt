@@ -306,7 +306,7 @@ fun VideoPreview(
     LaunchedEffect(exoPlayer.isPlaying) {
         if (exoPlayer.isPlaying) {
             showTimeLabel = true
-            delay(3000)
+            delay(5000)
             showTimeLabel = false
         }
     }
@@ -677,7 +677,7 @@ fun VideoPreview(
                 ) {
                     Text(
                         text = formatTime(remainingTime),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = Color.White.copy(alpha = 0.6f),
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp
                     )
