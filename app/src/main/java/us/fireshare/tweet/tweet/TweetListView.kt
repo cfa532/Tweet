@@ -499,8 +499,8 @@ fun TweetListView(
 
         // Allow loading if last tweet is visible, not already refreshing, and no pending load for the same page
         // OR if there's an external loadmore request (even when serverDepleted is true)
-        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.size >= 1 && !serverDepleted) ||
-            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.size >= 1)
+        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.isNotEmpty() && !serverDepleted) ||
+            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.isNotEmpty())
         ) {
 
             val nextPage = lastLoadedPage + 1

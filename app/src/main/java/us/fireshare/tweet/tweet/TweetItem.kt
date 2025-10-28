@@ -66,6 +66,12 @@ fun TweetItem(
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
     context: String = "default"
 ) {
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry, key = tweet.mid
+    ) { factory ->
+        factory.create(tweet)
+    }
+
     // Optimize: Use derivedStateOf to avoid unnecessary recomposition
     val isTweetValid by remember(tweet, tweet.author) {
         derivedStateOf { tweet.author != null }
@@ -85,12 +91,6 @@ fun TweetItem(
         return
     }
 
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweet.mid
-    ) { factory ->
-        factory.create(tweet)
-    }
-    
     // Optimize: Use remember for visibility state to reduce recomposition
     var isVisible by remember { mutableStateOf(false) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
