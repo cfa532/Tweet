@@ -2,6 +2,7 @@ package us.fireshare.tweet.tweet
 
 import android.net.Uri
 import android.widget.Toast
+import us.fireshare.tweet.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -11,8 +12,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +39,7 @@ import us.fireshare.tweet.ui.components.CameraHandler
 import us.fireshare.tweet.ui.components.ComposeTextField
 import us.fireshare.tweet.ui.components.ComposeTopAppBar
 import us.fireshare.tweet.ui.components.ExitConfirmationDialog
+import us.fireshare.tweet.utils.FileSizeUtils
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,16 +66,13 @@ fun ComposeCommentScreen(
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    var fileSizeWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    // File size validation
-    fun isFileSizeValid(uri: Uri): Boolean {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val fileSize = inputStream?.available() ?: 0
-            inputStream?.close()
-            fileSize <= TW_CONST.MAX_FILE_SIZE
-        } catch (_: Exception) {
-            false
+    // Update file size warnings when attachments change
+    LaunchedEffect(selectedAttachments) {
+        fileSizeWarnings = selectedAttachments.map { uri ->
+            val fileSize = FileSizeUtils.getFileSize(context, uri)
+            FileSizeUtils.getFileSizeWarningMessage(context, fileSize)
         }
     }
 
@@ -80,10 +82,11 @@ fun ComposeCommentScreen(
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
             if (selectedAttachments.find { u -> u == uri } == null) {
-                if (isFileSizeValid(uri)) {
+                val fileSize = FileSizeUtils.getFileSize(context, uri)
+                if (FileSizeUtils.isFileSizeValid(fileSize)) {
                     selectedAttachments.add(uri)
                 } else {
-                    Toast.makeText(context, "Files must be smaller than 120MB", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.files_too_large), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -197,6 +200,24 @@ fun ComposeCommentScreen(
                     attachments = selectedAttachments,
                     onRemoveAttachment = { selectedAttachments.remove(it) }
                 )
+
+                // File size warnings
+                if (fileSizeWarnings.isNotEmpty()) {
+                    fileSizeWarnings.forEach { warning ->
+                        Text(
+                            text = warning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (warning.contains("120MB")) {
+                                MaterialTheme.colorScheme.error
+                            } else if (warning.contains("Large file") || warning.contains("Very large")) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

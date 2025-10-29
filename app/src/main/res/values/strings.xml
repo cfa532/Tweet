@@ -269,4 +269,54 @@
     <string name="choose_photo">Choose Photo</string>
     <string name="select_photo_to_crop">Select a photo to crop</string>
     <string name="crop_instructions">Drag to reposition and pinch to zoom. The circular area will be your avatar.</string>
+    
+    <!-- Additional missing strings -->
+    <string name="downloading_file">Downloading file...</string>
+    <string name="error_unknown_error">Unknown error</string>
+    <string name="error_message_failed">Error: %s</string>
+    <string name="video_file_too_large">Video files must be smaller than 120MB</string>
+    <string name="files_too_large">Files must be smaller than 120MB</string>
+    <string name="camera_permission_required">Camera permission required</string>
+    <string name="sending_attachment_background">Sending attachment in background...</string>
+    <string name="message_failed_send_tap_error">Message failed to send - tap to see error details</string>
+    <string name="video_error">Video Error</string>
+    <string name="previous_video">Previous Video</string>
+    <string name="next_video">Next Video</string>
+    <string name="more_options">More options</string>
+    <string name="play_video">Play video</string>
+    <string name="photo_mode">Photo Mode</string>
+    <string name="video_mode">Video Mode</string>
+    <string name="copy_tweet_id">Copy tweet ID</string>
+    
+    <!-- File size warnings -->
+    <string name="file_size_warning">File size: %s (Max: 120MB)</string>
+    <string name="file_size_ok">File size: %s ✓</string>
+    <string name="file_size_large_warning">Large file selected (%s) - upload may take longer</string>
+    <string name="file_size_very_large_warning">Very large file (%s) - consider compressing before upload</string>
+    <string name="file_size_limit">120MB</string>
+    <string name="file_size_large_threshold">50MB</string>
+    <string name="file_size_very_large_threshold">100MB</string>
+    
+    <!-- Empty states -->
+    <string name="no_tweets_found">No tweets found</string>
+    <string name="no_search_results">No results found for "%s"</string>
+    <string name="no_bookmarks">No bookmarks yet</string>
+    <string name="no_favorites">No favorites yet</string>
+    <string name="no_followers">No followers yet</string>
+    <string name="no_following">Not following anyone yet</string>
+    <string name="start_following">Start following people to see their tweets</string>
+    <string name="try_different_search">Try a different search term</string>
+    
+    <!-- Network error messages -->
+    <string name="network_error_connection_lost">Connection lost. Please check your internet connection.</string>
+    <string name="network_error_timeout">Request timed out. Please try again.</string>
+    <string name="network_error_unreachable">Unable to reach server. Please check your connection.</string>
+    <string name="network_error_generic">Network error occurred. Please try again.</string>
+    <string name="retry_connection">Retry Connection</string>
+    
+    <!-- Video error messages -->
+    <string name="video_error_playback_failed">Video playback failed. This may be due to network issues or unsupported format.</string>
+    <string name="video_error_format_not_supported">Video format not supported. Please try a different video.</string>
+    <string name="video_error_network_issue">Video failed to load. Check your internet connection and try again.</string>
+    <string name="video_retry_playback">Retry Playback</string>
 </resources>

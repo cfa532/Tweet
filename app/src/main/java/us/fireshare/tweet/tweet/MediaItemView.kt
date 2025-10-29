@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Environment
 import android.widget.Toast
+import us.fireshare.tweet.R
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -347,6 +348,6 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     downloadManager.enqueue(request)
 
-    Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.downloading_file), Toast.LENGTH_SHORT).show()
 }
 

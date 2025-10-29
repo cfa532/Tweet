@@ -92,7 +92,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                 contentDescription = stringResource(R.string.cancel))
         }
 
-        Text(text = "Login", fontSize = 32.sp, color = Color.Black)
+        Text(text = stringResource(R.string.login), fontSize = 32.sp, color = Color.Black)
 
         Spacer(modifier = Modifier.height(16.dp))
 

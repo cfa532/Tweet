@@ -109,7 +109,7 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play video",
+                    contentDescription = stringResource(R.string.play_video),
                     tint = Color.White,
                     modifier = Modifier
                         .align(Alignment.Center)

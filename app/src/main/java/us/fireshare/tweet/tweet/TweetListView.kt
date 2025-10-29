@@ -4,10 +4,12 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -15,11 +17,17 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -43,6 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -614,31 +623,44 @@ fun TweetListView(
                 }
             }
 
-            itemsIndexed(
-                items = tweets,
-                key = { _, tweet -> tweet.mid },
-                contentType = { _, _ -> "tweet" }  // Help Compose reuse compositions efficiently
-            ) { index, tweet ->
-                if (showPrivateTweets || !tweet.isPrivate) {
-                    parentEntry?.let {
-                        TweetItem(
-                            tweet = tweet,
-                            parentEntry = it,
-                            onTweetUnavailable = onTweetUnavailable,
-                            context = context
-                        )
-                    }
+            // Show empty state if no tweets
+            if (tweets.isEmpty() && !isRefreshingAtTop) {
+                item(key = "empty_state") {
+                    EmptyStateContent(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        message = stringResource(R.string.no_tweets_found),
+                        icon = Icons.Default.Home
+                    )
+                }
+            } else {
+                itemsIndexed(
+                    items = tweets,
+                    key = { _, tweet -> tweet.mid },
+                    contentType = { _, _ -> "tweet" }  // Help Compose reuse compositions efficiently
+                ) { index, tweet ->
+                    if (showPrivateTweets || !tweet.isPrivate) {
+                        parentEntry?.let {
+                            TweetItem(
+                                tweet = tweet,
+                                parentEntry = it,
+                                onTweetUnavailable = onTweetUnavailable,
+                                context = context
+                            )
+                        }
 
-                    // Add divider after each tweet item (except the last one)
-                    // Use index instead of indexOf for O(1) performance
-                    if (index < tweets.size - 1) {
-                        HorizontalDivider(
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .padding(horizontal = 1.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                        )
+                        // Add divider after each tweet item (except the last one)
+                        // Use index instead of indexOf for O(1) performance
+                        if (index < tweets.size - 1) {
+                            HorizontalDivider(
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp)
+                                    .padding(horizontal = 1.dp),
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                            )
+                        }
                     }
                 }
             }
@@ -779,4 +801,38 @@ fun findStartIndexForTappedVideo(videoIndexedList: List<Pair<MimeiId, Int>>, tap
     // If not found, start from the beginning
     Timber.tag("TweetListView").d("Video $tappedVideoMid not found in video list, starting from beginning")
     return 0
+}
+
+/**
+ * Empty state content for when there are no tweets to display
+ */
+@Composable
+fun EmptyStateContent(
+    modifier: Modifier = Modifier,
+    message: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(64.dp)
+                    .padding(bottom = 16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 16.sp
+            )
+        }
+    }
 }

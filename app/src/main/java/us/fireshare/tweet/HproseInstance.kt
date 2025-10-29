@@ -53,6 +53,7 @@ import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
+import us.fireshare.tweet.utils.ErrorMessageUtils
 import java.io.File
 import java.util.UUID
 import java.util.regex.Pattern
@@ -274,7 +275,7 @@ object HproseInstance {
                         }
                     } catch (e: Exception) {
                         Timber.tag("sendMessage").e("Error sending to receipt: $e")
-                        return Pair(false, e.message ?: applicationContext.getString(R.string.error_network))
+                        return Pair(false, ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e))
                     }
                 }
                 return Pair(true, null) // No receipt user found, but outgoing was successful
@@ -424,14 +425,11 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
-                lastError = context.getString(R.string.login_error)
+                lastError = ErrorMessageUtils.getNetworkErrorMessage(context, e)
                 Timber.tag("Login").e(e, "Login attempt ${attempt + 1} failed")
                 
                 // Check if it's a network-related error that should be retried
-                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
-                        e.message?.contains("timeout", ignoreCase = true) == true ||
-                        e.message?.contains("connection", ignoreCase = true) == true ||
-                        e.message?.contains("unreachable", ignoreCase = true) == true
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (!isNetworkError) {
                     // Don't retry for non-network errors
@@ -1570,10 +1568,7 @@ object HproseInstance {
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: ${attempt + 1}, error: ${e.message}")
                 
                 // Check if it's a network-related error that should be retried
-                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
-                        e.message?.contains("timeout", ignoreCase = true) == true ||
-                        e.message?.contains("connection", ignoreCase = true) == true ||
-                        e.message?.contains("unreachable", ignoreCase = true) == true
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (!isNetworkError) {
                     // Don't retry for non-network errors
@@ -1615,10 +1610,7 @@ object HproseInstance {
                 Timber.tag("getProviderIP").e("Error getting provider IP for user: $userId (attempt ${attempt + 1})")
                 
                 // Check if it's a network-related error that should be retried
-                val isNetworkError = e.message?.contains("network", ignoreCase = true) == true ||
-                        e.message?.contains("timeout", ignoreCase = true) == true ||
-                        e.message?.contains("connection", ignoreCase = true) == true ||
-                        e.message?.contains("unreachable", ignoreCase = true) == true
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (!isNetworkError) {
                     // Don't retry for non-network errors

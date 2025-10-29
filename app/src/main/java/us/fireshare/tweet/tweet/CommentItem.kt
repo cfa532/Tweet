@@ -191,7 +191,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
             onClick = { expanded = !expanded }) {
             Icon(
                 painter = painterResource(R.drawable.ellipsis),
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.primary
             )
         }

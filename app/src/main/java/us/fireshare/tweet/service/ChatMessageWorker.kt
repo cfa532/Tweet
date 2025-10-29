@@ -19,6 +19,7 @@ import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.utils.ErrorMessageUtils
 
 @HiltWorker
 class SendChatMessageWorker @AssistedInject constructor(
@@ -110,7 +111,7 @@ class SendChatMessageWorker @AssistedInject constructor(
                     HproseInstance.sendMessage(receiptId, message)
                 } catch (e: Exception) {
                     Timber.tag("SendChatMessageWorker").e(e, "Error sending message via network")
-                    Pair(false, e.message ?: "Network error")
+                    Pair(false, ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e))
                 }
             }
 

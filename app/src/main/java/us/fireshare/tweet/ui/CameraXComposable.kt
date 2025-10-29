@@ -46,6 +46,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
+import us.fireshare.tweet.R
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -286,7 +288,7 @@ fun CameraXPreview(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Cancel",
+                    contentDescription = stringResource(R.string.cancel),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp).alpha(0.8f)
                 )
@@ -316,7 +318,7 @@ fun CameraXPreview(
             ) {
                 Icon(
                     imageVector = Icons.Default.CameraAlt,
-                    contentDescription = "Photo Mode",
+                    contentDescription = stringResource(R.string.photo_mode),
                     tint = if (captureMode == "photo") 
                         MaterialTheme.colorScheme.onPrimaryContainer
                     else 
@@ -374,7 +376,7 @@ fun CameraXPreview(
             ) {
                 Icon(
                     imageVector = Icons.Default.Videocam,
-                    contentDescription = "Video Mode",
+                    contentDescription = stringResource(R.string.video_mode),
                     tint = if (captureMode == "video") 
                         MaterialTheme.colorScheme.onPrimaryContainer
                     else 

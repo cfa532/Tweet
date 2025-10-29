@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
+import us.fireshare.tweet.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -32,7 +33,7 @@ fun CameraHandler(
         if (isGranted) {
             // Permission granted, camera will be shown by parent state
         } else {
-            Toast.makeText(context, "Camera permission required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.camera_permission_required), Toast.LENGTH_SHORT).show()
             onDismiss() // Dismiss if permission denied
         }
     }

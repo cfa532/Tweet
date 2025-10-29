@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
+import us.fireshare.tweet.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -55,6 +57,7 @@ import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.widget.Gadget.isElementVisible
+import us.fireshare.tweet.utils.ErrorMessageUtils
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -462,7 +465,8 @@ fun VideoPreview(
                     // For non-recoverable errors or after max retries, show error state
                     isLoading = false
                     hasError = true
-                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message} (retries: $retryCount, recoverable: $isRecoverableError, mediaCodec: $isMediaCodecError)")
+                    val userFriendlyError = ErrorMessageUtils.getVideoErrorMessage(context, error)
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - $userFriendlyError (retries: $retryCount, recoverable: $isRecoverableError, mediaCodec: $isMediaCodecError)")
                 }
             }
         }
@@ -559,7 +563,7 @@ fun VideoPreview(
                 ) {
                     Icon(
                         imageVector = Icons.Default.BrokenImage,
-                        contentDescription = "Video Error",
+                        contentDescription = stringResource(R.string.video_error),
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

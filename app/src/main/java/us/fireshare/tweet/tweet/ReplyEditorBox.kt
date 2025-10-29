@@ -117,7 +117,7 @@ fun ReplyEditorBox(
         if (isGranted) {
             openCamera()
         } else {
-            Toast.makeText(context, "Camera permission required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.camera_permission_required), Toast.LENGTH_SHORT).show()
         }
     }
 

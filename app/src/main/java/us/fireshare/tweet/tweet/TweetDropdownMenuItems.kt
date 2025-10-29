@@ -184,7 +184,7 @@ fun TweetDropdownMenuItems(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Filled.ContentCopy,
-                    contentDescription = "Copy tweet ID",
+                    contentDescription = stringResource(R.string.copy_tweet_id),
                     tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.width(16.dp)
                 )

@@ -500,14 +500,14 @@ fun ChatItem(
                 val context = LocalContext.current
                 Icon(
                     imageVector = Icons.Default.Error,
-                    contentDescription = "Message failed to send - tap to see error details",
+                    contentDescription = stringResource(R.string.message_failed_send_tap_error),
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier
                         .size(24.dp)
                         .align(Alignment.CenterVertically)
                         .clickable {
-                            val errorMessage = message.errorMsg ?: "Unknown error"
-                            Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
+                            val errorMessage = message.errorMsg ?: context.getString(R.string.error_unknown_error)
+                            Toast.makeText(context, context.getString(R.string.error_message_failed, errorMessage), Toast.LENGTH_LONG).show()
                         }
                 )
             }
@@ -591,7 +591,7 @@ fun ChatItem(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Sending attachment in background...",
+                                text = stringResource(R.string.sending_attachment_background),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center
@@ -618,13 +618,13 @@ fun ChatItem(
                     val context = LocalContext.current
                     Icon(
                         imageVector = Icons.Default.Error,
-                        contentDescription = "Message failed to send - tap to see error details",
+                        contentDescription = stringResource(R.string.message_failed_send_tap_error),
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier
                             .size(16.dp)
                             .clickable {
-                                val errorMessage = message.errorMsg ?: "Unknown error"
-                                Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
+                                val errorMessage = message.errorMsg ?: context.getString(R.string.error_unknown_error)
+                                Toast.makeText(context, context.getString(R.string.error_message_failed, errorMessage), Toast.LENGTH_LONG).show()
                             }
                     )
                 }
@@ -718,7 +718,7 @@ fun ChatInput(
             if (isFileSizeValid(it)) {
                 viewModel.selectedAttachment.value = it
             } else {
-                Toast.makeText(context, "Video files must be smaller than 120MB", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.video_file_too_large), Toast.LENGTH_LONG).show()
             }
         }
     }

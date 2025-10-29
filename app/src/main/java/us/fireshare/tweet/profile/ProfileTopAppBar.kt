@@ -170,7 +170,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More"
+                            contentDescription = stringResource(R.string.more)
                         )
                     }
                     DropdownMenu(

@@ -445,7 +445,7 @@ fun AdvancedImageViewer(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -496,9 +496,9 @@ fun AdvancedImageViewer(
                                     loadState.bitmap?.let { bitmap ->
                                         val success = saveImageToGallery(context, bitmap)
                                         if (success) {
-                                            Toast.makeText(context, "Image saved to gallery", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.image_saved_to_gallery), Toast.LENGTH_SHORT).show()
                                         } else {
-                                            Toast.makeText(context, "Failed to save image", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.failed_to_save_image), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                     showMenu = false
@@ -900,7 +900,7 @@ fun ImageViewer(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -926,7 +926,7 @@ fun ImageViewer(
                                     Toast.LENGTH_SHORT
                                 ).show()
                             } else {
-                                Toast.makeText(context, "Failed to save image", Toast.LENGTH_SHORT)
+                                Toast.makeText(context, context.getString(R.string.failed_to_save_image), Toast.LENGTH_SHORT)
                                     .show()
                             }
                         }

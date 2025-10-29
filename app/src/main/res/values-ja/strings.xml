@@ -11,4 +11,61 @@
     <string name="upgrade_failed_download">ダウンロードに失敗しました：%1$s</string>
     <string name="upgrade_failed_unknown">アップグレードに失敗しました：不明なエラー</string>
     <string name="download_in_progress">ダウンロードが進行中です。完了までお待ちください。</string>
+    
+    <!-- Additional missing strings -->
+    <string name="downloading_file">ファイルをダウンロード中...</string>
+    <string name="error_unknown_error">不明なエラー</string>
+    <string name="error_message_failed">エラー：%s</string>
+    <string name="video_file_too_large">動画ファイルは120MB未満である必要があります</string>
+    <string name="files_too_large">ファイルは120MB未満である必要があります</string>
+    <string name="image_saved_to_gallery">画像がギャラリーに保存されました</string>
+    <string name="failed_to_save_image">画像の保存に失敗しました</string>
+    <string name="camera_permission_required">カメラの権限が必要です</string>
+    <string name="sending_attachment_background">添付ファイルをバックグラウンドで送信中...</string>
+    <string name="message_failed_send_tap_error">メッセージの送信に失敗しました - タップしてエラー詳細を確認</string>
+    <string name="more">その他</string>
+    <string name="video_error">動画エラー</string>
+    <string name="close">閉じる</string>
+    <string name="previous_video">前の動画</string>
+    <string name="next_video">次の動画</string>
+    <string name="more_options">その他のオプション</string>
+    <string name="open_camera">カメラを開く</string>
+    <string name="upload_file">ファイルをアップロード</string>
+    <string name="play_video">動画を再生</string>
+    <string name="cancel">キャンセル</string>
+    <string name="photo_mode">写真モード</string>
+    <string name="video_mode">動画モード</string>
+    <string name="copy_tweet_id">ツイートIDをコピー</string>
+    
+    <!-- File size warnings -->
+    <string name="file_size_warning">ファイルサイズ：%s（最大：120MB）</string>
+    <string name="file_size_ok">ファイルサイズ：%s ✓</string>
+    <string name="file_size_large_warning">大きなファイルを選択しました（%s）- アップロードに時間がかかる場合があります</string>
+    <string name="file_size_very_large_warning">非常に大きなファイル（%s）- アップロード前に圧縮することをお勧めします</string>
+    <string name="file_size_limit">120MB</string>
+    <string name="file_size_large_threshold">50MB</string>
+    <string name="file_size_very_large_threshold">100MB</string>
+    
+    <!-- Empty states -->
+    <string name="no_tweets_found">ツイートが見つかりません</string>
+    <string name="no_search_results">「%s」の結果が見つかりません</string>
+    <string name="no_bookmarks">ブックマークがありません</string>
+    <string name="no_favorites">お気に入りがありません</string>
+    <string name="no_followers">フォロワーがいません</string>
+    <string name="no_following">まだ誰もフォローしていません</string>
+    <string name="start_following">人をフォローしてツイートを見る</string>
+    <string name="try_different_search">別の検索語を試してください</string>
+    
+    <!-- Network error messages -->
+    <string name="network_error_connection_lost">接続が失われました。インターネット接続を確認してください。</string>
+    <string name="network_error_timeout">リクエストがタイムアウトしました。再試行してください。</string>
+    <string name="network_error_unreachable">サーバーに接続できません。接続を確認してください。</string>
+    <string name="network_error_generic">ネットワークエラーが発生しました。再試行してください。</string>
+    <string name="retry_connection">接続を再試行</string>
+    
+    <!-- Video error messages -->
+    <string name="video_error_playback_failed">動画の再生に失敗しました。ネットワークの問題またはサポートされていない形式が原因の可能性があります。</string>
+    <string name="video_error_format_not_supported">動画形式がサポートされていません。別の動画をお試しください。</string>
+    <string name="video_error_network_issue">動画の読み込みに失敗しました。インターネット接続を確認して再試行してください。</string>
+    <string name="video_retry_playback">再生を再試行</string>
 </resources>

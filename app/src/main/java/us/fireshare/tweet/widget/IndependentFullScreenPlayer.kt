@@ -45,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
+import us.fireshare.tweet.R
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.media3.common.util.UnstableApi
@@ -319,7 +321,7 @@ private fun VideoInfoOverlay(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -357,7 +359,7 @@ private fun VideoInfoOverlay(
             IconButton(onClick = onPrevious) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous Video",
+                    contentDescription = stringResource(R.string.previous_video),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
@@ -366,7 +368,7 @@ private fun VideoInfoOverlay(
             IconButton(onClick = onNext) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next Video",
+                    contentDescription = stringResource(R.string.next_video),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )

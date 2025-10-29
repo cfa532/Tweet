@@ -203,7 +203,7 @@ fun ActionButtonsRow(
         IconButton(onClick = onCameraClick) {
             Icon(
                 painter = painterResource(R.drawable.ic_camera),
-                contentDescription = "Open Camera",
+                contentDescription = stringResource(R.string.open_camera),
                 tint = MaterialTheme.colorScheme.surfaceTint,
                 modifier = Modifier.size(32.dp)
             )
@@ -215,7 +215,7 @@ fun ActionButtonsRow(
         IconButton(onClick = onFilePickerClick) {
             Icon(
                 painter = painterResource(R.drawable.ic_photo_plus),
-                contentDescription = "Upload File",
+                contentDescription = stringResource(R.string.upload_file),
                 tint = MaterialTheme.colorScheme.surfaceTint,
                 modifier = Modifier.size(44.dp)
             )
