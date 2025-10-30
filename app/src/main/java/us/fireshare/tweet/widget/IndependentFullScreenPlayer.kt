@@ -64,6 +64,7 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import kotlin.math.abs
+import us.fireshare.tweet.service.OrientationManager
 
 /**
  * Independent fullscreen video player that automatically progresses through videos in a tweet list.
@@ -160,15 +161,17 @@ fun IndependentFullScreenPlayer(
         }
     }
     
-    // Handle immersive mode
+    // Handle immersive mode and allow rotation during fullscreen
     LaunchedEffect(Unit) {
         activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        activity?.let { OrientationManager.allowRotation(it) }
     }
     
-    // Cleanup immersive mode on dispose
+    // Cleanup immersive mode and restore portrait on dispose
     DisposableEffect(Unit) {
         onDispose {
             activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            activity?.let { OrientationManager.lockToPortrait(it) }
         }
     }
     
