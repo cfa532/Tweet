@@ -952,10 +952,12 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout(popBack: () -> Unit) {
+    suspend fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
+        val ip = HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
         appUser = User(
-            mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl,
+            mid = TW_CONST.GUEST_ID,
+            baseUrl = "http://$ip",
             followingList = HproseInstance.getAlphaIds()
         )
         /**
