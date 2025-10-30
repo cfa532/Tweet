@@ -199,10 +199,8 @@ fun IndependentFullScreenPlayer(
                                 Timber.d("IndependentFullScreenPlayer - Swipe up detected, playing next video")
                                 FullScreenPlayerManager.playNextVideo()
                             } else {
-                                // Small drag down - exit fullscreen
-                                Timber.d("IndependentFullScreenPlayer - Small drag down detected, exiting player")
-                                isClosing = true
-                                onClose()
+                                // Small drag down - not enough to exit, snap back
+                                Timber.d("IndependentFullScreenPlayer - Small drag down detected, not exiting")
                             }
                         } else {
                             // No significant gesture detected
@@ -215,7 +213,9 @@ fun IndependentFullScreenPlayer(
                         // Reset isClosing flag for next gesture
                         isClosing = false
                     },
-                    onDrag = { _, dragAmount ->
+                    onDrag = { change, dragAmount ->
+                        // Consume to ensure smooth, dedicated drag handling
+                        change.consume()
                         // Track vertical drag for navigation and exit
                         verticalDragOffset += dragAmount.y
                         
@@ -223,11 +223,13 @@ fun IndependentFullScreenPlayer(
                         if (verticalDragOffset < 0) {
                             // Dragging up - shrink video slightly for visual feedback
                             videoScale = (1f - abs(verticalDragOffset) / 1000f).coerceAtLeast(0.8f)
-                            videoOffset = verticalDragOffset / 10f
+                            // Move at 0.5x for smoother feel and less jitter
+                            videoOffset = verticalDragOffset / 2f
                         } else if (verticalDragOffset > 0) {
                             // Dragging down - moderate shrinking for exit feedback
                             videoScale = (1f - verticalDragOffset / 800f).coerceAtLeast(0.8f)
-                            videoOffset = verticalDragOffset / 10f
+                            // Move at 0.5x for smoother feel and less jitter
+                            videoOffset = verticalDragOffset / 2f
                         }
                     }
                 )

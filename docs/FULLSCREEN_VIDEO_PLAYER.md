@@ -187,13 +187,33 @@ val exoPlayer = remember(videoMid) {
 
 ### Gesture Controls
 - **Tap**: Toggle control visibility
-- **Vertical drag**: Swipe down to exit full screen
-- **Horizontal drag**: Navigate between videos (if supported)
+- **Vertical drag-to-exit (both variants)**:
+  - Drag down to dismiss the fullscreen player
+  - Exit threshold: ~220f of downward drag (tunable)
+  - Visuals while dragging:
+    - `translationY = verticalDragOffset`
+    - `scaleX/scaleY = (1f - verticalDragOffset/800f).coerceAtLeast(0.8f)`
+    - `alpha = 1f - (verticalDragOffset/500f).coerceAtMost(0.3f)`
+- **Horizontal drag (videoUrl variant only, optional)**: Triggers `onHorizontalSwipe(direction)` when |drag| > 100f
 
 ### Visual Feedback
-- **Drag animation**: Smooth visual effects during drag gestures
-- **Control fade**: Auto-hide controls after 1 second
+- **Unified drag animation** (same as `IndependentFullScreenPlayer`): moderate shrink (min 0.8f), fade, and follow-the-finger translation
+- **Control fade**: Auto-hide controls after 2 seconds
 - **Exit animation**: Smooth transition when exiting full screen
+
+## Variants and Behavior
+
+There are two overloads of `FullScreenVideoPlayer`:
+
+1) `FullScreenVideoPlayer(existingPlayer: ExoPlayer, ...)`
+   - Reuses an existing player instance
+   - Vertical drag-to-exit with the unified translation/scale/alpha formula above
+
+2) `FullScreenVideoPlayer(videoUrl: String, ...)`
+   - Manages its own full screen player
+   - Supports both vertical drag-to-exit (unified visuals) and optional horizontal swipe (`onHorizontalSwipe`)
+
+Both variants now share the same drag scaling algorithm as `IndependentFullScreenPlayer` for consistent feel.
 
 ## Error Handling
 

@@ -202,7 +202,7 @@ fun FullScreenVideoPlayer(
                     },
                     onDragEnd = {
                         // Check if it's a downward swipe (positive Y value means downward)
-                        if (dragOffset > 100f) { // Increased threshold - 100dp
+                        if (dragOffset > 220f) { // Allow more dragging distance before exit
                             onClose()
                         }
                         dragOffset = 0f
@@ -235,9 +235,9 @@ fun FullScreenVideoPlayer(
                 .fillMaxSize()
                 .graphicsLayer {
                     translationY = dragOffset
-                    // Add some scaling effect as the video is dragged down
-                    scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                    scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                    // Unified scaling with IndependentFullScreenPlayer: moderate shrink, min 0.8f
+                    scaleX = (1f - (dragOffset / 800f)).coerceAtLeast(0.8f)
+                    scaleY = (1f - (dragOffset / 800f)).coerceAtLeast(0.8f)
                     // Add alpha effect for fade out
                     alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                 }
@@ -260,7 +260,8 @@ fun FullScreenVideoPlayer(
     val activity = context as? Activity
     var showControls by remember { mutableStateOf(false) } // Start with controls hidden
     var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
-    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) } // horizontal offset (for swipe)
+    var verticalDragOffset by remember { mutableFloatStateOf(0f) } // vertical offset (for drag-to-exit)
 
     // Get the dedicated full screen player
     val exoPlayer = remember {
@@ -376,13 +377,24 @@ fun FullScreenVideoPlayer(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
+                        // Horizontal swipe
                         if (abs(dragOffset) > 100f) {
                             onHorizontalSwipe?.invoke(if (dragOffset > 0) 1 else -1)
                         }
+                        // Vertical drag-to-exit
+                        if (verticalDragOffset > 220f) {
+                            onClose()
+                        }
                         dragOffset = 0f
+                        verticalDragOffset = 0f
                     },
-                    onDrag = { _, dragAmount ->
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        // Track both directions
                         dragOffset += dragAmount.x
+                        if (dragAmount.y > 0) {
+                            verticalDragOffset += dragAmount.y
+                        }
                     }
                 )
             }
@@ -399,6 +411,14 @@ fun FullScreenVideoPlayer(
             },
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    // Apply vertical drag visuals (same feel as other fullscreen variant)
+                    translationY = verticalDragOffset
+                    // Unified scaling with IndependentFullScreenPlayer: moderate shrink, min 0.8f
+                    scaleX = (1f - (verticalDragOffset / 800f)).coerceAtLeast(0.8f)
+                    scaleY = (1f - (verticalDragOffset / 800f)).coerceAtLeast(0.8f)
+                    alpha = 1f - (verticalDragOffset / 500f).coerceAtMost(0.3f)
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
