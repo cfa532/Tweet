@@ -51,6 +51,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     
     // Track if ViewModel has been initialized to prevent race conditions
     private var isInitialized = false
+    // Remember which alphaId produced content for the current guest session
+    private var selectedAlphaIdForGuest: MimeiId? = null
 
     init {
         // Start listening to notifications immediately when ViewModel is created
@@ -154,23 +156,37 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
 
         if (appUser.isGuest()) {
-            // For guest users: call getTweetsByUser() to fetch tweets
+            // For guest users: fetch alpha user's own tweets and merge results
             val alphaIds = getAlphaIds()
             if (alphaIds.isEmpty()) {
                 Timber.tag("TweetFeedViewModel").w("No alpha IDs configured, returning empty list for guest user")
                 return emptyList()
             }
-            val defaultUserId = alphaIds.first()
+            val chosenAlphaId = selectedAlphaIdForGuest ?: alphaIds.first()
+
+            // Immediately surface any cached tweets scoped to chosen alphaId to avoid blank UI
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
-                    // only show default tweets to guest
-                    .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
+                    .filter { tweet: Tweet -> tweet.authorId == chosenAlphaId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
                 allTweets
             }
-            val result = getTweets(defaultUserId, pageNumber)
-            return result
+
+            // Determine a working alphaId on first load if needed
+            val userIdsToTry: List<MimeiId> = if (selectedAlphaIdForGuest == null && pageNumber == 0) alphaIds else listOf(chosenAlphaId)
+
+            var aggregated: List<Tweet?> = emptyList()
+            for (candidate in userIdsToTry) {
+                val result = getTweets(candidate, pageNumber)
+                aggregated = result
+                val validCount = result.count { it != null }
+                if (validCount > 0) {
+                    selectedAlphaIdForGuest = candidate
+                    break
+                }
+            }
+            return aggregated
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
