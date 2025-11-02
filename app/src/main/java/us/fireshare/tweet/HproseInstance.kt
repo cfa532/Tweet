@@ -1056,8 +1056,6 @@ object HproseInstance {
                             TweetCacheManager.saveUser(appUser)
                             
                             // Notify other ViewModels that user data has been updated
-                            // Pass a new user object to ensure recompose is triggered
-                            Timber.tag("uploadTweet").d("Posting UserDataUpdated event: userId=${appUser.mid}, tweetCount=${appUser.tweetCount}")
                             TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
                         }
                     } catch (e: Exception) {
@@ -1334,8 +1332,6 @@ object HproseInstance {
                         TweetCacheManager.saveUser(appUser)
                         
                         // Notify other ViewModels that user data has been updated
-                        // Pass a new user object to ensure recompose is triggered
-                        Timber.tag("deleteTweet").d("Posting UserDataUpdated event: userId=${appUser.mid}, tweetCount=${appUser.tweetCount}")
                         TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
                     }
                 } catch (e: Exception) {
