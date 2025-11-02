@@ -6,7 +6,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Environment
 import android.widget.Toast
-import us.fireshare.tweet.R
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,6 +46,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType

@@ -2,10 +2,10 @@ package us.fireshare.tweet.utils
 
 import android.content.Context
 import us.fireshare.tweet.R
+import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import java.io.IOException
 
 object ErrorMessageUtils {
     

@@ -26,7 +26,6 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -50,10 +49,10 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.service.MediaUploadService
+import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
-import us.fireshare.tweet.utils.ErrorMessageUtils
 import java.io.File
 import java.util.UUID
 import java.util.regex.Pattern
@@ -876,6 +875,7 @@ object HproseInstance {
      * @param userId The user ID to resync with main host node.
      * @return Updated User object from server, or null if resync failed
      */
+    @Suppress("UNREACHABLE_CODE")
     suspend fun syncUser(userId: MimeiId): User? {
         // Check if user is blacklisted
         if (BlackList.isBlacklisted(userId)) {
@@ -884,10 +884,9 @@ object HproseInstance {
         }
 
         // First attempt: Try with cached user's baseUrl
-        return try {
-            // Get the user to access their hproseService (uses cached baseUrl if available)
-            val user = getUser(userId) ?: return null
-            
+        val user = getUser(userId) ?: return null
+
+        val result = try {
             val entry = "resync_user"
             val params = mapOf(
                 "aid" to appId,
@@ -895,25 +894,26 @@ object HproseInstance {
                 "userid" to userId,
             )
             
-            user.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { userData ->
+            val response = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            if (response != null) {
                 // Record successful access
                 BlackList.recordSuccess(userId)
                 
                 // Create updated user from server response
                 val resyncedUser = getUserInstance(userId)
-                resyncedUser.from(userData)
+                resyncedUser.from(response)
                 resyncedUser.baseUrl = user.baseUrl
                 
                 // Update cache with refreshed user data (including baseUrl)
                 TweetCacheManager.saveUser(resyncedUser)
                 
                 Timber.tag("syncUser").d("Successfully synced user: $userId")
-                return resyncedUser
+                resyncedUser
+            } else {
+                // If we reach here, the call returned null, try with empty baseUrl
+                Timber.tag("syncUser").w("Initial sync attempt returned null for user: $userId, retrying with empty baseUrl")
+                syncUserWithEmptyBaseUrl(userId)
             }
-            
-            // If we reach here, the call returned null, try with empty baseUrl
-            Timber.tag("syncUser").w("Initial sync attempt returned null for user: $userId, retrying with empty baseUrl")
-            return syncUserWithEmptyBaseUrl(userId)
         } catch (e: Exception) {
             // Check if it's a network-related error that should trigger retry with empty baseUrl
             val isNetworkError = ErrorMessageUtils.isNetworkError(e)
@@ -921,7 +921,7 @@ object HproseInstance {
             if (isNetworkError) {
                 Timber.tag("syncUser").w("Network error during sync for user: $userId, retrying with empty baseUrl. Error: ${e.message}")
                 // Retry with empty baseUrl to force IP resolution
-                return syncUserWithEmptyBaseUrl(userId)
+                syncUserWithEmptyBaseUrl(userId)
             } else {
                 // Record failed access
                 BlackList.recordFailure(userId)
@@ -929,9 +929,10 @@ object HproseInstance {
                 Timber.tag("syncUser").e("Error refreshing user: $userId")
                 Timber.tag("syncUser").e("Exception: $e")
                 
-                return null
+                null
             }
         }
+        return result
     }
 
     /**

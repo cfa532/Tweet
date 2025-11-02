@@ -1,15 +1,12 @@
 package us.fireshare.tweet.widget
 
 import android.content.Context
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
-import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.Tweet
 
 /**
  * Singleton manager for the independent fullscreen video player.

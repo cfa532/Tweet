@@ -16,7 +16,6 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SearchViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
-import us.fireshare.tweet.ActivityViewModel
 import javax.inject.Singleton
 
 @Module

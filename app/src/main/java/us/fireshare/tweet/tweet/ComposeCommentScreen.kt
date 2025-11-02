@@ -2,7 +2,6 @@ package us.fireshare.tweet.tweet
 
 import android.net.Uri
 import android.widget.Toast
-import us.fireshare.tweet.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,7 +29,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.ui.components.ActionButtonsRow
 import us.fireshare.tweet.ui.components.AttachmentPreviewRow
