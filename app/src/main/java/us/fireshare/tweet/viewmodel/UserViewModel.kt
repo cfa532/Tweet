@@ -1302,7 +1302,16 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Listen to tweet notifications and update user's tweet lists accordingly
      */
+    private var isListeningToNotifications = false
+    
     fun startListeningToNotifications() {
+        // Prevent multiple listeners
+        if (isListeningToNotifications) {
+            Timber.tag("UserViewModel").d("Already listening to notifications for userId: $userId, skipping")
+            return
+        }
+        isListeningToNotifications = true
+        Timber.tag("UserViewModel").d("Starting notification listener for userId: $userId")
         viewModelScope.launch {
             TweetNotificationCenter.events.collect { event ->
                 when (event) {
@@ -1362,15 +1371,30 @@ class UserViewModel @AssistedInject constructor(
                     is TweetEvent.UserDataUpdated -> {
                         // Update user data if this is the current user
                         if (event.user.mid == userId) {
-                            Timber.tag("UserViewModel").d("Received UserDataUpdated event for user: ${event.user.mid}")
-                            _user.value = event.user
+                            Timber.tag("UserViewModel").d("Received UserDataUpdated event for user: ${event.user.mid}, tweetCount: ${event.user.tweetCount}, current tweetCount: ${_tweetCount.value}")
                             
-                            // Update all count variables to match the updated user
-                            _bookmarksCount.value = event.user.bookmarksCount
-                            _favoritesCount.value = event.user.favoritesCount
-                            _followersCount.value = event.user.followersCount
-                            _followingsCount.value = event.user.followingCount
-                            _tweetCount.value = event.user.tweetCount
+                            // Ensure appUser is also updated
+                            if (userId == appUser.mid && appUser.tweetCount != event.user.tweetCount) {
+                                Timber.tag("UserViewModel").d("Syncing appUser with updated data")
+                                appUser = event.user.copy()
+                            }
+                            
+                            // Create a new user object to trigger recompose
+                            val updatedUser = event.user.copy()
+                            
+                            // Update StateFlow values - these trigger recomposition automatically
+                            // Use update{} to ensure StateFlow detects the change
+                            _user.value = updatedUser
+                            _bookmarksCount.value = updatedUser.bookmarksCount
+                            _favoritesCount.value = updatedUser.favoritesCount
+                            _followersCount.value = updatedUser.followersCount
+                            _followingsCount.value = updatedUser.followingCount
+                            // Explicitly update tweetCount - StateFlow will trigger recomposition
+                            _tweetCount.value = updatedUser.tweetCount
+                            
+                            Timber.tag("UserViewModel").d("Updated all StateFlows - tweetCount: ${_tweetCount.value}, userId: $userId")
+                        } else {
+                            Timber.tag("UserViewModel").d("UserDataUpdated event ignored - event.user.mid: ${event.user.mid} != userId: $userId")
                         }
                     }
 

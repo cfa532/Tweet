@@ -883,8 +883,9 @@ object HproseInstance {
             return null
         }
 
+        // First attempt: Try with cached user's baseUrl
         return try {
-            // Get the user to access their hproseService
+            // Get the user to access their hproseService (uses cached baseUrl if available)
             val user = getUser(userId) ?: return null
             
             val entry = "resync_user"
@@ -903,17 +904,71 @@ object HproseInstance {
                 resyncedUser.from(userData)
                 resyncedUser.baseUrl = user.baseUrl
                 
-                // Update cache with refreshed user data
+                // Update cache with refreshed user data (including baseUrl)
                 TweetCacheManager.saveUser(resyncedUser)
                 
                 Timber.tag("syncUser").d("Successfully synced user: $userId")
+                return resyncedUser
+            }
+            
+            // If we reach here, the call returned null, try with empty baseUrl
+            Timber.tag("syncUser").w("Initial sync attempt returned null for user: $userId, retrying with empty baseUrl")
+            return syncUserWithEmptyBaseUrl(userId)
+        } catch (e: Exception) {
+            // Check if it's a network-related error that should trigger retry with empty baseUrl
+            val isNetworkError = ErrorMessageUtils.isNetworkError(e)
+            
+            if (isNetworkError) {
+                Timber.tag("syncUser").w("Network error during sync for user: $userId, retrying with empty baseUrl. Error: ${e.message}")
+                // Retry with empty baseUrl to force IP resolution
+                return syncUserWithEmptyBaseUrl(userId)
+            } else {
+                // Record failed access
+                BlackList.recordFailure(userId)
+                
+                Timber.tag("syncUser").e("Error refreshing user: $userId")
+                Timber.tag("syncUser").e("Exception: $e")
+                
+                return null
+            }
+        }
+    }
+
+    /**
+     * Helper function to sync user with empty baseUrl to force IP resolution
+     */
+    private suspend fun syncUserWithEmptyBaseUrl(userId: MimeiId): User? {
+        return try {
+            // Force IP resolution by using empty baseUrl
+            val user = getUser(userId, baseUrl = "") ?: return null
+            
+            val entry = "resync_user"
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "userid" to userId,
+            )
+            
+            user.hproseService?.runMApp<Map<String, Any>>(entry, params)?.let { userData ->
+                // Record successful access
+                BlackList.recordSuccess(userId)
+                
+                // Create updated user from server response
+                val resyncedUser = getUserInstance(userId)
+                resyncedUser.from(userData)
+                resyncedUser.baseUrl = user.baseUrl
+                
+                // Update cache with refreshed user data (including resolved baseUrl)
+                TweetCacheManager.saveUser(resyncedUser)
+                
+                Timber.tag("syncUser").d("Successfully synced user: $userId with resolved baseUrl: ${user.baseUrl}")
                 resyncedUser
             }
         } catch (e: Exception) {
             // Record failed access
             BlackList.recordFailure(userId)
             
-            Timber.tag("syncUser").e("Error refreshing user: $userId")
+            Timber.tag("syncUser").e("Error refreshing user with empty baseUrl: $userId")
             Timber.tag("syncUser").e("Exception: $e")
             
             null
@@ -991,15 +1046,19 @@ object HproseInstance {
                     
                     // Refresh appUser from server to get updated tweetCount and other properties
                     try {
-                        // Add a small delay to ensure server has processed the new tweet
-                        delay(500)
-                        val refreshedUser = getUser(appUser.mid, maxRetries = 1)
+                        // Invalidate cache to force fresh fetch from server
+                        TweetCacheManager.removeCachedUser(appUser.mid)
+                        val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
-                            appUser = refreshedUser
+                            // Create a new user object to trigger recompose
+                            val updatedUser = refreshedUser.copy()
+                            appUser = updatedUser
                             TweetCacheManager.saveUser(appUser)
                             
                             // Notify other ViewModels that user data has been updated
-                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
+                            // Pass a new user object to ensure recompose is triggered
+                            Timber.tag("uploadTweet").d("Posting UserDataUpdated event: userId=${appUser.mid}, tweetCount=${appUser.tweetCount}")
+                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
                         }
                     } catch (e: Exception) {
                         Timber.tag("uploadTweet").w("Failed to refresh appUser after upload: $e")
@@ -1265,13 +1324,19 @@ object HproseInstance {
                 
                 // Refresh appUser from server to get updated tweetCount and other properties
                 try {
-                    val refreshedUser = getUser(appUser.mid, maxRetries = 1)
+                    // Invalidate cache to force fresh fetch from server
+                    TweetCacheManager.removeCachedUser(appUser.mid)
+                    val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                     if (refreshedUser != null && !refreshedUser.isGuest()) {
-                        appUser = refreshedUser
+                        // Create a new user object to trigger recompose
+                        val updatedUser = refreshedUser.copy()
+                        appUser = updatedUser
                         TweetCacheManager.saveUser(appUser)
                         
                         // Notify other ViewModels that user data has been updated
-                        TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
+                        // Pass a new user object to ensure recompose is triggered
+                        Timber.tag("deleteTweet").d("Posting UserDataUpdated event: userId=${appUser.mid}, tweetCount=${appUser.tweetCount}")
+                        TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
                     }
                 } catch (e: Exception) {
                     Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
@@ -1509,6 +1574,9 @@ object HproseInstance {
      */
     private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3): Boolean {
         Timber.tag("updateUserFromServer").d("🔄 STARTING USER UPDATE WITH RETRY: userId: ${user.mid}, maxRetries: $maxRetries")
+        val originalBaseUrl = user.baseUrl
+        var hasTriedEmptyBaseUrl = false
+        
         repeat(maxRetries) { attempt ->
             try {
                 val entry = "get_user"
@@ -1576,6 +1644,26 @@ object HproseInstance {
                     return false
                 } else {
                     Timber.tag("updateUserFromServer").d("🌐 NETWORK ERROR: userId: ${user.mid}, will retry, error: ${e.message}")
+                    
+                    // If this is a network error and we haven't tried with empty baseUrl yet, try it now
+                    if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
+                        Timber.tag("updateUserFromServer").d("🔄 RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
+                        // Clear the cached service first
+                        user.clearHproseService()
+                        // Set baseUrl to empty to force IP resolution
+                        user.baseUrl = ""
+                        // Get a new provider IP to resolve the server address
+                        val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
+                        if (newProviderIP != null) {
+                            user.baseUrl = "http://$newProviderIP"
+                            Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
+                            hasTriedEmptyBaseUrl = true
+                        } else {
+                            Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
+                            // Restore original baseUrl if we can't resolve
+                            user.baseUrl = originalBaseUrl
+                        }
+                    }
                 }
             }
             

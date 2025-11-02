@@ -2,6 +2,10 @@
 <project version="4">
   <component name="CompilerConfiguration">
     <option name="PARALLEL_COMPILATION_OPTION" value="Automatic" />
-    <bytecodeTargetLevel target="17" />
+    <bytecodeTargetLevel target="17">
+      <module name="Tweet" target="21" />
+      <module name="Tweet.main" target="21" />
+      <module name="Tweet.test" target="21" />
+    </bytecodeTargetLevel>
   </component>
 </project>
