@@ -9,7 +9,7 @@ The "play" build variant is a third product flavor that's based on the full vers
 |---------|-------------|--------------|--------|---------|
 | **mini** | 67 | 38-mini | ❌ No | Lightweight version without local video processing |
 | **full** | 69 | 38 | ✅ Yes | Complete version with local video processing |
-| **play** | 71 | 38-play | ✅ Yes | Play Store version with specific configurations |
+| **play** | 73 | 38-play | ✅ Yes | Play Store version with specific configurations |
 
 ## Play Variant Configuration
 
@@ -18,7 +18,7 @@ The "play" build variant is a third product flavor that's based on the full vers
 create("play") {
     dimension = "version"
     versionNameSuffix = "-play"
-    versionCode = 71  // Play version gets versionCode 71 (increased)
+    versionCode = 73  // Play version code increased for release
     buildConfigField("Boolean", "IS_MINI_VERSION", "false")
     buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
     // Play version is based on full version but with different settings
