@@ -21,6 +21,7 @@
     <string name="image_saved_to_gallery">画像がギャラリーに保存されました</string>
     <string name="failed_to_save_image">画像の保存に失敗しました</string>
     <string name="camera_permission_required">カメラの権限が必要です</string>
+    <string name="uploading_attachment_background">添付ファイルをバックグラウンドでアップロード中...</string>
     <string name="sending_attachment_background">添付ファイルをバックグラウンドで送信中...</string>
     <string name="message_failed_send_tap_error">メッセージの送信に失敗しました - タップしてエラー詳細を確認</string>
     <string name="more">その他</string>

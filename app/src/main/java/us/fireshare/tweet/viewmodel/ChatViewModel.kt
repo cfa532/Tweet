@@ -32,6 +32,7 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.toChatMessage
 import us.fireshare.tweet.service.SendChatMessageWorker
+import us.fireshare.tweet.R
 
 @HiltViewModel( assistedFactory = ChatViewModel.ChatViewModelFactory::class)
 class ChatViewModel @AssistedInject constructor(
@@ -122,19 +123,21 @@ class ChatViewModel @AssistedInject constructor(
             _chatMessages.value += message
             chatRepository.insertMessage(message)
             
+            // Update ChatSession immediately so ChatListView reflects the change
+            chatSessionRepository.updateChatSession(
+                appUser.mid,
+                receiptId,
+                hasNews = false
+            )
+            chatListViewModel?.updateSession(message, hasNews = false)
+            
             // Send message and get result
             val (success, errorMsg) = HproseInstance.sendMessage(receiptId, message)
             
             if (success) {
-                // Message sent successfully, update session
-                chatSessionRepository.updateChatSession(
-                    appUser.mid,
-                    receiptId,
-                    hasNews = false
-                )
+                // Message sent successfully, ensure session is updated (already updated above)
                 Timber.tag("ChatViewModel")
-                    .d("sendTextMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
-                chatListViewModel?.updateSession(message, hasNews = false)
+                    .d("sendTextMessage message sent successfully: ${message.content}")
                 
                 // Trigger scroll to bottom
                 _shouldScrollToBottom.value = true
@@ -163,7 +166,7 @@ class ChatViewModel @AssistedInject constructor(
         context: Context
     ) {
         // Show sending status toast
-        _toastMessage.value = "Uploading attachment in background..."
+        _toastMessage.value = context.getString(R.string.uploading_attachment_background)
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
@@ -204,19 +207,18 @@ class ChatViewModel @AssistedInject constructor(
 
                                 // Insert message to database
                                 chatRepository.insertMessage(event.message)
-
-                                // Update chat session
-                                chatSessionRepository.updateChatSession(
-                                    appUser.mid,
-                                    receiptId,
-                                    hasNews = false
-                                )
                                 
                                 // Trigger scroll to bottom for messages from current user
                                 if (event.message.authorId == appUser.mid) {
                                     _shouldScrollToBottom.value = true
                                 }
                             }
+                            // Update chat session (always update, even if message already exists)
+                            chatSessionRepository.updateChatSession(
+                                appUser.mid,
+                                receiptId,
+                                hasNews = false
+                            )
                             chatListViewModel?.updateSession(event.message, hasNews = false)
                         }
                     }

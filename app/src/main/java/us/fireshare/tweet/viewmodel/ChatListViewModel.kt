@@ -48,48 +48,53 @@ class ChatListViewModel @Inject constructor(
      * If a receiptId is given, update its hasNews message flag to false.
      * */
     fun updateSession(msg: ChatMessage?, hasNews: Boolean = false, receiptId: MimeiId? = null) {
-        val targetReceiptId =
-            receiptId ?: if (msg?.receiptId == appUser.mid) msg.authorId else msg?.receiptId
-
-        val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
-
-        if (existingSession != null) {
-            val updatedSession = existingSession.copy(
-                hasNews = if (receiptId != null) false else hasNews,
-                lastMessage = msg ?: existingSession.lastMessage,
-                timestamp = msg?.timestamp ?: existingSession.timestamp
-            )
-            _chatSessions.update { sessions ->
-                (sessions - existingSession + updatedSession).sortedByDescending { it.timestamp }
-            }
-        } else if (msg != null) { // Only create a new session if a message is provided
-            _chatSessions.update { sessions ->
-                sessions + ChatSession(
-                    id = ChatSession.generateSessionId(), // Generate UUID for session
-                    userId = appUser.mid,
-                    receiptId = msg.receiptId,
-                    hasNews = hasNews,
-                    lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()) // Will be updated when session is saved
-                )
+        if (msg == null && receiptId == null) {
+            return // Nothing to update
+        }
+        
+        // Determine the receiptId for the session to update
+        // For outgoing messages: use msg.receiptId (the recipient)
+        // For incoming messages: use msg.authorId (the sender)
+        // If receiptId parameter is provided, use that
+        val targetReceiptId = receiptId ?: run {
+            when {
+                msg == null -> null
+                msg.authorId == appUser.mid -> msg.receiptId // Outgoing: update session with recipient
+                else -> msg.authorId // Incoming: update session with sender
             }
         }
+        
+        if (targetReceiptId == null) {
+            return
+        }
 
-        // Update 'hasNews' for the sender/receiver session if msg is not null
-        if (msg != null) {
-            val receiptIdForNewsUpdate =
-                if (msg.authorId == appUser.mid) msg.receiptId else msg.authorId
-            _chatSessions.value.find { it.receiptId == receiptIdForNewsUpdate }
-                ?.let { sessionForNewsUpdate ->
-                    val updatedSessionForNewsUpdate = sessionForNewsUpdate.copy(
-                        hasNews = false,
-                        lastMessage = msg,
-                        timestamp = msg.timestamp
-                    )
-                    _chatSessions.update { sessions ->
-                        (sessions - sessionForNewsUpdate + updatedSessionForNewsUpdate)
-                            .sortedByDescending { it.timestamp }
-                    }
+        // Ensure update happens on main thread for proper Compose observation
+        viewModelScope.launch(Dispatchers.Main) {
+            val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
+
+            if (existingSession != null) {
+                // Update existing session
+                val updatedSession = existingSession.copy(
+                    hasNews = if (receiptId != null) false else hasNews,
+                    lastMessage = msg ?: existingSession.lastMessage,
+                    timestamp = msg?.timestamp ?: existingSession.timestamp
+                )
+                _chatSessions.update { sessions ->
+                    (sessions - existingSession + updatedSession).sortedByDescending { it.timestamp }
                 }
+            } else if (msg != null) {
+                // Create new session if message is provided
+                _chatSessions.update { sessions ->
+                    (sessions + ChatSession(
+                        id = ChatSession.generateSessionId(),
+                        userId = appUser.mid,
+                        receiptId = targetReceiptId,
+                        hasNews = hasNews,
+                        lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()),
+                        timestamp = msg.timestamp
+                    )).sortedByDescending { it.timestamp }
+                }
+            }
         }
     }
 
