@@ -130,6 +130,19 @@ fun ChatListScreen(
         }
     }
 
+    // Filter out chat sessions with no messages
+    val filteredChatSessions = remember(chatSessions) {
+        chatSessions.filter { session ->
+            val message = session.lastMessage
+            // Include session if it has content or attachments (exclude empty/placeholder messages)
+            val hasContent = !message.content.isNullOrBlank()
+            val hasAttachments = !message.attachments.isNullOrEmpty()
+            // Filter out placeholder messages like "New chat started"
+            val isPlaceholder = message.content == "New chat started"
+            (hasContent || hasAttachments) && !isPlaceholder
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -155,6 +168,23 @@ fun ChatListScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            // manually prevent fast continuous click of a button
+                            val currentTime = SystemClock.elapsedRealtime()
+                            if (currentTime - lastClickTime > debounceTime) {
+                                showFollowingsDialog = true
+                                lastClickTime = currentTime
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = stringResource(R.string.add_chat),
+                        )
+                    }
+                },
             )
         },
         bottomBar = { BottomNavigationBar(navController = navController, selectedIndex = 1) }
@@ -170,7 +200,7 @@ fun ChatListScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Top
             ) {
-                items(chatSessions, key = {it.receiptId}) { chatSession ->
+                items(filteredChatSessions, key = {it.receiptId}) { chatSession ->
                     ChatSession(chatSession, navController, viewModel)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
@@ -179,7 +209,7 @@ fun ChatListScreen(
                     )
                 }
                 item {
-                    if (chatSessions.isEmpty()) {
+                    if (filteredChatSessions.isEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
