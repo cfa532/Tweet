@@ -82,10 +82,9 @@ fun FullScreenVideoPlayer(
                         existingPlayer.playWhenReady = true
                     }
                     Player.STATE_ENDED -> {
-                        // If video ends, restart it
-                        Timber.d("FullScreenVideoPlayer: Video ended, restarting")
-                        existingPlayer.seekTo(0)
-                        existingPlayer.playWhenReady = true
+                        // Rewind is handled by CreateExoPlayer listener
+                        Timber.d("FullScreenVideoPlayer: Video ended")
+                        existingPlayer.playWhenReady = false
                     }
                     Player.STATE_BUFFERING -> {
                         // Video is buffering, this is normal - no action needed
@@ -105,6 +104,10 @@ fun FullScreenVideoPlayer(
         
         onDispose {
             existingPlayer.removeListener(listener)
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer: Exiting fullscreen, stopping playback")
+            existingPlayer.pause()
+            existingPlayer.playWhenReady = false
         }
     }
 
@@ -139,6 +142,10 @@ fun FullScreenVideoPlayer(
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer: Exiting fullscreen, stopping playback")
+            existingPlayer.pause()
+            existingPlayer.playWhenReady = false
         }
     }
 
@@ -184,9 +191,17 @@ fun FullScreenVideoPlayer(
             existingPlayer.prepare()
         }
         
-        // Start playback if ready
+        // Autoplay when entering fullscreen
         if (existingPlayer.playbackState == Player.STATE_READY) {
+            Timber.d("FullScreenVideoPlayer: Player ready, autoplaying")
             existingPlayer.playWhenReady = true
+        } else {
+            // Wait for player to become ready, then autoplay
+            kotlinx.coroutines.delay(100)
+            if (existingPlayer.playbackState == Player.STATE_READY) {
+                Timber.d("FullScreenVideoPlayer: Player ready after delay, autoplaying")
+                existingPlayer.playWhenReady = true
+            }
         }
     }
 
@@ -319,6 +334,10 @@ fun FullScreenVideoPlayer(
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer (API 30+): Exiting fullscreen, stopping playback")
+            exoPlayer.pause()
+            exoPlayer.playWhenReady = false
         }
     }
 
@@ -353,21 +372,7 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Handle auto-replay
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && autoReplay) {
-                    exoPlayer.seekTo(0)
-                    exoPlayer.play()
-                }
-            }
-        }
-        exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-        }
-    }
+    // Note: Rewind is handled by CreateExoPlayer listener, no need to duplicate here
 
     // Full screen video player UI
     Box(

@@ -283,10 +283,32 @@ fun IndependentFullScreenPlayer(
         }
     }
     
+    // Autoplay when entering fullscreen
+    LaunchedEffect(exoPlayer) {
+        exoPlayer?.let { player ->
+            // Wait a bit for player to be ready, then autoplay
+            kotlinx.coroutines.delay(200)
+            if (player.playbackState == androidx.media3.common.Player.STATE_READY) {
+                Timber.d("IndependentFullScreenPlayer - Player ready, autoplaying")
+                player.playWhenReady = true
+            } else {
+                // If not ready yet, wait and try again
+                kotlinx.coroutines.delay(300)
+                if (player.playbackState == androidx.media3.common.Player.STATE_READY) {
+                    Timber.d("IndependentFullScreenPlayer - Player ready after delay, autoplaying")
+                    player.playWhenReady = true
+                }
+            }
+        }
+    }
+    
     // Cleanup on dispose
     DisposableEffect(Unit) {
         onDispose {
-            Timber.d("IndependentFullScreenPlayer - Disposing, cleaning up manager")
+            Timber.d("IndependentFullScreenPlayer - Disposing, stopping playback and cleaning up manager")
+            // Stop playback before cleanup
+            exoPlayer?.pause()
+            exoPlayer?.playWhenReady = false
             FullScreenPlayerManager.cleanup()
         }
     }

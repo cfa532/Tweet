@@ -18,32 +18,27 @@ object FullScreenPlayerManager {
     private var currentVideoIndex: Int = 0
     private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
-    private var context: Context? = null
+    private var applicationContext: Context? = null // Use Application context to avoid memory leaks
     private var isManualNavigation: Boolean = false // Flag to prevent double progression
     
     /**
      * Initialize the singleton player instance
      */
     fun initialize(context: Context) {
-        this.context = context
+        // Store Application context to avoid memory leaks
+        this.applicationContext = context.applicationContext
         if (exoPlayer == null) {
             Timber.d("FullScreenPlayerManager - Initializing singleton player")
-            exoPlayer = createExoPlayer(context, "")
+            exoPlayer = createExoPlayer(context.applicationContext, "")
             
-            // Add listener for automatic video progression
+            // Add listener for automatic video rewinding when finished
             exoPlayer?.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
                     when (playbackState) {
                         Player.STATE_ENDED -> {
-                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next (manual navigation: $isManualNavigation)")
-                            // Auto-play next video when current video ends, but only if not manually navigated
-                            if (!isManualNavigation) {
-                                playNextVideo()
-                            } else {
-                                Timber.d("FullScreenPlayerManager - Skipping auto-progression due to manual navigation")
-                                isManualNavigation = false // Reset flag for next video
-                            }
+                            // Rewind is handled by CreateExoPlayer listener
+                            Timber.d("FullScreenPlayerManager - Video ended")
                         }
                         Player.STATE_READY -> {
                             Timber.d("FullScreenPlayerManager - Video ready to play")
@@ -150,7 +145,7 @@ object FullScreenPlayerManager {
      */
     private fun loadVideo(videoUrl: String, mediaType: MediaType) {
         val player = exoPlayer ?: return
-        val ctx = context ?: return
+        val ctx = applicationContext ?: return
         
         try {
             // Create a new ExoPlayer with the video URL (like VideoPreview does when videoMid is null)
@@ -161,20 +156,14 @@ object FullScreenPlayerManager {
             player.release()
             exoPlayer = newPlayer
             
-            // Add listener for automatic video progression to the new player
+            // Add listener for automatic video rewinding when finished
             newPlayer.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
                     when (playbackState) {
                         Player.STATE_ENDED -> {
-                            Timber.d("FullScreenPlayerManager - Video ended, auto-playing next (manual navigation: $isManualNavigation)")
-                            // Auto-play next video when current video ends, but only if not manually navigated
-                            if (!isManualNavigation) {
-                                playNextVideo()
-                            } else {
-                                Timber.d("FullScreenPlayerManager - Skipping auto-progression due to manual navigation")
-                                isManualNavigation = false // Reset flag for next video
-                            }
+                            // Rewind is handled by CreateExoPlayer listener
+                            Timber.d("FullScreenPlayerManager - Video ended")
                         }
                         Player.STATE_READY -> {
                             Timber.d("FullScreenPlayerManager - Video ready to play")
@@ -238,11 +227,14 @@ object FullScreenPlayerManager {
      */
     fun cleanup() {
         Timber.d("FullScreenPlayerManager - Cleaning up resources")
+        // Stop playback before releasing
+        exoPlayer?.pause()
+        exoPlayer?.playWhenReady = false
         exoPlayer?.release()
         exoPlayer = null
         currentVideoList = null
         currentVideoIndex = 0
-        context = null
+        applicationContext = null
         onVideoChanged = null
         onPlayerStateChanged = null
     }

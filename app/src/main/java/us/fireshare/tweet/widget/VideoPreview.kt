@@ -199,9 +199,7 @@ fun VideoPreview(
                     hasError = false
                 }
                 androidx.media3.common.Player.STATE_ENDED -> {
-                    // Video ended, seek to beginning and start if needed
-                    exoPlayer.seekTo(0)
-                    exoPlayer.playWhenReady = autoPlay
+                    // Video ended - rewind is handled by CreateExoPlayer listener
                     hasError = false
                 }
                 else -> {
@@ -261,9 +259,8 @@ fun VideoPreview(
                     exoPlayer.playWhenReady = autoPlay
                 }
                 androidx.media3.common.Player.STATE_ENDED -> {
-                    // Video ended, seek to beginning first
-                    exoPlayer.seekTo(0)
-                    exoPlayer.playWhenReady = autoPlay
+                    // Video ended - rewind is handled by CreateExoPlayer listener
+                    exoPlayer.playWhenReady = false
                 }
                 else -> {
                     // For other states, just set play state
@@ -347,7 +344,7 @@ fun VideoPreview(
 
                     androidx.media3.common.Player.STATE_ENDED -> {
                         isLoading = false
-                        // Ensure video doesn't restart by setting playWhenReady to false
+                        // Rewind is handled by CreateExoPlayer listener, but we still need to handle callbacks
                         exoPlayer.playWhenReady = false
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)

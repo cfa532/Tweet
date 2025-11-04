@@ -110,7 +110,10 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null,
                             Timber.tag("createExoPlayer").d("Player idle for URL: $url")
                         }
                         androidx.media3.common.Player.STATE_ENDED -> {
-                            Timber.tag("createExoPlayer").d("Player ended for URL: $url")
+                            // Auto-rewind when video ends - applies to all videos (fullscreen, MediaItemView, DetailView, etc.)
+                            Timber.tag("createExoPlayer").d("Player ended for URL: $url, rewinding to beginning")
+                            this@apply.seekTo(0)
+                            this@apply.playWhenReady = false
                         }
                     }
                 }
