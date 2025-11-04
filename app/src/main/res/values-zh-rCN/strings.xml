@@ -68,7 +68,6 @@
     <string name="add_chat">添加对话</string>
     <string name="select_user_to_chat">选择聊天用户</string>
     <string name="delete_chat">删除对话</string>
-    <string name="delete_chat_confirmation">确定要删除此对话吗？</string>
     <string name="login_error">用户名或密码错误</string>
     <string name="comment_failed">评论失败</string>
     <string name="comment_uploaded">评论发布成功</string>

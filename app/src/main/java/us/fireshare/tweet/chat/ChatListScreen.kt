@@ -23,8 +23,6 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,7 +47,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -356,145 +353,115 @@ fun ChatSession(
 ) {
     val chatMessage = chatSession.lastMessage
     val user by viewModel.receipt.collectAsState()
-    var showContextMenu by remember { mutableStateOf(false) }
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var showDeleteButton by remember { mutableStateOf(false) }
 
-    Box {
-        Row(
-            modifier = Modifier
-                .padding(8.dp)
-                .clickable {
-                    user.mid.let { navController.navigate(NavTweet.ChatBox(it)) }
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = {
-                            showContextMenu = true
-                        }
-                    )
-                }
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(onClick = {
-                        user.mid.let {
-                            navController.navigate(NavTweet.UserProfile(it))
-                        }
-                    })
-            ) {
-                UserAvatar(user = user)
+    // Auto-hide delete button after 3 seconds
+    LaunchedEffect(showDeleteButton) {
+        if (showDeleteButton) {
+            kotlinx.coroutines.delay(3000)
+            showDeleteButton = false
+        }
+    }
 
-                // show badge of new incoming message
-                if (chatSession.hasNews) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.TopEnd)
-                            .offset(x = (6).dp, y = (-4).dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Email, contentDescription = stringResource(R.string.mail),
-                            tint = MaterialTheme.colorScheme.error
-                        )
+    Row(
+        modifier = Modifier
+            .padding(8.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        if (showDeleteButton) {
+                            showDeleteButton = false
+                        } else {
+                            user.mid.let { navController.navigate(NavTweet.ChatBox(it)) }
+                        }
+                    },
+                    onLongPress = {
+                        showDeleteButton = true
                     }
+                )
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clickable(onClick = {
+                    user.mid.let {
+                        navController.navigate(NavTweet.UserProfile(it))
+                    }
+                })
+        ) {
+            UserAvatar(user = user)
+
+            // show badge of new incoming message
+            if (chatSession.hasNews) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = (6).dp, y = (-4).dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Email, contentDescription = stringResource(R.string.mail),
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
-            Column(
-                modifier = Modifier
-                    .padding(start = 4.dp)
-                    .weight(1f)
+        }
+        Column(
+            modifier = Modifier
+                .padding(start = 4.dp)
+                .weight(1f)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${user.name}@${user.username}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(
-                            Date(
-                                chatMessage.timestamp
-                            )
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
                 Text(
-                    text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
-                        if (chatMessage.authorId == appUser.mid) {
-                            "Attachment sent"
-                        } else {
-                            "Attachment received"
-                        }
+                    text = "${user.name}@${user.username}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(
+                        Date(
+                            chatMessage.timestamp
+                        )
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            Text(
+                text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
+                    if (chatMessage.authorId == appUser.mid) {
+                        "Attachment sent"
                     } else {
-                        chatMessage.content ?: ""
-                    },
-                    style = MaterialTheme.typography.bodyLarge
+                        "Attachment received"
+                    }
+                } else {
+                    chatMessage.content ?: ""
+                },
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+        
+        // Delete button that appears on long press
+        if (showDeleteButton) {
+            Box(
+                modifier = Modifier
+                    .clickable {
+                        chatListViewModel.deleteChatSession(chatSession.receiptId)
+                        showDeleteButton = false
+                    }
+                    .padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.delete_chat),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
-        
-        // Context menu shown on long press
-        DropdownMenu(
-            expanded = showContextMenu,
-            onDismissRequest = { showContextMenu = false }
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Text(text = stringResource(R.string.delete_chat))
-                    }
-                },
-                onClick = {
-                    showContextMenu = false
-                    showDeleteConfirmation = true
-                }
-            )
-        }
-    }
-    
-    // Delete confirmation dialog
-    if (showDeleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmation = false },
-            title = {
-                Text(text = stringResource(R.string.delete_chat))
-            },
-            text = {
-                Text(text = stringResource(R.string.delete_chat_confirmation))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        chatListViewModel.deleteChatSession(chatSession.receiptId)
-                        showDeleteConfirmation = false
-                    }
-                ) {
-                    Text(text = stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDeleteConfirmation = false }
-                ) {
-                    Text(text = stringResource(R.string.cancel))
-                }
-            }
-        )
     }
 }

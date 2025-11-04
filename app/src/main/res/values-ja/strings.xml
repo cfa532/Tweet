@@ -72,8 +72,4 @@
     <string name="video_error_format_not_supported">動画形式がサポートされていません。別の動画をお試しください。</string>
     <string name="video_error_network_issue">動画の読み込みに失敗しました。インターネット接続を確認して再試行してください。</string>
     <string name="video_retry_playback">再生を再試行</string>
-    
-    <!-- Chat related strings -->
-    <string name="delete_chat">チャットを削除</string>
-    <string name="delete_chat_confirmation">このチャットセッションを削除してもよろしいですか？</string>
 </resources>
