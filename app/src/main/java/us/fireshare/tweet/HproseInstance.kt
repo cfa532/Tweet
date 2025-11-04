@@ -192,11 +192,23 @@ object HproseInstance {
                 if (matcher.find()) {
                     matcher.group(1)?.let {
                         val paramMap = Gson().fromJson(it, Map::class.java) as Map<*, *>
-                        _appId = paramMap["mid"].toString()
+                        // For debug builds, always use BuildConfig.APP_ID to ensure correct APP_ID
+                        // For release builds, use the server's mid value
+                        val serverMid = paramMap["mid"]?.toString()
+                        if (BuildConfig.DEBUG) {
+                            // Debug builds: Use BuildConfig.APP_ID, don't overwrite with server value
+                            Timber.tag("initAppEntry").d("Debug build: Using BuildConfig.APP_ID (${BuildConfig.APP_ID}) instead of server mid ($serverMid)")
+                            // _appId is already set from BuildConfig.APP_ID at initialization, keep it
+                        } else {
+                            // Release builds: Use server's mid value
+                            _appId = serverMid ?: BuildConfig.APP_ID
+                            Timber.tag("initAppEntry").d("Release build: Using server mid: $_appId")
+                        }
 
                         /**
                          * The code above makes a call to base URL of the app, get a html page
                          * and tries to extract appId and host IP addresses from source code.
+                         * For debug builds, APP_ID is always from BuildConfig to ensure debug/release separation.
                          *
                          * addrs is an ArrayList of ArrayList of node's IP address pairs.
                          * Each pair is an ArrayList of two elements. The first is the IP address,

@@ -79,12 +79,6 @@ fun ShareScreenshotButton(viewModel: TweetViewModel) {
             viewModel.viewModelScope.launch {
                 guestWarning(context, navController)
             }
-        } else {
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                contentToShare = "${appUser.baseUrl}/entry?mid=${BuildConfig.APP_ID_HASH}" +
-                        "&ver=last&r=${Random.nextFloat()}#/tweet/${tweet.mid}/${tweet.authorId}"
-                showBottomSheet = true
-            }
         }
     }) {
         Row(horizontalArrangement = Arrangement.Center) {

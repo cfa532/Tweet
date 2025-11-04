@@ -42,6 +42,11 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
+        
+        // Default APP_ID (will be overridden by buildTypes)
+        // This ensures APP_ID is always defined and prevents any inheritance issues
+        buildConfigField("String", "APP_ID", "\"\"")
+        buildConfigField("String", "BASE_URL", "\"\"")
     }
     
     signingConfigs {
@@ -78,9 +83,9 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
+            // DEBUG BUILD CONFIG - Different from release
             buildConfigField("String", "BASE_URL", "\"twbe.fireshare.us\"")
-            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
-            buildConfigField("String", "APP_ID_HASH", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
+            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
@@ -97,9 +102,9 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
+            // RELEASE BUILD CONFIG - Different from debug
             buildConfigField("String", "BASE_URL", "\"tweet.fireshare.us\"")
-            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
-            buildConfigField("String", "APP_ID_HASH", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
+            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")  // RELEASE APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")

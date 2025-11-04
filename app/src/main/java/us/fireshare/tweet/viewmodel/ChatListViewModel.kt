@@ -15,6 +15,7 @@ import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.MimeiId
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,9 +35,11 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
+            Timber.tag("ChatListViewModel").d("init: Loading sessions from database")
             chatSessionRepository.getAllSessions().forEach { chatSession ->
                 _chatSessions.update { it + chatSession }
             }
+            Timber.tag("ChatListViewModel").d("init: Loaded ${_chatSessions.value.size} sessions, now checking for new messages")
 
             // Check for new messages on initialization
             previewMessages()
@@ -100,12 +103,20 @@ class ChatListViewModel @Inject constructor(
 
     // check if there are new messages on the server. If so, retrieve the last one for UI update.
     suspend fun previewMessages() {
-        val newMessages = HproseInstance.checkNewMessages() ?: return
+        Timber.tag("ChatListViewModel").d("previewMessages: Starting to check for new messages")
+        val newMessages = HproseInstance.checkNewMessages()
+        if (newMessages == null) {
+            Timber.tag("ChatListViewModel").d("previewMessages: checkNewMessages returned null")
+            return
+        }
+        Timber.tag("ChatListViewModel").d("previewMessages: Found ${newMessages.size} messages from server")
 
         // Filter out messages that already exist in local database
         val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
+        Timber.tag("ChatListViewModel").d("previewMessages: After filtering, ${trulyNewMessages.size} truly new messages")
 
         if (trulyNewMessages.isEmpty()) {
+            Timber.tag("ChatListViewModel").d("previewMessages: No truly new messages, returning")
             return // No truly new messages
         }
 
