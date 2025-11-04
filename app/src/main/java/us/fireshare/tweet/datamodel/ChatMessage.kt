@@ -13,17 +13,30 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 import java.lang.reflect.Type
 import java.util.UUID
 
 // Custom deserializer to handle both Long and Double timestamp values
 class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
+    /**
+     * Validates that a MimeiFileType has all required non-null fields properly set.
+     * This is needed because Gson can bypass Kotlin's null-safety at runtime.
+     */
+    private fun isValidAttachment(attachment: MimeiFileType?): Boolean {
+        if (attachment == null) return false
+        // Check mid - must be non-null and non-blank
+        val midValue = try { attachment.mid } catch (e: Exception) { null }
+        return !midValue.isNullOrBlank()
+    }
+    
     override fun deserialize(
         json: JsonElement?,
         typeOfT: Type?,
@@ -60,12 +73,65 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         // Handle sessionId (optional)
         val sessionId = jsonObject.get("sessionId")?.asString
         
-        // Handle attachments (optional)
+        // Handle attachments (optional) - handle both array and single object
         val attachmentsElement = jsonObject.get("attachments")
-        val attachments = if (attachmentsElement?.isJsonArray == true) {
-            val gson = Gson()
-            gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java).toList()
-        } else null
+        val attachments = when {
+            attachmentsElement == null -> null
+            attachmentsElement.isJsonArray -> {
+                try {
+                    // Use GsonBuilder with MediaTypeDeserializer to properly handle MediaType enum
+                    val gson = GsonBuilder()
+                        .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
+                        .create()
+                    val deserialized = gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java)
+                    // Validate and filter out invalid attachments (mid and type must not be null)
+                    val validAttachments = deserialized.filterNotNull()
+                        .filter { attachment ->
+                            val isValid = isValidAttachment(attachment)
+                            if (!isValid) {
+                                Timber.tag("ChatMessageDeserializer")
+                                    .w("Filtering out invalid attachment: mid=${try { attachment.mid } catch (e: Exception) { "null" }}, type=${try { attachment.type } catch (e: Exception) { "null" }}")
+                            }
+                            isValid
+                        }
+                    // Return null if all attachments were invalid, otherwise return the valid list
+                    if (validAttachments.isEmpty()) {
+                        Timber.tag("ChatMessageDeserializer")
+                            .w("All attachments were invalid, returning null instead of empty list")
+                        null
+                    } else {
+                        validAttachments
+                    }
+                } catch (e: Exception) {
+                    // Log deserialization error but don't fail the whole message
+                    Timber.tag("ChatMessageDeserializer").e(e, "Failed to deserialize attachments array")
+                    null
+                }
+            }
+            attachmentsElement.isJsonObject -> {
+                // Handle single attachment as object (convert to list)
+                try {
+                    // Use GsonBuilder with MediaTypeDeserializer to properly handle MediaType enum
+                    val gson = GsonBuilder()
+                        .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
+                        .create()
+                    val deserialized = gson.fromJson(attachmentsElement, MimeiFileType::class.java)
+                    // Validate attachment (mid and type must not be null)
+                    if (isValidAttachment(deserialized)) {
+                        listOf(deserialized)
+                    } else {
+                        Timber.tag("ChatMessageDeserializer")
+                            .w("Filtering out invalid single attachment: mid=${try { deserialized?.mid } catch (e: Exception) { "null" }}, type=${try { deserialized?.type } catch (e: Exception) { "null" }}")
+                        null
+                    }
+                } catch (e: Exception) {
+                    // Log deserialization error but don't fail the whole message
+                    Timber.tag("ChatMessageDeserializer").e(e, "Failed to deserialize single attachment object")
+                    null
+                }
+            }
+            else -> null
+        }
         
         // Handle success and errorMsg (optional)
         val success = jsonObject.get("success")?.asBoolean ?: true
