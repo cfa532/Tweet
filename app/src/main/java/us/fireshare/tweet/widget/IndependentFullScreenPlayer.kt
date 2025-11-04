@@ -527,8 +527,9 @@ private fun fetchTweetsFromFeed(currentTweet: Tweet): List<Tweet> {
  */
 @Composable
 private fun fetchTweetsFromBookmarks(currentTweet: Tweet): List<Tweet> {
-    // Get UserViewModel from the current composition
-    val userViewModel = hiltViewModel<UserViewModel>()
+    // Get appUserViewModel from SharedViewModel
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+    val userViewModel = sharedViewModel.appUserViewModel
     val bookmarks by userViewModel.bookmarks.collectAsState()
     
     Timber.d("IndependentFullScreenPlayer - Fetched ${bookmarks.size} bookmarks")
@@ -550,8 +551,9 @@ private fun fetchTweetsFromBookmarks(currentTweet: Tweet): List<Tweet> {
  */
 @Composable
 private fun fetchTweetsFromFavorites(currentTweet: Tweet): List<Tweet> {
-    // Get UserViewModel from the current composition
-    val userViewModel = hiltViewModel<UserViewModel>()
+    // Get appUserViewModel from SharedViewModel
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+    val userViewModel = sharedViewModel.appUserViewModel
     val favorites by userViewModel.favorites.collectAsState()
     
     Timber.d("IndependentFullScreenPlayer - Fetched ${favorites.size} favorites")
@@ -573,8 +575,9 @@ private fun fetchTweetsFromFavorites(currentTweet: Tweet): List<Tweet> {
  */
 @Composable
 private fun fetchTweetsFromUserProfile(currentTweet: Tweet): List<Tweet> {
-    // Get UserViewModel from the current composition
-    val userViewModel = hiltViewModel<UserViewModel>()
+    // Get appUserViewModel from SharedViewModel
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+    val userViewModel = sharedViewModel.appUserViewModel
     val tweets by userViewModel.tweets.collectAsState()
     
     Timber.d("IndependentFullScreenPlayer - Fetched ${tweets.size} tweets from user profile")

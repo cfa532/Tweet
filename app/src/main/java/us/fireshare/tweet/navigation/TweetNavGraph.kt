@@ -152,7 +152,9 @@ fun TweetNavGraph(
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
                 val args = it.toRoute<NavTweet.ChatBox>()
+                // Use NavBackStackEntry as viewModelStoreOwner for proper lifecycle management
                 val viewModel = hiltViewModel<ChatViewModel, ChatViewModel.ChatViewModelFactory>(
+                    viewModelStoreOwner = it,
                     key = args.receiptId
                 ) { factory ->
                     factory.create(receiptId = args.receiptId)

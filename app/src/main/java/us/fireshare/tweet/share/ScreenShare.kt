@@ -59,39 +59,6 @@ import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import kotlin.random.Random
 
-@Composable
-fun ShareScreenshotButton(viewModel: TweetViewModel) {
-    val navController = LocalNavController.current
-    val context = LocalContext.current
-    var showBottomSheet by remember { mutableStateOf(false) }
-    var contentToShare by rememberSaveable { mutableStateOf("") }
-    val tweet by viewModel.tweetState.collectAsState()
-
-    if (showBottomSheet) {
-        ShareBottomSheet(
-            onDismiss = { showBottomSheet = false },
-            viewModel = viewModel,
-            contentToShare = contentToShare
-        )
-    }
-    IconButton(onClick = {
-        if (appUser.isGuest()) {
-            viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
-            }
-        }
-    }) {
-        Row(horizontalArrangement = Arrangement.Center) {
-            Icon(
-                painter = painterResource(R.drawable.ic_share),
-                contentDescription = stringResource(R.string.share),
-                modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-}
-
 class ShareOption(val title: String, val painter: Painter, val action: () -> Unit)
 
 @OptIn(ExperimentalMaterial3Api::class)

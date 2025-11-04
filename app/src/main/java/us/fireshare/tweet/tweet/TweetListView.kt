@@ -44,6 +44,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -111,7 +113,13 @@ fun TweetListView(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     
     // Create our own TweetListViewModel instance
-    val tweetListViewModel = hiltViewModel<TweetListViewModel>(key = context)
+    // Use activity scope if parentEntry is null, otherwise use parentEntry for proper lifecycle
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetListViewModel = if (parentEntry != null) {
+        hiltViewModel<TweetListViewModel>(viewModelStoreOwner = parentEntry, key = context)
+    } else {
+        hiltViewModel<TweetListViewModel>(viewModelStoreOwner = activity, key = context)
+    }
 
     // Set our TweetListViewModel instance to SharedViewModel. It will be used by MediaBrowser to
     // play full screen videos in order.
