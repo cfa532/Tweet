@@ -357,16 +357,17 @@ fun ChatSession(
     val chatMessage = chatSession.lastMessage
     val user by viewModel.receipt.collectAsState()
     var showContextMenu by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     Box {
         Row(
             modifier = Modifier
                 .padding(8.dp)
+                .clickable {
+                    user.mid.let { navController.navigate(NavTweet.ChatBox(it)) }
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = {
-                            user.mid.let { navController.navigate(NavTweet.ChatBox(it)) }
-                        },
                         onLongPress = {
                             showContextMenu = true
                         }
@@ -461,9 +462,39 @@ fun ChatSession(
                 },
                 onClick = {
                     showContextMenu = false
-                    chatListViewModel.deleteChatSession(chatSession.receiptId)
+                    showDeleteConfirmation = true
                 }
             )
         }
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = {
+                Text(text = stringResource(R.string.delete_chat))
+            },
+            text = {
+                Text(text = stringResource(R.string.delete_chat_confirmation))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        chatListViewModel.deleteChatSession(chatSession.receiptId)
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text(text = stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false }
+                ) {
+                    Text(text = stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
