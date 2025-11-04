@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 69    // Google Play store version code
+        versionCode = 75    // Google Play store version code
         versionName = "38"   // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -117,7 +117,7 @@ android {
         create("full") {
             dimension = "version"
             versionNameSuffix = ""
-            // Full version uses default versionCode from defaultConfig (currently 69)
+            // Full version uses default versionCode from defaultConfig (currently 70)
             // No override - will use defaultConfig versionCode
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
@@ -126,7 +126,7 @@ android {
         create("mini") {
             dimension = "version"
             versionNameSuffix = "-mini"
-            versionCode = 67  // Mini stays at 67
+            versionCode = 68  // Mini version code
             buildConfigField("Boolean", "IS_MINI_VERSION", "true")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
         }
@@ -134,7 +134,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 73  // Play version code increased for release
+            versionCode = 75  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             // Play version is based on full version but with different settings
