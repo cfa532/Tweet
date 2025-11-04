@@ -78,7 +78,7 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
+            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.us\"")
             buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
             buildConfigField("String", "APP_ID_HASH", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
@@ -97,7 +97,7 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
+            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.us\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
             buildConfigField("String", "APP_ID_HASH", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")

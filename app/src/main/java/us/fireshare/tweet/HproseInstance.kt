@@ -41,6 +41,7 @@ import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
@@ -132,11 +133,15 @@ object HproseInstance {
             val tweetCache = TweetCacheDatabase.getInstance(context)
             dao = tweetCache.tweetDao()
 
+            // Initialize appUser with minimal state - initAppEntry() will set IP-based baseUrl
             appUser = User(
                 mid = TW_CONST.GUEST_ID,
-                baseUrl = preferenceHelper.getAppUrls().first(),
+                baseUrl = null,
                 followingList = getAlphaIds()
             )
+            
+            // CRITICAL: initAppEntry() must complete first and set IP-based baseUrl
+            // This is suspend, so init() will wait for it to complete
             initAppEntry()
         } catch (e: Exception) {
             Timber.tag("HproseInstance").e(e, "Error during HproseInstance initialization")
@@ -161,9 +166,13 @@ object HproseInstance {
      * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
      * */
     private suspend fun initAppEntry() {
+        val urls = preferenceHelper.getAppUrls()
+        Timber.tag("initAppEntry").d("Attempting to initialize app entry with ${urls.size} URL(s): $urls")
+        
         // make sure no stale data during retry init.
-        for (url in preferenceHelper.getAppUrls()) {
+        for (url in urls) {
             try {
+                Timber.tag("initAppEntry").d("Trying URL: $url")
                 /**
                  * retrieve window.Param from page source code of http://base_url
                  * window.setParam({
@@ -195,10 +204,12 @@ object HproseInstance {
                          *
                          * bestIp is the IP with the smallest response time from valid public IPs.
                          * */
-                        Timber.tag("initAppEntry").d("$paramMap")
+                        Timber.tag("initAppEntry").d("Successfully parsed paramMap: $paramMap")
                         val bestIp = filterIpAddresses(paramMap["addrs"] as List<String>)
 
                         appUser = appUser.copy(baseUrl = "http://$bestIp")
+                        Timber.tag("initAppEntry").d("Set baseUrl to IP: http://$bestIp")
+                        
                         val userId = preferenceHelper.getUserId()
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
                             /**
@@ -216,16 +227,27 @@ object HproseInstance {
                             TweetCacheManager.saveUser(appUser)
                             Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
                         }
-                        // once a workable URL is found, break.
+                        // once a workable URL is found, return successfully
+                        Timber.tag("initAppEntry").d("✅ Successfully initialized app entry")
                         return
                     }
                 } else {
-                    Timber.tag("initAppEntry").e("No data found within window.setParam()")
+                    Timber.tag("initAppEntry").w("No data found within window.setParam() for URL: $url")
                 }
             } catch (e: Exception) {
-                Timber.tag("initAppEntry").e(e.toString())
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
+                if (isNetworkError) {
+                    Timber.tag("initAppEntry").w(e, "Network error connecting to URL: $url (will try next URL if available)")
+                } else {
+                    Timber.tag("initAppEntry").e(e, "Failed to initialize app entry from URL: $url")
+                }
             }
         }
+        
+        // If we reach here, all URLs failed - throw exception with detailed error message
+        val errorMsg = "Failed to initialize app entry. Tried ${urls.size} URL(s): ${urls.joinToString(", ")}"
+        Timber.tag("initAppEntry").e(errorMsg)
+        throw IllegalStateException(errorMsg)
     }
 
     /**

@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.nio.channels.UnresolvedAddressException
 
 object ErrorMessageUtils {
     
@@ -86,13 +87,15 @@ object ErrorMessageUtils {
             is SocketTimeoutException,
             is ConnectException,
             is UnknownHostException,
+            is UnresolvedAddressException,
             is IOException -> true
             else -> {
                 val message = error?.message?.lowercase() ?: ""
                 message.contains("timeout") || 
                 message.contains("connection") || 
                 message.contains("unreachable") || 
-                message.contains("network")
+                message.contains("network") ||
+                message.contains("unresolved")
             }
         }
     }

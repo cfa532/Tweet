@@ -17,6 +17,7 @@ class PreferenceHelper(context: Context) {
         return if (urlsString.isNotEmpty()) {
             urlsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         } else {
+            // First-time initialization: use BASE_URL to fetch HTML page
             setOf("http://${BuildConfig.BASE_URL}")
         }
     }
