@@ -122,6 +122,11 @@ fun ChatScreen(
             }
         }
     }
+
+    LaunchedEffect(key1 = Unit) {
+        // get unread messages from network
+        viewModel.fetchNewMessage()
+    }
     
     // Preload videos for visible messages with shorter debouncing for LAN
     LaunchedEffect(visibleMessages, chatMessages.size) {

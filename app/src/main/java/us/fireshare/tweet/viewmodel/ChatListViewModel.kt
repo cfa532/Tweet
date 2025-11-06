@@ -103,13 +103,8 @@ class ChatListViewModel @Inject constructor(
 
     // check if there are new messages on the server. If so, retrieve the last one for UI update.
     suspend fun previewMessages() {
-        Timber.tag("ChatListViewModel").d("previewMessages: Starting to check for new messages")
-        val newMessages = HproseInstance.checkNewMessages()
-        if (newMessages == null) {
-            Timber.tag("ChatListViewModel").d("previewMessages: checkNewMessages returned null")
-            return
-        }
-        Timber.tag("ChatListViewModel").d("previewMessages: Found ${newMessages.size} messages from server")
+        val newMessages = HproseInstance.checkNewMessages() ?: return
+        Timber.tag("checkNewMessages").d("previewMessages: $newMessages")
 
         // Filter out messages that already exist in local database
         val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)

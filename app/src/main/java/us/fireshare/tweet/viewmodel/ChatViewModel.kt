@@ -86,9 +86,6 @@ class ChatViewModel @AssistedInject constructor(
             // Load only the latest 10 messages from local database
             _chatMessages.value = loadLatestMessages(receiptId)
                 .sortedBy { it.timestamp }
-
-            // get unread messages from network
-            fetchNewMessage()
         }
     }
 
@@ -104,7 +101,7 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     private suspend fun sendTextMessage(content: String) {
-        val messageContent = if (content.trim().isNotBlank()) content.trim() else null
+        val messageContent = content.trim().ifBlank { null }
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
