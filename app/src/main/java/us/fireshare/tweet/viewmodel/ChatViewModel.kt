@@ -67,7 +67,7 @@ class ChatViewModel @AssistedInject constructor(
     val shouldScrollToBottom: StateFlow<Boolean> get() = _shouldScrollToBottom.asStateFlow()
 
     companion object {
-        private const val MESSAGES_PER_PAGE = 10
+        private const val MESSAGES_PER_PAGE = 20
         
         /**
          * Helper function to check if a message is new (not already in the list)
@@ -83,7 +83,7 @@ class ChatViewModel @AssistedInject constructor(
             _receipt.value = HproseInstance.getUser(receiptId)
                 ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
 
-            // Load only the latest 10 messages from local database
+            // Load only the latest 20 messages from local database
             _chatMessages.value = loadLatestMessages(receiptId)
                 .sortedBy { it.timestamp }
         }
@@ -306,7 +306,7 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     /**
-     * Load the latest 10 messages from database
+     * Load the latest 20 messages from database
      */
     private suspend fun loadLatestMessages(receiptId: MimeiId): List<ChatMessage> {
         // Get session ID for this conversation
