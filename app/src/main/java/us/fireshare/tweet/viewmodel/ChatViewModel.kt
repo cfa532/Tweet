@@ -274,15 +274,17 @@ class ChatViewModel @AssistedInject constructor(
 
             /**
              * Deduplication logic using unique message IDs to prevent message duplication.
+             * Check both in-memory list and database to avoid duplicates from previewMessages.
              */
-            val newMessages = updatedNews.filter { message ->
-                val isNew = isNewMessage(message, _chatMessages.value)
+            val newMessages = chatSessionRepository.filterExistingMessages(updatedNews).filter { message ->
+                // Also check in-memory list to avoid adding messages already in UI
+                val isNewInMemory = isNewMessage(message, _chatMessages.value)
                 
-                if (!isNew) {
+                if (!isNewInMemory) {
                     Timber.tag("ChatViewModel")
-                        .d("fetchNewMessage: filtering out duplicate message with ID: ${message.id}")
+                        .d("fetchNewMessage: filtering out duplicate message with ID: ${message.id} (already in memory)")
                 }
-                isNew
+                isNewInMemory
             }
             Timber.tag("ChatViewModel")
                 .d("fetchNewMessage: existing messages count: ${_chatMessages.value.size}, new messages count: ${newMessages.size}, total fetched: ${updatedNews.size}")
