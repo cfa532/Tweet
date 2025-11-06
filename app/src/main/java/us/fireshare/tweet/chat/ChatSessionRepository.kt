@@ -89,18 +89,6 @@ class ChatSessionRepository(
     }
 
     /**
-     * Get a chat session by userId and receiptId
-     */
-    suspend fun getChatSession(userId: String, receiptId: String): ChatSession? {
-        val sessionId = getOrCreateSessionId(userId, receiptId)
-        val sessionEntity = chatSessionDao.getSessionById(sessionId) ?: return null
-        val lastMessage =
-            chatMessageDao.getLatestMessageBySession(sessionEntity.id)?.toChatMessage()
-                ?: return null
-        return sessionEntity.toChatSession(lastMessage)
-    }
-
-    /**
      * Filter out messages that already exist in the local database
      */
     suspend fun filterExistingMessages(messages: List<ChatMessage>): List<ChatMessage> {

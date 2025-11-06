@@ -421,10 +421,26 @@ class MediaUploadService(
         referenceId: MimeiId?,
         mediaType: MediaType
     ): MimeiFileType? {
-        // Resolve writableUrl before using uploadService
-        val resolvedUrl = appUser.resolveWritableUrl()
+        // Resolve writableUrl before using uploadService (with retry)
+        var resolvedUrl: String? = null
+        var lastError: String? = null
+        for (attempt in 1..3) {
+            resolvedUrl = appUser.resolveWritableUrl()
+            if (!resolvedUrl.isNullOrEmpty()) {
+                Timber.tag(TAG).d("Successfully resolved writableUrl on attempt $attempt: $resolvedUrl")
+                break
+            } else {
+                lastError = "Failed to resolve writableUrl (attempt $attempt/3)"
+                Timber.tag(TAG).w(lastError)
+                if (attempt < 3) {
+                    // Wait a bit before retrying (exponential backoff)
+                    kotlinx.coroutines.delay(1000L * attempt)
+                }
+            }
+        }
+        
         if (resolvedUrl.isNullOrEmpty()) {
-            Timber.tag(TAG).e("Failed to resolve writableUrl")
+            Timber.tag(TAG).e("Failed to resolve writableUrl after 3 attempts")
             return null
         }
 

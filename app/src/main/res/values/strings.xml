@@ -196,6 +196,7 @@
     <!-- Toast messages -->
     <string name="failed_to_send_message">Failed to send message: %s</string>
     <string name="uploading_attachment_background">Uploading attachment in background...</string>
+    <string name="attachment_upload_failed">Failed to upload attachment. Please check your network connection and try again.</string>
     <string name="image_saved_to_gallery">Image saved to gallery</string>
     <string name="failed_to_save_image">Failed to save image</string>
     <string name="permission_granted">Permission Granted</string>

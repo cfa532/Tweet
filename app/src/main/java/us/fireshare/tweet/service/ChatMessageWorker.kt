@@ -15,6 +15,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.TweetEvent
@@ -67,18 +68,16 @@ class SendChatMessageWorker @AssistedInject constructor(
                             .d("File uploaded successfully: ${uploadedFile.mid}")
                     } else {
                         Timber.tag("SendChatMessageWorker").e("Failed to upload file - uploadToIPFS returned null")
-                        // Only show toast on final attempt
-                        if (runAttemptCount >= 3) {
-                            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment"))
-                        }
+                        // Show localized error message to user
+                        val errorMessage = applicationContext.getString(R.string.attachment_upload_failed)
+                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage))
                         return Result.failure()
                     }
                 } catch (e: Exception) {
                     Timber.tag("SendChatMessageWorker").e(e, "Error uploading file: $attachmentUri")
-                    // Only show toast on final attempt
-                    if (runAttemptCount >= 3) {
-                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Failed to upload attachment: ${e.message}"))
-                    }
+                    // Show localized error message to user
+                    val errorMessage = applicationContext.getString(R.string.attachment_upload_failed)
+                    TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage))
                     return Result.failure()
                 }
             }
