@@ -150,6 +150,7 @@ fun AdvancedImageViewer(
     var isVisible by remember { mutableStateOf(true) }
     var lastRetryTime by remember { mutableStateOf(0L) }
     var currentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var currentImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -190,6 +191,13 @@ fun AdvancedImageViewer(
             if (initialBitmap != null) {
                 Timber.tag("ImageViewer").d("Using initial bitmap from preview: $imageUrl")
                 loadState = loadState.copy(bitmap = initialBitmap, isLoading = false, hasError = false)
+                
+                // Try to get the cached file for the compressed image to avoid creating temp file
+                val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                if (cachedFile != null && cachedFile.exists()) {
+                    imageFile = cachedFile
+                }
+                
                 onLoadComplete?.invoke()
             } else {
                 // Step 1: Check for compressed image in cache first (memory + disk)
@@ -231,34 +239,54 @@ fun AdvancedImageViewer(
                 }
             }
             
-            // Step 2: Load original image from server (only if no cached images found)
-            try {
-                val originalMid = "${mid}_original"
-                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
-                
-                if (downloadedBitmap != null) {
-                    // Update with original high-resolution image
-                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
+            // Step 2: Load original image from server (only if no cached images found and no initial bitmap)
+            // Skip loading original if we have an initialBitmap to prevent flicker
+            if (initialBitmap == null) {
+                try {
+                    val originalMid = "${mid}_original"
+                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
                     
-                    // Reset retry count on successful load
-                    retryCount = 0
-                    
-                    // Update file for SubsamplingScaleImageView (use original cache key)
-                    val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                    if (updatedCachedFile != null && updatedCachedFile.exists()) {
-                        imageFile = updatedCachedFile
+                    if (downloadedBitmap != null) {
+                        // Update with original high-resolution image
+                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
+                        
+                        // Reset retry count on successful load
+                        retryCount = 0
+                        
+                        // Update file for SubsamplingScaleImageView (use original cache key)
+                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
+                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
+                            imageFile = updatedCachedFile
+                        }
+                        
+                        onLoadComplete?.invoke()
+                        Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl")
+                        // Server load failed - show error or fallback to compressed
+                        if (compressedBitmap == null) {
+                            loadState = loadState.copy(
+                                isLoading = false, 
+                                hasError = true
+                            )
+                            Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl")
+                            
+                            // Auto-retry if within limit and debounced
+                            if (retryCount < 3 && shouldRetry()) {
+                                delay(2000L) // Wait 2 seconds before retry
+                                retryCount++
+                                lastRetryTime = System.currentTimeMillis()
+                            }
+                        } else {
+                            // Keep showing compressed version if original loading fails
+                            Timber.tag("ImageViewer").w("Failed to load original image from server, keeping compressed version: $imageUrl")
+                        }
                     }
-                    
-                    onLoadComplete?.invoke()
-                    Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl")
-                } else {
-                    // Server load failed - show error or fallback to compressed
+                } catch (e: Exception) {
+                    Timber.tag("ImageViewer").e(e, "Error loading original image from server: $imageUrl")
                     if (compressedBitmap == null) {
                         loadState = loadState.copy(
                             isLoading = false, 
                             hasError = true
                         )
-                        Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl")
                         
                         // Auto-retry if within limit and debounced
                         if (retryCount < 3 && shouldRetry()) {
@@ -268,27 +296,12 @@ fun AdvancedImageViewer(
                         }
                     } else {
                         // Keep showing compressed version if original loading fails
-                        Timber.tag("ImageViewer").w("Failed to load original image from server, keeping compressed version: $imageUrl")
+                        Timber.tag("ImageViewer").w("Error loading original image from server, keeping compressed version: $imageUrl")
                     }
                 }
-            } catch (e: Exception) {
-                Timber.tag("ImageViewer").e(e, "Error loading original image from server: $imageUrl")
-                if (compressedBitmap == null) {
-                    loadState = loadState.copy(
-                        isLoading = false, 
-                        hasError = true
-                    )
-                    
-                    // Auto-retry if within limit and debounced
-                    if (retryCount < 3 && shouldRetry()) {
-                        delay(2000L) // Wait 2 seconds before retry
-                        retryCount++
-                        lastRetryTime = System.currentTimeMillis()
-                    }
-                } else {
-                    // Keep showing compressed version if original loading fails
-                    Timber.tag("ImageViewer").w("Error loading original image from server, keeping compressed version: $imageUrl")
-                }
+            } else {
+                // We have an initialBitmap, so skip loading original to prevent flicker
+                Timber.tag("ImageViewer").d("Skipping original image load because initialBitmap is provided: $imageUrl")
             }
         } catch (e: Exception) {
             // Handle cancellation gracefully - don't retry on cancellation
@@ -402,7 +415,13 @@ fun AdvancedImageViewer(
                                 }
                                 tempFile
                             }
-                            imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(fileToUse.toUri()))
+                            val imageUri = fileToUse.toUri()
+                            
+                            // Only update if the URI has changed to prevent flicker
+                            if (currentImageUri != imageUri) {
+                                currentImageUri = imageUri
+                                imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
+                            }
                         } catch (e: Exception) {
                             Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
                             loadState = loadState.copy(hasError = true)
@@ -689,50 +708,91 @@ fun ImageViewer(
             }
             
             // Step 2: Load image from server (only if no cached images found)
-            // Note: Server only has original images, so always load original from server
             try {
-                val originalMid = "${mid}_original"
-                // Always load original from server since that's all the server has
-                val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
-                
-                if (downloadedBitmap != null) {
-                    // Update with loaded original image (server only has original images)
-                    loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
-                    onBitmapLoaded?.invoke(downloadedBitmap)
+                if (loadOriginalImage) {
+                    // Load original high-res image from server
+                    val originalMid = "${mid}_original"
+                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
                     
-                    // Reset retry count on successful load
-                    retryCount = 0
-                    
-                    // Update file for SubsamplingScaleImageView (always use original cache key since we load original from server)
-                    val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
-                    if (updatedCachedFile != null && updatedCachedFile.exists()) {
-                        imageFile = updatedCachedFile
-                    }
-                    
-                    onLoadComplete?.invoke()
-                    Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
-                } else {
-                    // Server load failed - show error or fallback to compressed
-                    if (initialBitmap == null) {
-                        loadState = loadState.copy(
-                            isLoading = false, 
-                            hasError = true
-                        )
-                        Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl - hasError: true, retryCount: $retryCount")
+                    if (downloadedBitmap != null) {
+                        // Update with loaded original image
+                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
+                        onBitmapLoaded?.invoke(downloadedBitmap)
                         
-                        // Auto-retry if within limit, visible, and debounced
-                        if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
-                            delay(2000L) // Wait 2 seconds before retry
-                            retryCount++
-                            lastRetryTime = System.currentTimeMillis()
+                        // Reset retry count on successful load
+                        retryCount = 0
+                        
+                        // Update file for SubsamplingScaleImageView
+                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
+                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
+                            imageFile = updatedCachedFile
                         }
+                        
+                        onLoadComplete?.invoke()
+                        Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
                     } else {
-                        // Keep showing initial bitmap if original loading fails
-                        Timber.tag("ImageViewer").w("Failed to load original image from server, keeping initial bitmap: $imageUrl")
+                        // Server load failed - show error or fallback
+                        if (initialBitmap == null) {
+                            loadState = loadState.copy(
+                                isLoading = false, 
+                                hasError = true
+                            )
+                            Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl - hasError: true, retryCount: $retryCount")
+                            
+                            // Auto-retry if within limit, visible, and debounced
+                            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                                delay(2000L) // Wait 2 seconds before retry
+                                retryCount++
+                                lastRetryTime = System.currentTimeMillis()
+                            }
+                        } else {
+                            // Keep showing initial bitmap if original loading fails
+                            Timber.tag("ImageViewer").w("Failed to load original image from server, keeping initial bitmap: $imageUrl")
+                        }
+                    }
+                } else {
+                    // Load compressed image from server (downloads and compresses automatically)
+                    val downloadedBitmap = ImageCacheManager.downloadAndCacheImage(context, imageUrl, mid)
+                    
+                    if (downloadedBitmap != null) {
+                        // Update with loaded compressed image
+                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
+                        onBitmapLoaded?.invoke(downloadedBitmap)
+                        
+                        // Reset retry count on successful load
+                        retryCount = 0
+                        
+                        // Update file for SubsamplingScaleImageView (use compressed cache key)
+                        val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                        if (updatedCachedFile != null && updatedCachedFile.exists()) {
+                            imageFile = updatedCachedFile
+                        }
+                        
+                        onLoadComplete?.invoke()
+                        Timber.tag("ImageViewer").d("Successfully loaded compressed image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
+                    } else {
+                        // Server load failed - show error
+                        if (initialBitmap == null) {
+                            loadState = loadState.copy(
+                                isLoading = false, 
+                                hasError = true
+                            )
+                            Timber.tag("ImageViewer").e("Failed to load compressed image from server: $imageUrl - hasError: true, retryCount: $retryCount")
+                            
+                            // Auto-retry if within limit, visible, and debounced
+                            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                                delay(2000L) // Wait 2 seconds before retry
+                                retryCount++
+                                lastRetryTime = System.currentTimeMillis()
+                            }
+                        } else {
+                            // Keep showing initial bitmap if loading fails
+                            Timber.tag("ImageViewer").w("Failed to load compressed image from server, keeping initial bitmap: $imageUrl")
+                        }
                     }
                 }
             } catch (e: Exception) {
-                Timber.tag("ImageViewer").e(e, "Error loading original image from server: $imageUrl")
+                Timber.tag("ImageViewer").e(e, "Error loading image from server: $imageUrl")
                 if (initialBitmap == null) {
                     loadState = loadState.copy(
                         isLoading = false, 
@@ -746,8 +806,8 @@ fun ImageViewer(
                         lastRetryTime = System.currentTimeMillis()
                     }
                 } else {
-                    // Keep showing initial bitmap if original loading fails
-                    Timber.tag("ImageViewer").w("Error loading original image from server, keeping initial bitmap: $imageUrl")
+                    // Keep showing initial bitmap if loading fails
+                    Timber.tag("ImageViewer").w("Error loading image from server, keeping initial bitmap: $imageUrl")
                 }
             }
         } catch (e: Exception) {
@@ -865,15 +925,56 @@ fun ImageViewer(
                 )
             } else {
                 // Use regular Image for preview mode
-                Image(
-                    bitmap = loadState.bitmap!!.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = when {
-                        inPreviewGrid -> ContentScale.Crop
-                        else -> ContentScale.Fit
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                // Downscale bitmap if it's too large for canvas drawing (Android limit ~100MB)
+                val previewBitmap = remember(loadState.bitmap) {
+                    loadState.bitmap?.let { bitmap ->
+                        // Calculate bitmap size in bytes (ARGB_8888 = 4 bytes per pixel)
+                        val bitmapSizeBytes = bitmap.width * bitmap.height * 4L
+                        val maxSizeBytes = 50 * 1024 * 1024L // 50MB safe limit (well below 100MB canvas limit)
+                        val maxDimension = 2048 // Maximum dimension for preview
+                        
+                        // Check if downscaling is needed
+                        if (bitmapSizeBytes > maxSizeBytes || bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                            // Calculate scale factor
+                            val widthScale = maxDimension.toFloat() / bitmap.width
+                            val heightScale = maxDimension.toFloat() / bitmap.height
+                            val sizeScale = kotlin.math.sqrt(maxSizeBytes.toFloat() / bitmapSizeBytes)
+                            
+                            // Use the most restrictive scale factor
+                            val scale = minOf(widthScale, heightScale, sizeScale).coerceAtMost(1f)
+                            
+                            if (scale < 1f) {
+                                val newWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
+                                val newHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+                                
+                                Timber.tag("ImageViewer").d("Downscaling bitmap for preview: ${bitmap.width}x${bitmap.height} -> ${newWidth}x${newHeight} (scale: $scale)")
+                                
+                                try {
+                                    android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                                } catch (e: Exception) {
+                                    Timber.tag("ImageViewer").e(e, "Failed to downscale bitmap, using original")
+                                    bitmap
+                                }
+                            } else {
+                                bitmap
+                            }
+                        } else {
+                            bitmap
+                        }
+                    }
+                }
+                
+                previewBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = when {
+                            inPreviewGrid -> ContentScale.Crop
+                            else -> ContentScale.Fit
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         } else if (loadState.isLoading) {
             // Show loading state only when actually loading

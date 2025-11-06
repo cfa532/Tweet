@@ -64,8 +64,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -77,6 +79,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -168,6 +172,7 @@ fun ChatScreen(
     // Global state to control full screen display
     var showFullScreen by remember { mutableStateOf(false) }
     var fullScreenAttachment by remember { mutableStateOf<us.fireshare.tweet.datamodel.MimeiFileType?>(null) }
+    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     fun scrollToBottom() {
         if (chatMessages.isNotEmpty()) {
@@ -383,8 +388,9 @@ fun ChatScreen(
                                 viewModel = viewModel,
                                 message = msg,
                                 messages = chatMessages,
-                                onImageClick = { attachment ->
+                                onImageClick = { attachment, bitmap ->
                                     fullScreenAttachment = attachment
+                                    fullScreenBitmap = bitmap
                                     showFullScreen = true
                                 },
                                 onVideoClick = { attachment ->
@@ -408,19 +414,35 @@ fun ChatScreen(
         }
     }
     
-    // Full screen overlays - rendered at the top level
+    // Full screen overlays - rendered at the top level (same as MediaItemView)
     if (showFullScreen && fullScreenAttachment != null) {
         val attachment = fullScreenAttachment!!
         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
         
         when (attachment.type) {
             MediaType.Image -> {
-                us.fireshare.tweet.widget.AdvancedImageViewer(
-                    imageUrl = mediaUrl,
-                    enableLongPress = true,
-                    onClose = { showFullScreen = false },
-                    modifier = Modifier.fillMaxSize()
-                )
+                Dialog(
+                    onDismissRequest = { showFullScreen = false },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = true,
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    ) {
+                        us.fireshare.tweet.widget.AdvancedImageViewer(
+                            imageUrl = mediaUrl,
+                            enableLongPress = true,
+                            initialBitmap = fullScreenBitmap,
+                            onClose = { showFullScreen = false },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Try to get existing player for seamless transition
@@ -460,7 +482,7 @@ fun ChatItem(
     viewModel: ChatViewModel, 
     message: ChatMessage, 
     messages: List<ChatMessage>,
-    onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit,
+    onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
     val isSentByCurrentUser = message.authorId == appUser.mid
@@ -565,7 +587,7 @@ fun ChatItem(
                             // Simple media preview for chat messages
                             ChatMediaPreview(
                                 attachments = attachments,
-                                onImageClick = { onImageClick(attachments.first()) },
+                                onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
                                 onVideoClick = { onVideoClick(attachments.first()) }
                             )
                         }
@@ -909,7 +931,7 @@ private fun formatTimestamp(timestamp: Long): String {
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
-    onImageClick: (() -> Unit)? = null,
+    onImageClick: ((android.graphics.Bitmap?) -> Unit)? = null,
     onVideoClick: (() -> Unit)? = null
 ) {
     if (attachments.isEmpty()) return
@@ -943,13 +965,32 @@ fun ChatMediaPreview(
     ) {
         when (attachment.type) {
             MediaType.Image -> {
-                us.fireshare.tweet.widget.ImageViewer(
-                    imageUrl = mediaUrl,
+                // Track visibility for priority-based loading (same as MediaItemView)
+                var isVisible by remember { mutableStateOf(true) }
+                var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                
+                // Use a Box with clickable modifier to handle image clicks (same as MediaItemView)
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clickable { onImageClick?.invoke() },
-                    enableLongPress = false
-                )
+                        .clipToBounds()
+                        .onGloballyPositioned { layoutCoordinates ->
+                            // Update visibility based on actual layout - if item has size, it's visible
+                            val hasSize = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                            isVisible = hasSize
+                        }
+                        .clickable { onImageClick?.invoke(currentBitmap) }
+                ) {
+                    us.fireshare.tweet.widget.ImageViewer(
+                        imageUrl = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        enableLongPress = false, // Disable long press to allow clickable to work
+                        inPreviewGrid = true, // Use preview grid mode like MediaCell
+                        isVisible = isVisible, // Track visibility for priority loading
+                        loadOriginalImage = false, // Load compressed images first for preview (same as MediaCell)
+                        onBitmapLoaded = { bitmap -> currentBitmap = bitmap }
+                    )
+                }
             }
 
             MediaType.Video, MediaType.HLS_VIDEO -> {
