@@ -168,19 +168,27 @@ class ChatListViewModel @Inject constructor(
         enhancedSessions.forEach { chatSession ->
             val existingSession = existingSessionsMap[chatSession.receiptId]
             if (existingSession != null) {
-                // Update existing session directly
-                val index = updatedChatSessions.indexOf(existingSession)
-                updatedChatSessions[index] = existingSession.copy(
-                    hasNews = chatSession.hasNews,
-                    lastMessage = chatSession.lastMessage,
-                    timestamp = chatSession.timestamp
-                )
+                // Check if we should update (different message ID or newer timestamp)
+                // Message ID comparison is more reliable since all incoming messages get same currentTime
+                val isDifferentMessage = chatSession.lastMessage.id != existingSession.lastMessage.id
+                val isNewerTimestamp = chatSession.lastMessage.timestamp > existingSession.lastMessage.timestamp
+                if (isDifferentMessage || isNewerTimestamp) {
+                    val index = updatedChatSessions.indexOf(existingSession)
+                    if (index >= 0) {
+                        Timber.tag("ChatListViewModel").d("previewMessages: Updating session for receiptId=${chatSession.receiptId}, oldMessageId=${existingSession.lastMessage.id}, newMessageId=${chatSession.lastMessage.id}")
+                        updatedChatSessions[index] = chatSession.copy(
+                            id = existingSession.id // Preserve the existing session ID
+                        )
+                    }
+                }
             } else {
                 // Add new session
+                Timber.tag("ChatListViewModel").d("previewMessages: Adding new session for receiptId=${chatSession.receiptId}")
                 updatedChatSessions.add(chatSession)
             }
         }
-        _chatSessions.value = updatedChatSessions
+        // Sort by timestamp descending and update
+        _chatSessions.value = updatedChatSessions.sortedByDescending { it.timestamp }
     }
 
     /**

@@ -139,11 +139,20 @@ class ChatSessionRepository(
         }
 
         // Merge new messages into the map, by replacing old last messages.
+        // Compare by message ID first (more reliable), then by timestamp
+        // This is important because previewMessages sets all incoming messages to the same currentTime
         newMessages.forEach { message ->
             val key = normalizedKey(message)
             val existingMessage = messageMap[key]
-            if (existingMessage == null || message.timestamp > existingMessage.timestamp) {
+            if (existingMessage == null) {
                 messageMap[key] = message
+            } else {
+                // Update if message ID is different (new message) or if timestamp is newer
+                val isDifferentMessage = message.id != existingMessage.id
+                val isNewerTimestamp = message.timestamp > existingMessage.timestamp
+                if (isDifferentMessage || isNewerTimestamp) {
+                    messageMap[key] = message
+                }
             }
         }
 
@@ -164,7 +173,11 @@ class ChatSessionRepository(
                     )
                 )
             } else {
-                if (msg.timestamp > es.lastMessage.timestamp) {
+                // Update if message ID is different (new message) or if timestamp is newer
+                // Message ID comparison is more reliable since previewMessages sets all incoming messages to same currentTime
+                val isDifferentMessage = msg.id != es.lastMessage.id
+                val isNewerTimestamp = msg.timestamp > es.lastMessage.timestamp
+                if (isDifferentMessage || isNewerTimestamp) {
                     // existing session is updated with new message.
                     updatedSessions.remove(es)
                     updatedSessions.add(
