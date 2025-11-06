@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,9 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -252,11 +256,21 @@ fun MediaGrid(
     gridColumns: Int, containerWidth: Dp = 400.dp
 ) {
     val tweet by viewModel.tweetState.collectAsState()
-    Box(
+    
+    BoxWithConstraints(
         modifier = Modifier
             .padding(top = 0.dp)
             .fillMaxWidth()
     ) {
+        val mediaGridWidth = maxWidth
+        val itemWidth = if (gridColumns == 1) {
+            mediaGridWidth
+        } else {
+            // Account for spacing between items (1.dp between each column)
+            val spacing = 1.dp * (gridColumns - 1)
+            (mediaGridWidth - spacing) / gridColumns
+        }
+        
         LazyVerticalGrid(
             columns = GridCells.Fixed(gridColumns),
             modifier = Modifier
@@ -268,11 +282,18 @@ fun MediaGrid(
             horizontalArrangement = Arrangement.spacedBy(1.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            val modifier =
-                if (gridColumns == 1)
-                    Modifier.fillMaxWidth()
-                else Modifier.size(containerWidth / gridColumns)
-            itemsIndexed(mediaItems) { index, _ ->
+            itemsIndexed(mediaItems) { index, item ->
+                // Get aspect ratio from attachment, default to 1 if unknown
+                val aspectRatio = item.aspectRatio ?: 1f
+                
+                // Calculate height based on width and aspect ratio
+                // aspectRatio = width / height, so height = width / aspectRatio
+                val itemHeight = itemWidth / aspectRatio
+                
+                val modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemHeight)
+                
                 MediaItemView(
                     mediaItems,
                     modifier.clickable {
