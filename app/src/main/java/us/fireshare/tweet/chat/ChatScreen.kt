@@ -434,13 +434,13 @@ fun ChatScreen(
                             .fillMaxSize()
                             .background(Color.Black)
                     ) {
-                        us.fireshare.tweet.widget.AdvancedImageViewer(
-                            imageUrl = mediaUrl,
-                            enableLongPress = true,
+                us.fireshare.tweet.widget.AdvancedImageViewer(
+                    imageUrl = mediaUrl,
+                    enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
-                            onClose = { showFullScreen = false },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    onClose = { showFullScreen = false },
+                    modifier = Modifier.fillMaxSize()
+                )
                     }
                 }
             }
