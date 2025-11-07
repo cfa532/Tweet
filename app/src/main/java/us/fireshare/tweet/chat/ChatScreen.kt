@@ -52,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -83,6 +84,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -174,16 +176,26 @@ fun ChatScreen(
     var fullScreenAttachment by remember { mutableStateOf<us.fireshare.tweet.datamodel.MimeiFileType?>(null) }
     var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
+    var pendingScrollJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingScrollJob?.cancel()
+            pendingScrollJob = null
+        }
+    }
+
     fun scrollToBottom() {
         if (chatMessages.isNotEmpty()) {
-            coroutineScope.launch {
+            pendingScrollJob?.cancel()
+            val job = coroutineScope.launch {
                 try {
-                    listState.animateScrollToItem(chatMessages.size - 1)
-                } catch (e: Exception) {
-                    // Fallback to scroll to end if animateScrollToItem fails
                     listState.scrollToItem(chatMessages.size - 1)
+                } finally {
+                    pendingScrollJob = null
                 }
             }
+            pendingScrollJob = job
         }
     }
 
