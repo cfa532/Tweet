@@ -298,10 +298,12 @@ class ChatViewModel @AssistedInject constructor(
             chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
 
             // update session in memory
-            val lastMessage = updatedNews.last()
-            Timber.tag("ChatViewModel")
-                .d("fetchNewMessage calling updateSession with message: ${lastMessage.content}, authorId: ${lastMessage.authorId}")
-            chatListViewModel?.updateSession(lastMessage, hasNews = false)
+            val lastMessage = (newMessages + updatedNews).maxByOrNull { it.timestamp }
+            lastMessage?.let { message ->
+                Timber.tag("ChatViewModel")
+                    .d("fetchNewMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
+                chatListViewModel?.updateSession(message, hasNews = false)
+            }
         }
     }
 
