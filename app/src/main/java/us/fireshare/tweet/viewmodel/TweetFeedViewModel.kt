@@ -65,40 +65,24 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * This should be called from the UI layer after app initialization completes.
      */
     fun initialize() {
-        if (!isInitialized) {
-            isInitialized = true
-            viewModelScope.launch(IO) {
-                try {
-                    // Ensure appUser is properly initialized before loading tweets
-                    // Only check baseUrl since getTweetFeed doesn't require followingList
-                    if (appUser.baseUrl != null) {
-                        refresh(0)
-                    } else {
-                        // If appUser is not ready, wait a bit and retry with exponential backoff
-                        var retryCount = 0
-                        val maxRetries = 3
-                        while (retryCount < maxRetries && appUser.baseUrl == null) {
-                            val delayTime = 500L * (retryCount + 1) // Exponential backoff: 500ms, 1s, 1.5s
-                            kotlinx.coroutines.delay(delayTime)
-                            retryCount++
-                            Timber.tag("TweetFeedViewModel").d("Retry $retryCount: waiting for appUser.baseUrl to be initialized")
-                        }
-                        
-                        if (appUser.baseUrl != null) {
-                            refresh(0)
-                        } else {
-                            Timber.tag("TweetFeedViewModel").w("AppUser not properly initialized after $maxRetries retries, skipping initial tweet load")
-                            // Set some default state to prevent blank screen
-                            _tweets.value = emptyList()
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization")
-                    // Set empty state to prevent blank screen
+        if (isInitialized) {
+            return
+        }
+        isInitialized = true
+        viewModelScope.launch(IO) {
+            try {
+                waitForAppUser()
+                if (appUser.baseUrl != null) {
+                    refresh(0)
+                } else {
+                    Timber.tag("TweetFeedViewModel").w("AppUser not initialized, showing empty feed and will retry on user update")
                     _tweets.value = emptyList()
-                } finally {
-                    initState.value = false
                 }
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization")
+                _tweets.value = emptyList()
+            } finally {
+                initState.value = false
             }
         }
     }
@@ -135,6 +119,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (!appUser.isGuest())
             TweetCacheManager.saveUser(appUser)
         fetchTweets(pageNumber)
+    }
+
+    private suspend fun waitForAppUser(timeoutMillis: Long = 5000L) {
+        val startTime = System.currentTimeMillis()
+        while (appUser.baseUrl.isNullOrBlank() && System.currentTimeMillis() - startTime < timeoutMillis) {
+            kotlinx.coroutines.delay(200)
+        }
     }
 
     private var followingTweetsJob: Job? = null
