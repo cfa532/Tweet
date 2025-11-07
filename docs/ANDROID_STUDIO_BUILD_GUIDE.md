@@ -57,6 +57,50 @@ Wait for Gradle sync to complete.
 3. Click **locate** in the notification
 4. Or find APK at: `app/build/outputs/apk/mini/release/app-mini-release.apk`
 5. Drag APK to device or install via: `adb install app/build/outputs/apk/mini/release/app-mini-release.apk`
+    
+## Build and Install Full Release via Command Line
+
+These steps are for developers who prefer using the terminal.
+
+### Step 1: Build the APK
+
+1.  Open your terminal.
+
+2.  Navigate to the project's root directory:
+    ```bash
+    cd /Users/cfa532/Documents/GitHub/Tweet
+    ```
+
+3.  Run the Gradle command to assemble the full release build:
+    ```bash
+    ./gradlew assembleFullRelease
+    ```
+    Alternatively, you can build all release variants (full, mini, play):
+    ```bash
+    ./gradlew assembleRelease
+    ```
+
+### Step 2: Locate the APK
+
+The built APK file will be in the following directory:
+
+`app/build/outputs/apk/full/release/app-full-release.apk`
+
+### Step 3: Install the APK
+
+1.  Make sure your device is connected and recognized by ADB. You can check with `adb devices`.
+
+2.  Use `adb install` to install the APK on your specific device. Replace `DEVICE_SERIAL` with your device's serial number (e.g., `TAS-AN00`).
+
+    ```bash
+    adb -s DEVICE_SERIAL install app/build/outputs/apk/full/release/app-full-release.apk
+    ```
+
+    For example, for the device `TAS-AN00`:
+    ```bash
+    adb -s TAS-AN00 install app/build/outputs/apk/full/release/app-full-release.apk
+    ```
+    If you only have one device connected, you can omit the `-s DEVICE_SERIAL` part.
 
 ## Quick Reference
 
