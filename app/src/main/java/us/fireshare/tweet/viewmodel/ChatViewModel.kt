@@ -121,13 +121,13 @@ class ChatViewModel @AssistedInject constructor(
             chatRepository.insertMessage(message)
             
             // Update ChatSession immediately so ChatListView reflects the change
-            chatSessionRepository.updateChatSessionWithMessage(
+            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
                 appUser.mid,
                 receiptId,
                 message,
                 hasNews = false
             )
-            chatListViewModel?.updateSession(message, hasNews = false)
+            chatListViewModel?.updateSession(previewMessage, hasNews = false)
             
             // Send message and get result
             val (success, errorMsg) = HproseInstance.sendMessage(receiptId, message)
@@ -212,13 +212,13 @@ class ChatViewModel @AssistedInject constructor(
                                 }
                             }
                             // Update chat session (always update, even if message already exists)
-                            chatSessionRepository.updateChatSessionWithMessage(
+                            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
                                 appUser.mid,
                                 receiptId,
                                 event.message,
                                 hasNews = false
                             )
-                            chatListViewModel?.updateSession(event.message, hasNews = false)
+                            chatListViewModel?.updateSession(previewMessage, hasNews = false)
                         }
                     }
 
@@ -308,8 +308,8 @@ class ChatViewModel @AssistedInject constructor(
             lastMessage?.let { message ->
                 Timber.tag("ChatViewModel")
                     .d("fetchNewMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
-                chatSessionRepository.updateChatSessionWithMessage(appUser.mid, receiptId, message, hasNews = false)
-                chatListViewModel?.updateSession(message, hasNews = false)
+                val previewMessage = chatSessionRepository.updateChatSessionWithMessage(appUser.mid, receiptId, message, hasNews = false)
+                chatListViewModel?.updateSession(previewMessage, hasNews = false)
             } ?: run {
                 chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
             }

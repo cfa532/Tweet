@@ -6,6 +6,8 @@ import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatMessageEntity
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.ChatSessionDao
+import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.toChatMessage
 import us.fireshare.tweet.datamodel.toChatSession
@@ -21,8 +23,10 @@ class ChatSessionRepository(
         return sessionEntities.mapNotNull { sessionEntity ->
             val lastMessageEntity = chatMessageDao.getMessageById(sessionEntity.lastMessageId)
             lastMessageEntity?.let { messageEntity ->
-                val chatMessage = messageEntity.toChatMessage().copy(sessionId = sessionEntity.id)
-                sessionEntity.toChatSession(chatMessage)
+                val previewEntity = messageEntity
+                    .copy(sessionId = sessionEntity.id)
+                    .withAttachmentPreview()
+                sessionEntity.toChatSession(previewEntity.toChatMessage())
             }
         }
     }
@@ -43,7 +47,7 @@ class ChatSessionRepository(
         receiptId: String,
         message: ChatMessage,
         hasNews: Boolean
-    ) {
+    ): ChatMessage {
         val sessionId = getOrCreateSessionId(userId, receiptId)
         val normalizedMessage = if (message.sessionId == sessionId) {
             message
@@ -51,13 +55,28 @@ class ChatSessionRepository(
             message.copy(sessionId = sessionId)
         }
 
-        // Persist message to ensure it exists with correct sessionId
-        chatMessageDao.insertMessage(normalizedMessage.toEntity())
+        val previewMessage = normalizedMessage.withAttachmentPreview()
+        val existingEntity = chatMessageDao.getMessageByMessageId(previewMessage.id)
 
-        val messageEntity = chatMessageDao.getMessageByMessageId(normalizedMessage.id)
-        if (messageEntity != null) {
-            updateSessionWithEntity(sessionId, messageEntity.copy(sessionId = sessionId), hasNews)
+        if (existingEntity != null) {
+            val previewEntity = existingEntity.copy(
+                content = previewMessage.content,
+                attachments = previewMessage.attachments,
+                timestamp = previewMessage.timestamp,
+                sessionId = sessionId
+            )
+            chatMessageDao.insertMessage(previewEntity)
+            updateSessionWithEntity(sessionId, previewEntity, hasNews)
+            return previewEntity.toChatMessage()
         }
+
+        chatMessageDao.insertMessage(previewMessage.toEntity())
+        chatMessageDao.getMessageByMessageId(previewMessage.id)?.let { inserted ->
+            val entityWithSession = inserted.copy(sessionId = sessionId)
+            chatMessageDao.insertMessage(entityWithSession)
+            updateSessionWithEntity(sessionId, entityWithSession, hasNews)
+        }
+        return previewMessage
     }
 
     private suspend fun updateSessionWithEntity(
@@ -187,7 +206,8 @@ class ChatSessionRepository(
         }
 
         val updatedSessions = existingSessions.toMutableList()
-        messageMap.forEach { (key, msg) ->
+        messageMap.forEach { (key, rawMessage) ->
+            val msg = rawMessage.withAttachmentPreview()
             val es =
                 existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
             if (es == null) {
@@ -221,5 +241,29 @@ class ChatSessionRepository(
             }
         }
         return updatedSessions.toList()
+    }
+
+    private fun ChatMessage.withAttachmentPreview(): ChatMessage {
+        val preview = buildAttachmentPreview(authorId, attachments) ?: return this
+        return copy(content = preview)
+    }
+
+    private fun ChatMessageEntity.withAttachmentPreview(): ChatMessageEntity {
+        val preview = buildAttachmentPreview(authorId, attachments) ?: return this
+        return copy(content = preview)
+    }
+
+    private fun buildAttachmentPreview(authorId: MimeiId, attachments: List<MimeiFileType>?): String? {
+        val attachment = attachments?.firstOrNull() ?: return null
+        val baseLabel = when (attachment.type) {
+            MediaType.Image -> "Image"
+            MediaType.Video, MediaType.HLS_VIDEO -> "Video"
+            MediaType.Audio -> "Audio"
+            MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT, MediaType.Txt, MediaType.Html -> "Document"
+            MediaType.Zip -> "Archive"
+            MediaType.Unknown -> "Attachment"
+        }
+        val direction = if (authorId == appUser.mid) "sent" else "received"
+        return "$baseLabel $direction"
     }
 }
