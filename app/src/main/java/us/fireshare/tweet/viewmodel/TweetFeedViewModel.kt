@@ -70,27 +70,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
         isInitialized = true
         viewModelScope.launch(IO) {
-            val cachedTweets = loadCachedTweets(0, TW_CONST.PAGE_SIZE)
-            if (cachedTweets.isNotEmpty()) {
-                displayCachedTweets(cachedTweets)
-                initState.value = false
-            }
             try {
                 waitForAppUser()
                 if (appUser.baseUrl != null) {
                     refresh(0)
                 } else {
-                    Timber.tag("TweetFeedViewModel").w("AppUser not initialized, showing cached feed only")
+                    Timber.tag("TweetFeedViewModel").w("AppUser not initialized, showing empty feed and will retry on user update")
+                    _tweets.value = emptyList()
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization")
-                if (_tweets.value.isEmpty()) {
-                    _tweets.value = emptyList()
-                }
+                _tweets.value = emptyList()
             } finally {
-                if (initState.value) {
-                    initState.value = false
-                }
+                initState.value = false
             }
         }
     }
@@ -136,33 +128,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private fun displayCachedTweets(cachedTweets: List<Tweet>, guestUserId: MimeiId? = null) {
-        if (cachedTweets.isEmpty()) return
-
-        if (appUser.isGuest()) {
-            val targetUserId = guestUserId ?: getAlphaIds().firstOrNull() ?: return
-            _tweets.update { currentTweets ->
-                (cachedTweets + currentTweets)
-                    .filter { it.authorId == targetUserId }
-                    .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
-            }
-        } else {
-            _tweets.update { currentTweets ->
-                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
-
-                if (newCachedTweets.isNotEmpty()) {
-                    (currentTweets + newCachedTweets)
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp }
-                } else {
-                    currentTweets
-                }
-            }
-        }
-    }
-
     private var followingTweetsJob: Job? = null
 
     /**
@@ -184,17 +149,35 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             val alphaIds = getAlphaIds()
             if (alphaIds.isEmpty()) {
                 Timber.tag("TweetFeedViewModel").w("No alpha IDs configured, returning empty list for guest user")
-                displayCachedTweets(cachedTweets)
                 return emptyList()
             }
             val defaultUserId = alphaIds.first()
-            displayCachedTweets(cachedTweets, defaultUserId)
+            _tweets.update { currentTweets ->
+                val allTweets = (cachedTweets + currentTweets)
+                    // only show default tweets to guest
+                    .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                allTweets
+            }
             val result = getTweets(defaultUserId, pageNumber)
             return result
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
-            displayCachedTweets(cachedTweets)
+            _tweets.update { currentTweets ->
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+
+                if (newCachedTweets.isNotEmpty()) {
+                    val allTweets = (currentTweets + newCachedTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    allTweets
+                } else {
+                    currentTweets
+                }
+            }
 
             /**
              * Load tweet feed from network
