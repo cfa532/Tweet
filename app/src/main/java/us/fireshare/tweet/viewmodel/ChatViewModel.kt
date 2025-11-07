@@ -259,16 +259,23 @@ class ChatViewModel @AssistedInject constructor(
             // Get or create session ID for this conversation
             val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
 
-            // Update timestamps with local system time for received messages and assign session ID
-            val currentTime = System.currentTimeMillis()
-            val updatedNews = news.map { message ->
-                if (message.authorId != appUser.mid) {
-                    // Update timestamp for incoming messages with local time and assign session ID
-                    message.copy(timestamp = currentTime, sessionId = sessionId)
+            // Normalize order and timestamps so messages are processed sequentially
+            val fetchBaseTime = System.currentTimeMillis()
+            val sortedFetchedMessages = news.sortedBy { it.timestamp }
+            var lastKnownTimestamp = _chatMessages.value.lastOrNull()?.timestamp ?: 0L
+            val updatedNews = sortedFetchedMessages.mapIndexed { index, message ->
+                val baseTimestamp = if (message.authorId != appUser.mid) {
+                    maxOf(message.timestamp, fetchBaseTime + index)
                 } else {
-                    // Assign session ID to outgoing messages
-                    message.copy(sessionId = sessionId)
+                    message.timestamp
                 }
+                val adjustedTimestamp = if (baseTimestamp <= lastKnownTimestamp) {
+                    lastKnownTimestamp + 1
+                } else {
+                    baseTimestamp
+                }
+                lastKnownTimestamp = adjustedTimestamp
+                message.copy(timestamp = adjustedTimestamp, sessionId = sessionId)
             }
 
             /**
@@ -293,8 +300,8 @@ class ChatViewModel @AssistedInject constructor(
                 chatRepository.insertMessages(newMessages)
             }
 
-            _chatMessages.update {
-                it.plus(newMessages).sortedBy { it.timestamp }
+            _chatMessages.update { existing ->
+                (existing + newMessages).sortedBy { it.timestamp }
             }
             // update session in memory
             val lastMessage = (newMessages + updatedNews).maxByOrNull { it.timestamp }
