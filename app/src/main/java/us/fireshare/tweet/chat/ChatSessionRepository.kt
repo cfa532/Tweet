@@ -3,6 +3,7 @@ package us.fireshare.tweet.chat
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDao
+import us.fireshare.tweet.datamodel.ChatMessageEntity
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.ChatSessionDao
 import us.fireshare.tweet.datamodel.MimeiId
@@ -29,23 +30,52 @@ class ChatSessionRepository(
     suspend fun updateChatSession(userId: String, receiptId: String, hasNews: Boolean) {
         // Get or create session ID for this conversation
         val sessionId = getOrCreateSessionId(userId, receiptId)
-        
+
         // Get the latest message for this conversation
         val lastMessageEntity = chatMessageDao.getLatestMessageBySession(sessionId)
         lastMessageEntity?.let { messageEntity ->
-            // Update existing session using sessionId
-            chatSessionDao.updateSession(
-                sessionId = sessionId,
-                timestamp = messageEntity.timestamp,
-                lastMessageId = messageEntity.id,
-                hasNews = hasNews
-            )
+            updateSessionWithEntity(sessionId, messageEntity, hasNews)
+        }
+    }
 
-            // Update message with sessionId if not already set
-            if (messageEntity.sessionId == null) {
-                val updatedMessage = messageEntity.copy(sessionId = sessionId)
-                chatMessageDao.insertMessage(updatedMessage)
-            }
+    suspend fun updateChatSessionWithMessage(
+        userId: String,
+        receiptId: String,
+        message: ChatMessage,
+        hasNews: Boolean
+    ) {
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        val normalizedMessage = if (message.sessionId == sessionId) {
+            message
+        } else {
+            message.copy(sessionId = sessionId)
+        }
+
+        // Persist message to ensure it exists with correct sessionId
+        chatMessageDao.insertMessage(normalizedMessage.toEntity())
+
+        val messageEntity = chatMessageDao.getMessageByMessageId(normalizedMessage.id)
+        if (messageEntity != null) {
+            updateSessionWithEntity(sessionId, messageEntity.copy(sessionId = sessionId), hasNews)
+        }
+    }
+
+    private suspend fun updateSessionWithEntity(
+        sessionId: String,
+        messageEntity: ChatMessageEntity,
+        hasNews: Boolean
+    ) {
+        // Update existing session using sessionId
+        chatSessionDao.updateSession(
+            sessionId = sessionId,
+            timestamp = messageEntity.timestamp,
+            lastMessageId = messageEntity.id,
+            hasNews = hasNews
+        )
+
+        // Ensure message has sessionId set for consistency
+        if (messageEntity.sessionId != sessionId) {
+            chatMessageDao.insertMessage(messageEntity.copy(sessionId = sessionId))
         }
     }
 

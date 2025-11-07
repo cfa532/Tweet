@@ -121,9 +121,10 @@ class ChatViewModel @AssistedInject constructor(
             chatRepository.insertMessage(message)
             
             // Update ChatSession immediately so ChatListView reflects the change
-            chatSessionRepository.updateChatSession(
+            chatSessionRepository.updateChatSessionWithMessage(
                 appUser.mid,
                 receiptId,
+                message,
                 hasNews = false
             )
             chatListViewModel?.updateSession(message, hasNews = false)
@@ -211,9 +212,10 @@ class ChatViewModel @AssistedInject constructor(
                                 }
                             }
                             // Update chat session (always update, even if message already exists)
-                            chatSessionRepository.updateChatSession(
+                            chatSessionRepository.updateChatSessionWithMessage(
                                 appUser.mid,
                                 receiptId,
+                                event.message,
                                 hasNews = false
                             )
                             chatListViewModel?.updateSession(event.message, hasNews = false)
@@ -294,15 +296,15 @@ class ChatViewModel @AssistedInject constructor(
             _chatMessages.update {
                 it.plus(newMessages).sortedBy { it.timestamp }
             }
-            // update session in database
-            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
-
             // update session in memory
             val lastMessage = (newMessages + updatedNews).maxByOrNull { it.timestamp }
             lastMessage?.let { message ->
                 Timber.tag("ChatViewModel")
                     .d("fetchNewMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
+                chatSessionRepository.updateChatSessionWithMessage(appUser.mid, receiptId, message, hasNews = false)
                 chatListViewModel?.updateSession(message, hasNews = false)
+            } ?: run {
+                chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
             }
         }
     }
