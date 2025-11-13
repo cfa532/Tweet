@@ -55,6 +55,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
+import androidx.core.graphics.createBitmap
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -338,7 +339,7 @@ class TweetViewModel @AssistedInject constructor(
         // Try to generate preview image from first attachment (with timeout)
         val previewImage = try {
             withContext(Dispatchers.IO) {
-                kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                kotlinx.coroutines.withTimeoutOrNull(10000L) {
                     loadAttachmentPreviewImage(context)
                 }
             }
@@ -454,8 +455,7 @@ class TweetViewModel @AssistedInject constructor(
                     Timber.tag("SHARE").d("Processing video attachment, type: ${attachment.type}")
                     val videoUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
                     Timber.tag("SHARE").d("Generating video preview from URL: $videoUrl")
-                    val isHLS = attachment.type == MediaType.HLS_VIDEO
-                    val preview = generateVideoPreviewImage(context, videoUrl, attachment.mid, isHLS)
+                    val preview = generateVideoPreviewImage(context, videoUrl, attachment.mid, attachment.type)
                     Timber.tag("SHARE").d("Video preview generated: ${preview != null}")
                     return@withContext preview
                 }
@@ -519,171 +519,88 @@ class TweetViewModel @AssistedInject constructor(
     }
     
     /**
-     * Generate a video preview image from video URL
-     * Captures frame at current playback position if video is playing,
-     * otherwise captures at 1 second (or 10% of duration for short videos)
+     * Generate a video preview image from the existing player or video URL
+     * For HLS: Uses a direct segment URL from the cached video
+     * For Progressive: Uses MediaMetadataRetriever with the video URL
      * Returns a 270x270 center-cropped preview
-     * Supports both regular videos (via MediaMetadataRetriever) and HLS videos (via ExoPlayer)
      */
-    private suspend fun generateVideoPreviewImage(context: Context, videoUrl: String, mediaId: String, isHLS: Boolean = false): Bitmap? = withContext(Dispatchers.IO) {
-        // For HLS videos, use ExoPlayer to capture frame
-        if (isHLS) {
-            return@withContext generateHLSVideoPreview(context, videoUrl, mediaId)
-        }
-        
-        // For regular videos, check if there's a cached player first
-        // Videos use VideoManager, not TweetViewModel.exoPlayers
-        val cachedPlayer = VideoManager.getCachedVideoPlayer(mediaId)
-        if (cachedPlayer != null && cachedPlayer.duration > 0) {
-            // Use ExoPlayer to capture at current position
-            Timber.tag("SHARE").d("Using cached VideoManager player for regular video preview, mediaId: $mediaId")
-            return@withContext withContext(Dispatchers.Main) {
-                captureFrameFromPlayer(context, cachedPlayer)
+    private suspend fun generateVideoPreviewImage(context: Context, videoUrl: String, mediaId: String, mediaType: MediaType): Bitmap? = withContext(Dispatchers.IO) {
+        if (mediaType == MediaType.HLS_VIDEO) {
+            // For HLS, check if player exists
+            val hasPlayer = withContext(Dispatchers.Main) {
+                VideoManager.getCachedVideoPlayer(mediaId) != null
             }
-        }
-        
-        // No cached player - use MediaMetadataRetriever
-        var retriever: MediaMetadataRetriever? = null
-        try {
-            Timber.tag("SHARE").d("Starting video preview generation for: $videoUrl")
             
-            retriever = MediaMetadataRetriever()
-            retriever.setDataSource(videoUrl, HashMap())
-            
-            // Get video duration
-            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            val durationMs = durationStr?.toLongOrNull() ?: 0L
-            val durationSeconds = durationMs / 1000.0
-            
-            Timber.tag("SHARE").d("Video duration: ${durationSeconds}s")
-            
-            if (durationSeconds <= 0 || durationSeconds.isNaN() || durationSeconds.isInfinite()) {
-                Timber.tag("SHARE").w("Invalid video duration: $durationSeconds")
+            if (!hasPlayer) {
+                Timber.tag("SHARE").d("No cached player for HLS, skipping preview generation")
                 return@withContext null
             }
             
-            // Capture at 1 second, or at 10% of duration if video is shorter than 10 seconds
-            val captureTime = minOf(1.0, durationSeconds * 0.1)
-            val captureTimeUs = (captureTime * 1_000_000).toLong()
+            // MediaMetadataRetriever needs a direct .ts segment file, not a .m3u8 playlist
+            // Try different quality levels in order (smallest first for speed)
+            val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+            val qualityLevels = listOf("480p", "720p")
             
-            Timber.tag("SHARE").d("Capturing frame at ${captureTime}s")
-            
-            // Get frame at specified time
-            val frame = retriever.getFrameAtTime(
-                captureTimeUs,
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-            )
-            
-            if (frame != null) {
-                // Crop to center and resize to 270x270
-                val croppedFrame = cropToCenter(frame, 270)
-                Timber.tag("SHARE").d("Video frame captured and cropped to 270x270")
-                return@withContext croppedFrame
-            } else {
-                Timber.tag("SHARE").w("Failed to capture video frame")
-                return@withContext null
-            }
-        } catch (e: Exception) {
-            Timber.tag("SHARE").e(e, "Error generating video preview")
-            return@withContext null
-        } finally {
-            try {
-                retriever?.release()
-            } catch (e: Exception) {
-                Timber.tag("SHARE").w("Error releasing MediaMetadataRetriever: ${e.message}")
-            }
-        }
-    }
-    
-    /**
-     * Generate preview for HLS video from cached ExoPlayer
-     * If video is playing, capture current frame directly from player
-     */
-    private suspend fun generateHLSVideoPreview(context: Context, videoUrl: String, mediaId: String): Bitmap? = withContext(Dispatchers.Main) {
-        try {
-            Timber.tag("SHARE").d("Generating HLS video preview for: $videoUrl, mediaId: $mediaId")
-            
-            // Check if there's a cached player using media ID as key
-            // HLS videos use VideoManager, not TweetViewModel.exoPlayers
-            val cachedPlayer = VideoManager.getCachedVideoPlayer(mediaId)
-            
-            if (cachedPlayer == null || cachedPlayer.duration <= 0) {
-                Timber.tag("SHARE").d("No cached VideoManager player available for HLS video with mediaId: $mediaId, skipping preview")
-                return@withContext null
-            }
-            
-            Timber.tag("SHARE").d("Found cached VideoManager player for HLS video with mediaId: $mediaId")
-            
-            // HLS video preview is too slow (requires downloading segments over network)
-            // Even with FFmpeg, it takes 10+ seconds which is unacceptable for a share action
-            // The user is already watching the video, so they know what it looks like
-            // Skip preview for HLS videos
-            Timber.tag("SHARE").d("Skipping HLS video preview (too slow for share action)")
-            return@withContext null
-            
-        } catch (e: Exception) {
-            Timber.tag("SHARE").e(e, "Error generating HLS video preview from player")
-            return@withContext null
-        }
-    }
-    
-    /**
-     * Capture a frame from an ExoPlayer at current position
-     * Uses MediaMetadataRetriever as a fast fallback since ExoPlayer frame capture is complex
-     */
-    @OptIn(UnstableApi::class)
-    private suspend fun captureFrameFromPlayer(context: Context, player: ExoPlayer): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            val currentPosition = player.currentPosition
-            val videoFormat = player.videoFormat
-            
-            if (videoFormat == null) {
-                Timber.tag("SHARE").w("No video format available from player")
-                return@withContext null
-            }
-            
-            // Get the current media item URL
-            val currentMediaItem = player.currentMediaItem
-            val videoUrl = currentMediaItem?.localConfiguration?.uri?.toString()
-            
-            if (videoUrl == null) {
-                Timber.tag("SHARE").w("No video URL available from player")
-                return@withContext null
-            }
-            
-            Timber.tag("SHARE").d("Capturing frame at position ${currentPosition}ms from URL: $videoUrl")
-            
-            // Use MediaMetadataRetriever to capture at current position
-            var retriever: MediaMetadataRetriever? = null
-            try {
-                retriever = MediaMetadataRetriever()
-                retriever.setDataSource(videoUrl, HashMap())
+            for (quality in qualityLevels) {
+                val segmentUrl = if (quality.isEmpty()) {
+                    "${baseUrl}segment000.ts"
+                } else {
+                    "${baseUrl}${quality}/segment000.ts"
+                }
                 
-                // Capture at current playback position
-                val captureTimeUs = currentPosition * 1000L
-                val frame = retriever.getFrameAtTime(
-                    captureTimeUs,
-                    MediaMetadataRetriever.OPTION_CLOSEST
-                )
+                Timber.tag("SHARE").d("Trying HLS segment: $segmentUrl")
+                
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(segmentUrl, mapOf("timeout" to "3000"))
+                    val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST)
+                    
+                    if (frame != null) {
+                        Timber.tag("SHARE").d("Successfully captured frame from $quality segment")
+                        return@withContext cropToCenter(frame, 270)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("SHARE").d("Failed with $quality: ${e.message}")
+                } finally {
+                    try {
+                        retriever.release()
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                }
+            }
+            
+            Timber.tag("SHARE").w("Failed to capture frame from any quality level")
+            return@withContext null
+        } else {
+            // For progressive videos, use the direct URL
+            val retriever = MediaMetadataRetriever()
+            try {
+                Timber.tag("SHARE").d("Using progressive video URL: $videoUrl")
+                retriever.setDataSource(videoUrl, mapOf("timeout" to "3000"))
+                
+                val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST)
                 
                 if (frame != null) {
-                    val croppedBitmap = cropToCenter(frame, 270)
-                    Timber.tag("SHARE").d("Captured frame at ${currentPosition}ms and cropped to 270x270")
-                    return@withContext croppedBitmap
+                    Timber.tag("SHARE").d("Successfully captured frame")
+                    return@withContext cropToCenter(frame, 270)
                 } else {
-                    Timber.tag("SHARE").w("Failed to capture frame at ${currentPosition}ms")
+                    Timber.tag("SHARE").w("Failed to capture frame from retriever")
                     return@withContext null
                 }
+            } catch (e: Exception) {
+                Timber.tag("SHARE").e(e, "Failed to generate preview with MediaMetadataRetriever")
+                return@withContext null
             } finally {
-                retriever?.release()
+                try {
+                    retriever.release()
+                } catch (e: Exception) {
+                    Timber.tag("SHARE").w("Error releasing MediaMetadataRetriever: ${e.message}")
+                }
             }
-            
-        } catch (e: Exception) {
-            Timber.tag("SHARE").e(e, "Error capturing frame from player")
-            return@withContext null
         }
     }
-    
+
     /**
      * Crop image to center square and resize to target size
      */
