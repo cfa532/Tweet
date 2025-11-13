@@ -526,37 +526,48 @@ class TweetViewModel @AssistedInject constructor(
      */
     private suspend fun generateVideoPreviewImage(context: Context, videoUrl: String, mediaId: String, mediaType: MediaType): Bitmap? = withContext(Dispatchers.IO) {
         if (mediaType == MediaType.HLS_VIDEO) {
-            // For HLS, check if player exists
-            val hasPlayer = withContext(Dispatchers.Main) {
-                VideoManager.getCachedVideoPlayer(mediaId) != null
+            // For HLS, get current playback position from player
+            val playerInfo = withContext(Dispatchers.Main) {
+                val player = VideoManager.getCachedVideoPlayer(mediaId)
+                player?.currentPosition
             }
             
-            if (!hasPlayer) {
+            if (playerInfo == null) {
                 Timber.tag("SHARE").d("No cached player for HLS, skipping preview generation")
                 return@withContext null
             }
             
+            val currentPositionMs = playerInfo
+            
             // MediaMetadataRetriever needs a direct .ts segment file, not a .m3u8 playlist
+            // Calculate which segment to use based on current position
+            // Assuming standard HLS segment duration of 5 seconds
+            val segmentDurationMs = 5000L
+            val segmentNumber = (currentPositionMs / segmentDurationMs).toInt()
+            val offsetWithinSegmentMs = currentPositionMs % segmentDurationMs
+            val segmentName = "segment%03d.ts".format(segmentNumber)
+            
+            Timber.tag("SHARE").d("Current position: ${currentPositionMs}ms, using segment: $segmentName, offset: ${offsetWithinSegmentMs}ms")
+            
             // Try different quality levels in order (smallest first for speed)
             val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
             val qualityLevels = listOf("480p", "720p")
             
             for (quality in qualityLevels) {
-                val segmentUrl = if (quality.isEmpty()) {
-                    "${baseUrl}segment000.ts"
-                } else {
-                    "${baseUrl}${quality}/segment000.ts"
-                }
+                val segmentUrl = "${baseUrl}${quality}/$segmentName"
                 
                 Timber.tag("SHARE").d("Trying HLS segment: $segmentUrl")
                 
                 val retriever = MediaMetadataRetriever()
                 try {
                     retriever.setDataSource(segmentUrl, mapOf("timeout" to "3000"))
-                    val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST)
+                    
+                    // Get frame at the offset within the segment
+                    val captureTimeUs = offsetWithinSegmentMs * 1000
+                    val frame = retriever.getFrameAtTime(captureTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                     
                     if (frame != null) {
-                        Timber.tag("SHARE").d("Successfully captured frame from $quality segment")
+                        Timber.tag("SHARE").d("Successfully captured frame from $quality segment at offset ${offsetWithinSegmentMs}ms")
                         return@withContext cropToCenter(frame, 270)
                     }
                 } catch (e: Exception) {
