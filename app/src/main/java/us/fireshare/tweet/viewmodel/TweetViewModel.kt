@@ -574,12 +574,19 @@ class TweetViewModel @AssistedInject constructor(
             return@withContext null
         } else {
             // For progressive videos, use the direct URL
+            // Get current playback position if player exists
+            val currentPositionMs = withContext(Dispatchers.Main) {
+                val player = VideoManager.getCachedVideoPlayer(mediaId)
+                player?.currentPosition ?: 1000L // Default to 1 second if no player
+            }
+            
             val retriever = MediaMetadataRetriever()
             try {
-                Timber.tag("SHARE").d("Using progressive video URL: $videoUrl")
+                Timber.tag("SHARE").d("Using progressive video URL: $videoUrl at position ${currentPositionMs}ms")
                 retriever.setDataSource(videoUrl, mapOf("timeout" to "3000"))
                 
-                val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST)
+                val captureTimeUs = currentPositionMs * 1000 // Convert ms to microseconds
+                val frame = retriever.getFrameAtTime(captureTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                 
                 if (frame != null) {
                     Timber.tag("SHARE").d("Successfully captured frame")
