@@ -11,11 +11,13 @@ import android.graphics.Rect
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
+import androidx.annotation.OptIn
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
@@ -27,6 +29,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +49,7 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.service.UploadCommentWorker
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.createExoPlayer
 import java.io.File
 import java.io.FileOutputStream
@@ -77,13 +81,26 @@ class TweetViewModel @AssistedInject constructor(
     private val playbackPositions = mutableMapOf<String, Long>()
 
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {
-        return exoPlayers.getOrPut(url) {
+        // Extract media ID (CID) from URL to use as key
+        val mediaId = extractMediaIdFromUrl(url)
+        return exoPlayers.getOrPut(mediaId) {
             createExoPlayer(context, url).also { player ->
-                val position = savedStateHandle.get<Long>("playbackPosition_$url") ?: 0L
+                val position = savedStateHandle.get<Long>("playbackPosition_$mediaId") ?: 0L
                 player.seekTo(position)
-                playbackPositions[url] = position
+                playbackPositions[mediaId] = position
             }
         }
+    }
+    
+    /**
+     * Extract media ID (IPFS CID) from URL
+     * Returns the CID (e.g., "QmZeP6Cc1r8yG4u1iEksvEBM3ohajhobUfHdGyoBVAs6Qg")
+     */
+    private fun extractMediaIdFromUrl(url: String): String {
+        // Look for IPFS CID pattern (Qm followed by 44 characters)
+        val cidPattern = Regex("(Qm[A-Za-z0-9]{44})")
+        val match = cidPattern.find(url)
+        return match?.value ?: url // Fallback to full URL if no CID found
     }
 
     fun updateRetweetCount(tweet: Tweet) {
@@ -92,8 +109,9 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun savePlaybackPosition(url: String, position: Long) {
-        playbackPositions[url] = position
-        savedStateHandle["playbackPosition_$url"] = position
+        val mediaId = extractMediaIdFromUrl(url)
+        playbackPositions[mediaId] = position
+        savedStateHandle["playbackPosition_$mediaId"] = position
     }
 
     fun releaseAllPlayers() {
@@ -102,7 +120,8 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun stopPlayer(url: String) {
-        exoPlayers[url]?.playWhenReady = false  // have to set it here, otherwise won't work.
+        val mediaId = extractMediaIdFromUrl(url)
+        exoPlayers[mediaId]?.playWhenReady = false  // have to set it here, otherwise won't work.
     }
 
     init {
@@ -316,13 +335,24 @@ class TweetViewModel @AssistedInject constructor(
             deepLink
         }
 
-        // Try to generate preview image from first attachment
-        val previewImage = loadAttachmentPreviewImage(context)
+        // Try to generate preview image from first attachment (with timeout)
+        val previewImage = try {
+            withContext(Dispatchers.IO) {
+                kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                    loadAttachmentPreviewImage(context)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error loading preview image")
+            null
+        }
         
         // Save image file for both sharing and copying
         var imageUri: Uri? = null
         if (previewImage != null) {
-            val imageFile = saveBitmapToCache(context, previewImage, "share_preview.jpg")
+            // Use unique filename with timestamp to avoid WeChat cache issues
+            val uniqueFilename = "share_preview_${System.currentTimeMillis()}.jpg"
+            val imageFile = saveBitmapToCache(context, previewImage, uniqueFilename)
             if (imageFile != null) {
                 imageUri = FileProvider.getUriForFile(
                     context,
@@ -332,25 +362,32 @@ class TweetViewModel @AssistedInject constructor(
             }
         }
         
-        // Create share intent with both text and image
+        // Always update clipboard - either with preview image or clear it
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        
+        if (imageUri != null) {
+            // Clear and set new image immediately
+            clipboard.clearPrimaryClip()
+            val clip = android.content.ClipData.newUri(context.contentResolver, "Tweet Image", imageUri)
+            clipboard.setPrimaryClip(clip)
+            Timber.tag("SHARE").d("Copied preview image to clipboard")
+        } else {
+            // Clear clipboard
+            clipboard.clearPrimaryClip()
+            Timber.tag("SHARE").d("Cleared clipboard (no preview image)")
+        }
+        
+        // Create share intent - share text only for WeChat compatibility
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
-            
-            if (imageUri != null) {
-                // For WeChat and other apps, put text in both EXTRA_TEXT and EXTRA_SUBJECT
-                putExtra(Intent.EXTRA_TEXT, textToShare)
-                putExtra(Intent.EXTRA_SUBJECT, shareContent)
-                putExtra(Intent.EXTRA_TITLE, shareContent)
-                putExtra(Intent.EXTRA_STREAM, imageUri)
-                // Use */* to allow apps to choose what they support
-                type = "*/*"
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                Timber.tag("SHARE").d("Sharing with preview image and text")
-                Timber.tag("SHARE").d("Text: $textToShare")
-            } else {
             putExtra(Intent.EXTRA_TEXT, textToShare)
             type = "text/plain"
-                Timber.tag("SHARE").d("Sharing without preview image")
+            
+            if (imageUri != null) {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                Timber.tag("SHARE").d("Sharing text (image already in clipboard)")
+            } else {
+                Timber.tag("SHARE").d("Sharing text only")
             }
         }
         
@@ -417,7 +454,8 @@ class TweetViewModel @AssistedInject constructor(
                     Timber.tag("SHARE").d("Processing video attachment, type: ${attachment.type}")
                     val videoUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
                     Timber.tag("SHARE").d("Generating video preview from URL: $videoUrl")
-                    val preview = generateVideoPreviewImage(videoUrl)
+                    val isHLS = attachment.type == MediaType.HLS_VIDEO
+                    val preview = generateVideoPreviewImage(context, videoUrl, attachment.mid, isHLS)
                     Timber.tag("SHARE").d("Video preview generated: ${preview != null}")
                     return@withContext preview
                 }
@@ -482,10 +520,29 @@ class TweetViewModel @AssistedInject constructor(
     
     /**
      * Generate a video preview image from video URL
-     * Captures a frame at 1 second (or 10% of duration for short videos)
+     * Captures frame at current playback position if video is playing,
+     * otherwise captures at 1 second (or 10% of duration for short videos)
      * Returns a 270x270 center-cropped preview
+     * Supports both regular videos (via MediaMetadataRetriever) and HLS videos (via ExoPlayer)
      */
-    private suspend fun generateVideoPreviewImage(videoUrl: String): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun generateVideoPreviewImage(context: Context, videoUrl: String, mediaId: String, isHLS: Boolean = false): Bitmap? = withContext(Dispatchers.IO) {
+        // For HLS videos, use ExoPlayer to capture frame
+        if (isHLS) {
+            return@withContext generateHLSVideoPreview(context, videoUrl, mediaId)
+        }
+        
+        // For regular videos, check if there's a cached player first
+        // Videos use VideoManager, not TweetViewModel.exoPlayers
+        val cachedPlayer = VideoManager.getCachedVideoPlayer(mediaId)
+        if (cachedPlayer != null && cachedPlayer.duration > 0) {
+            // Use ExoPlayer to capture at current position
+            Timber.tag("SHARE").d("Using cached VideoManager player for regular video preview, mediaId: $mediaId")
+            return@withContext withContext(Dispatchers.Main) {
+                captureFrameFromPlayer(context, cachedPlayer)
+            }
+        }
+        
+        // No cached player - use MediaMetadataRetriever
         var retriever: MediaMetadataRetriever? = null
         try {
             Timber.tag("SHARE").d("Starting video preview generation for: $videoUrl")
@@ -539,6 +596,95 @@ class TweetViewModel @AssistedInject constructor(
     }
     
     /**
+     * Generate preview for HLS video from cached ExoPlayer
+     * If video is playing, capture current frame directly from player
+     */
+    private suspend fun generateHLSVideoPreview(context: Context, videoUrl: String, mediaId: String): Bitmap? = withContext(Dispatchers.Main) {
+        try {
+            Timber.tag("SHARE").d("Generating HLS video preview for: $videoUrl, mediaId: $mediaId")
+            
+            // Check if there's a cached player using media ID as key
+            // HLS videos use VideoManager, not TweetViewModel.exoPlayers
+            val cachedPlayer = VideoManager.getCachedVideoPlayer(mediaId)
+            
+            if (cachedPlayer == null || cachedPlayer.duration <= 0) {
+                Timber.tag("SHARE").d("No cached VideoManager player available for HLS video with mediaId: $mediaId, skipping preview")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("Found cached VideoManager player for HLS video with mediaId: $mediaId")
+            
+            // HLS video preview is too slow (requires downloading segments over network)
+            // Even with FFmpeg, it takes 10+ seconds which is unacceptable for a share action
+            // The user is already watching the video, so they know what it looks like
+            // Skip preview for HLS videos
+            Timber.tag("SHARE").d("Skipping HLS video preview (too slow for share action)")
+            return@withContext null
+            
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error generating HLS video preview from player")
+            return@withContext null
+        }
+    }
+    
+    /**
+     * Capture a frame from an ExoPlayer at current position
+     * Uses MediaMetadataRetriever as a fast fallback since ExoPlayer frame capture is complex
+     */
+    @OptIn(UnstableApi::class)
+    private suspend fun captureFrameFromPlayer(context: Context, player: ExoPlayer): Bitmap? = withContext(Dispatchers.IO) {
+        try {
+            val currentPosition = player.currentPosition
+            val videoFormat = player.videoFormat
+            
+            if (videoFormat == null) {
+                Timber.tag("SHARE").w("No video format available from player")
+                return@withContext null
+            }
+            
+            // Get the current media item URL
+            val currentMediaItem = player.currentMediaItem
+            val videoUrl = currentMediaItem?.localConfiguration?.uri?.toString()
+            
+            if (videoUrl == null) {
+                Timber.tag("SHARE").w("No video URL available from player")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("Capturing frame at position ${currentPosition}ms from URL: $videoUrl")
+            
+            // Use MediaMetadataRetriever to capture at current position
+            var retriever: MediaMetadataRetriever? = null
+            try {
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(videoUrl, HashMap())
+                
+                // Capture at current playback position
+                val captureTimeUs = currentPosition * 1000L
+                val frame = retriever.getFrameAtTime(
+                    captureTimeUs,
+                    MediaMetadataRetriever.OPTION_CLOSEST
+                )
+                
+                if (frame != null) {
+                    val croppedBitmap = cropToCenter(frame, 270)
+                    Timber.tag("SHARE").d("Captured frame at ${currentPosition}ms and cropped to 270x270")
+                    return@withContext croppedBitmap
+                } else {
+                    Timber.tag("SHARE").w("Failed to capture frame at ${currentPosition}ms")
+                    return@withContext null
+                }
+            } finally {
+                retriever?.release()
+            }
+            
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error capturing frame from player")
+            return@withContext null
+        }
+    }
+    
+    /**
      * Crop image to center square and resize to target size
      */
     private fun cropToCenter(image: Bitmap, targetSize: Int): Bitmap {
@@ -568,12 +714,22 @@ class TweetViewModel @AssistedInject constructor(
     
     /**
      * Save bitmap to cache directory and return the file
+     * Also cleans up old preview files to avoid cache bloat
      */
     private fun saveBitmapToCache(context: Context, bitmap: Bitmap, filename: String): File? {
         return try {
             val cacheDir = File(context.cacheDir, "share_previews")
             if (!cacheDir.exists()) {
                 cacheDir.mkdirs()
+            }
+            
+            // Clean up old preview files (keep only last 5)
+            cacheDir.listFiles()?.let { files ->
+                if (files.size > 5) {
+                    files.sortedBy { it.lastModified() }
+                        .dropLast(5)
+                        .forEach { it.delete() }
+                }
             }
             
             val file = File(cacheDir, filename)

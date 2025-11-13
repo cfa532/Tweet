@@ -61,7 +61,6 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
-import us.fireshare.tweet.viewmodel.UserViewModel
 import kotlin.math.abs
 
 /**

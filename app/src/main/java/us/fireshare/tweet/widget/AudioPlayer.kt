@@ -40,10 +40,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MimeiFileType
 
 @OptIn(UnstableApi::class)
 @Composable

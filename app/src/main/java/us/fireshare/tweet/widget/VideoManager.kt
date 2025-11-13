@@ -575,6 +575,12 @@ object VideoManager {
     fun getCachedVideoCount(): Int = videoPlayers.size
 
     /**
+     * Get a cached video player if it exists (without creating a new one)
+     * Used for frame capture during sharing
+     */
+    fun getCachedVideoPlayer(videoMid: MimeiId): ExoPlayer? = videoPlayers[videoMid]
+
+    /**
      * Get the number of active videos
      */
     fun getActiveVideoCount(): Int = activeVideos.size
