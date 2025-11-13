@@ -2,9 +2,17 @@ package us.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Rect
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,13 +38,17 @@ import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.service.UploadCommentWorker
+import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.createExoPlayer
+import java.io.File
+import java.io.FileOutputStream
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
 
@@ -270,7 +282,7 @@ class TweetViewModel @AssistedInject constructor(
         // No need to observe work status - UI will update via notification system
     }
 
-    open suspend fun shareTweet(context: Context) {
+    suspend fun shareTweet(context: Context) {
         /**
          * Call to checkUpgrade() also returns a map of environmental variables,
          * which includes environment variables of the App.
@@ -281,21 +293,21 @@ class TweetViewModel @AssistedInject constructor(
         } else {
             "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
         }
-//            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
-//                    "${tweet.mid}/${tweet.authorId}"
 
-        // Generate share content based on tweet title or first 40 characters of content
+        // Generate share content based on tweet title, content, or attachment types
         val shareContent = when {
-            !tweet.title.isNullOrBlank() -> tweet.title!!
-            !tweet.content.isNullOrBlank() -> {
-                val content = tweet.content!!
-                if (content.length <= 40) {
-                    content
-                } else {
-                    "${content.take(40)}..."
-                }
+            !tweet.title.isNullOrBlank() -> {
+                val title = tweet.title!!.trim()
+                if (title.length <= 40) title else "${title.take(40)}..."
             }
-            else -> ""
+            !tweet.content.isNullOrBlank() -> {
+                val content = tweet.content!!.replace("\n", " ").trim()
+                if (content.length <= 40) content else "${content.take(40)}..."
+            }
+            else -> {
+                // No title or content, compose from first 3 attachment types
+                composeAttachmentTypeText(tweet)
+            }
         }
 
         val textToShare = if (shareContent.isNotEmpty()) {
@@ -304,13 +316,325 @@ class TweetViewModel @AssistedInject constructor(
             deepLink
         }
 
+        // Try to generate preview image from first attachment
+        val previewImage = loadAttachmentPreviewImage(context)
+        
+        // Save image file for both sharing and copying
+        var imageUri: Uri? = null
+        if (previewImage != null) {
+            val imageFile = saveBitmapToCache(context, previewImage, "share_preview.jpg")
+            if (imageFile != null) {
+                imageUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    imageFile
+                )
+            }
+        }
+        
+        // Create share intent with both text and image
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
+            
+            if (imageUri != null) {
+                // For WeChat and other apps, put text in both EXTRA_TEXT and EXTRA_SUBJECT
+                putExtra(Intent.EXTRA_TEXT, textToShare)
+                putExtra(Intent.EXTRA_SUBJECT, shareContent)
+                putExtra(Intent.EXTRA_TITLE, shareContent)
+                putExtra(Intent.EXTRA_STREAM, imageUri)
+                // Use */* to allow apps to choose what they support
+                type = "*/*"
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                Timber.tag("SHARE").d("Sharing with preview image and text")
+                Timber.tag("SHARE").d("Text: $textToShare")
+            } else {
             putExtra(Intent.EXTRA_TEXT, textToShare)
             type = "text/plain"
+                Timber.tag("SHARE").d("Sharing without preview image")
+            }
         }
-        val shareIntent = Intent.createChooser(sendIntent, null)
-        context.startActivity(shareIntent, null)
+        
+        // Create chooser
+        val chooserIntent = Intent.createChooser(sendIntent, "Share Tweet")
+        context.startActivity(chooserIntent, null)
+    }
+    
+    
+    /**
+     * Load attachment preview image for sharing
+     * Returns a 270x270 center-cropped preview of the first image or video attachment
+     */
+    private suspend fun loadAttachmentPreviewImage(context: Context): Bitmap? = withContext(Dispatchers.IO) {
+        try {
+            Timber.tag("SHARE").d("Loading attachment preview for tweet: ${tweet.mid}")
+            
+            // Find the source tweet with attachments (could be original for retweets/quotes)
+            val sourceTweet = resolveSourceTweetWithAttachments() ?: run {
+                Timber.tag("SHARE").d("No source tweet with attachments found")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("Source tweet found: ${sourceTweet.mid}, attachments: ${sourceTweet.attachments?.size ?: 0}")
+            
+            val attachment = sourceTweet.attachments?.firstOrNull() ?: run {
+                Timber.tag("SHARE").d("No first attachment found")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("First attachment type: ${attachment.type}, mid: ${attachment.mid}")
+            
+            // Get base URL for attachments
+            val baseURL = resolveAttachmentBaseURL(sourceTweet)
+            Timber.tag("SHARE").d("Resolved baseURL: $baseURL")
+            
+            when (attachment.type) {
+                MediaType.Image -> {
+                    Timber.tag("SHARE").d("Processing image attachment")
+                    var fullImage: Bitmap? = null
+                    
+                    // Try to get cached image first
+                    fullImage = ImageCacheManager.getCachedImage(context, attachment.mid)
+                    
+                    if (fullImage == null) {
+                        // Download image if not cached
+                        val imageUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
+                        Timber.tag("SHARE").d("Loading image from URL: $imageUrl")
+                        fullImage = ImageCacheManager.downloadAndCacheImage(context, imageUrl, attachment.mid)
+                        Timber.tag("SHARE").d("Image loaded: ${fullImage != null}")
+                    } else {
+                        Timber.tag("SHARE").d("Found cached image")
+                    }
+                    
+                    // Crop to center square and resize to 270x270
+                    if (fullImage != null) {
+                        val croppedImage = cropToCenter(fullImage, 270)
+                        Timber.tag("SHARE").d("Image cropped to center 270x270")
+                        return@withContext croppedImage
+                    }
+                    return@withContext null
+                }
+                MediaType.Video, MediaType.HLS_VIDEO -> {
+                    Timber.tag("SHARE").d("Processing video attachment, type: ${attachment.type}")
+                    val videoUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
+                    Timber.tag("SHARE").d("Generating video preview from URL: $videoUrl")
+                    val preview = generateVideoPreviewImage(videoUrl)
+                    Timber.tag("SHARE").d("Video preview generated: ${preview != null}")
+                    return@withContext preview
+                }
+                else -> {
+                    Timber.tag("SHARE").d("Attachment type not supported: ${attachment.type}")
+                    return@withContext null
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error loading attachment preview")
+            return@withContext null
+        }
+    }
+    
+    /**
+     * Resolve the source tweet that contains attachments
+     * For retweets/quotes, returns the original tweet if it has attachments
+     */
+    private suspend fun resolveSourceTweetWithAttachments(): Tweet? {
+        // Check if current tweet has attachments
+        if (!tweet.attachments.isNullOrEmpty()) {
+            return tweet
+        }
+        
+        // Check if it's a retweet/quote and get original tweet
+        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+            try {
+                val originalTweet = HproseInstance.fetchTweet(
+                    tweet.originalTweetId!!,
+                    tweet.originalAuthorId!!,
+                    shouldCache = true
+                )
+                if (originalTweet != null && !originalTweet.attachments.isNullOrEmpty()) {
+                    return originalTweet
+                }
+            } catch (e: Exception) {
+                Timber.tag("SHARE").e(e, "Error fetching original tweet")
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * Resolve the base URL for attachments
+     * Tries author's base URL first, then falls back to app user's base URL
+     */
+    private suspend fun resolveAttachmentBaseURL(sourceTweet: Tweet): String {
+        // Try to get author's base URL
+        try {
+            val author = HproseInstance.getUser(sourceTweet.authorId)
+            if (author?.baseUrl != null) {
+                return author.baseUrl.toString()
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").w("Error fetching author base URL: ${e.message}")
+        }
+        
+        // Fall back to app user's base URL
+        return appUser.baseUrl?.toString() ?: "https://fireshare.us"
+    }
+    
+    /**
+     * Generate a video preview image from video URL
+     * Captures a frame at 1 second (or 10% of duration for short videos)
+     * Returns a 270x270 center-cropped preview
+     */
+    private suspend fun generateVideoPreviewImage(videoUrl: String): Bitmap? = withContext(Dispatchers.IO) {
+        var retriever: MediaMetadataRetriever? = null
+        try {
+            Timber.tag("SHARE").d("Starting video preview generation for: $videoUrl")
+            
+            retriever = MediaMetadataRetriever()
+            retriever.setDataSource(videoUrl, HashMap())
+            
+            // Get video duration
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durationMs = durationStr?.toLongOrNull() ?: 0L
+            val durationSeconds = durationMs / 1000.0
+            
+            Timber.tag("SHARE").d("Video duration: ${durationSeconds}s")
+            
+            if (durationSeconds <= 0 || durationSeconds.isNaN() || durationSeconds.isInfinite()) {
+                Timber.tag("SHARE").w("Invalid video duration: $durationSeconds")
+                return@withContext null
+            }
+            
+            // Capture at 1 second, or at 10% of duration if video is shorter than 10 seconds
+            val captureTime = minOf(1.0, durationSeconds * 0.1)
+            val captureTimeUs = (captureTime * 1_000_000).toLong()
+            
+            Timber.tag("SHARE").d("Capturing frame at ${captureTime}s")
+            
+            // Get frame at specified time
+            val frame = retriever.getFrameAtTime(
+                captureTimeUs,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            )
+            
+            if (frame != null) {
+                // Crop to center and resize to 270x270
+                val croppedFrame = cropToCenter(frame, 270)
+                Timber.tag("SHARE").d("Video frame captured and cropped to 270x270")
+                return@withContext croppedFrame
+            } else {
+                Timber.tag("SHARE").w("Failed to capture video frame")
+                return@withContext null
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error generating video preview")
+            return@withContext null
+        } finally {
+            try {
+                retriever?.release()
+            } catch (e: Exception) {
+                Timber.tag("SHARE").w("Error releasing MediaMetadataRetriever: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Crop image to center square and resize to target size
+     */
+    private fun cropToCenter(image: Bitmap, targetSize: Int): Bitmap {
+        val width = image.width
+        val height = image.height
+        
+        // Determine the crop size (square based on the shorter dimension)
+        val cropSize = minOf(width, height)
+        
+        // Calculate the crop rect (centered)
+        val left = (width - cropSize) / 2
+        val top = (height - cropSize) / 2
+        
+        // Create cropped bitmap
+        val croppedBitmap = Bitmap.createBitmap(image, left, top, cropSize, cropSize)
+        
+        // Resize to target size
+        val resizedBitmap = Bitmap.createScaledBitmap(croppedBitmap, targetSize, targetSize, true)
+        
+        // Clean up intermediate bitmap if different from input
+        if (croppedBitmap != image && croppedBitmap != resizedBitmap) {
+            croppedBitmap.recycle()
+        }
+        
+        return resizedBitmap
+    }
+    
+    /**
+     * Save bitmap to cache directory and return the file
+     */
+    private fun saveBitmapToCache(context: Context, bitmap: Bitmap, filename: String): File? {
+        return try {
+            val cacheDir = File(context.cacheDir, "share_previews")
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+            
+            val file = File(cacheDir, filename)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            
+            Timber.tag("SHARE").d("Saved preview image to: ${file.absolutePath}")
+            file
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error saving bitmap to cache")
+            null
+        }
+    }
+    
+    /**
+     * Compose a descriptive string from the first three attachment types
+     */
+    private fun composeAttachmentTypeText(tweet: Tweet): String {
+        // Get attachments from the tweet or its original tweet
+        var attachments: List<MimeiFileType>? = null
+        
+        if (!tweet.attachments.isNullOrEmpty()) {
+            attachments = tweet.attachments
+        } else if (tweet.originalTweetId != null) {
+            // Try to get original tweet from cache
+            val originalTweet = Tweet.getInstance(tweet.originalTweetId!!, tweet.originalAuthorId ?: "")
+            if (!originalTweet.attachments.isNullOrEmpty()) {
+                attachments = originalTweet.attachments
+            }
+        }
+        
+        if (attachments.isNullOrEmpty()) {
+            return ""
+        }
+        
+        // Get first 3 attachment types
+        val firstThree = attachments.take(3)
+        val typeTexts = firstThree.map { attachment ->
+            when (attachment.type) {
+                MediaType.Image -> "📷 Image"
+                MediaType.Video, MediaType.HLS_VIDEO -> "🎬 Video"
+                MediaType.Audio -> "🎵 Audio"
+                MediaType.PDF -> "📄 PDF"
+                MediaType.Word -> "📝 Word"
+                MediaType.Excel -> "📊 Excel"
+                MediaType.PPT -> "📊 PPT"
+                MediaType.Zip -> "🗜️ Zip"
+                MediaType.Txt -> "📄 Text"
+                MediaType.Html -> "🌐 HTML"
+                else -> "📎 File"
+            }
+        }
+        
+        // Add count if there are more attachments
+        return if (attachments.size > 3) {
+            val remaining = attachments.size - 3
+            typeTexts.joinToString(", ") + " +$remaining more"
+        } else {
+            typeTexts.joinToString(", ")
+        }
     }
 
     /**
