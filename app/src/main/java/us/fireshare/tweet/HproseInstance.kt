@@ -1911,18 +1911,12 @@ object HproseInstance {
                 val fileSize = getFileSize(context, uri)
                 if (fileSize != null && fileSize < MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES) {
                     Timber.tag("uploadToIPFS").d(
-                        "Video size (%d bytes) below %d threshold, using default IPFS upload",
+                        "Video size (%d bytes) below %d threshold, converting to MP4 first",
                         fileSize,
                         MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES
                     )
-                    return uploadToIPFSOriginal(
-                        context,
-                        uri,
-                        fileName,
-                        fileTimestamp,
-                        referenceId,
-                        us.fireshare.tweet.datamodel.MediaType.Video
-                    )
+                    // For videos < 50MB, convert to MP4 first with resolution reduction if needed
+                    return normalizeAndUploadVideo(context, uri, fileName, fileTimestamp, referenceId)
                 }
             }
             Timber.tag("uploadToIPFS").d("Detected video file, attempting local processing only")
@@ -2055,57 +2049,84 @@ object HproseInstance {
             } else {
                 // Normalize to mp4 and upload via IPFS
                 Timber.tag("processVideoLocally").d("Conversion server not available, normalizing to mp4 and uploading via IPFS")
-                
-                // Check if video resolution is > 720p
-                val videoResolution = VideoManager.getVideoResolution(context, uri)
-                val needsResampling = if (videoResolution != null) {
-                    val (width, height) = videoResolution
-                    width > 1280 || height > 720
-                } else {
-                    false
-                }
-                
-                Timber.tag("processVideoLocally").d("Video resolution: $videoResolution, needs resampling: $needsResampling")
-                
-                // Normalize video to mp4
-                val normalizer = us.fireshare.tweet.video.VideoNormalizer(context)
-                val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
-                
-                try {
-                    val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
-                    
-                    when (normalizationResult) {
-                        is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Success -> {
-                            Timber.tag("processVideoLocally").d("Video normalization successful")
-                            
-                            // Upload normalized video via IPFS
-                            val normalizedUri = android.net.Uri.fromFile(normalizedFile)
-                            val result = uploadToIPFSOriginal(
-                                context,
-                                normalizedUri,
-                                fileName,
-                                fileTimestamp,
-                                referenceId,
-                                us.fireshare.tweet.datamodel.MediaType.Video
-                            )
-                            
-                            Timber.tag("processVideoLocally").d("IPFS upload result: ${result?.mid}")
-                            result
-                        }
-                        is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Error -> {
-                            Timber.tag("processVideoLocally").e("Video normalization failed: ${normalizationResult.message}")
-                            null
-                        }
-                    }
-                } finally {
-                    // Clean up normalized file
-                    if (normalizedFile.exists()) {
-                        normalizedFile.delete()
-                    }
-                }
+                return normalizeAndUploadVideo(context, uri, fileName, fileTimestamp, referenceId)
             }
         } catch (e: Exception) {
             Timber.tag("processVideoLocally").e(e, "Error in local video processing")
+            null
+        }
+    }
+
+    /**
+     * Normalize video to MP4 format and upload via IPFS
+     * - Converts video to MP4 format
+     * - If resolution > 720p, reduces to 720p
+     * - Otherwise keeps original resolution
+     * - Uploads the normalized video
+     */
+    private suspend fun normalizeAndUploadVideo(
+        context: Context,
+        uri: Uri,
+        fileName: String?,
+        fileTimestamp: Long,
+        referenceId: MimeiId?
+    ): MimeiFileType? {
+        return try {
+            Timber.tag("normalizeAndUploadVideo").d("Normalizing video to MP4 for IPFS upload")
+            
+            // Check if video resolution is > 720p
+            val videoResolution = VideoManager.getVideoResolution(context, uri)
+            val needsResampling = if (videoResolution != null) {
+                val (width, height) = videoResolution
+                width > 1280 || height > 720
+            } else {
+                false
+            }
+            
+            if (needsResampling) {
+                Timber.tag("normalizeAndUploadVideo").d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
+            } else {
+                Timber.tag("normalizeAndUploadVideo").d("Video ${videoResolution?.first}x${videoResolution?.second} will keep original resolution")
+            }
+            
+            // Normalize video to mp4
+            val normalizer = us.fireshare.tweet.video.VideoNormalizer(context)
+            val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
+            
+            try {
+                val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
+                
+                when (normalizationResult) {
+                    is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Success -> {
+                        Timber.tag("normalizeAndUploadVideo").d("Video normalization successful")
+                        
+                        // Upload normalized video via IPFS
+                        val normalizedUri = android.net.Uri.fromFile(normalizedFile)
+                        val result = uploadToIPFSOriginal(
+                            context,
+                            normalizedUri,
+                            fileName,
+                            fileTimestamp,
+                            referenceId,
+                            us.fireshare.tweet.datamodel.MediaType.Video
+                        )
+                        
+                        Timber.tag("normalizeAndUploadVideo").d("IPFS upload result: ${result?.mid}")
+                        result
+                    }
+                    is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Error -> {
+                        Timber.tag("normalizeAndUploadVideo").e("Video normalization failed: ${normalizationResult.message}")
+                        null
+                    }
+                }
+            } finally {
+                // Clean up normalized file
+                if (normalizedFile.exists()) {
+                    normalizedFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("normalizeAndUploadVideo").e(e, "Error in video normalization and upload")
             null
         }
     }

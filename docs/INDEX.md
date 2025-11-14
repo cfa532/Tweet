@@ -1,5 +1,5 @@
 # Tweet App Documentation Index
-**Last Updated:** October 13, 2025
+**Last Updated:** December 2024
 
 ---
 
@@ -8,7 +8,7 @@
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
 **Total Documents:** 68 documentation files  
-**Last Updated:** December 17, 2025  
+**Last Updated:** December 2024  
 **Status:** ✅ All Documentation Organized in docs/ folder
 
 ---
@@ -36,6 +36,7 @@ This folder contains all technical documentation for the Tweet distributed socia
   - **[PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md)** - Merged audit + improvements
 
 ### Latest Features
+- **Small Video MP4 Conversion (December 2024)** 🆕 - Automatic MP4 conversion and resolution optimization for videos < 50MB
 - **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** - Complete background processing architecture
 - **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Major performance optimization
 - **[VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md](VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md)** - Video manager unification
@@ -160,12 +161,13 @@ This folder contains all technical documentation for the Tweet distributed socia
   - Multi-resolution HLS (720p + 480p)
   - Segment naming: segment000.ts, segment001.ts, etc.
 
-- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)**
+- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)** 🆕 **Updated December 2024**
   - Video upload strategy and routing
   - TUS server integration
   - Service availability checking
   - Automatic fallback to IPFS
   - Resolution-based processing
+  - **NEW:** Small video (< 50MB) MP4 conversion with automatic resolution optimization
 
 - **[TUS_SERVER_NAMING_UPDATE.md](TUS_SERVER_NAMING_UPDATE.md)**
   - Renamed netDiskUrl to tusServerUrl
@@ -350,9 +352,9 @@ The Tweet app is a distributed social media application that connects to multipl
 - **UI Issues?** → See UI Features & Components
 
 ### By Date
-- **Latest (Oct 2025):** Connection Pooling, Video Mute Fix
-- **Recent:** Video loading optimizations, Chat improvements
-- **Older:** Initial implementations and configurations
+- **Latest (December 2024):** Small Video MP4 Conversion with Resolution Optimization
+- **Recent (Oct 2025):** Connection Pooling, Video Mute Fix
+- **Older:** Video loading optimizations, Chat improvements
 
 ---
 

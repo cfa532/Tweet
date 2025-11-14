@@ -136,17 +136,12 @@ class MediaUploadService(
                 val fileSize = getFileSize(uri)
                 if (fileSize != null && fileSize < VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES) {
                     Timber.tag(TAG).d(
-                        "Video size (%d bytes) below %d threshold, using default IPFS upload",
+                        "Video size (%d bytes) below %d threshold, converting to MP4 first",
                         fileSize,
                         VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES
                     )
-                    return uploadToIPFSOriginal(
-                        uri,
-                        fileName,
-                        fileTimestamp,
-                        referenceId,
-                        MediaType.Video
-                    )
+                    // For videos < 50MB, convert to MP4 first with resolution reduction if needed
+                    return normalizeAndUploadVideo(uri, fileName, fileTimestamp, referenceId)
                 }
             }
             try {
@@ -259,58 +254,82 @@ class MediaUploadService(
             } else {
                 // Normalize to mp4 and upload via IPFS
                 Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
-                
-                // Check if video resolution is > 720p
-                val videoResolution = VideoManager.getVideoResolution(context, uri)
-                val needsResampling = if (videoResolution != null) {
-                    val (width, height) = videoResolution
-                    width > 1280 || height > 720
-                } else {
-                    false
-                }
-                
-                if (needsResampling) {
-                    Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
-                }
-                
-                // Normalize video to mp4
-                val normalizer = VideoNormalizer(context)
-                val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
-                
-                try {
-                    val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
-                    
-                    when (normalizationResult) {
-                        is VideoNormalizer.NormalizationResult.Success -> {
-                            // Upload normalized video via IPFS
-                            val normalizedUri = Uri.fromFile(normalizedFile)
-                            val result = uploadToIPFSOriginal(
-                                normalizedUri,
-                                fileName,
-                                fileTimestamp,
-                                referenceId,
-                                MediaType.Video
-                            )
-                            
-                            if (result != null) {
-                                Timber.tag(TAG).d("Video uploaded: ${result.mid}")
-                            }
-                            result
-                        }
-                        is VideoNormalizer.NormalizationResult.Error -> {
-                            Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
-                            null
-                        }
-                    }
-                } finally {
-                    // Clean up normalized file
-                    if (normalizedFile.exists()) {
-                        normalizedFile.delete()
-                    }
-                }
+                return normalizeAndUploadVideo(uri, fileName, fileTimestamp, referenceId)
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in local video processing")
+            null
+        }
+    }
+
+    /**
+     * Normalize video to MP4 format and upload via IPFS
+     * - Converts video to MP4 format
+     * - If resolution > 720p, reduces to 720p
+     * - Otherwise keeps original resolution
+     * - Uploads the normalized video
+     */
+    private suspend fun normalizeAndUploadVideo(
+        uri: Uri,
+        fileName: String?,
+        fileTimestamp: Long,
+        referenceId: MimeiId?
+    ): MimeiFileType? {
+        return try {
+            Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
+            
+            // Check if video resolution is > 720p
+            val videoResolution = VideoManager.getVideoResolution(context, uri)
+            val needsResampling = if (videoResolution != null) {
+                val (width, height) = videoResolution
+                width > 1280 || height > 720
+            } else {
+                false
+            }
+            
+            if (needsResampling) {
+                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
+            } else {
+                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will keep original resolution")
+            }
+            
+            // Normalize video to mp4
+            val normalizer = VideoNormalizer(context)
+            val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
+            
+            try {
+                val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
+                
+                when (normalizationResult) {
+                    is VideoNormalizer.NormalizationResult.Success -> {
+                        // Upload normalized video via IPFS
+                        val normalizedUri = Uri.fromFile(normalizedFile)
+                        val result = uploadToIPFSOriginal(
+                            normalizedUri,
+                            fileName,
+                            fileTimestamp,
+                            referenceId,
+                            MediaType.Video
+                        )
+                        
+                        if (result != null) {
+                            Timber.tag(TAG).d("Video uploaded: ${result.mid}")
+                        }
+                        result
+                    }
+                    is VideoNormalizer.NormalizationResult.Error -> {
+                        Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
+                        null
+                    }
+                }
+            } finally {
+                // Clean up normalized file
+                if (normalizedFile.exists()) {
+                    normalizedFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error in video normalization and upload")
             null
         }
     }

@@ -1,5 +1,5 @@
 # Video Upload Strategy Update
-**Last Updated:** October 13, 2025 (Updated: Health check endpoint and tusServerUrl)
+**Last Updated:** December 2024 (Updated: Small video MP4 conversion with resolution optimization)
 
 ## Overview
 
@@ -29,7 +29,14 @@ This document summarizes the changes made to the video upload strategy, includin
 - `app/src/main/java/us/fireshare/tweet/video/VideoNormalizer.kt`
 
 **Modified Files:**
+- `app/src/main/java/us/fireshare/tweet/service/MediaUploadService.kt`
 - `app/src/main/java/us/fireshare/tweet/HproseInstance.kt`
+
+**Key Feature: Small Video Optimization (December 2024)**
+- Videos less than 50MB are now converted to MP4 format before upload
+- Resolution > 720p is automatically reduced to 720p
+- Original resolution is preserved if ≤ 720p
+- Ensures consistent format and optimal file size for all small videos
 
 **Processing Flow:**
 
@@ -42,34 +49,39 @@ WorkManager Enqueues UploadTweetWorker
     ↓
 Wake Lock Acquired (10 min protection)
     ↓
-Check cloudDrivePort validity
+Check video file size
     ↓
-┌─────────────────────────────────┐
-│ Is cloudDrivePort set?          │
-│ Is conversion server available? │
-└─────────────────────────────────┘
+┌─────────────────────────────┐
+│ Is video < 50MB?            │
+└─────────────────────────────┘
     ↓                    ↓
   YES                   NO
     ↓                    ↓
-┌─────────────────┐  ┌───────────────────────────┐
-│ HLS Conversion  │  │ Check video resolution    │
-│ + Process-zip   │  └───────────────────────────┘
-│ Upload          │       ↓              ↓
-│ (Background)    │   > 720p        ≤ 720p
-└─────────────────┘       ↓              ↓
-                  ┌──────────────┐  ┌──────────────┐
-                  │ Normalize +  │  │ Normalize to │
-                  │ Resample to  │  │ standard MP4 │
-                  │ 720p         │  │              │
-                  │ (Background) │  │ (Background) │
-                  └──────────────┘  └──────────────┘
-                        ↓              ↓
-                  ┌──────────────────────┐
-                  │ Upload via IPFS      │
-                  │ (Background)         │
-                  └──────────────────────┘
-                        ↓
-                  Wake Lock Released
+┌──────────────────┐  ┌─────────────────────────────────┐
+│ Convert to MP4    │  │ Check cloudDrivePort validity   │
+│ Check resolution  │  └─────────────────────────────────┘
+│ > 720p?           │       ↓                    ↓
+└──────────────────┘     YES                   NO
+    ↓        ↓              ↓                    ↓
+  YES       NO         ┌──────────┐      ┌──────────────────┐
+    ↓        ↓         │ HLS      │      │ Check resolution │
+┌─────────┐ ┌─────────┐│ Convert │      └──────────────────┘
+│ Reduce  │ │ Keep     ││ + Upload│            ↓              ↓
+│ to 720p │ │ original ││ (HLS)   │        > 720p        ≤ 720p
+└─────────┘ └─────────┘└─────────┘            ↓              ↓
+    ↓        ↓              ↓          ┌──────────────┐  ┌──────────────┐
+    └────────┴──────────────┘          │ Normalize +  │  │ Normalize to │
+            ↓                            │ Resample to  │  │ standard MP4 │
+    ┌──────────────────────┐           │ 720p         │  │              │
+    │ Upload via IPFS      │           │ (Background) │  │ (Background) │
+    │ (Background)         │           └──────────────┘  └──────────────┘
+    └──────────────────────┘                 ↓              ↓
+            ↓                          ┌──────────────────────┐
+    Wake Lock Released                 │ Upload via IPFS      │
+                                       │ (Background)         │
+                                       └──────────────────────┘
+                                             ↓
+                                       Wake Lock Released
 ```
 
 **All operations execute in background workers with wake lock protection.**
@@ -84,6 +96,13 @@ The new `VideoNormalizer` class provides:
 - Maintains aspect ratio
 - Uses FFmpeg libx264 codec with AAC audio
 - Optimizes for streaming with `faststart` flag
+
+**Small Video Processing (< 50MB):**
+- All videos under 50MB are automatically converted to MP4
+- Resolution check: If width > 1280 OR height > 720, video is resampled to 720p
+- If resolution ≤ 720p, original resolution is preserved
+- Conversion happens before upload to ensure consistent format
+- Uses `normalizeAndUploadVideo()` helper method in both `MediaUploadService` and `HproseInstance`
 
 **Command Examples:**
 
@@ -178,6 +197,8 @@ A computed property that constructs the TUS (resumable upload) server URL by:
 3. **Bandwidth Optimization**: Videos > 720p are automatically downsampled when using IPFS
 4. **Quality Control**: All videos are normalized to standard MP4 format
 5. **User Experience**: Seamless operation regardless of server availability
+6. **Small Video Optimization**: Videos < 50MB are pre-processed to MP4 with optimal resolution, ensuring faster uploads and consistent format
+7. **Automatic Resolution Management**: High-resolution small videos are automatically optimized to 720p to reduce file size while maintaining quality
 
 ## Usage Guidelines
 

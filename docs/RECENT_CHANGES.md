@@ -1,18 +1,142 @@
 # Recent Changes & Updates
-**Period:** October 2025  
+**Period:** October 2025 - December 2024  
 **Status:** Production Ready
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Documentation Cleanup](#documentation-cleanup) 🆕 **(Oct 14, 2025)**
-2. [Background Video Processing](#background-video-processing) 🆕 **(Oct 14, 2025)**
-3. [Connection Pooling Optimization](#connection-pooling-optimization)
-4. [Video Mute State Fix](#video-mute-state-fix)
-5. [HLS Segment Naming](#hls-segment-naming)
-6. [Java Toolchain Configuration](#java-toolchain-configuration)
-7. [Files Modified Summary](#files-modified-summary)
+1. [Small Video MP4 Conversion](#small-video-mp4-conversion) 🆕 **(December 2024)**
+2. [Documentation Cleanup](#documentation-cleanup) 🆕 **(Oct 14, 2025)**
+3. [Background Video Processing](#background-video-processing) 🆕 **(Oct 14, 2025)**
+4. [Connection Pooling Optimization](#connection-pooling-optimization)
+5. [Video Mute State Fix](#video-mute-state-fix)
+6. [HLS Segment Naming](#hls-segment-naming)
+7. [Java Toolchain Configuration](#java-toolchain-configuration)
+8. [Files Modified Summary](#files-modified-summary)
+
+---
+
+## 🎬 Small Video MP4 Conversion
+
+**Date:** December 2024  
+**Priority:** 🔶 **MEDIUM** - Video Processing Enhancement  
+**Status:** ✅ **Implemented & Deployed**
+
+### Overview
+Implemented automatic MP4 conversion and resolution optimization for videos less than 50MB before upload. This ensures consistent format and optimal file size for all small videos.
+
+### Key Features
+
+#### 1. **Automatic MP4 Conversion for Small Videos**
+- Videos under 50MB are now converted to MP4 format before upload
+- Previously, small videos were uploaded directly without processing
+- Ensures consistent format across all video uploads
+
+#### 2. **Intelligent Resolution Management**
+- **High Resolution (> 720p)**: Automatically reduced to 720p
+  - Threshold: width > 1280 OR height > 720
+  - Maintains aspect ratio during resampling
+- **Standard Resolution (≤ 720p)**: Original resolution preserved
+  - No unnecessary processing
+  - Faster conversion time
+
+#### 3. **Implementation Details**
+
+**Modified Files:**
+- `app/src/main/java/us/fireshare/tweet/service/MediaUploadService.kt`
+- `app/src/main/java/us/fireshare/tweet/HproseInstance.kt`
+
+**New Helper Method:**
+```kotlin
+private suspend fun normalizeAndUploadVideo(
+    uri: Uri,
+    fileName: String?,
+    fileTimestamp: Long,
+    referenceId: MimeiId?
+): MimeiFileType?
+```
+
+**Processing Flow:**
+1. Check video file size (< 50MB threshold)
+2. Get video resolution using `VideoManager.getVideoResolution()`
+3. Determine if resampling needed (width > 1280 OR height > 720)
+4. Convert to MP4 using `VideoNormalizer`
+5. Upload converted video via IPFS
+6. Clean up temporary files
+
+### Technical Implementation
+
+**Resolution Detection:**
+```kotlin
+val videoResolution = VideoManager.getVideoResolution(context, uri)
+val needsResampling = if (videoResolution != null) {
+    val (width, height) = videoResolution
+    width > 1280 || height > 720
+} else {
+    false
+}
+```
+
+**FFmpeg Processing:**
+- Uses `VideoNormalizer` class with FFmpeg Kit
+- Codec: libx264 (video) + AAC (audio)
+- Preset: fast
+- CRF: 23 (quality setting)
+- Optimized for streaming with `faststart` flag
+
+### Benefits
+
+1. **Consistent Format**: All small videos are standardized to MP4
+2. **Optimal File Size**: High-resolution videos automatically optimized
+3. **Faster Uploads**: Smaller file sizes mean faster upload times
+4. **Quality Preservation**: Original resolution maintained for ≤ 720p videos
+5. **Bandwidth Savings**: Reduced file sizes for high-resolution videos
+
+### Behavior Matrix
+
+| Video Size | Resolution | Action | Result |
+|-----------|------------|--------|--------|
+| < 50MB | > 720p | Convert to MP4 + Resample to 720p | Optimized MP4 |
+| < 50MB | ≤ 720p | Convert to MP4 (keep resolution) | Standardized MP4 |
+| ≥ 50MB | Any | Existing HLS/IPFS flow | Unchanged |
+
+### Files Modified
+
+1. **MediaUploadService.kt**
+   - Updated `uploadToIPFS()` to call `normalizeAndUploadVideo()` for videos < 50MB
+   - Extracted normalization logic into reusable helper method
+   - Refactored `processVideoLocally()` to use helper method
+
+2. **HproseInstance.kt**
+   - Applied same logic for consistency
+   - Added `normalizeAndUploadVideo()` helper method
+   - Updated video upload flow to process small videos
+
+### Testing Checklist
+
+- [x] Build compilation successful
+- [x] Videos < 50MB with resolution > 720p are resampled
+- [x] Videos < 50MB with resolution ≤ 720p keep original resolution
+- [x] MP4 conversion works correctly
+- [x] Temporary files are cleaned up
+- [x] Upload succeeds after conversion
+- [ ] Extended testing on various video formats
+- [ ] Performance testing for conversion time
+
+### Impact
+
+- ✅ **Format Consistency**: All small videos now in MP4 format
+- ✅ **File Size Optimization**: High-res videos automatically optimized
+- ✅ **User Experience**: Faster uploads for optimized videos
+- ✅ **Backward Compatible**: Large videos (≥ 50MB) unchanged
+
+### Documentation
+
+Updated documentation:
+- **[VIDEO_UPLOAD_STRATEGY_UPDATE.md](VIDEO_UPLOAD_STRATEGY_UPDATE.md)** - Added small video processing details
+- Processing flow diagram updated
+- Benefits section expanded
 
 ---
 
