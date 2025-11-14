@@ -99,6 +99,12 @@ The built APK file will be in the following directory:
     For example, for the device `TAS-AN00`:
     ```bash
     adb -s TAS-AN00 install app/build/outputs/apk/full/release/app-full-release.apk
+
+    If you rely on Android Studio's bundled Android SDK, use the full path to its `adb` binary. For example, on macOS:
+    ```bash
+    /Users/<username>/Library/Android/sdk/platform-tools/adb -s TAS-AN00 install app/build/outputs/apk/full/debug/app-full-debug.apk
+    ```
+    Replace `<username>` with your macOS account name and adjust the variant (`debug`, `release`, `mini`, etc.) as needed.
     ```
     If you only have one device connected, you can omit the `-s DEVICE_SERIAL` part.
 

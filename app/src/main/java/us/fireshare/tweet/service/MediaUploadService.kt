@@ -43,6 +43,7 @@ class MediaUploadService(
 
     companion object {
         private const val TAG = "MediaUploadService"
+        internal const val VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES = 50L * 1024 * 1024
     }
 
     /**
@@ -129,8 +130,25 @@ class MediaUploadService(
             }
         }
 
-        // For video files, use local processing only
+        // For video files, check if we can upload via default IPFS path directly
         if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
+            if (mediaType == MediaType.Video) {
+                val fileSize = getFileSize(uri)
+                if (fileSize != null && fileSize < VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES) {
+                    Timber.tag(TAG).d(
+                        "Video size (%d bytes) below %d threshold, using default IPFS upload",
+                        fileSize,
+                        VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES
+                    )
+                    return uploadToIPFSOriginal(
+                        uri,
+                        fileName,
+                        fileTimestamp,
+                        referenceId,
+                        MediaType.Video
+                    )
+                }
+            }
             try {
                 val localResult = processVideoLocally(uri, fileName, fileTimestamp, referenceId)
                 if (localResult != null) {

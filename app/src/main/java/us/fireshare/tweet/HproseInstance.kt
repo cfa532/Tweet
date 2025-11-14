@@ -1905,8 +1905,26 @@ object HproseInstance {
             }
         }
 
-        // For video files, use local processing only (no fallback for testing)
+        // For video files, optionally bypass local processing for small files
         if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video || mediaType == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) {
+            if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
+                val fileSize = getFileSize(context, uri)
+                if (fileSize != null && fileSize < MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES) {
+                    Timber.tag("uploadToIPFS").d(
+                        "Video size (%d bytes) below %d threshold, using default IPFS upload",
+                        fileSize,
+                        MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES
+                    )
+                    return uploadToIPFSOriginal(
+                        context,
+                        uri,
+                        fileName,
+                        fileTimestamp,
+                        referenceId,
+                        us.fireshare.tweet.datamodel.MediaType.Video
+                    )
+                }
+            }
             Timber.tag("uploadToIPFS").d("Detected video file, attempting local processing only")
             try {
                 val localResult = processVideoLocally(context, uri, fileName, fileTimestamp, referenceId)
