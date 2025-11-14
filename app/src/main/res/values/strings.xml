@@ -178,6 +178,9 @@
     <string name="cleared">Cleared!</string>
     <string name="clear">Clear</string>
     <string name="search_placeholder">Search @username or #hashtag</string>
+    <string name="search_generic_error">Something went wrong while searching. Please try again.</string>
+    <string name="search_section_users">Accounts</string>
+    <string name="search_section_tweets">Tweets</string>
     <string name="content_to_share">Content to Share</string>
     <string name="yesterday">Yesterday</string>
     

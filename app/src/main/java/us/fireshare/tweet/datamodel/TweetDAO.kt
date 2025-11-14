@@ -107,6 +107,9 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedUser")
     fun clearAllCachedUsers()
+
+    @Query("SELECT * FROM CachedUser")
+    fun getAllCachedUsers(): List<CachedUser>
     
     @Query("DELETE FROM CachedUser WHERE timestamp < :cutoffTime")
     fun deleteOldCachedUsers(cutoffTime: Date)
@@ -122,6 +125,9 @@ interface CachedTweetDao {
 
     @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :count OFFSET :offset")
     fun getCachedTweets(offset: Int, count: Int): List<CachedTweet>
+
+    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentCachedTweets(limit: Int): List<CachedTweet>
 
     @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY timestamp DESC" +
             " LIMIT :count OFFSET :offset")

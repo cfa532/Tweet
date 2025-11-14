@@ -50,6 +50,9 @@
     <!-- Empty states -->
     <string name="no_tweets_found">沒有找到推文</string>
     <string name="no_search_results">沒有找到「%s」的結果</string>
+    <string name="search_generic_error">搜尋時發生問題，請再試一次。</string>
+    <string name="search_section_users">帳號</string>
+    <string name="search_section_tweets">推文</string>
     <string name="no_bookmarks">還沒有書簽</string>
     <string name="no_favorites">還沒有喜歡的內容</string>
     <string name="no_followers">還沒有粉絲</string>

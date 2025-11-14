@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import java.util.Date
+import java.util.Locale
 
 /**
  * TweetCacheManager handles tweet and user caching with expiration management.
@@ -375,6 +376,170 @@ object TweetCacheManager {
         } catch (e: Exception) {
             Timber.e("Error getting cache stats: $e")
             CacheStats(0, 0, 0)
+        }
+    }
+
+    /**
+     * Perform a partial search across locally cached users (memory + database).
+     * Matches both username and display name, case-insensitively.
+     */
+    suspend fun searchUsers(query: String, limit: Int = 20): List<User> = withContext(Dispatchers.IO) {
+        if (query.isBlank() || limit <= 0) return@withContext emptyList()
+
+        val normalizedQuery = query.normalizedLowercase()
+        val results = LinkedHashMap<String, Pair<Int, User>>(limit)
+
+        fun consider(user: User?) {
+            if (user == null) return
+            val score = user.matchScore(normalizedQuery) ?: return
+            val existing = results[user.mid]
+            if (existing == null || score < existing.first) {
+                results[user.mid] = score to user
+            }
+        }
+
+        val memoryUsers = synchronized(userCacheLock) { userMemoryCache.values.toList() }
+        memoryUsers.forEach(::consider)
+
+        if (results.size < limit) {
+            try {
+                HproseInstance.dao.getAllCachedUsers().forEach { cachedUser ->
+                    consider(cachedUser.user)
+                    if (results.size >= limit) return@forEach
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "searchUsers: Unable to read cached users from database")
+            }
+        }
+
+        if (results.size < limit) {
+            try {
+                val candidateIds = mutableSetOf<String>()
+
+                synchronized(userCacheLock) {
+                    candidateIds.addAll(userMemoryCache.keys)
+                }
+
+                synchronized(cacheLock) {
+                    memoryCache.values.forEach { cachedTweet ->
+                        candidateIds.add(cachedTweet.originalTweet.authorId)
+                    }
+                }
+
+                HproseInstance.dao.getRecentCachedTweets(200).forEach { cachedTweet ->
+                    candidateIds.add(cachedTweet.originalTweet.authorId)
+                }
+
+                for (userId in candidateIds) {
+                    if (results.size >= limit || results.containsKey(userId)) continue
+                    try {
+                        val user = HproseInstance.getUser(userId)
+                        consider(user)
+                    } catch (e: Exception) {
+                        Timber.tag("TweetCacheManager").v(e, "searchUsers: Failed to fetch user $userId")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "searchUsers: Failed to enrich results with tweet authors")
+            }
+        }
+
+        return@withContext results.values
+            .sortedWith(
+                compareBy(
+                    { it.first },
+                    {
+                        it.second.username?.normalizedLowercase()
+                            ?: it.second.name?.normalizedLowercase()
+                            ?: it.second.mid
+                    }
+                )
+            )
+            .map { it.second }
+            .take(limit)
+    }
+
+    /**
+     * Perform a partial search across locally cached tweets (memory + database).
+     * Matches tweet content, title, and author metadata case-insensitively.
+     */
+    suspend fun searchTweets(query: String, limit: Int = 40): List<Tweet> = withContext(Dispatchers.IO) {
+        if (query.isBlank() || limit <= 0) return@withContext emptyList()
+
+        val normalizedQuery = query.normalizedLowercase()
+        val results = LinkedHashMap<String, Pair<Int, Tweet>>(limit)
+
+        fun consider(tweet: Tweet?) {
+            if (tweet == null || tweet.isPrivate) return
+            val score = tweet.matchScore(normalizedQuery) ?: return
+            val existing = results[tweet.mid]
+            if (existing == null || score < existing.first) {
+                results[tweet.mid] = score to tweet
+            }
+        }
+
+        synchronized(cacheLock) {
+            memoryCache.values.forEach { cachedTweet ->
+                consider(cachedTweet.originalTweet)
+            }
+        }
+
+        if (results.size < limit) {
+            try {
+                HproseInstance.dao.getRecentCachedTweets(400).forEach { cachedTweet ->
+                    consider(cachedTweet.originalTweet)
+                    if (results.size >= limit) return@forEach
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "searchTweets: Unable to read cached tweets from database")
+            }
+        }
+
+        val sortedTweets = results.values
+            .sortedWith(compareBy({ it.first }, { -it.second.timestamp }))
+            .map { it.second }
+            .take(limit)
+            .toMutableList()
+
+        for (tweet in sortedTweets) {
+            if (tweet.author == null) {
+                try {
+                    tweet.author = HproseInstance.getUser(tweet.authorId)
+                } catch (e: Exception) {
+                    Timber.tag("TweetCacheManager").v(e, "searchTweets: Failed to fetch author ${tweet.authorId}")
+                }
+            }
+        }
+
+        return@withContext sortedTweets
+    }
+
+    private fun String.normalizedLowercase(): String =
+        lowercase(Locale.getDefault()).trim()
+
+    private fun User.matchScore(query: String): Int? {
+        val usernameValue = username?.normalizedLowercase() ?: ""
+        val nameValue = name?.normalizedLowercase() ?: ""
+
+        return when {
+            usernameValue.contains(query) -> if (usernameValue.startsWith(query)) 0 else 1
+            nameValue.contains(query) -> if (nameValue.startsWith(query)) 2 else 3
+            else -> null
+        }
+    }
+
+    private fun Tweet.matchScore(query: String): Int? {
+        val contentValue = content?.normalizedLowercase() ?: ""
+        val titleValue = title?.normalizedLowercase() ?: ""
+        val authorUsername = author?.username?.normalizedLowercase() ?: ""
+        val authorName = author?.name?.normalizedLowercase() ?: ""
+
+        return when {
+            contentValue.contains(query) -> if (contentValue.startsWith(query)) 0 else 1
+            titleValue.contains(query) -> if (titleValue.startsWith(query)) 2 else 3
+            authorUsername.contains(query) -> if (authorUsername.startsWith(query)) 4 else 5
+            authorName.contains(query) -> if (authorName.startsWith(query)) 6 else 7
+            else -> null
         }
     }
 

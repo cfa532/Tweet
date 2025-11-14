@@ -179,6 +179,9 @@
     <string name="cleared">已清除！</string>
     <string name="clear">清除</string>
     <string name="search_placeholder">搜索 @用户名 或 #话题</string>
+    <string name="search_generic_error">搜索时出现问题，请重试。</string>
+    <string name="search_section_users">账号</string>
+    <string name="search_section_tweets">推文</string>
     <string name="content_to_share">分享内容</string>
     <string name="yesterday">昨天</string>
     
