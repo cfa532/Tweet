@@ -1,23 +1,19 @@
 package us.fireshare.tweet.viewmodel
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.Rect
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
-import androidx.annotation.OptIn
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.FileProvider
+import androidx.core.graphics.scale
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
@@ -27,15 +23,16 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
@@ -55,7 +52,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
-import androidx.core.graphics.createBitmap
+import java.util.concurrent.TimeUnit
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -293,7 +290,7 @@ class TweetViewModel @AssistedInject constructor(
             .setBackoffCriteria(
                 BackoffPolicy.EXPONENTIAL,
                 10_000L, // 10 seconds
-                java.util.concurrent.TimeUnit.MILLISECONDS
+                TimeUnit.MILLISECONDS
             )
             .build()
         val workManager = WorkManager.getInstance(context)
@@ -339,7 +336,7 @@ class TweetViewModel @AssistedInject constructor(
         // Try to generate preview image from first attachment (with timeout)
         val previewImage = try {
             withContext(Dispatchers.IO) {
-                kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                withTimeoutOrNull(10000L) {
                     loadAttachmentPreviewImage(context)
                 }
             }
@@ -364,12 +361,12 @@ class TweetViewModel @AssistedInject constructor(
         }
         
         // Always update clipboard - either with preview image or clear it
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         
         if (imageUri != null) {
             // Clear and set new image immediately
             clipboard.clearPrimaryClip()
-            val clip = android.content.ClipData.newUri(context.contentResolver, "Tweet Image", imageUri)
+            val clip = ClipData.newUri(context.contentResolver, "Tweet Image", imageUri)
             clipboard.setPrimaryClip(clip)
             Timber.tag("SHARE").d("Copied preview image to clipboard")
         } else {
@@ -428,8 +425,8 @@ class TweetViewModel @AssistedInject constructor(
             when (attachment.type) {
                 MediaType.Image -> {
                     Timber.tag("SHARE").d("Processing image attachment")
-                    var fullImage: Bitmap? = null
-                    
+                    var fullImage: Bitmap?
+
                     // Try to get cached image first
                     fullImage = ImageCacheManager.getCachedImage(context, attachment.mid)
                     
@@ -455,7 +452,7 @@ class TweetViewModel @AssistedInject constructor(
                     Timber.tag("SHARE").d("Processing video attachment, type: ${attachment.type}")
                     val videoUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
                     Timber.tag("SHARE").d("Generating video preview from URL: $videoUrl")
-                    val preview = generateVideoPreviewImage(context, videoUrl, attachment.mid, attachment.type)
+                    val preview = generateVideoPreviewImage(videoUrl, attachment.mid, attachment.type)
                     Timber.tag("SHARE").d("Video preview generated: ${preview != null}")
                     return@withContext preview
                 }
@@ -515,7 +512,7 @@ class TweetViewModel @AssistedInject constructor(
         }
         
         // Fall back to app user's base URL
-        return appUser.baseUrl?.toString() ?: "https://fireshare.us"
+        return appUser.baseUrl ?: "https://fireshare.us"
     }
     
     /**
@@ -524,10 +521,10 @@ class TweetViewModel @AssistedInject constructor(
      * For Progressive: Uses MediaMetadataRetriever with the video URL
      * Returns a 270x270 center-cropped preview
      */
-    private suspend fun generateVideoPreviewImage(context: Context, videoUrl: String, mediaId: String, mediaType: MediaType): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun generateVideoPreviewImage(videoUrl: String, mediaId: String, mediaType: MediaType): Bitmap? = withContext(Dispatchers.IO) {
         if (mediaType == MediaType.HLS_VIDEO) {
             // For HLS, get current playback position from player
-            val playerInfo = withContext(Dispatchers.Main) {
+            val playerInfo = withContext(Main) {
                 val player = VideoManager.getCachedVideoPlayer(mediaId)
                 player?.currentPosition
             }
@@ -536,18 +533,16 @@ class TweetViewModel @AssistedInject constructor(
                 Timber.tag("SHARE").d("No cached player for HLS, skipping preview generation")
                 return@withContext null
             }
-            
-            val currentPositionMs = playerInfo
-            
+
             // MediaMetadataRetriever needs a direct .ts segment file, not a .m3u8 playlist
             // Calculate which segment to use based on current position
             // Assuming standard HLS segment duration of 5 seconds
             val segmentDurationMs = 5000L
-            val segmentNumber = (currentPositionMs / segmentDurationMs).toInt()
-            val offsetWithinSegmentMs = currentPositionMs % segmentDurationMs
+            val segmentNumber = (playerInfo / segmentDurationMs).toInt()
+            val offsetWithinSegmentMs = playerInfo % segmentDurationMs
             val segmentName = "segment%03d.ts".format(segmentNumber)
             
-            Timber.tag("SHARE").d("Current position: ${currentPositionMs}ms, using segment: $segmentName, offset: ${offsetWithinSegmentMs}ms")
+            Timber.tag("SHARE").d("Current position: ${playerInfo}ms, using segment: $segmentName, offset: ${offsetWithinSegmentMs}ms")
             
             // Try different quality levels in order (smallest first for speed)
             val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
@@ -575,7 +570,7 @@ class TweetViewModel @AssistedInject constructor(
                 } finally {
                     try {
                         retriever.release()
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Ignore
                     }
                 }
@@ -586,7 +581,7 @@ class TweetViewModel @AssistedInject constructor(
         } else {
             // For progressive videos, use the direct URL
             // Get current playback position if player exists
-            val currentPositionMs = withContext(Dispatchers.Main) {
+            val currentPositionMs = withContext(Main) {
                 val player = VideoManager.getCachedVideoPlayer(mediaId)
                 player?.currentPosition ?: 1000L // Default to 1 second if no player
             }
@@ -637,7 +632,7 @@ class TweetViewModel @AssistedInject constructor(
         val croppedBitmap = Bitmap.createBitmap(image, left, top, cropSize, cropSize)
         
         // Resize to target size
-        val resizedBitmap = Bitmap.createScaledBitmap(croppedBitmap, targetSize, targetSize, true)
+        val resizedBitmap = croppedBitmap.scale(targetSize, targetSize)
         
         // Clean up intermediate bitmap if different from input
         if (croppedBitmap != image && croppedBitmap != resizedBitmap) {
@@ -756,10 +751,10 @@ class TweetViewModel @AssistedInject constructor(
             )
             // Show error toast
             notificationContextRef?.get()?.let { context ->
-                android.widget.Toast.makeText(
+                Toast.makeText(
                     context,
                     "Failed to update favorite",
-                    android.widget.Toast.LENGTH_SHORT
+                    Toast.LENGTH_SHORT
                 ).show()
             }
         } else {
@@ -796,10 +791,10 @@ class TweetViewModel @AssistedInject constructor(
             )
             // Show error toast
             notificationContextRef?.get()?.let { context ->
-                android.widget.Toast.makeText(
+                Toast.makeText(
                     context,
                     "Failed to update bookmark",
-                    android.widget.Toast.LENGTH_SHORT
+                    Toast.LENGTH_SHORT
                 ).show()
             }
         } else {
@@ -913,7 +908,7 @@ class TweetViewModel @AssistedInject constructor(
                         }
                     }
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 // This is expected when the ViewModel is destroyed
                 Timber.tag("TweetViewModel").d("Notification listener cancelled: ${e.message}")
             } catch (e: Exception) {
