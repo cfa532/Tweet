@@ -58,11 +58,11 @@ Wait for Gradle sync to complete.
 4. Or find APK at: `app/build/outputs/apk/mini/release/app-mini-release.apk`
 5. Drag APK to device or install via: `adb install app/build/outputs/apk/mini/release/app-mini-release.apk`
     
-## Build and Install Full Release via Command Line
+## Build and Install (Full) via Command Line
 
 These steps are for developers who prefer using the terminal.
 
-### Step 1: Build the APK
+### Step 1: Build the APK (release or debug)
 
 1.  Open your terminal.
 
@@ -71,41 +71,80 @@ These steps are for developers who prefer using the terminal.
     cd /Users/cfa532/Documents/GitHub/Tweet
     ```
 
-3.  Run the Gradle command to assemble the full release build:
+3.  Run **one** of the following, depending on what you want to install:
     ```bash
+    # Full RELEASE APK (used for production testing)
     ./gradlew assembleFullRelease
     ```
     Alternatively, you can build all release variants (full, mini, play):
     ```bash
+    # All release variants (full, mini, play)
     ./gradlew assembleRelease
+
+    # Full DEBUG APK (what you usually install while developing)
+    ./gradlew assembleFullDebug
     ```
 
 ### Step 2: Locate the APK
 
-The built APK file will be in the following directory:
+**Full variants:**
 
-`app/build/outputs/apk/full/release/app-full-release.apk`
+- Full **release** APK  
+  `app/build/outputs/apk/full/release/app-full-release.apk`
 
-### Step 3: Install the APK
+- Full **debug** APK  
+  `app/build/outputs/apk/full/debug/app-full-debug.apk`
 
-1.  Make sure your device is connected and recognized by ADB. You can check with `adb devices`.
+**Mini variants (for reference):**
 
-2.  Use `adb install` to install the APK on your specific device. Replace `DEVICE_SERIAL` with your device's serial number (e.g., `TAS-AN00`).
+- Mini **debug** APK  
+  `app/build/outputs/apk/mini/debug/app-mini-debug.apk`
+
+- Mini **release** APK  
+  `app/build/outputs/apk/mini/release/app-mini-release.apk`
+
+### Step 3: Install the APK on a specific device
+
+1.  Make sure your device is connected and recognized by ADB:
 
     ```bash
+    adb devices
+    ```
+
+    Example output:
+
+    ```text
+    List of devices attached
+    FEC5T19A22022812    device
+    ```
+
+2.  Use `adb install` to install the APK on your specific device.  
+    Replace `DEVICE_SERIAL` with your device's serial number from `adb devices` (for example: `FEC5T19A22022812`).
+
+    ```bash
+    # Full RELEASE APK
     adb -s DEVICE_SERIAL install app/build/outputs/apk/full/release/app-full-release.apk
+
+    # Full DEBUG APK (most common during development)
+    adb -s DEVICE_SERIAL install app/build/outputs/apk/full/debug/app-full-debug.apk
     ```
 
-    For example, for the device `TAS-AN00`:
-    ```bash
-    adb -s TAS-AN00 install app/build/outputs/apk/full/release/app-full-release.apk
+    For example, for a device with serial `FEC5T19A22022812` and a full **debug** APK:
 
-    If you rely on Android Studio's bundled Android SDK, use the full path to its `adb` binary. For example, on macOS:
     ```bash
-    /Users/<username>/Library/Android/sdk/platform-tools/adb -s TAS-AN00 install app/build/outputs/apk/full/debug/app-full-debug.apk
+    adb -s FEC5T19A22022812 install -r app/build/outputs/apk/full/debug/app-full-debug.apk
     ```
-    Replace `<username>` with your macOS account name and adjust the variant (`debug`, `release`, `mini`, etc.) as needed.
+
+    If you rely on Android Studio's bundled Android SDK (adb not on PATH), use the full path to its `adb` binary.  
+    On macOS, this is typically:
+
+    ```bash
+    /Users/<username>/Library/Android/sdk/platform-tools/adb -s DEVICE_SERIAL install -r app/build/outputs/apk/full/debug/app-full-debug.apk
     ```
+
+    Replace:
+    - `<username>` with your macOS account name (for you: `cfa532`)
+    - `DEVICE_SERIAL` with the actual serial from `adb devices` (for example: `FEC5T19A22022812`)
     If you only have one device connected, you can omit the `-s DEVICE_SERIAL` part.
 
 ## Quick Reference

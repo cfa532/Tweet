@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SkipNext
@@ -53,6 +54,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import timber.log.Timber
 import us.fireshare.tweet.R
@@ -60,6 +62,12 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
+import us.fireshare.tweet.tweet.BookmarkButton
+import us.fireshare.tweet.tweet.CommentButton
+import us.fireshare.tweet.tweet.LikeButton
+import us.fireshare.tweet.tweet.RetweetButton
+import us.fireshare.tweet.tweet.ShareButton
+import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import kotlin.math.abs
 
@@ -74,7 +82,8 @@ fun IndependentFullScreenPlayer(
     startIndex: Int,
     modifier: Modifier = Modifier,
     tappedTweet: Tweet? = null, // The tweet that was actually tapped
-    onClose: () -> Unit,
+    parentEntry: NavBackStackEntry,
+    onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -103,13 +112,18 @@ fun IndependentFullScreenPlayer(
     val activity = context as? Activity
     
     var showControls by remember { mutableStateOf(false) }
-    var currentTweet by remember { mutableStateOf<Tweet?>(null) }
+    var currentTweet by remember { mutableStateOf<Tweet?>(tappedTweet) }
     var currentIndex by remember { mutableIntStateOf(0) }
     var totalVideos by remember { mutableIntStateOf(0) }
     var verticalDragOffset by remember { mutableFloatStateOf(0f) }
     var videoScale by remember { mutableFloatStateOf(1f) }
     var videoOffset by remember { mutableFloatStateOf(0f) }
     var isClosing by remember { mutableStateOf(false) }
+
+    // Show controls (and thus action buttons) briefly when entering fullscreen
+    LaunchedEffect(Unit) {
+        showControls = true
+    }
     
     // Initialize the singleton player
     LaunchedEffect(Unit) {
@@ -125,18 +139,15 @@ fun IndependentFullScreenPlayer(
         // Set up callbacks
         FullScreenPlayerManager.setOnVideoChanged { videoMid, index ->
             Timber.d("IndependentFullScreenPlayer - Video changed to index $index: $videoMid")
-            // For now, we'll set currentTweet to null since we don't have tweet info
-            // TODO: Find a way to get tweet info from video mid
-            currentTweet = null
+            // For now, keep using tappedTweet for actions if we don't have per-video tweet mapping
+            // TODO: Map videoMid to the correct Tweet instance for accurate context
             currentIndex = index
             totalVideos = FullScreenPlayerManager.getTotalVideos()
         }
         
         // Set initial values
         val currentVideoMid = FullScreenPlayerManager.getCurrentVideoMid()
-        // For now, we'll set currentTweet to null since we don't have tweet info
-        // TODO: Find a way to get tweet info from video mid
-        currentTweet = null
+        // Keep using tappedTweet as the current tweet context for now
         currentIndex = FullScreenPlayerManager.getCurrentIndex()
         totalVideos = FullScreenPlayerManager.getTotalVideos()
     }
@@ -252,7 +263,15 @@ fun IndependentFullScreenPlayer(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                    
+                    // Keep showControls state in sync with native controller visibility
+                    setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            val isVisible = visibility == android.view.View.VISIBLE
+                            if (showControls != isVisible) {
+                                showControls = isVisible
+                            }
+                        }
+                    )
                 }
             },
             update = { playerView ->
@@ -277,6 +296,7 @@ fun IndependentFullScreenPlayer(
                 onClose = onClose,
                 onNext = { FullScreenPlayerManager.playNextVideo() },
                 onPrevious = { FullScreenPlayerManager.playPreviousVideo() },
+                parentEntry = parentEntry,
                 modifier = Modifier.alpha(controlsAlpha)
             )
         }
@@ -301,6 +321,14 @@ fun IndependentFullScreenPlayer(
         }
     }
     
+    // Auto-hide controls (and action buttons) after 3 seconds whenever they are shown
+    LaunchedEffect(showControls) {
+        if (showControls) {
+            kotlinx.coroutines.delay(3000)
+            showControls = false
+        }
+    }
+    
     // Cleanup on dispose
     DisposableEffect(Unit) {
         onDispose {
@@ -321,82 +349,36 @@ private fun VideoInfoOverlay(
     onClose: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    parentEntry: NavBackStackEntry,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+    // TweetViewModel for action buttons, scoped to the same NavBackStackEntry
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        parentEntry,
+        key = tweet.mid
+    ) { factory ->
+        factory.create(tweet)
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize()
     ) {
-        // Top bar with close button and video counter
+        // Tweet action buttons row – floated above the native progress bar
+        // Use slightly transparent white so they blend with fullscreen controls
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 72.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "${currentIndex + 1} of $totalVideos",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        
-        // Tweet content
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = tweet.content ?: "",
-                color = Color.White,
-                fontSize = 14.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = "@${tweet.author?.username ?: "Unknown"}",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp
-            )
-        }
-        
-        // Bottom controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onPrevious) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = stringResource(R.string.previous_video),
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            
-            IconButton(onClick = onNext) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = stringResource(R.string.next_video),
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+            val actionColor = Color.White.copy(alpha = 0.7f)
+            CommentButton(viewModel, color = actionColor)
+            LikeButton(viewModel, color = actionColor)
+            BookmarkButton(viewModel, color = actionColor)
+            RetweetButton(viewModel, color = actionColor)
+            Spacer(modifier = Modifier.width(20.dp))
+            ShareButton(viewModel, color = actionColor)
         }
     }
 }

@@ -334,6 +334,7 @@ fun MediaBrowser(
                         // Always use full tweet list
                         startIndex = startIndex,
                         tappedTweet = tweet, // Pass the current tweet for reference
+                        parentEntry = parentEntry,
                         onClose = {
                             Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
                             navController.popBackStack()

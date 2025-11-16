@@ -54,7 +54,8 @@ suspend fun guestWarning(context: Context, navController: NavController? = null)
 @Composable
 fun CommentButton(
     viewModel: TweetViewModel,
-    onExpandReply: (() -> Unit)? = null
+    onExpandReply: (() -> Unit)? = null,
+    color: Color? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember {
@@ -86,14 +87,14 @@ fun CommentButton(
                 painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (count >0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
             if (count > 0) {
                 Text(
                     text = "$count",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = color ?: MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -101,7 +102,7 @@ fun CommentButton(
 }
 
 @Composable
-fun RetweetButton(viewModel: TweetViewModel) {
+fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember {
         derivedStateOf { tweet.retweetCount }
@@ -136,14 +137,14 @@ fun RetweetButton(viewModel: TweetViewModel) {
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
                 contentDescription = stringResource(R.string.forward),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (count>0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(4.dp))
-            if (count>0) {
+            if (count > 0) {
                 Text(
                     text = "$count",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                    color = color ?: if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                 )
             }
         }
@@ -237,7 +238,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
 }
 
 @Composable
-fun ShareButton(viewModel: TweetViewModel) {
+fun ShareButton(viewModel: TweetViewModel, color: Color? = null) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -259,7 +260,7 @@ fun ShareButton(viewModel: TweetViewModel) {
                 contentDescription = stringResource(R.string.share),
                 modifier = Modifier.size(ButtonDefaults.IconSize)
                     .padding(1.dp),
-                tint = MaterialTheme.colorScheme.outline
+                tint = color ?: MaterialTheme.colorScheme.outline
             )
         }
     }

@@ -19,7 +19,7 @@ object FullScreenPlayerManager {
     private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
     private var applicationContext: Context? = null // Use Application context to avoid memory leaks
-    private var isManualNavigation: Boolean = false // Flag to prevent double progression
+    private var isManualNavigation: Boolean = false // Flag to prevent double progression when user manually skips
     
     /**
      * Initialize the singleton player instance
@@ -76,7 +76,7 @@ object FullScreenPlayerManager {
         val videoList = currentVideoList ?: return
         Timber.d("FullScreenPlayerManager - Playing next video, current index: $currentVideoIndex, total videos: ${videoList.size}")
         
-        // Set manual navigation flag to prevent double progression
+        // Mark that this change was initiated by the user/gesture
         isManualNavigation = true
         
         if (currentVideoIndex < videoList.size - 1) {
@@ -102,7 +102,7 @@ object FullScreenPlayerManager {
         val videoList = currentVideoList ?: return
         Timber.d("FullScreenPlayerManager - Playing previous video, current index: $currentVideoIndex")
         
-        // Set manual navigation flag to prevent double progression
+        // Mark that this change was initiated by the user/gesture
         isManualNavigation = true
         
         if (currentVideoIndex > 0) {
@@ -155,6 +155,10 @@ object FullScreenPlayerManager {
             // Release the old player and set the new one
             player.release()
             exoPlayer = newPlayer
+
+            // Reset manual navigation flag when starting a fresh video
+            // so that natural video completion can auto-advance
+            isManualNavigation = false
             
             // Add listener for automatic video rewinding when finished
             newPlayer.addListener(object : Player.Listener {
@@ -162,8 +166,16 @@ object FullScreenPlayerManager {
                     Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
                     when (playbackState) {
                         Player.STATE_ENDED -> {
-                            // Rewind is handled by CreateExoPlayer listener
                             Timber.d("FullScreenPlayerManager - Video ended")
+                            // If this wasn't a manual skip, automatically play the next video
+                            if (!isManualNavigation) {
+                                Timber.d("FullScreenPlayerManager - Auto-playing next video after completion")
+                                playNextVideo()
+                            } else {
+                                // Clear the manual flag so the next natural end can auto-advance
+                                Timber.d("FullScreenPlayerManager - Manual navigation flag cleared after end")
+                                isManualNavigation = false
+                            }
                         }
                         Player.STATE_READY -> {
                             Timber.d("FullScreenPlayerManager - Video ready to play")
