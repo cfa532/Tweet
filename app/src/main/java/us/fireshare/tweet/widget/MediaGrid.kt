@@ -8,15 +8,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.CoroutineScope
@@ -242,12 +247,16 @@ fun MediaGrid(
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentWidth(Alignment.CenterHorizontally)
     ) {
-        when (limitedMediaList.size) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+        ) {
+            when (limitedMediaList.size) {
             1 -> {
                 // Use cached aspect ratio for better performance
                 val aspectRatio = if (cachedAspectRatios[0] > 0.8f) {
@@ -700,6 +709,33 @@ fun MediaGrid(
                             onVideoCompleted = { onVideoCompleted(index) }
                         )
                     }
+                }
+            }
+            }
+        }
+
+        // Caption for single-video grid: title or file name (without extension)
+        if (limitedMediaList.size == 1) {
+            val singleItem = limitedMediaList[0]
+            val singleItemType = inferMediaTypeFromAttachment(singleItem)
+            if (singleItemType == MediaType.Video || singleItemType == MediaType.HLS_VIDEO) {
+                // Prefer tweet title; fallback to file name without extension
+                val rawTitle = tweet.title?.takeIf { it.isNotBlank() }
+                val fileNameWithoutExt = singleItem.fileName
+                    ?.substringBeforeLast('.', missingDelimiterValue = singleItem.fileName)
+                    ?.takeIf { it.isNotBlank() }
+
+                val captionText = rawTitle ?: fileNameWithoutExt
+
+                if (!captionText.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = captionText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
