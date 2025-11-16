@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -110,6 +113,7 @@ fun IndependentFullScreenPlayer(
         startIndex
     }
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     
     var showControls by remember { mutableStateOf(false) }
     var currentTweet by remember { mutableStateOf<Tweet?>(tappedTweet) }
@@ -173,6 +177,23 @@ fun IndependentFullScreenPlayer(
     LaunchedEffect(Unit) {
         activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         activity?.let { OrientationManager.allowRotation(it) }
+    }
+    
+    // Pause fullscreen playback when app goes to background
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                exoPlayer?.let { player ->
+                    Timber.d("IndependentFullScreenPlayer - Lifecycle ${event.name}, pausing fullscreen video")
+                    player.playWhenReady = false
+                    player.pause()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
     
     // Cleanup immersive mode and restore portrait on dispose

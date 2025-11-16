@@ -35,6 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -62,6 +65,7 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
     // Add player listener to handle state changes
@@ -108,6 +112,21 @@ fun FullScreenVideoPlayer(
             Timber.d("FullScreenVideoPlayer: Exiting fullscreen, stopping playback")
             existingPlayer.pause()
             existingPlayer.playWhenReady = false
+        }
+    }
+    
+    // Pause playback when app goes to background
+    DisposableEffect(lifecycleOwner, existingPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                Timber.d("FullScreenVideoPlayer: Lifecycle ${event.name}, pausing existingPlayer")
+                existingPlayer.playWhenReady = false
+                existingPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -273,6 +292,7 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showControls by remember { mutableStateOf(false) } // Start with controls hidden
     var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) } // horizontal offset (for swipe)
@@ -302,6 +322,21 @@ fun FullScreenVideoPlayer(
 
         // Auto-play the video
         exoPlayer.playWhenReady = true
+    }
+    
+    // Pause playback when app goes to background
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                Timber.d("FullScreenVideoPlayer (API 30+): Lifecycle ${event.name}, pausing fullscreen player")
+                exoPlayer.playWhenReady = false
+                exoPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Immersive full screen and orientation handling
