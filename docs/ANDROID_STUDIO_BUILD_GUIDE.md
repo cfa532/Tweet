@@ -147,6 +147,14 @@ These steps are for developers who prefer using the terminal.
     - `DEVICE_SERIAL` with the actual serial from `adb devices` (for example: `FEC5T19A22022812`)
     If you only have one device connected, you can omit the `-s DEVICE_SERIAL` part.
 
+    **Quick copy/paste command for this project (full debug APK):**
+
+    ```bash
+    /Users/cfa532/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
+    ```
+
+    Use this whenever someone needs the exact install command—no extra explanation required.
+
 ## Quick Reference
 
 ### Switch Between Mini and Full
