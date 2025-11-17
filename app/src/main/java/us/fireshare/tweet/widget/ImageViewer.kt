@@ -1,5 +1,7 @@
 package us.fireshare.tweet.widget
 
+import android.graphics.PointF
+import android.view.View
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -39,6 +41,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,6 +67,8 @@ import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
+import kotlin.math.min
+import androidx.core.graphics.scale
 
 /**
  * State object for image loading to reduce recomposition
@@ -387,12 +393,10 @@ fun AdvancedImageViewer(
             AndroidView(
                 factory = { context ->
                     SubsamplingScaleImageView(context).apply {
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
-                        setDoubleTapZoomScale(2f)
+                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
                         setDoubleTapZoomDuration(300)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                         setMinimumTileDpi(160)
-                        maxScale = 4f // Maximum zoom for pinch-to-zoom
                         
                         // Enable EXIF orientation handling
                         setOrientation(SubsamplingScaleImageView.ORIENTATION_USE_EXIF)
@@ -402,6 +406,11 @@ fun AdvancedImageViewer(
                             showMenu = true
                             true
                         }
+                        
+                        configureConsistentZoomScaling(
+                            doubleTapFactor = 2f,
+                            maxScaleFactor = 4f
+                        )
                     }
                 },
                 update = { imageView ->
@@ -602,10 +611,9 @@ fun ImageViewer(
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
-    var dragOffset by remember { mutableStateOf(0f) }
-    var retryCount by remember { mutableStateOf(0) }
-    var lastRetryTime by remember { mutableStateOf(0L) }
-    var currentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var retryCount by remember { mutableIntStateOf(0) }
+    var lastRetryTime by remember { mutableLongStateOf(0L) }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -653,7 +661,6 @@ fun ImageViewer(
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
         // Store the current job for potential cancellation
-        currentJob = coroutineContext[Job]
         try {
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
@@ -880,18 +887,21 @@ fun ImageViewer(
                 AndroidView(
                     factory = { context ->
                         SubsamplingScaleImageView(context).apply {
-                            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
-                            setDoubleTapZoomScale(2f)
+                            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
                             setDoubleTapZoomDuration(300)
                             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
                             setMinimumTileDpi(160)
-                            maxScale = 4f // Maximum zoom for pinch-to-zoom
                             
                             // Add long press listener for the third-party view
                             setOnLongClickListener {
                                 showMenu = true
                                 true
                             }
+                            
+                            configureConsistentZoomScaling(
+                                doubleTapFactor = 2f,
+                                maxScaleFactor = 4f
+                            )
                         }
                     },
                     update = { imageView ->
@@ -950,7 +960,7 @@ fun ImageViewer(
                                 Timber.tag("ImageViewer").d("Downscaling bitmap for preview: ${bitmap.width}x${bitmap.height} -> ${newWidth}x${newHeight} (scale: $scale)")
                                 
                                 try {
-                                    android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                                    bitmap.scale(newWidth, newHeight)
                                 } catch (e: Exception) {
                                     Timber.tag("ImageViewer").e(e, "Failed to downscale bitmap, using original")
                                     bitmap
@@ -1066,4 +1076,78 @@ private fun saveImageToGallery(context: android.content.Context, bitmap: android
         Timber.e("Failed to save image: $e")
         false
     }
+}
+
+private fun SubsamplingScaleImageView.configureConsistentZoomScaling(
+    doubleTapFactor: Float,
+    maxScaleFactor: Float
+) {
+    setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
+
+    val layoutChangeListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        updateScaleBounds(doubleTapFactor, maxScaleFactor)
+    }
+
+    addOnLayoutChangeListener(layoutChangeListener)
+    addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {}
+
+        override fun onViewDetachedFromWindow(v: View) {
+            removeOnLayoutChangeListener(layoutChangeListener)
+            removeOnAttachStateChangeListener(this)
+        }
+    })
+
+    setOnImageEventListener(object : SubsamplingScaleImageView.OnImageEventListener {
+        override fun onReady() = updateScaleBounds(doubleTapFactor, maxScaleFactor)
+        override fun onImageLoaded() = updateScaleBounds(doubleTapFactor, maxScaleFactor)
+        override fun onPreviewReleased() {}
+        override fun onImageLoadError(e: Exception) {}
+        override fun onPreviewLoadError(e: Exception) {}
+        override fun onTileLoadError(e: Exception) {}
+    })
+
+    post { updateScaleBounds(doubleTapFactor, maxScaleFactor) }
+}
+
+private fun SubsamplingScaleImageView.updateScaleBounds(
+    doubleTapFactor: Float,
+    maxScaleFactor: Float
+) {
+    val contentWidth = width - paddingLeft - paddingRight
+    val contentHeight = height - paddingTop - paddingBottom
+    if (contentWidth <= 0 || contentHeight <= 0) return
+
+    val (sourceWidth, sourceHeight) = orientedSourceSize()
+    if (sourceWidth <= 0 || sourceHeight <= 0) return
+
+    val fitScale = min(
+        contentWidth.toFloat() / sourceWidth.toFloat(),
+        contentHeight.toFloat() / sourceHeight.toFloat()
+    )
+    if (!fitScale.isFinite() || fitScale <= 0f) return
+
+    minScale = fitScale
+
+    val computedMaxScale = (fitScale * maxScaleFactor).coerceAtLeast(fitScale)
+    maxScale = computedMaxScale
+
+    val targetDoubleTapScale = (fitScale * doubleTapFactor)
+        .coerceIn(fitScale, computedMaxScale)
+    setDoubleTapZoomScale(targetDoubleTapScale)
+
+    val currentScale = scale
+    if (!currentScale.isFinite() || currentScale < fitScale) {
+        val center = getCenter() ?: PointF(sourceWidth / 2f, sourceHeight / 2f)
+        setScaleAndCenter(fitScale, center)
+    }
+}
+
+private fun SubsamplingScaleImageView.orientedSourceSize(): Pair<Int, Int> {
+    val rotation = orientation
+    val swap = rotation == SubsamplingScaleImageView.ORIENTATION_90 ||
+        rotation == SubsamplingScaleImageView.ORIENTATION_270
+    val width = if (swap) getSHeight() else getSWidth()
+    val height = if (swap) getSWidth() else getSHeight()
+    return width to height
 }
