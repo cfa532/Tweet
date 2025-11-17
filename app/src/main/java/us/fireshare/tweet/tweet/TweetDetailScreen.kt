@@ -92,9 +92,6 @@ fun TweetDetailScreen(
     // ReplyEditorBox state management
     var isReplyBoxExpanded by remember { mutableStateOf(false) }
 
-    // Grid columns state for media layout
-    var gridColumns by remember { mutableStateOf(1) }
-
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
@@ -318,7 +315,6 @@ fun TweetDetailScreen(
                     TweetDetailBody(
                         viewModel = viewModel,
                         parentEntry = parentEntry,
-                        gridColumns = gridColumns,
                         onExpandReply = { isReplyBoxExpanded = true }
                     )
                     HorizontalDivider(

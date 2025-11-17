@@ -2,26 +2,26 @@ package us.fireshare.tweet.tweet
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -39,16 +39,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -57,14 +56,12 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
@@ -76,7 +73,6 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    gridColumns: Int = 1,
     onExpandReply: (() -> Unit)? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
@@ -157,8 +153,12 @@ fun TweetDetailBody(
                                 it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
                             }
                             AudioPlayer(attachments)
-                        } else
-                            MediaGrid(attachments, viewModel, navController, gridColumns)
+                        } else {
+                            AttachmentBrowser(
+                                mediaItems = attachments,
+                                viewModel = viewModel
+                            )
+                        }
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
@@ -245,77 +245,69 @@ fun TweetDetailBody(
 }
 
 @RequiresApi(Build.VERSION_CODES.R)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MediaGrid(
+fun AttachmentBrowser(
     mediaItems: List<MimeiFileType>,
-    viewModel: TweetViewModel,
-    navController: NavController,
-    gridColumns: Int, containerWidth: Dp = 400.dp
+    viewModel: TweetViewModel
 ) {
-    val tweet by viewModel.tweetState.collectAsState()
-    
-    BoxWithConstraints(
+    val pagerState = rememberPagerState(pageCount = { mediaItems.size })
+
+    Column(
         modifier = Modifier
-            .padding(top = 0.dp)
             .fillMaxWidth()
+            .background(Color.Transparent)
     ) {
-        val mediaGridWidth = maxWidth
-        val itemWidth = if (gridColumns == 1) {
-            mediaGridWidth
-        } else {
-            // Account for spacing between items (1.dp between each column)
-            val spacing = 1.dp * (gridColumns - 1)
-            (mediaGridWidth - spacing) / gridColumns
-        }
-        
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(gridColumns),
-            modifier = Modifier
-                .padding(top = 0.dp)
-                .fillMaxWidth()
-                .background(Color.Transparent)
-                .border(1.dp, Color.Transparent)
-                .heightIn(max = 20000.dp),
-            horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            itemsIndexed(mediaItems) { index, item ->
-                // Get aspect ratio from attachment, default to 1 if unknown
-                val aspectRatio = item.aspectRatio ?: 1f
-                
-                // Calculate height based on width and aspect ratio
-                // aspectRatio = width / height, so height = width / aspectRatio
-                val itemHeight = itemWidth / aspectRatio
-                
-                val modifier = Modifier
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth()
+        ) { page ->
+            val aspectRatio = mediaItems[page].aspectRatio
+                ?.takeIf { it > 0f }
+                ?.coerceIn(0.6f, 1.8f)
+                ?: 1f
+
+            Box(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .height(itemHeight)
-                
+                    .aspectRatio(aspectRatio)
+            ) {
                 MediaItemView(
-                    mediaItems,
-                    modifier.clickable {
-                        val params = MediaViewerParams(
-                            mediaItems.map {
-                                MediaItem(
-                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                    it.type
-                                )
-                            }, index, tweet.mid, tweet.authorId
-                        )
-                        navController.navigate(
-                            NavTweet.MediaViewer(params)
-                        )
-                    },
-                    index,
-                    0,
-                    autoPlay = true,
+                    mediaItems = mediaItems,
+                    modifier = Modifier.fillMaxSize(),
+                    index = page,
+                    autoPlay = pagerState.currentPage == page,
                     inPreviewGrid = false,
-                    loadOriginalImage = false, // Use compressed preview in detail view
-                    viewModel,
+                    loadOriginalImage = false,
+                    viewModel = viewModel,
                     onVideoCompleted = null,
-                    useIndependentVideoMute = true, // TweetDetailView videos are unmuted and independent
-                    enableTapToShowControls = true // Enable tap-to-show controls for TweetDetailView
+                    useIndependentVideoMute = true,
+                    enableTapToShowControls = true
                 )
+            }
+        }
+
+        if (mediaItems.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(mediaItems.size) { index ->
+                    val isSelected = pagerState.currentPage == index
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (isSelected) 10.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                    )
+                }
             }
         }
     }
