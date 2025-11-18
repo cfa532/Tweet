@@ -32,6 +32,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
@@ -76,7 +77,15 @@ fun UserBookmarks(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() })
+                    IconButton(onClick = {
+                        // Navigate back to user profile's tweetlist view
+                        navController.navigate(NavTweet.UserProfile(appUser.mid)) {
+                            // Pop back stack up to and including the current screen
+                            popUpTo(NavTweet.Bookmarks(appUser.mid)) { inclusive = true }
+                            // Avoid creating duplicate entries if UserProfile is already in stack
+                            launchSingleTop = true
+                        }
+                    })
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
