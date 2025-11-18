@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
@@ -105,9 +106,12 @@ fun ProfileScreen(
     }
 
     LaunchedEffect(Unit) {
-        // load tweets only when user profile screen is opened.
+        // Always refresh user from server when profile screen is opened
         withContext(Dispatchers.IO) {
-            viewModel.syncUser()
+            // Invalidate cache first to force fresh fetch
+            TweetCacheManager.removeCachedUser(userId)
+            // Refresh user data from server
+            viewModel.refreshUserData()
         }
     }
 

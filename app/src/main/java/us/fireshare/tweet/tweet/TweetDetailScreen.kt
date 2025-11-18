@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,7 +48,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -245,13 +250,23 @@ fun TweetDetailScreen(
 
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.offset(y = (-56 * (1 - topAppBarAlpha)).dp),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
-                    titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
-                ),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clipToBounds()
+                    .background(Color.Transparent)
+            ) {
+                TopAppBar(
+                    modifier = Modifier
+                        .offset(y = (-56 * (1 - topAppBarAlpha)).dp)
+                        .graphicsLayer(alpha = if (topAppBarAlpha < 0.01f) 0f else topAppBarAlpha),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = if (topAppBarAlpha < 0.01f) Color.Transparent else MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
+                        titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
+                    ),
                 title = {
                     Text(
                         text = "Tweet",
@@ -277,6 +292,7 @@ fun TweetDetailScreen(
                     }
                 },
             )
+            }
         },
         bottomBar = {
             Column {
@@ -301,12 +317,15 @@ fun TweetDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Transparent)
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
                 .pullRefresh(pullRefreshState)
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(y = if (showTopAppBar) 0.dp else -innerPadding.calculateTopPadding())
+                    .background(MaterialTheme.colorScheme.background),
                 state = listState,
                 contentPadding = PaddingValues(bottom = 60.dp)
             ) {

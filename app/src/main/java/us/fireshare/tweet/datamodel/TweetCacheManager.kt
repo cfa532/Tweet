@@ -504,7 +504,8 @@ object TweetCacheManager {
         for (tweet in sortedTweets) {
             if (tweet.author == null) {
                 try {
-                    tweet.author = HproseInstance.getUser(tweet.authorId)
+                    // Check cache first before fetching from server
+                    tweet.author = getCachedUser(tweet.authorId) ?: HproseInstance.getUser(tweet.authorId)
                 } catch (e: Exception) {
                     Timber.tag("TweetCacheManager").v(e, "searchTweets: Failed to fetch author ${tweet.authorId}")
                 }

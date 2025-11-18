@@ -1390,7 +1390,10 @@ object HproseInstance {
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
         return try {
-            if (tweet.author == null) tweet.author = getUser(tweet.authorId)
+            if (tweet.author == null) {
+                // Check cache first before fetching from server
+                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: getUser(tweet.authorId)
+            }
             val entry = "get_comments"
             val params = mapOf(
                 "aid" to appId,
@@ -1487,22 +1490,26 @@ object HproseInstance {
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      * Includes retry logic with exponential backoff for network-related failures.
      */
-    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3): User? {
+    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false): User? {
         // Check if user is blacklisted
         if (BlackList.isBlacklisted(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
         }
 
-        // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl)
-        Timber.tag("getUser").d("=== USER FETCH START === userId: $userId, baseUrl: $baseUrl, maxRetries: $maxRetries")
-        val cachedUser = TweetCacheManager.getCachedUser(userId)
-        if (cachedUser != null && cachedUser.baseUrl != null) {
-            Timber.tag("getUser").d("✅ CACHE HIT: Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}, baseUrl: ${cachedUser.baseUrl}")
-            return cachedUser
+        // Step 1: Check user cache first (if baseUrl matches appUser.baseUrl and not forcing refresh)
+        Timber.tag("getUser").d("=== USER FETCH START === userId: $userId, baseUrl: $baseUrl, maxRetries: $maxRetries, forceRefresh: $forceRefresh")
+        if (!forceRefresh) {
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            if (cachedUser != null && cachedUser.baseUrl != null) {
+                Timber.tag("getUser").d("✅ CACHE HIT: Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}, baseUrl: ${cachedUser.baseUrl}")
+                return cachedUser
+            }
+        } else {
+            Timber.tag("getUser").d("🔄 FORCE REFRESH: Skipping cache for userId: $userId")
         }
 
-        Timber.tag("getUser").d("❌ CACHE MISS: userId: $userId, cachedUser: ${cachedUser?.username ?: "null"}, hasExpired: ${cachedUser?.hasExpired ?: true}, cachedBaseUrl: ${cachedUser?.baseUrl}")
+        Timber.tag("getUser").d("❌ CACHE MISS OR FORCE REFRESH: userId: $userId")
 
         // Check if we're already updating this user
         val shouldProceed = userUpdateMutex.withLock {
@@ -1550,7 +1557,7 @@ object HproseInstance {
                     } else {
                         Timber.tag("getUser").w("⚠️ CONCURRENT UPDATE FAILED: userId: $userId completed but no cached user found, retrying entire process")
                         // If no cached result, we need to retry the entire process
-                        return getUser(userId, baseUrl, maxRetries)
+                        return getUser(userId, baseUrl, maxRetries, forceRefresh)
                     }
                 }
             }
@@ -1607,7 +1614,9 @@ object HproseInstance {
         val originalBaseUrl = user.baseUrl
         var hasTriedEmptyBaseUrl = false
         
-        repeat(maxRetries) { attempt ->
+        var attempt = 0
+        while (attempt < maxRetries) {
+            var shouldRetryImmediately = false
             try {
                 val entry = "get_user"
                 val params = mapOf(
@@ -1658,6 +1667,22 @@ object HproseInstance {
                     
                     null -> {
                         Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE: userId: ${user.mid}, attempt: ${attempt + 1}")
+                        // On first failure with null response, try with empty baseUrl to refresh IP
+                        if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
+                            Timber.tag("updateUserFromServer").d("🔄 NULL RESPONSE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
+                            user.clearHproseService()
+                            user.baseUrl = ""
+                            val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
+                            if (newProviderIP != null) {
+                                user.baseUrl = "http://$newProviderIP"
+                                Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
+                                hasTriedEmptyBaseUrl = true
+                                shouldRetryImmediately = true // Retry immediately with new baseUrl
+                            } else {
+                                Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
+                                user.baseUrl = originalBaseUrl
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -1674,34 +1699,42 @@ object HproseInstance {
                     return false
                 } else {
                     Timber.tag("updateUserFromServer").d("🌐 NETWORK ERROR: userId: ${user.mid}, will retry, error: ${e.message}")
-                    
-                    // If this is a network error and we haven't tried with empty baseUrl yet, try it now
-                    if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
-                        Timber.tag("updateUserFromServer").d("🔄 RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
-                        // Clear the cached service first
-                        user.clearHproseService()
-                        // Set baseUrl to empty to force IP resolution
-                        user.baseUrl = ""
-                        // Get a new provider IP to resolve the server address
-                        val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
-                        if (newProviderIP != null) {
-                            user.baseUrl = "http://$newProviderIP"
-                            Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
-                            hasTriedEmptyBaseUrl = true
-                        } else {
-                            Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
-                            // Restore original baseUrl if we can't resolve
-                            user.baseUrl = originalBaseUrl
-                        }
+                }
+                
+                // On first failure (network error or null response), try with empty baseUrl to refresh IP
+                if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
+                    Timber.tag("updateUserFromServer").d("🔄 FIRST FAILURE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
+                    // Clear the cached service first
+                    user.clearHproseService()
+                    // Set baseUrl to empty to force IP resolution
+                    user.baseUrl = ""
+                    // Get a new provider IP to resolve the server address
+                    val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
+                    if (newProviderIP != null) {
+                        user.baseUrl = "http://$newProviderIP"
+                        Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
+                        hasTriedEmptyBaseUrl = true
+                        shouldRetryImmediately = true // Retry immediately with new baseUrl (don't wait)
+                    } else {
+                        Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
+                        // Restore original baseUrl if we can't resolve
+                        user.baseUrl = originalBaseUrl
                     }
                 }
             }
             
-            // If this isn't the last attempt, wait before retrying
-            if (attempt < maxRetries - 1) {
-                val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
-                Timber.tag("updateUserFromServer").d("⏳ RETRYING IN ${delayMs}ms: userId: ${user.mid}, attempt ${attempt + 2}/$maxRetries")
-                kotlinx.coroutines.delay(delayMs)
+            // If we should retry immediately, don't increment attempt and don't wait
+            if (shouldRetryImmediately) {
+                Timber.tag("updateUserFromServer").d("🔄 RETRYING IMMEDIATELY: userId: ${user.mid} with new baseUrl")
+                // Don't increment attempt, just continue the loop
+            } else {
+                attempt++
+                // If this isn't the last attempt, wait before retrying
+                if (attempt < maxRetries) {
+                    val delayMs = minOf(3000L, 1000L * (1 shl (attempt - 1))) // Exponential backoff: 1s, 2s
+                    Timber.tag("updateUserFromServer").d("⏳ RETRYING IN ${delayMs}ms: userId: ${user.mid}, attempt ${attempt + 1}/$maxRetries")
+                    kotlinx.coroutines.delay(delayMs)
+                }
             }
         }
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")

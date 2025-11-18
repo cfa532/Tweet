@@ -152,11 +152,13 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Refresh user data with retry logic
+     * Always forces refresh from server (skips cache)
      */
     private suspend fun refreshUserWithRetry(maxRetries: Int = 3) {
         repeat(maxRetries) { attempt ->
             try {
-                val refreshedUser = getUser(userId, maxRetries = 1) // Single attempt per retry
+                // Force refresh from server, skip cache
+                val refreshedUser = HproseInstance.getUser(userId, baseUrl = null, maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
                     return // Success, exit retry loop
@@ -783,7 +785,9 @@ class UserViewModel @AssistedInject constructor(
                         if (tweet != null && pinnedTimestamp != null) {
                             // Ensure the author field is set correctly for pinned tweets
                             val tweetWithAuthor = if (tweet.author == null) {
-                                tweet.copy(author = HproseInstance.getUser(tweet.authorId))
+                                // Check cache first before fetching from server
+                                val cachedAuthor = TweetCacheManager.getCachedUser(tweet.authorId)
+                                tweet.copy(author = cachedAuthor ?: HproseInstance.getUser(tweet.authorId))
                             } else {
                                 tweet
                             }

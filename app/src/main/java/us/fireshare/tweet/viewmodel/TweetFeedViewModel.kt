@@ -603,7 +603,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val retweetWithAuthor = if (event.retweet.author != null) {
                                 event.retweet
                             } else {
-                                event.retweet.copy(author = appUser)
+                                // Check cache first before using appUser as fallback
+                                val cachedAuthor = TweetCacheManager.getCachedUser(event.retweet.authorId)
+                                event.retweet.copy(author = cachedAuthor ?: appUser)
                             }
                             withContext(Main) {
                                 // Check if retweet already exists to avoid duplicates

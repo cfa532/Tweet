@@ -42,6 +42,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.service.UploadCommentWorker
@@ -129,12 +130,39 @@ class TweetViewModel @AssistedInject constructor(
          * */
         Timber.d("TweetViewModel - Initializing with tweet: ${tweet.mid}, attachments: ${tweet.attachments?.size}")
         if (tweetState.value.author == null) {
-            Timber.d("TweetViewModel - Author is null, refreshing tweet")
+            Timber.d("TweetViewModel - Author is null, checking cache first")
             viewModelScope.launch(Dispatchers.IO) {
+                // Step 1: Check if there's a cached tweet with author already populated
+                val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
+                if (cachedTweet != null && cachedTweet.author != null) {
+                    Timber.d("TweetViewModel - Found cached tweet with author: ${cachedTweet.mid}, author: ${cachedTweet.author?.username}")
+                    _tweetState.value = cachedTweet
+                    _attachments.value = cachedTweet.attachments
+                    return@launch
+                }
+                
+                // Step 2: Try to get user from cache and populate author
+                val cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
+                if (cachedUser != null) {
+                    Timber.d("TweetViewModel - Found cached user: ${cachedUser.username}, populating author")
+                    val tweetWithAuthor = tweet.copy(author = cachedUser)
+                    _tweetState.value = tweetWithAuthor
+                    // Continue to refresh tweet to get latest data, but now with author populated
+                } else {
+                    Timber.d("TweetViewModel - User not in cache, will fetch from server")
+                }
+                
+                // Step 3: Refresh tweet from server (getUser inside refreshTweet will use cache or fetch)
                 HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
-                    Timber.d("TweetViewModel - Refreshed tweet: ${refreshedTweet.mid}, attachments: ${refreshedTweet.attachments?.size}")
+                    Timber.d("TweetViewModel - Refreshed tweet: ${refreshedTweet.mid}, attachments: ${refreshedTweet.attachments?.size}, author: ${refreshedTweet.author?.username}")
                     _tweetState.value = refreshedTweet
                     _attachments.value = refreshedTweet.attachments
+                } ?: run {
+                    Timber.w("TweetViewModel - Failed to refresh tweet, but keeping cached user if available")
+                    // If refresh failed but we have cached user, at least show tweet with author
+                    if (cachedUser != null && tweetState.value.author == null) {
+                        _tweetState.value = tweet.copy(author = cachedUser)
+                    }
                 }
             }
         } else {
