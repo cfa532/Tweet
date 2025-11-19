@@ -21,6 +21,7 @@ data class User(
     @Expose var avatar: MimeiId? = null,
     @Expose var email: String? = null,
     @Expose var profile: String? = null,
+    @Expose var domainToShare: String? = null,
     @Expose var timestamp: Long = System.currentTimeMillis(),
     @Expose var lastLogin: Long? = System.currentTimeMillis(),
     @Expose var cloudDrivePort: Int = 0,
@@ -133,6 +134,7 @@ data class User(
                 avatar = user.avatar
                 email = user.email
                 profile = user.profile
+                domainToShare = user.domainToShare
                 lastLogin = user.lastLogin
                 cloudDrivePort = user.cloudDrivePort
                 hostIds = user.hostIds
@@ -377,6 +379,7 @@ data class User(
             avatar = processedData["avatar"] as? String ?: avatar
             email = processedData["email"] as? String ?: email
             profile = processedData["profile"] as? String ?: profile
+            domainToShare = processedData["domainToShare"] as? String ?: domainToShare
             cloudDrivePort = (processedData["cloudDrivePort"] as? Number)?.toInt() ?: cloudDrivePort
             
             tweetCount = (processedData["tweetCount"] as? Number)?.toInt() ?: tweetCount
@@ -408,6 +411,7 @@ data class User(
         avatar = userData.avatar
         email = userData.email
         profile = userData.profile
+        domainToShare = userData.domainToShare
         cloudDrivePort = userData.cloudDrivePort
 
         tweetCount = userData.tweetCount

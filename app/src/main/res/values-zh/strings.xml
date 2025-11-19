@@ -72,5 +72,6 @@
     <string name="video_error_format_not_supported">視頻格式不支持。請嘗試其他視頻。</string>
     <string name="video_error_network_issue">視頻加載失敗。檢查您的網絡連接並重試。</string>
     <string name="video_retry_playback">重試播放</string>
+    <string name="domain_to_share">分享域名</string>
 </resources>
 

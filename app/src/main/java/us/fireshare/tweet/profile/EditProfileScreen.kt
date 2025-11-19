@@ -59,6 +59,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -154,6 +155,7 @@ fun EditProfileScreen(
     val showConfirm = remember { mutableStateOf(false) }
     val name by viewModel.name
     val profile by viewModel.profile
+    val domainToShare by viewModel.domainToShare
     val hostId by viewModel.hostId
     val cloudDrivePort by viewModel.cloudDrivePort
     val isPasswordVisible by viewModel.isPasswordVisible
@@ -161,6 +163,7 @@ fun EditProfileScreen(
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
+    val defaultDomainPlaceholder = remember { mutableStateOf<String?>(null) }
     
     // Simple check for unsaved changes (excluding avatar and username which can't be changed)
     val hasUnsavedChanges = remember {
@@ -168,6 +171,7 @@ fun EditProfileScreen(
             name != appUser.name || 
             profile != appUser.profile || 
             password.isNotEmpty() ||
+            domainToShare != (appUser.domainToShare ?: "") ||
             cloudDrivePort != appUser.cloudDrivePort.toString()
         }
     }
@@ -189,6 +193,13 @@ fun EditProfileScreen(
         // get hostId if not exists
         if (hostId.isEmpty()) {
             viewModel.getHostId()
+        }
+        // Get domain from check_upgrade for placeholder text
+        viewModel.viewModelScope.launch(Dispatchers.IO) {
+            val upgradeInfo = HproseInstance.checkUpgrade()
+            upgradeInfo?.get("domain")?.let { domain ->
+                defaultDomainPlaceholder.value = domain
+            }
         }
     }
 
@@ -328,6 +339,17 @@ fun EditProfileScreen(
                     value = cloudDrivePort,
                     onValueChange = { viewModel.onCloudDrivePortChange(it) },
                     label = { Text(stringResource(R.string.cloud_port)) },
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = domainToShare,
+                    onValueChange = { viewModel.onDomainToShareChange(it) },
+                    label = { Text(stringResource(R.string.domain_to_share)) },
+                    placeholder = defaultDomainPlaceholder.value?.let { { Text(it) } } ?: null,
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()

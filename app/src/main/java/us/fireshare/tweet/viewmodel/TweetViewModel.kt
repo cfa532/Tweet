@@ -333,10 +333,16 @@ class TweetViewModel @AssistedInject constructor(
          * which includes environment variables of the App.
          * */
         val map = HproseInstance.checkUpgrade() ?: return
+        // Use appUser.domainToShare if available, otherwise fall back to checkUpgrade domain
+        val domain = if (!appUser.domainToShare.isNullOrBlank()) {
+            appUser.domainToShare!!
+        } else {
+            map["domain"] ?: return
+        }
         val deepLink = if (BuildConfig.IS_PLAY_VERSION) {
             "http://gplay.fireshare.us/tweet/${tweet.mid}/${tweet.authorId}"
         } else {
-            "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
+            "http://$domain/tweet/${tweet.mid}/${tweet.authorId}"
         }
 
         // Generate share content based on tweet title, content, or attachment types

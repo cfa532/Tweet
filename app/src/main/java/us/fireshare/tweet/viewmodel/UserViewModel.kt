@@ -87,6 +87,7 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(appUser.name)
     var profile = mutableStateOf(appUser.profile)
+    var domainToShare = mutableStateOf(appUser.domainToShare ?: "")
     var hostId = mutableStateOf("")
     var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
     var isPasswordVisible = mutableStateOf(false)
@@ -930,6 +931,7 @@ class UserViewModel @AssistedInject constructor(
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
+                domainToShare.value = appUser.domainToShare ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
@@ -1030,6 +1032,7 @@ class UserViewModel @AssistedInject constructor(
             name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value?.trim(),
+            domainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim(),
             cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
         )
         HproseInstance.setUserData(updatedUser)?.let { ret ->
@@ -1155,6 +1158,7 @@ class UserViewModel @AssistedInject constructor(
                                 appUser = appUser.copy(
                                     name = updatedUser.name, profile = updatedUser.profile,
                                     username = updatedUser.username, hostIds = updatedUser.hostIds,
+                                    domainToShare = updatedUser.domainToShare,
                                     cloudDrivePort = updatedUser.cloudDrivePort
                                 )
                                 _user.value = appUser
@@ -1171,6 +1175,7 @@ class UserViewModel @AssistedInject constructor(
                                     // Update profile state variables to match saved values
                                     name.value = appUser.name
                                     profile.value = appUser.profile
+                                    domainToShare.value = appUser.domainToShare ?: ""
                                     hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                     cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                     
@@ -1274,6 +1279,12 @@ class UserViewModel @AssistedInject constructor(
 
     fun onProfileChange(value: String) {
         profile.value = value
+        isLoading.value = false
+        loginError.value = ""
+    }
+
+    fun onDomainToShareChange(value: String) {
+        domainToShare.value = value
         isLoading.value = false
         loginError.value = ""
     }

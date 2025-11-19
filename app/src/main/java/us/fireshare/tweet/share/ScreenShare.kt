@@ -94,16 +94,22 @@ fun ShareBottomSheet(
                 val file = saveBitmapToFile(context, newBitmap, fileName)
                 viewModel.viewModelScope.launch {
                     val map = HproseInstance.checkUpgrade() ?: return@launch
+                    // Use appUser.domainToShare if available, otherwise fall back to checkUpgrade domain
+                    val domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                        appUser.domainToShare!!
+                    } else {
+                        map["domain"] ?: return@launch
+                    }
                     HproseInstance.uploadToIPFS(context, Uri.fromFile(file))?.let {
                         it.type = MediaType.Image
                         HproseInstance.uploadTweet(
                             Tweet(mid = it.mid,
                                 authorId = appUser.mid,
-                                content = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}",
+                                content = "http://$domain/tweet/${tweet.mid}/${tweet.authorId}",
                                 attachments = listOf(it))
                         )?.let { newTweet ->
                             val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            shareText.value = "http://${map["domain"]}/tweet/${newTweet.mid}/${newTweet.authorId}"
+                            shareText.value = "http://$domain/tweet/${newTweet.mid}/${newTweet.authorId}"
                             val clip = ClipData.newPlainText("Shared Text", shareText.value)
                             clipboardManager.setPrimaryClip(clip)
                         }
