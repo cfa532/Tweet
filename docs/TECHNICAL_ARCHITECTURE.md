@@ -812,10 +812,6 @@ MediaItemView(
 object AppModule {
     @Provides @Singleton
     fun provideChatDatabase(@ApplicationContext context: Context): ChatDatabase
-    
-    @Provides @Singleton  
-    fun provideTweetFeedViewModel(): TweetFeedViewModel
-    
     @Provides
     fun provideChatRepository(dao: ChatMessageDao): ChatRepository
 }

@@ -660,6 +660,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             // User data updates are handled in UserViewModel
                             Timber.tag("TweetFeedViewModel").d("Ignoring UserDataUpdated event")
                         }
+
+                        is TweetEvent.FeedResetRequested -> {
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Feed reset requested due to ${event.reason}, resetting feed")
+                            reset()
+                        }
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {

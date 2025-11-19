@@ -14,7 +14,6 @@ import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatSessionDao
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SearchViewModel
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
 import javax.inject.Singleton
 
@@ -26,12 +25,6 @@ object AppModule {
     @Singleton
     fun provideSearchViewModel(): SearchViewModel {
         return SearchViewModel()
-    }
-
-    @Provides
-    @Singleton
-    fun provideTweetFeedViewModel(): TweetFeedViewModel {
-        return TweetFeedViewModel()
     }
 
     @Provides

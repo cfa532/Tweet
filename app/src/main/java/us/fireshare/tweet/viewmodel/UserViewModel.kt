@@ -29,6 +29,7 @@ import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.FeedResetReason
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -40,8 +41,7 @@ import us.fireshare.tweet.datamodel.UserContentType
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
-    @Assisted val userId: MimeiId,
-    private val tweetFeedViewModel: TweetFeedViewModel
+    @Assisted val userId: MimeiId
 ): ViewModel() {
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
@@ -936,8 +936,10 @@ class UserViewModel @AssistedInject constructor(
                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
                 
-                // Reset and refresh tweet feed after successful login
-                tweetFeedViewModel.reset()
+                // Notify TweetFeedViewModel to refresh feed after successful login
+                TweetNotificationCenter.postAsync(
+                    TweetEvent.FeedResetRequested(FeedResetReason.LOGIN)
+                )
 
                 // Show success Toast message on main thread
                 withContext(Dispatchers.Main) {
@@ -973,8 +975,10 @@ class UserViewModel @AssistedInject constructor(
         _pinnedTweets.value = emptyList()
         dao.clearAllCachedTweets()
         
-        // Reset TweetFeedViewModel to prevent stale data and race conditions
-        tweetFeedViewModel.reset()
+        // Notify TweetFeedViewModel to reset for guest timeline
+        TweetNotificationCenter.postAsync(
+            TweetEvent.FeedResetRequested(FeedResetReason.LOGOUT)
+        )
         
         popBack()
     }

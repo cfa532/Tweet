@@ -61,7 +61,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
@@ -86,9 +85,9 @@ data class ImageLoadState(
  */
 @Composable
 fun AnimatedLoadingText(
+    modifier: Modifier = Modifier,
     text: String = "Loading",
-    color: Color = Color.Gray,
-    modifier: Modifier = Modifier
+    color: Color = Color.Gray
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
     
@@ -152,10 +151,9 @@ fun AdvancedImageViewer(
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
-    var retryCount by remember { mutableStateOf(0) }
+    var retryCount by remember { mutableIntStateOf(0) }
     var isVisible by remember { mutableStateOf(true) }
-    var lastRetryTime by remember { mutableStateOf(0L) }
-    var currentJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var lastRetryTime by remember { mutableLongStateOf(0L) }
     var currentImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
     // Function to check if retry should be attempted (debounced and with available slots)
@@ -184,7 +182,6 @@ fun AdvancedImageViewer(
     // Load image using ImageCacheManager with proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
         // Store the current job for potential cancellation
-        currentJob = coroutineContext[Job]
         // Only attempt loading if retry count is within limit
         if (retryCount > 3) {
             return@LaunchedEffect
@@ -1147,7 +1144,7 @@ private fun SubsamplingScaleImageView.orientedSourceSize(): Pair<Int, Int> {
     val rotation = orientation
     val swap = rotation == SubsamplingScaleImageView.ORIENTATION_90 ||
         rotation == SubsamplingScaleImageView.ORIENTATION_270
-    val width = if (swap) getSHeight() else getSWidth()
-    val height = if (swap) getSWidth() else getSHeight()
+    val width = if (swap) sHeight else sWidth
+    val height = if (swap) sWidth else sHeight
     return width to height
 }
