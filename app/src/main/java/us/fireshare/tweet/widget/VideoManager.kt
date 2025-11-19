@@ -488,8 +488,9 @@ object VideoManager {
 
     /**
      * Load a video into the full screen player
+     * Uses the same cache-aware data source factory as createExoPlayer for optimal performance
      */
-    fun loadVideo(context: Context, videoUrl: String) {
+    fun loadVideo(context: Context, videoUrl: String, videoType: MediaType? = null) {
         if (currentVideoUrl == videoUrl) {
             return
         }
@@ -500,14 +501,46 @@ object VideoManager {
 
         try {
             player.stop()
-            // Create a simple media source - this is a placeholder
-            // In practice, you'd want to use the same media source creation as VideoManager
-            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context)
-            val mediaSourceFactory =
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-            val mediaSource = mediaSourceFactory.createMediaSource(
-                androidx.media3.common.MediaItem.fromUri(videoUrl)
-            )
+            
+            // Use the same cache-aware data source factory as createExoPlayer
+            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(30000) // 30 seconds connection timeout
+                .setReadTimeoutMs(30000)    // 30 seconds read timeout
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("TweetApp/1.0")
+
+            val upstreamFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val cache = getCache(context)
+            val cacheDataSourceFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(MediaIdCacheKeyFactory()) // Use media ID as cache key
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+            // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+            
+            // Create media source based on video type (same logic as createExoPlayer)
+            val mediaSource = when (videoType) {
+                MediaType.HLS_VIDEO -> {
+                    // For HLS videos: start with master.m3u8
+                    val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                    val masterUrl = "${baseUrl}master.m3u8"
+                    Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+                }
+                MediaType.Video -> {
+                    // For progressive videos: play URL directly
+                    Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+                }
+                else -> {
+                    // Default to progressive video for unknown types
+                    Timber.d("VideoManager - Unknown media type '$videoType', defaulting to progressive video: $videoUrl")
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
+                }
+            }
+            
             player.setMediaSource(mediaSource)
             player.prepare()
         } catch (e: Exception) {
