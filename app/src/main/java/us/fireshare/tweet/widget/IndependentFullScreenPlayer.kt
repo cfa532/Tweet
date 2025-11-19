@@ -278,6 +278,8 @@ fun IndependentFullScreenPlayer(
                     useController = true // Always show native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set shutter background to black to prevent white flash on initial load
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
                     // Keep last frame to avoid black flashes when resetting/pausing
                     setKeepContentOnPlayerReset(true)
                     // Only show buffering indicator when playing and buffering
@@ -296,6 +298,8 @@ fun IndependentFullScreenPlayer(
                 }
             },
             update = { playerView ->
+                // Ensure shutter background is black when updating player (in case view hierarchy changed)
+                playerView.setShutterBackgroundColor(android.graphics.Color.BLACK)
                 // Update the player when exoPlayer changes
                 playerView.player = exoPlayer
                 Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer")

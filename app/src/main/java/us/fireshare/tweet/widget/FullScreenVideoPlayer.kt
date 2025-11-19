@@ -258,6 +258,8 @@ fun FullScreenVideoPlayer(
                     useController = true // Use native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set shutter background to black to prevent white flash on initial load
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
                     // Let ExoPlayer handle its own control visibility
                     controllerShowTimeoutMs = 2000 // Auto-hide after 2 seconds
                     controllerHideOnTouch = true // Hide when tapping outside controls
@@ -447,6 +449,8 @@ fun FullScreenVideoPlayer(
                     useController = false // We'll implement custom controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set shutter background to black to prevent white flash on initial load
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             modifier = Modifier
