@@ -434,7 +434,7 @@ fun ChatScreen(
         when (attachment.type) {
             MediaType.Image -> {
                 Dialog(
-                    onDismissRequest = { showFullScreen = false },
+                    onDismissRequest = { },
                     properties = DialogProperties(
                         usePlatformDefaultWidth = false,
                         dismissOnBackPress = true,
@@ -450,7 +450,7 @@ fun ChatScreen(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
-                    onClose = { showFullScreen = false },
+                    onClose = { },
                     modifier = Modifier.fillMaxSize()
                 )
                     }
@@ -466,7 +466,6 @@ fun ChatScreen(
                         existingPlayer = existingPlayer,
                         videoItem = attachment,
                         onClose = {
-                            showFullScreen = false
                             // Return player back to VideoManager when closed
                             VideoManager.returnFromFullScreen(attachment.mid)
                         },
@@ -476,7 +475,7 @@ fun ChatScreen(
                     // Fallback to regular full-screen player
                     FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
-                        onClose = { showFullScreen = false },
+                        onClose = { },
                         enableImmersiveMode = true,
                         autoReplay = true
                     )
@@ -744,7 +743,7 @@ fun ChatInput(
             val fileSize = inputStream?.available() ?: 0
             inputStream?.close()
             fileSize <= TW_CONST.MAX_FILE_SIZE
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -770,7 +769,7 @@ fun ChatInput(
                 cursor.moveToFirst()
                 cursor.getString(nameIndex) ?: context.getString(R.string.unknown_file)
             } ?: context.getString(R.string.unknown_file)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             context.getString(R.string.unknown_file)
         }
     }
@@ -953,8 +952,6 @@ fun ChatMediaPreview(
     val mediaUrl =
         us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
 
-    val context = LocalContext.current
-
     // Video preloading is handled by the main ChatScreen component with debouncing
 
     // Helper function to apply aspect ratio rule: use 0.8 if aspect ratio is smaller than 0.8, otherwise use original value
@@ -1008,17 +1005,16 @@ fun ChatMediaPreview(
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Use a completely stable approach with key (same as MediaCell)
                 val videoMid = attachment.mid
-                val videoUrl = mediaUrl
 
                 // Use key with stable identifier to prevent recreation (same as MediaItemView)
                 key("chat_video_${videoMid}_0") {
                     us.fireshare.tweet.widget.VideoPreview(
-                        url = videoUrl,
+                        url = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
                         autoPlay = true,
                         inPreviewGrid = true,
-                        callback = { index ->
+                        callback = { _ ->
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
                         },

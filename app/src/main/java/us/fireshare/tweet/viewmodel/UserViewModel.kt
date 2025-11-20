@@ -300,6 +300,8 @@ class UserViewModel @AssistedInject constructor(
      * Returns List<MimeiId> (null values are filtered out)
      */
     suspend fun fetchFollowers(pageNumber: Int): List<MimeiId> {
+        @Suppress("SENSELESS_COMPARISON")
+        if (userId == null) return emptyList()
         Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {

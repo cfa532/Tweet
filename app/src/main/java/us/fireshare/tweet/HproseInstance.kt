@@ -857,14 +857,13 @@ object HproseInstance {
      * Get tweet from node Mimei DB to refresh cached tweet.
      * Called when the given tweet is visible.
      * */
+    @Suppress("SENSELESS_COMPARISON")
     suspend fun refreshTweet(
         tweetId: MimeiId?,
         authorId: MimeiId?
     ): Tweet? {
-        // Check for null parameters
         if (tweetId == null || authorId == null) {
-            Timber.tag("refreshTweet")
-                .w("Null parameters: tweetId=$tweetId, authorId=$authorId")
+            Timber.tag("refreshTweet").w("Null parameters: tweetId=$tweetId, authorId=$authorId")
             return null
         }
 
@@ -1490,7 +1489,13 @@ object HproseInstance {
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      * Includes retry logic with exponential backoff for network-related failures.
      */
-    suspend fun getUser(userId: MimeiId, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false): User? {
+    @Suppress("SENSELESS_COMPARISON")
+    suspend fun getUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false): User? {
+        if (userId == null) {
+            Timber.tag("getUser").w("Null userId, returning null")
+            return null
+        }
+
         // Check if user is blacklisted
         if (BlackList.isBlacklisted(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")

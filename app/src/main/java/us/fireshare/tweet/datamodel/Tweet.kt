@@ -141,7 +141,8 @@ data class Tweet(
                 val mid = processedDict["mid"] as? String
                 val authorId = processedDict["authorId"] as? String
                 
-                if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
+                @Suppress("SENSELESS_COMPARISON")
+                if (mid == null || authorId == null) {
                     Timber.e("Tweet.from() - Missing required fields: mid=$mid, authorId=$authorId, dict=$dict")
                     throw IllegalArgumentException("Tweet missing required fields: mid=$mid, authorId=$authorId")
                 }

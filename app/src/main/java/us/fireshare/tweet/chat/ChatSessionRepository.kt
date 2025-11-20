@@ -117,24 +117,10 @@ class ChatSessionRepository(
     }
 
     /**
-     * Update a specific message in the database
-     */
-    suspend fun updateMessage(message: ChatMessage) {
-        chatMessageDao.insertMessage(message.toEntity())
-    }
-
-    /**
-     * Update messages with the correct sessionId for a conversation
-     */
-    suspend fun updateMessagesWithSessionId(userId: String, receiptId: String, sessionId: String) {
-        chatMessageDao.updateMessagesWithSessionId(userId, receiptId, sessionId)
-    }
-
-    /**
      * Get or create session ID for a conversation
      */
     suspend fun getOrCreateSessionId(userId: String, receiptId: String): String {
-        return ChatSession.getOrCreateSession(userId, receiptId, chatSessionDao, chatMessageDao)
+        return ChatSession.getOrCreateSession(userId, receiptId, chatSessionDao)
     }
 
     /**

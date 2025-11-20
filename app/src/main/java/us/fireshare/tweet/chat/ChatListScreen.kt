@@ -159,7 +159,6 @@ fun ChatListScreen(
                         val currentTime = SystemClock.elapsedRealtime()
                         if (currentTime - lastClickTime > debounceTime) {
                             navController.popBackStack()
-                            lastClickTime = currentTime
                         }
                     } ) {
                         Icon(
@@ -175,7 +174,6 @@ fun ChatListScreen(
                             val currentTime = SystemClock.elapsedRealtime()
                             if (currentTime - lastClickTime > debounceTime) {
                                 showFollowingsDialog = true
-                                lastClickTime = currentTime
                             }
                         }
                     ) {
@@ -245,11 +243,10 @@ fun ChatListScreen(
             onUserSelected = { selectedUserId ->
                 // Create a new in-memory chat session
                 viewModel.createInMemoryChatSession(selectedUserId)
-                showFollowingsDialog = false
                 // Navigate to the chat screen
                 navController.navigate(NavTweet.ChatBox(selectedUserId))
             },
-            onDismiss = { showFollowingsDialog = false }
+            onDismiss = { }
         )
     }
 }
@@ -358,7 +355,7 @@ fun ChatSession(
     // Auto-hide delete button after 3 seconds
     LaunchedEffect(showDeleteButton) {
         if (showDeleteButton) {
-            kotlinx.coroutines.delay(3000)
+            delay(3000)
             showDeleteButton = false
         }
     }
