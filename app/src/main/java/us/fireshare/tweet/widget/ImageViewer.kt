@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -445,16 +446,21 @@ fun AdvancedImageViewer(
                         alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                     }
             )
-        } else if (loadState.isLoading) {
-            // Show loading state only when actually loading
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                AnimatedLoadingText(
-                    text = stringResource(R.string.loading),
-                    color = Color.Gray
-                )
+        } else {
+            // Check if we have a valid bitmap before showing loading spinner
+            val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
+            if (loadState.isLoading && !hasValidBitmap) {
+                // Show loading state only when actually loading AND no valid bitmap exists
+                // This prevents spinner from showing when image is already loaded
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedLoadingText(
+                        text = stringResource(R.string.loading),
+                        color = Color.Gray
+                    )
+                }
             }
         }
 
@@ -877,7 +883,10 @@ fun ImageViewer(
         modifier = baseModifier,
         contentAlignment = if (isFullScreen) Alignment.Center else Alignment.Center
     ) {
-        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
+        // Always prioritize showing bitmap if it exists, regardless of isLoading state
+        // This prevents spinner from showing when image is already loaded
+        val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
+        if (hasValidBitmap) {
             Timber.tag("ImageViewer").d("Rendering image: ${loadState.bitmap!!.width}x${loadState.bitmap!!.height}, hasError: ${loadState.hasError}, isLoading: ${loadState.isLoading}")
             if (isFullScreen) {
                 // Use SubsamplingScaleImageView for fullscreen with built-in zoom/pan operations
@@ -932,16 +941,18 @@ fun ImageViewer(
                 )
             } else {
                 // Use regular Image for preview mode
-                // Downscale bitmap if it's too large for canvas drawing (Android limit ~100MB)
-                val previewBitmap = remember(loadState.bitmap) {
-                    loadState.bitmap?.let { bitmap ->
+                // Process bitmap directly to ensure it updates when bitmap changes
+                loadState.bitmap?.let { bitmap ->
+                    if (bitmap.isRecycled) {
+                        Timber.tag("ImageViewer").w("Bitmap is recycled, cannot display: $imageUrl")
+                    } else {
                         // Calculate bitmap size in bytes (ARGB_8888 = 4 bytes per pixel)
                         val bitmapSizeBytes = bitmap.width * bitmap.height * 4L
                         val maxSizeBytes = 50 * 1024 * 1024L // 50MB safe limit (well below 100MB canvas limit)
                         val maxDimension = 2048 // Maximum dimension for preview
                         
                         // Check if downscaling is needed
-                        if (bitmapSizeBytes > maxSizeBytes || bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                        val displayBitmap = if (bitmapSizeBytes > maxSizeBytes || bitmap.width > maxDimension || bitmap.height > maxDimension) {
                             // Calculate scale factor
                             val widthScale = maxDimension.toFloat() / bitmap.width
                             val heightScale = maxDimension.toFloat() / bitmap.height
@@ -968,23 +979,31 @@ fun ImageViewer(
                         } else {
                             bitmap
                         }
+                        
+                        // Use key with bitmap dimensions to force recomposition when bitmap changes
+                        // This ensures the Image composable updates when a new bitmap is loaded
+                        key("${displayBitmap.width}_${displayBitmap.height}_${displayBitmap.hashCode()}") {
+                            val imageBitmap = displayBitmap.asImageBitmap()
+                            Timber.tag("ImageViewer")
+                                .d("Rendering preview image: ${displayBitmap.width}x${displayBitmap.height}, inPreviewGrid: $inPreviewGrid")
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = null,
+                                contentScale = when {
+                                    inPreviewGrid -> ContentScale.Crop
+                                    else -> ContentScale.Fit
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
-                }
-                
-                previewBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = when {
-                            inPreviewGrid -> ContentScale.Crop
-                            else -> ContentScale.Fit
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                } ?: run {
+                    Timber.tag("ImageViewer").d("No bitmap available for preview: $imageUrl, isLoading: ${loadState.isLoading}, hasError: ${loadState.hasError}")
                 }
             }
         } else if (loadState.isLoading) {
-            // Show loading state only when actually loading
+            // Show loading state only when actually loading AND no valid bitmap exists
+            // This prevents spinner from showing when image is already loaded
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center

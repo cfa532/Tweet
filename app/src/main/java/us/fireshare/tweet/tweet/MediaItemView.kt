@@ -166,8 +166,10 @@ fun MediaItemView(
                 var isVisible by remember { mutableStateOf(true) } // Default to true since images in feed are likely visible
                 
                 // Use a Box with clickable modifier to handle image clicks
+                // Ensure the inner Box fills the parent to properly display the image
                 Box(
                     modifier = modifier
+                        .fillMaxSize()
                         .clipToBounds()
                         .onGloballyPositioned { layoutCoordinates ->
                             // Update visibility based on actual layout - if item has size, it's visible
@@ -180,16 +182,14 @@ fun MediaItemView(
                 ) {
                     ImageViewer(
                         attachment.url,
-                        modifier = if (inPreviewGrid) 
-                            Modifier.fillMaxSize() 
-                        else 
-                            Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(), // Always fill parent in preview grid
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
                         onBitmapLoaded = { bitmap ->
                             currentBitmap = bitmap
+                            Timber.tag("MediaItemView").d("Bitmap loaded for image at index $index: ${bitmap?.width}x${bitmap?.height}")
                         }
                     )
                 }
@@ -278,7 +278,7 @@ fun MediaItemView(
         val mediaUrl = getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
         
         Dialog(
-            onDismissRequest = { showFullScreenImage = false },
+            onDismissRequest = { },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,
@@ -294,7 +294,7 @@ fun MediaItemView(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
                     initialBitmap = fullScreenBitmap,
-                    onClose = { showFullScreenImage = false },
+                    onClose = { },
                     modifier = Modifier.fillMaxSize()
                 )
             }
