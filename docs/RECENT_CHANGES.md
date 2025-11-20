@@ -6,6 +6,7 @@
 
 ## 📋 Table of Contents
 
+0. [Media Grid Video Resume](#media-grid-video-resume) 🆕 **(Nov 20, 2025)**
 1. [Small Video MP4 Conversion](#small-video-mp4-conversion) 🆕 **(December 2024)**
 2. [Documentation Cleanup](#documentation-cleanup) 🆕 **(Oct 14, 2025)**
 3. [Background Video Processing](#background-video-processing) 🆕 **(Oct 14, 2025)**
@@ -14,6 +15,37 @@
 6. [HLS Segment Naming](#hls-segment-naming)
 7. [Java Toolchain Configuration](#java-toolchain-configuration)
 8. [Files Modified Summary](#files-modified-summary)
+
+---
+
+## ▶️ Media Grid Video Resume
+
+**Date:** November 20, 2025  
+**Priority:** 🔶 **MEDIUM** – UX refinement  
+**Status:** ✅ **Shipped**
+
+### Overview
+Tweet detail screens with multiple videos now resume playback from the last video the user watched whenever the media grid reappears (e.g., after scrolling off-screen or navigating back). Previously, the sequence always restarted from the first video, forcing users to manually locate their place.
+
+### Key Changes
+- Added a dedicated `mediaGridVideoIndex` `StateFlow` inside `TweetViewModel` to persist the active video index across recompositions and navigation.
+- `MediaGrid` now:
+  - Reads the saved index when composing
+  - Initializes sequential playback from that index when videos are present
+  - Writes the current index back whenever playback advances to the next video
+- Existing sequential playback, preloading, and auto-advance logic remain intact.
+
+### Files Touched
+1. `app/src/main/java/us/fireshare/tweet/viewmodel/TweetViewModel.kt`
+   - New view-model state + `updateMediaGridVideoIndex()` helper
+2. `app/src/main/java/us/fireshare/tweet/widget/MediaGrid.kt`
+   - Restored saved index through `LaunchedEffect` and persisted updates
+
+### Benefits
+- ✅ Seamless resume experience for multi-video tweets  
+- ✅ Applies automatically without extra UI or settings  
+- ✅ Backward compatible (defaults to index 0 when no state exists)  
+- ✅ Works with existing `VideoManager` sequential playback APIs
 
 ---
 
