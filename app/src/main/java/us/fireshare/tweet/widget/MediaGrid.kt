@@ -61,6 +61,7 @@ fun MediaGrid(
 ) {
     Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
+    val savedVideoIndex by viewModel.mediaGridVideoIndex.collectAsState()
     val navController = LocalNavController.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
@@ -140,7 +141,20 @@ fun MediaGrid(
     }
 
     // Track current playing video as index within videoGridIndices
-    var currentVideoListIndex by remember { mutableStateOf(if (firstVideoIndex >= 0) 0 else -1) }
+    var currentVideoListIndex by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(videoMids, savedVideoIndex) {
+        currentVideoListIndex = when {
+            videoMids.isEmpty() -> -1
+            savedVideoIndex in videoGridIndices.indices -> savedVideoIndex
+            firstVideoIndex >= 0 -> 0
+            else -> -1
+        }
+    }
+
+    LaunchedEffect(currentVideoListIndex) {
+        viewModel.updateMediaGridVideoIndex(currentVideoListIndex)
+    }
 
     fun isAutoPlayForGridIndex(gridIndex: Int): Boolean {
         return currentVideoListIndex >= 0 &&
@@ -152,11 +166,15 @@ fun MediaGrid(
     LaunchedEffect(videoMids) {
         if (videoMids.size > 1) {
             // For multiple videos, only the first one should autoplay initially
-            currentVideoListIndex = 0
+            if (currentVideoListIndex == -1) {
+                currentVideoListIndex = 0
+            }
             VideoManager.setupSequentialPlayback(videoMids)
         } else if (videoMids.size == 1) {
             // Single video - no sequential playback needed
-            currentVideoListIndex = 0
+            if (currentVideoListIndex == -1) {
+                currentVideoListIndex = 0
+            }
             VideoManager.stopSequentialPlayback()
         } else {
             currentVideoListIndex = -1

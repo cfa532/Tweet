@@ -75,6 +75,9 @@ class TweetViewModel @AssistedInject constructor(
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
+    private val _mediaGridVideoIndex = MutableStateFlow(-1)
+    val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
+
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
 
     // remember current video playback position after configuration changes.
@@ -319,6 +322,10 @@ class TweetViewModel @AssistedInject constructor(
         _tweetState.value = tweetState.value.copy(
             commentCount = tweetState.value.commentCount + 1
         )
+    }
+
+    fun updateMediaGridVideoIndex(index: Int) {
+        _mediaGridVideoIndex.value = index
     }
 
     // add new Comment object to its parent Tweet. The code runs on Main thread.
