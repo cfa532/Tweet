@@ -1417,4 +1417,19 @@ class UserViewModel @AssistedInject constructor(
         _favorites.value = updatedFavorites
         _bookmarks.value = updatedBookmarks
     }
+    
+    fun restoreTweetToLists(tweet: Tweet, inTweets: Boolean, inPinned: Boolean, inFavorites: Boolean, inBookmarks: Boolean) {
+        if (inTweets && !tweets.value.any { it.mid == tweet.mid }) {
+            _tweets.value = (listOf(tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        if (inPinned && !pinnedTweets.value.any { it.mid == tweet.mid }) {
+            _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        if (inFavorites && !favorites.value.any { it.mid == tweet.mid }) {
+            _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        if (inBookmarks && !bookmarks.value.any { it.mid == tweet.mid }) {
+            _bookmarks.value = (listOf(tweet) + bookmarks.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+    }
 }
