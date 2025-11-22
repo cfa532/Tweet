@@ -165,6 +165,13 @@ fun AdvancedImageViewer(
     var isVisible by remember { mutableStateOf(true) }
     var lastRetryTime by remember { mutableLongStateOf(0L) }
     var currentImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var imageSetInView by remember { mutableStateOf(false) } // Track if image has been set in SubsamplingScaleImageView
+    
+    // Reset image set flag when imageUrl changes (new image)
+    LaunchedEffect(imageUrl) {
+        imageSetInView = false
+        currentImageUri = null
+    }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -479,8 +486,26 @@ fun AdvancedImageViewer(
                                 
                                 // Only update if the URI has changed to prevent flicker
                                 if (currentImageUri != imageUri) {
-                                    currentImageUri = imageUri
-                                    imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
+                                    // Check if SubsamplingScaleImageView already has an image loaded for this imageUrl
+                                    val hasImage = try {
+                                        imageView.sWidth > 0 && imageView.sHeight > 0
+                                    } catch (e: Exception) {
+                                        false
+                                    }
+                                    
+                                    // Only set image if we haven't set one yet for this imageUrl
+                                    // This prevents flicker when upgrading from compressed to original
+                                    if (!imageSetInView || !hasImage) {
+                                        currentImageUri = imageUri
+                                        imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
+                                        imageSetInView = true
+                                        Timber.tag("ImageViewer").d("Setting image in SubsamplingScaleImageView: $imageUri")
+                                    } else {
+                                        // Image is already loaded - don't reload to prevent flicker
+                                        // Update currentImageUri to match so we don't keep trying
+                                        currentImageUri = imageUri
+                                        Timber.tag("ImageViewer").d("Skipping image reload to prevent flicker - image already loaded")
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")

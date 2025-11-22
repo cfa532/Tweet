@@ -73,7 +73,8 @@ fun MediaItemView(
     viewModel: TweetViewModel,
     onVideoCompleted: (() -> Unit)? = null,
     useIndependentVideoMute: Boolean = false, // For TweetDetailView - videos independent of global mute
-    enableTapToShowControls: Boolean = false // For TweetDetailView - enable tap-to-show controls
+    enableTapToShowControls: Boolean = false, // For TweetDetailView - enable tap-to-show controls
+    allMediaItems: List<MimeiFileType>? = null // All media items for full screen navigation (if different from mediaItems)
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
@@ -276,8 +277,11 @@ fun MediaItemView(
     if (showFullScreenImage && fullScreenImageMid != null) {
         val imageMid = fullScreenImageMid!!
         
+        // Use allMediaItems if provided (for full navigation), otherwise use mediaItems
+        val itemsForNavigation = allMediaItems ?: mediaItems
+        
         // Filter to only image attachments and get their URLs
-        val imageAttachments = mediaItems.mapIndexedNotNull { idx, item ->
+        val imageAttachments = itemsForNavigation.mapIndexedNotNull { idx, item ->
             val inferredType = inferMediaTypeFromAttachment(item)
             if (inferredType == MediaType.Image) {
                 idx to getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
@@ -288,7 +292,7 @@ fun MediaItemView(
         
         // Find current image index in the filtered list
         val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
-            mediaItems[idx].mid == imageMid
+            itemsForNavigation[idx].mid == imageMid
         }
         
         // Get current media URL based on current imageMid
@@ -329,7 +333,7 @@ fun MediaItemView(
                                 // Load next image - the key(imageMid) will trigger recomposition and animation
                                 val nextIndex = currentImageIndexInList + 1
                                 val (nextMediaIndex, _) = imageAttachments[nextIndex]
-                                fullScreenImageMid = mediaItems[nextMediaIndex].mid
+                                fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
                                 fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         }

@@ -305,7 +305,8 @@ fun MediaGrid(
                     inPreviewGrid = true,
                     loadOriginalImage = true, // Load original high-res image for single image
                     viewModel = viewModel,
-                    onVideoCompleted = { onVideoCompleted(0) }
+                    onVideoCompleted = { onVideoCompleted(0) },
+                    allMediaItems = mediaItems // Pass all items for full screen navigation
                 )
             }
             2 -> {
@@ -340,7 +341,8 @@ fun MediaGrid(
                                     autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(idx) }
+                                    onVideoCompleted = { onVideoCompleted(idx) },
+                                    allMediaItems = mediaItems // Pass all items for full screen navigation
                                 )
                             }
                         }
@@ -368,7 +370,8 @@ fun MediaGrid(
                                     autoPlay = isAutoPlayForGridIndex(idx),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(idx) }
+                                    onVideoCompleted = { onVideoCompleted(idx) },
+                                    allMediaItems = mediaItems // Pass all items for full screen navigation
                                 )
                             }
                         }
@@ -724,7 +727,8 @@ fun MediaGrid(
                             autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
-                            onVideoCompleted = { onVideoCompleted(index) }
+                            onVideoCompleted = { onVideoCompleted(index) },
+                            allMediaItems = mediaItems // Pass all items for full screen navigation
                         )
                     }
                 }
