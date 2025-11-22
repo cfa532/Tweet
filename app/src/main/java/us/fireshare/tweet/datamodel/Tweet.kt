@@ -106,16 +106,6 @@ data class Tweet(
         }
 
         /**
-         * Clear a specific tweet instance
-         */
-        @Synchronized
-        fun clearInstance(mid: String) {
-            synchronized(instanceLock) {
-                instances.remove(mid)
-            }
-        }
-
-        /**
          * Clear all tweet instances
          */
         @Synchronized
@@ -154,7 +144,7 @@ data class Tweet(
                         is String -> {
                             try {
                                 processedDict["timestamp"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
+                            } catch (_: NumberFormatException) {
                                 Timber.w("Failed to parse timestamp: $value")
                             }
                         }
@@ -173,7 +163,7 @@ data class Tweet(
                                     is String -> {
                                         try {
                                             attachmentMap["timestamp"] = value.toDouble().toLong()
-                                        } catch (e: NumberFormatException) {
+                                        } catch (_: NumberFormatException) {
                                             Timber.w("Failed to parse attachment timestamp: $value")
                                         }
                                     }
@@ -233,15 +223,6 @@ data class Tweet(
             favorites!![1] = value
         }
 
-    var hasRetweeted: Boolean
-        get() = favorites?.getOrNull(2) ?: false
-        set(value) {
-            if (favorites == null) {
-                favorites = mutableListOf(false, false, false)
-            }
-            favorites!![2] = value
-        }
-
     /**
      * Updates the tweet instance with values from another tweet
      */
@@ -277,7 +258,7 @@ data class Tweet(
                     is String -> {
                         try {
                             processedDict["timestamp"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse timestamp: $value")
                         }
                     }
@@ -300,7 +281,7 @@ data class Tweet(
                                 is String -> {
                                     try {
                                         attachmentMap["timestamp"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
+                                    } catch (_: NumberFormatException) {
                                         Timber.w("Failed to parse attachment timestamp: $value")
                                     }
                                 }
@@ -342,28 +323,6 @@ data class Tweet(
 @Serializable
 enum class MediaType {
     Image, Video, HLS_VIDEO, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
-}
-
-/**
- * Extension function for merging tweets into an array
- */
-fun MutableList<Tweet>.mergeTweets(newTweets: List<Tweet>) {
-    // Create a dictionary to track unique tweets by their mid
-    val uniqueTweets = mutableMapOf<String, Tweet>()
-    
-    // Add existing tweets to dictionary
-    for (tweet in this) {
-        uniqueTweets[tweet.mid] = tweet
-    }
-    
-    // Add new tweets, overwriting existing ones if they have the same mid
-    for (tweet in newTweets) {
-        uniqueTweets[tweet.mid] = tweet
-    }
-    
-    // Convert back to array and sort by timestamp in descending order
-    this.clear()
-    this.addAll(uniqueTweets.values.sortedByDescending { it.timestamp })
 }
 
 @Serializable

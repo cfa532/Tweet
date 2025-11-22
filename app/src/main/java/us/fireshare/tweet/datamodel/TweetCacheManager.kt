@@ -110,23 +110,6 @@ object TweetCacheManager {
     }
 
     /**
-     * Remove a tweet from cache
-     */
-    fun removeCachedTweet(tweetId: MimeiId) {
-        try {
-            synchronized(cacheLock) {
-                // Remove from memory cache
-                memoryCache.remove(tweetId)
-
-                // Remove from database cache
-                HproseInstance.dao.deleteCachedTweet(tweetId)
-            }
-        } catch (e: Exception) {
-            Timber.e("Error removing cached tweet: $e")
-        }
-    }
-
-    /**
      * Clear all cached tweets
      */
     fun clearAllCachedTweets() {
@@ -140,33 +123,6 @@ object TweetCacheManager {
             }
         } catch (e: Exception) {
             Timber.e("Error clearing cached tweets: $e")
-        }
-    }
-
-    /**
-     * Clean up expired tweets
-     */
-    fun cleanupExpiredTweets() {
-        try {
-            synchronized(cacheLock) {
-                val cutoffDate = Date(System.currentTimeMillis() - CACHE_EXPIRATION_TIME)
-
-                // Remove expired tweets from database
-                HproseInstance.dao.deleteOldCachedTweets(cutoffDate)
-
-                // Remove expired tweets from memory cache
-                val expiredKeys = memoryCache.filter { (_, cachedTweet) ->
-                    isExpired(cachedTweet)
-                }.keys
-
-                expiredKeys.forEach { key ->
-                    memoryCache.remove(key)
-                }
-
-
-            }
-        } catch (e: Exception) {
-            Timber.e("Error cleaning up expired tweets: $e")
         }
     }
 
@@ -280,30 +236,6 @@ object TweetCacheManager {
     }
 
     /**
-     * Clean up expired users from cache
-     */
-    fun cleanupExpiredUsers() {
-        try {
-            // Remove expired users from database cache
-            val cutoffTime = Date(System.currentTimeMillis() - USER_CACHE_EXPIRATION_TIME)
-            HproseInstance.dao.deleteOldCachedUsers(cutoffTime)
-            
-            // Remove expired users from memory cache
-            val expiredUserIds = synchronized(userCacheLock) {
-                userMemoryCache.filter { (_, user) ->
-                    isUserExpired(user)
-                }.keys.toList()
-            }
-
-            expiredUserIds.forEach { userId ->
-                removeCachedUserInternal(userId)
-            }
-        } catch (e: Exception) {
-            Timber.e("Error cleaning up expired users: $e")
-        }
-    }
-
-    /**
      * Clear all cached users (memory + database)
      */
     fun clearAllCachedUsers() {
@@ -351,15 +283,6 @@ object TweetCacheManager {
             Timber.e("Error getting user cache stats: $e")
             UserCacheStats(0, 0, 0, USER_CACHE_EXPIRATION_TIME)
         }
-    }
-
-    /**
-     * Check if a cached tweet is expired
-     */
-    private fun isExpired(cachedTweet: CachedTweet): Boolean {
-        val currentTime = System.currentTimeMillis()
-        val cacheTime = cachedTweet.timestamp.time
-        return (currentTime - cacheTime) > CACHE_EXPIRATION_TIME
     }
 
     /**
