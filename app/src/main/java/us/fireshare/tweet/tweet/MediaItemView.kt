@@ -294,7 +294,7 @@ fun MediaItemView(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
                     initialBitmap = fullScreenBitmap,
-                    onClose = { },
+                    onClose = { showFullScreenImage = false },
                     modifier = Modifier.fillMaxSize()
                 )
             }

@@ -371,16 +371,20 @@ fun AdvancedImageViewer(
                         dragOffset = 0f
                     },
                     onDragEnd = { 
-                        // If dragged down more than 100f, close the image viewer
-                        if (dragOffset > 100f) {
+                        // If dragged down more than 150f, close the image viewer
+                        if (dragOffset > 150f) {
                             onClose?.invoke()
                         }
                         dragOffset = 0f
                     },
-                    onDrag = { _, dragAmount ->
+                    onDrag = { change, dragAmount ->
                         // Only allow downward dragging (positive Y values)
-                        if (dragAmount.y > 0) {
+                        // Check if this is primarily a vertical drag
+                        val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
+                        if (dragAmount.y > 0 && isVerticalDrag) {
                             dragOffset += dragAmount.y
+                            // Consume the event to prevent SubsamplingScaleImageView from handling it
+                            change.consume()
                         }
                     }
                 )
@@ -389,63 +393,63 @@ fun AdvancedImageViewer(
         if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
             // Always use SubsamplingScaleImageView for consistent rendering and built-in operations
             AndroidView(
-                factory = { context ->
-                    SubsamplingScaleImageView(context).apply {
-                        setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
-                        setDoubleTapZoomDuration(300)
-                        setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
-                        setMinimumTileDpi(160)
-                        
-                        // Enable EXIF orientation handling
-                        setOrientation(SubsamplingScaleImageView.ORIENTATION_USE_EXIF)
-                        
-                        // Add long press listener for the third-party view
-                        setOnLongClickListener {
-                            showMenu = true
-                            true
-                        }
-                        
-                        configureConsistentZoomScaling(
-                            doubleTapFactor = 2f,
-                            maxScaleFactor = 4f
-                        )
-                    }
-                },
-                update = { imageView ->
-                    loadState.bitmap?.let { bitmap ->
-                        try {
-                            // Use cached file if available, otherwise create temp file from bitmap
-                            val fileToUse = imageFile ?: run {
-                                val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
-                                tempFile.outputStream().use { out ->
-                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
-                                }
-                                tempFile
-                            }
-                            val imageUri = fileToUse.toUri()
+                    factory = { context ->
+                        SubsamplingScaleImageView(context).apply {
+                            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
+                            setDoubleTapZoomDuration(300)
+                            setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
+                            setMinimumTileDpi(160)
                             
-                            // Only update if the URI has changed to prevent flicker
-                            if (currentImageUri != imageUri) {
-                                currentImageUri = imageUri
-                                imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
+                            // Enable EXIF orientation handling
+                            setOrientation(SubsamplingScaleImageView.ORIENTATION_USE_EXIF)
+                            
+                            // Add long press listener for the third-party view
+                            setOnLongClickListener {
+                                showMenu = true
+                                true
                             }
-                        } catch (e: Exception) {
-                            Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
-                            loadState = loadState.copy(hasError = true)
+                            
+                            configureConsistentZoomScaling(
+                                doubleTapFactor = 2f,
+                                maxScaleFactor = 4f
+                            )
                         }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationY = dragOffset
-                        // Add some scaling effect as the image is dragged down
-                        scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                        scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                        // Add alpha effect for fade out
-                        alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                    }
-            )
+                    },
+                    update = { imageView ->
+                        loadState.bitmap?.let { bitmap ->
+                            try {
+                                // Use cached file if available, otherwise create temp file from bitmap
+                                val fileToUse = imageFile ?: run {
+                                    val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
+                                    tempFile.outputStream().use { out ->
+                                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
+                                    }
+                                    tempFile
+                                }
+                                val imageUri = fileToUse.toUri()
+                                
+                                // Only update if the URI has changed to prevent flicker
+                                if (currentImageUri != imageUri) {
+                                    currentImageUri = imageUri
+                                    imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
+                                loadState = loadState.copy(hasError = true)
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationY = dragOffset
+                            // Add some scaling effect as the image is dragged down
+                            scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                            scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                            // Add alpha effect for fade out
+                            alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                        }
+                )
         } else {
             // Check if we have a valid bitmap before showing loading spinner
             val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
@@ -464,24 +468,6 @@ fun AdvancedImageViewer(
             }
         }
 
-        // Close button
-        if (onClose != null) {
-            IconButton(
-                onClick = { onClose.invoke() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), shape = CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
 
         // Custom long press menu
         if (enableLongPress && showMenu) {
@@ -860,16 +846,20 @@ fun ImageViewer(
                         dragOffset = 0f
                     },
                     onDragEnd = { 
-                        // If dragged down more than 100f, close the image viewer
-                        if (dragOffset > 100f) {
+                        // If dragged down more than 150f, close the image viewer
+                        if (dragOffset > 150f) {
                             onClose?.invoke()
                         }
                         dragOffset = 0f
                     },
-                    onDrag = { _, dragAmount ->
+                    onDrag = { change, dragAmount ->
                         // Only allow downward dragging (positive Y values)
-                        if (dragAmount.y > 0) {
+                        // Check if this is primarily a vertical drag
+                        val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
+                        if (dragAmount.y > 0 && isVerticalDrag) {
                             dragOffset += dragAmount.y
+                            // Consume the event to prevent SubsamplingScaleImageView from handling it
+                            change.consume()
                         }
                     }
                 )
@@ -891,54 +881,54 @@ fun ImageViewer(
             if (isFullScreen) {
                 // Use SubsamplingScaleImageView for fullscreen with built-in zoom/pan operations
                 AndroidView(
-                    factory = { context ->
-                        SubsamplingScaleImageView(context).apply {
-                            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
-                            setDoubleTapZoomDuration(300)
-                            setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
-                            setMinimumTileDpi(160)
-                            
-                            // Add long press listener for the third-party view
-                            setOnLongClickListener {
-                                showMenu = true
-                                true
-                            }
-                            
-                            configureConsistentZoomScaling(
-                                doubleTapFactor = 2f,
-                                maxScaleFactor = 4f
-                            )
-                        }
-                    },
-                    update = { imageView ->
-                        loadState.bitmap?.let { bitmap ->
-                            try {
-                                // Use cached file if available, otherwise create temp file from bitmap
-                                val fileToUse = imageFile ?: run {
-                                    val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
-                                    tempFile.outputStream().use { out ->
-                                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
-                                    }
-                                    tempFile
+                        factory = { context ->
+                            SubsamplingScaleImageView(context).apply {
+                                setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
+                                setDoubleTapZoomDuration(300)
+                                setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
+                                setMinimumTileDpi(160)
+                                
+                                // Add long press listener for the third-party view
+                                setOnLongClickListener {
+                                    showMenu = true
+                                    true
                                 }
-                                imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(fileToUse.toUri()))
-                            } catch (e: Exception) {
-                                Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
-                                loadState = loadState.copy(hasError = true)
+                                
+                                configureConsistentZoomScaling(
+                                    doubleTapFactor = 2f,
+                                    maxScaleFactor = 4f
+                                )
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationY = dragOffset
-                            // Add some scaling effect as the image is dragged down
-                            scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                            scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                            // Add alpha effect for fade out
-                            alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                        }
-                )
+                        },
+                        update = { imageView ->
+                            loadState.bitmap?.let { bitmap ->
+                                try {
+                                    // Use cached file if available, otherwise create temp file from bitmap
+                                    val fileToUse = imageFile ?: run {
+                                        val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
+                                        tempFile.outputStream().use { out ->
+                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
+                                        }
+                                        tempFile
+                                    }
+                                    imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(fileToUse.toUri()))
+                                } catch (e: Exception) {
+                                    Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
+                                    loadState = loadState.copy(hasError = true)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                translationY = dragOffset
+                                // Add some scaling effect as the image is dragged down
+                                scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                                scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                                // Add alpha effect for fade out
+                                alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                            }
+                    )
             } else {
                 // Use regular Image for preview mode
                 // Process bitmap directly to ensure it updates when bitmap changes
@@ -1015,24 +1005,6 @@ fun ImageViewer(
             }
         }
 
-        // Close button (only for full screen mode)
-        if (isFullScreen && onClose != null) {
-            IconButton(
-                onClick = { onClose.invoke() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), shape = CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
 
         // Long press menu (only for full screen mode)
         if (isFullScreen && enableLongPress && showMenu) {
