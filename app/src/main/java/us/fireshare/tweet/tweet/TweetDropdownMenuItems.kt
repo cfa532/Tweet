@@ -81,6 +81,30 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
+                // Validate that we can actually delete this tweet
+                if (tweet.mid.isNullOrBlank()) {
+                    Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: tweet.mid is null or blank")
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.delete_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onDismissRequest()
+                    return@DropdownMenuItem
+                }
+
+                // Check if hproseService is available
+                if (appUser.hproseService == null) {
+                    Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: hproseService is null")
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.network_error_connection_lost),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    onDismissRequest()
+                    return@DropdownMenuItem
+                }
+
                 // inform user the tweet is being deleted.
                 Toast.makeText(
                     context,
@@ -91,6 +115,7 @@ fun TweetDropdownMenuItems(
 
                 applicationScope.launch(IO) {
                     try {
+                        Timber.tag("TweetDropdownMenuItems").d("Starting deletion of tweet: ${tweet.mid}")
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
                             // Deletion completed successfully
                             Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
@@ -109,7 +134,29 @@ fun TweetDropdownMenuItems(
                     } catch (e: Exception) {
                         Timber.tag("TweetDropdownMenuItems")
                             .e(e, "Error deleting tweet: ${e.message}")
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Stack trace: ${e.stackTraceToString()}")
                         // Show error toast for any exceptions
+                        withContext(Main) {
+                            val errorMessage = e.message ?: context.getString(R.string.delete_failed)
+                            // Truncate error message if too long to avoid UI issues
+                            val displayMessage = if (errorMessage.length > 100) {
+                                errorMessage.take(100) + "..."
+                            } else {
+                                errorMessage
+                            }
+                            Toast.makeText(
+                                context,
+                                displayMessage,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } catch (e: Throwable) {
+                        // Catch any other errors (including cancellation exceptions)
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Unexpected error deleting tweet: ${e.message}")
+                        Timber.tag("TweetDropdownMenuItems")
+                            .e(e, "Stack trace: ${e.stackTraceToString()}")
                         withContext(Main) {
                             Toast.makeText(
                                 context,

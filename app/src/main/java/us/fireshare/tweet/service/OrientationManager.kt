@@ -15,7 +15,7 @@ object OrientationManager {
      */
     fun lockToPortrait(activity: Activity) {
         Timber.d("OrientationManager: Locking to portrait")
-        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
     
     /**

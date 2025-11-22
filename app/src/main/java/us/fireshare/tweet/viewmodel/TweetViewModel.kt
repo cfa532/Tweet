@@ -679,7 +679,7 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Crop image to center square and resize to target size
      */
-    private fun cropToCenter(image: Bitmap, targetSize: Int): Bitmap {
+    private fun cropToCenter(image: Bitmap, targetSize: Int = 360): Bitmap {
         val width = image.width
         val height = image.height
         

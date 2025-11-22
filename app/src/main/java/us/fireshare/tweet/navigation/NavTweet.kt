@@ -68,9 +68,6 @@ sealed interface NavTweet {
 
     @Serializable
     data class Favorites(val userId: MimeiId) : NavTweet
-
-    @Serializable
-    data class Comments(val userId: MimeiId) : NavTweet
 }
 
 @Serializable

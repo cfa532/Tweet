@@ -17,8 +17,7 @@ class TweetListViewModel @Inject constructor() : ViewModel() {
     val videoIndexedList: StateFlow<List<Pair<MimeiId, MediaType>>> get() = _videoIndexedList.asStateFlow()
     
     private val _tweetList = MutableStateFlow<List<Tweet>>(emptyList())
-    val tweetList: StateFlow<List<Tweet>> get() = _tweetList.asStateFlow()
-    
+
     fun setVideoIndexedList(videoList: List<Pair<MimeiId, MediaType>>) {
         _videoIndexedList.value = videoList
     }

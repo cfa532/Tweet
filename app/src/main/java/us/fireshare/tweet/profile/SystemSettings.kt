@@ -74,7 +74,6 @@ import us.fireshare.tweet.widget.VideoManager
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
     val appUser by appUserViewModel.user.collectAsState()
-    var showDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Scaffold(

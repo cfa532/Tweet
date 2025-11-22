@@ -368,9 +368,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             // Note: tweetCount is updated by getUser() refresh inside deleteTweet()
 
             // Also remove from UserViewModel lists if provided (for profile screen)
-            if (userViewModel != null) {
-                userViewModel.removeTweetFromAllLists(tweetId)
-            }
+            userViewModel?.removeTweetFromAllLists(tweetId)
         }
 
         // Navigate back immediately for better UX

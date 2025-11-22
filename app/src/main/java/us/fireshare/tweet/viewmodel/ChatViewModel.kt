@@ -242,16 +242,11 @@ class ChatViewModel @AssistedInject constructor(
     fun resetScrollToBottomFlag() {
         _shouldScrollToBottom.value = false
     }
-    
-    fun scrollToBottom() {
-        // This will be called from the UI to trigger scroll to bottom
-        // The actual scrolling is handled in the ChatScreen
-    }
 
     /**
      * Check new messages on writable host of an user.
      * */
-    suspend fun fetchNewMessage(numOfMsgs: Int = 500) {
+    suspend fun fetchNewMessage() {
         val fetchedMessages = HproseInstance.fetchMessages(receiptId) ?: return
         val news = fetchedMessages.toMutableList()
         Timber.tag("ChatViewModel").d("fetchNewMessage fetched ${news.size} messages $receiptId")

@@ -115,7 +115,6 @@ fun TweetNavGraph(
                     val currentTime = SystemClock.elapsedRealtime()
                     if (currentTime - lastClickTime > debounceTime) {
                         navController.popBackStack()
-                        lastClickTime = currentTime
                     }
                 }
             }

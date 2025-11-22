@@ -21,11 +21,9 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
             val cachedTweetDao = database.tweetDao()
             cachedTweetDao.deleteOldCachedTweets(oneMonthAgo)
 
-            // clear old cached images after 30 days.
-            val oneMonthInMillis = 30L * 24L * 60L * 60L * 1000L
             // Note: VideoManager doesn't have clearOldCachedVideos method
-        // The memory management is handled automatically by VideoManager
-        Timber.d("CleanUpWorker - Video cache cleanup handled by VideoManager")
+            // The memory management is handled automatically by VideoManager
+            Timber.d("CleanUpWorker - Video cache cleanup handled by VideoManager")
             Timber.tag("CleanUpWorker").d("Clean up finished!!!!")
 
             return Result.success()

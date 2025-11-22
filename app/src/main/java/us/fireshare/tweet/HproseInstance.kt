@@ -1365,6 +1365,13 @@ object HproseInstance {
      * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
      */
     suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
+        // Check if hproseService is available
+        if (appUser.hproseService == null) {
+            val errorMsg = "Cannot delete tweet: hproseService is null. User may not be properly initialized."
+            Timber.tag("deleteTweet").e(errorMsg)
+            throw Exception(errorMsg)
+        }
+
         val entry = "delete_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1376,8 +1383,20 @@ object HproseInstance {
             val response =
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
-            if (response?.get("success") == true) {
+            if (response == null) {
+                val errorMsg = "Delete tweet failed: server returned null response"
+                Timber.tag("deleteTweet").e(errorMsg)
+                throw Exception(errorMsg)
+            }
+
+            if (response.get("success") == true) {
                 val deletedTweetId = response["tweetid"] as? MimeiId
+                
+                if (deletedTweetId == null) {
+                    val errorMsg = "Delete tweet failed: server returned success but no tweetid"
+                    Timber.tag("deleteTweet").e(errorMsg)
+                    throw Exception(errorMsg)
+                }
                 
                 // Refresh appUser from server to get updated tweetCount and other properties
                 try {
@@ -1400,12 +1419,15 @@ object HproseInstance {
                 deletedTweetId
             } else {
                 val errorMessage =
-                    response?.get("message") as? String ?: applicationContext.getString(R.string.error_tweet_deletion_unknown)
+                    response.get("message") as? String ?: applicationContext.getString(R.string.error_tweet_deletion_unknown)
+                Timber.tag("deleteTweet").e("Delete tweet failed: $errorMessage")
                 throw Exception(errorMessage)
             }
         } catch (e: Exception) {
-            Timber.tag("deleteTweet").e(e)
-            throw Exception(e.message)
+            Timber.tag("deleteTweet").e(e, "Error deleting tweet: ${e.message}")
+            Timber.tag("deleteTweet").e("Stack trace: ${e.stackTraceToString()}")
+            // Re-throw with original message or provide default
+            throw Exception(e.message ?: "Unknown error occurred while deleting tweet")
         }
     }
 

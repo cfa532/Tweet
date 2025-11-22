@@ -37,7 +37,7 @@ object FileSizeUtils {
             val size = inputStream?.available()?.toLong() ?: 0L
             inputStream?.close()
             size
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             0L
         }
     }
@@ -68,18 +68,6 @@ object FileSizeUtils {
             else -> {
                 context.getString(R.string.file_size_ok, formattedSize)
             }
-        }
-    }
-    
-    /**
-     * Gets file size status color (for UI indicators)
-     */
-    fun getFileSizeStatusColor(fileSize: Long): Long {
-        return when {
-            fileSize > MAX_FILE_SIZE -> -65536L // Red
-            fileSize > VERY_LARGE_FILE_THRESHOLD -> -256L // Orange
-            fileSize > LARGE_FILE_THRESHOLD -> -256L // Yellow
-            else -> 65280L // Green
         }
     }
 }

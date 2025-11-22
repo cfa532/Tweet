@@ -236,7 +236,7 @@ fun ComposeCommentScreen(
     // Exit confirmation dialog
     ExitConfirmationDialog(
         showDialog = showExitConfirmation,
-        onDismiss = { showExitConfirmation = false },
+        onDismiss = { },
         onConfirm = { popBack() },
         title = "Discard Comment"
     )

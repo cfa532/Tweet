@@ -229,7 +229,7 @@ fun BottomNavigationBar(
     // Upgrade required dialog
     if (showUpgradeDialog) {
         AlertDialog(
-            onDismissRequest = { showUpgradeDialog = false },
+            onDismissRequest = { },
             icon = {
                 Icon(
                     imageVector = Icons.Default.Upgrade,
@@ -254,7 +254,6 @@ fun BottomNavigationBar(
                         // Trigger immediate server upgrade check (no delay)
                         Timber.tag("UpgradeButton").d("Upgrade button clicked")
                         activityViewModel.checkForMiniUpgrade(context)
-                        showUpgradeDialog = false
                     }
                 ) {
                     Text(stringResource(R.string.upgrade_now))
@@ -262,7 +261,7 @@ fun BottomNavigationBar(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showUpgradeDialog = false }
+                    onClick = { }
                 ) {
                     Text(stringResource(R.string.cancel))
                 }

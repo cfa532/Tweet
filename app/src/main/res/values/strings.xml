@@ -324,4 +324,9 @@
     <string name="video_error_format_not_supported">Video format not supported. Please try a different video.</string>
     <string name="video_error_network_issue">Video failed to load. Check your internet connection and try again.</string>
     <string name="video_retry_playback">Retry Playback</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">Need to set up your own node</string>
+    <string name="node_required_message">You have more than 10 tweets and need to set up your own node to continue posting. Please set up your own node for better performance and storage.</string>
+    <string name="node_required_ok">OK</string>
 </resources>

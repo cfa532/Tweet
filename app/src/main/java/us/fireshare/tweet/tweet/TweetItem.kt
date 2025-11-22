@@ -385,7 +385,7 @@ private fun RetweetWithContent(
                             SelectableText(
                                 text = tweet.content!!,
                                 maxLines = 10,
-                            ) { username ->
+                            ) { _ ->
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     withContext(Dispatchers.Main) {
                                         navController.navigate(

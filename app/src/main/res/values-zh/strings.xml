@@ -73,5 +73,10 @@
     <string name="video_error_network_issue">視頻加載失敗。檢查您的網絡連接並重試。</string>
     <string name="video_retry_playback">重試播放</string>
     <string name="domain_to_share">分享域名</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">需要建立自己的節點</string>
+    <string name="node_required_message">您已發布超過10條推文，需要建立自己的節點才能繼續發布。請建立您自己的節點以獲得更好的性能和存儲。</string>
+    <string name="node_required_ok">我知道了</string>
 </resources>
 

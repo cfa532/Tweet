@@ -97,7 +97,6 @@ fun UserListView(
         Timber.tag("UserListView").d("LaunchedEffect triggered with currentUserId: $currentUserId, lastUserId: $lastUserId")
         if (currentUserId != lastUserId || allUserIds.isEmpty()) {
             Timber.tag("UserListView").d("User changed from $lastUserId to $currentUserId, initializing data")
-            lastUserId = currentUserId
             allUserIds = emptyList()
             displayedUserCount = 0
             serverDepleted = false
@@ -198,7 +197,6 @@ fun UserListView(
         
         if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && !serverDepleted) {
             Timber.tag("UserListView").d("Triggering load more...")
-            isLoadingMore = true
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
@@ -234,7 +232,6 @@ fun UserListView(
                     serverDepleted = true
                 } finally {
                     isRefreshingAtBottom = false
-                    isLoadingMore = false
                     Timber.tag("UserListView").d("Load more completed, isRefreshingAtBottom set to false, isLoadingMore set to false")
                 }
             }

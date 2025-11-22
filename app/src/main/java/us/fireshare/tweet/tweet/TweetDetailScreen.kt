@@ -138,10 +138,6 @@ fun TweetDetailScreen(
                 } else if (scrollDelta < -5) { // Scrolling up - show top bar
                     showTopAppBar = true
                 }
-                // If scrollDelta is small (between -5 and 5), maintain current state
-                // This prevents the top bar from popping back when scrolling stops
-                
-                previousScrollOffset = currentOffset
             }
     }
 
@@ -218,8 +214,6 @@ fun TweetDetailScreen(
                     withContext(Dispatchers.IO) {
                         val pageToLoad = currentPage + 1
                         viewModel.loadComments(tweet, pageToLoad)
-                        lastLoadedPage = pageToLoad
-                        currentPage = pageToLoad
                     }
                 } finally {
                     isRefreshingAtBottom = false
@@ -334,7 +328,7 @@ fun TweetDetailScreen(
                     TweetDetailBody(
                         viewModel = viewModel,
                         parentEntry = parentEntry,
-                        onExpandReply = { isReplyBoxExpanded = true }
+                        onExpandReply = { }
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 1.dp),

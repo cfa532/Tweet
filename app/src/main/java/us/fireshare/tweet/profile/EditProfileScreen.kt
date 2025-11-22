@@ -206,7 +206,6 @@ fun EditProfileScreen(
     // Show cropping screen if requested
     if (showCropScreen.value) {
         AvatarCropScreen(
-            user = appUser,
             viewModel = viewModel,
             onNavigateBack = { 
                 showCropScreen.value = false

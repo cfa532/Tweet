@@ -82,13 +82,6 @@ fun ProfileTopBarButton(
                             return@DebouncedButton
                         }
 
-                        // Store the previous state for potential rollback
-                        val previousState = localIsFollowing
-                        
-                        // Toggle local state immediately for instant UI feedback
-                        localIsFollowing = !localIsFollowing
-                        isOperationInProgress = true
-
                         appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                             try {
                                 // Attempt the actual toggle operation
@@ -115,11 +108,8 @@ fun ProfileTopBarButton(
                                 }
 
                                 withContext(Dispatchers.Main) {
-                                    isOperationInProgress = false
-                                    
                                     if (result == null) {
                                         // Operation failed, revert the local state
-                                        localIsFollowing = previousState
                                         Toast.makeText(
                                             context,
                                             context.getString(R.string.follow_operation_failed),
@@ -128,11 +118,9 @@ fun ProfileTopBarButton(
                                     }
                                     // If result is not null, the operation succeeded and local state is correct
                                 }
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 // Exception occurred, revert the local state
                                 withContext(Dispatchers.Main) {
-                                    localIsFollowing = previousState
-                                    isOperationInProgress = false
                                     Toast.makeText(
                                         context,
                                         context.getString(R.string.follow_operation_failed),

@@ -38,7 +38,6 @@ fun ProfileDetail(
 ) {
     val sharedViewModel = hiltViewModel<SharedViewModel>()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
 

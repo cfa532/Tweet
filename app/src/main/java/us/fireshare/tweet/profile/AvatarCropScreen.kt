@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,11 +59,11 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.viewmodel.UserViewModel
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import androidx.core.graphics.createBitmap
 
 /**
  * Simple avatar cropping screen with circular crop overlay
@@ -71,7 +71,6 @@ import java.io.InputStream
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AvatarCropScreen(
-    user: User,
     viewModel: UserViewModel,
     onNavigateBack: () -> Unit,
     onCropComplete: () -> Unit,
@@ -87,8 +86,6 @@ fun AvatarCropScreen(
     var uploadError by remember { mutableStateOf<String?>(null) }
     
     // State for image transformation
-    var imageOffset by remember { mutableStateOf(Offset.Zero) }
-    var imageScale by remember { mutableFloatStateOf(1f) }
     var imageView by remember { mutableStateOf<SubsamplingScaleImageView?>(null) }
     
     // Crop overlay state - make it much larger
@@ -103,8 +100,6 @@ fun AvatarCropScreen(
             selectedImageUri = it
             uploadError = null
             // Reset transformations when new image is selected
-            imageOffset = Offset.Zero
-            imageScale = 1f
         }
     }
     
@@ -138,7 +133,7 @@ fun AvatarCropScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back)
                         )
                     }
@@ -149,28 +144,20 @@ fun AvatarCropScreen(
                             onClick = {
                                 // Crop and upload the image
                                 originalBitmap?.let { bitmap ->
-                                    isUploading = true
-                                    uploadError = null
-                                    
+
                                     viewModel.viewModelScope.launch {
-                                        try {
-                                            val croppedBitmap = cropCircularImageFromView(
-                                                bitmap = bitmap,
-                                                imageView = imageView,
-                                                cropSizePx = cropSizePx
-                                            )
-                                            
-                                            // Convert to URI and upload
-                                            val croppedUri = bitmapToUri(context, croppedBitmap)
-                                            viewModel.updateAvatar(context, croppedUri)
-                                            
-                                            // Success - navigate back
-                                            onCropComplete()
-                                        } catch (e: Exception) {
-                                            uploadError = "Upload failed: ${e.message}"
-                                        } finally {
-                                            isUploading = false
-                                        }
+                                        val croppedBitmap = cropCircularImageFromView(
+                                            bitmap = bitmap,
+                                            imageView = imageView,
+                                            cropSizePx = cropSizePx
+                                        )
+
+                                        // Convert to URI and upload
+                                        val croppedUri = bitmapToUri(context, croppedBitmap)
+                                        viewModel.updateAvatar(context, croppedUri)
+
+                                        // Success - navigate back
+                                        onCropComplete()
                                     }
                                 }
                             },
@@ -195,20 +182,14 @@ fun AvatarCropScreen(
             if (originalBitmap == null) {
                 // Show photo picker interface
                 PhotoPickerInterface(
-                    onPickPhoto = { photoPickerLauncher.launch("image/*") },
                     modifier = Modifier.weight(1f)
                 )
             } else {
                 // Show cropping interface
                 CroppingInterface(
                     bitmap = originalBitmap!!,
-                    imageOffset = imageOffset,
-                    imageScale = imageScale,
                     cropSizePx = cropSizePx,
-                    onOffsetChange = { imageOffset = it },
-                    onScaleChange = { imageScale = it },
-                    onImageViewReady = { imageView = it },
-                    isUploading = isUploading,
+                    onImageViewReady = { },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -279,7 +260,6 @@ fun AvatarCropScreen(
 
 @Composable
 private fun PhotoPickerInterface(
-    onPickPhoto: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -316,13 +296,8 @@ private fun PhotoPickerInterface(
 @Composable
 private fun CroppingInterface(
     bitmap: Bitmap,
-    imageOffset: Offset,
-    imageScale: Float,
     cropSizePx: Float,
-    onOffsetChange: (Offset) -> Unit,
-    onScaleChange: (Float) -> Unit,
     onImageViewReady: (SubsamplingScaleImageView?) -> Unit,
-    isUploading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -485,22 +460,6 @@ private fun loadAndRotateImage(inputStream: InputStream): Bitmap? {
 }
 
 /**
- * Transform bitmap with scale
- */
-private fun transformBitmap(bitmap: Bitmap, scale: Float): Bitmap {
-    val matrix = Matrix().apply {
-        postScale(scale, scale)
-    }
-    
-    return Bitmap.createBitmap(
-        bitmap,
-        0, 0, bitmap.width, bitmap.height,
-        matrix,
-        true
-    )
-}
-
-/**
  * Crop image to circular area from the actual view state, preserving aspect ratio
  */
 private fun cropCircularImageFromView(
@@ -511,12 +470,6 @@ private fun cropCircularImageFromView(
     val cropSize = cropSizePx.toInt()
     
     if (imageView != null) {
-        // Get the actual view state from SubsamplingScaleImageView
-        val viewWidth = imageView.width.toFloat()
-        val viewHeight = imageView.height.toFloat()
-        val centerX = viewWidth / 2f
-        val centerY = viewHeight / 2f
-        
         // Get the current scale and pan from the view
         val scale = imageView.scale
         val center = imageView.center
@@ -547,7 +500,7 @@ private fun cropCircularImageFromView(
         }
         
         // Create result bitmap with proper aspect ratio
-        val result = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888)
+        val result = createBitmap(outputWidth, outputHeight)
         val canvas = Canvas(result)
         
         // Fill with black background

@@ -200,7 +200,7 @@ class UploadTweetWorker @AssistedInject constructor(
                     isPrivate = isPrivate
                 )
 
-                HproseInstance.uploadTweet(tweet)?.let { t: Tweet ->
+                HproseInstance.uploadTweet(tweet)?.let { _: Tweet ->
                     Timber.tag("UploadTweetWorker").d(tweet.toString())
                     
                     // Remove incomplete upload from tracking since it completed successfully

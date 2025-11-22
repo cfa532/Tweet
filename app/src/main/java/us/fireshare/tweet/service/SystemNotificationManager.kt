@@ -125,70 +125,8 @@ object SystemNotificationManager {
             Timber.e(e, "Failed to show chat message notification")
         }
     }
-    
 
-    
-    /**
-     * Show notification for system updates or important events
-     */
-    fun showSystemNotification(
-        context: Context,
-        title: String,
-        message: String,
-        notificationId: Int = NOTIFICATION_ID_SYSTEM_UPDATE
-    ) {
-        if (!NotificationPermissionManager.isNotificationPermissionGranted(context)) {
-            Timber.d("Notification permission not granted, skipping system notification")
-            return
-        }
-        
-        try {
-            val intent = Intent(context, TweetActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                notificationId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            
-            val notification = NotificationCompat.Builder(context, DEFAULT_CHANNEL)
-                .setSmallIcon(R.drawable.ic_notice)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_STATUS)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .build()
-            
-            try {
-                NotificationManagerCompat.from(context).notify(notificationId, notification)
-            } catch (e: SecurityException) {
-                Timber.e(e, "Security exception when showing notification - permission may be denied")
-            }
-            Timber.d("System notification shown: $title")
-            
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to show system notification")
-        }
-    }
-    
-    /**
-     * Clear all notifications
-     */
-    fun clearAllNotifications(context: Context) {
-        try {
-            NotificationManagerCompat.from(context).cancelAll()
-            Timber.d("All notifications cleared")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to clear notifications")
-        }
-    }
-    
+
     /**
      * Clear specific notification by ID
      */
@@ -200,46 +138,4 @@ object SystemNotificationManager {
             Timber.e(e, "Failed to clear notification: $notificationId")
         }
     }
-    
-    /**
-     * Check if notifications are enabled for the app
-     */
-    fun areNotificationsEnabled(context: Context): Boolean {
-        return NotificationManagerCompat.from(context).areNotificationsEnabled()
-    }
-    
-    /**
-     * Test notification for debugging purposes
-     */
-    fun testNotification(context: Context) {
-        Timber.d("Testing notification...")
-        showChatMessageNotification(
-            context,
-            "Test User",
-            "This is a test notification message",
-            1
-        )
-    }
-    
-    /**
-     * Get notification debug info
-     */
-    fun getNotificationDebugInfo(context: Context): String {
-        val permissionGranted = NotificationPermissionManager.isNotificationPermissionGranted(context)
-        val notificationsEnabled = areNotificationsEnabled(context)
-        val channelExists = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.getNotificationChannel(DEFAULT_CHANNEL) != null
-        } else {
-            true
-        }
-        
-        return """
-            Notification Debug Info:
-            - Permission Granted: $permissionGranted
-            - Notifications Enabled: $notificationsEnabled
-            - Channel Exists: $channelExists
-            - Android Version: ${android.os.Build.VERSION.SDK_INT}
-        """.trimIndent()
-    }
-} 
+}

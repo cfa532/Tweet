@@ -76,7 +76,6 @@ fun FollowingsTweet(
                         if (isAtLastTweet && !isRefreshingAtBottom && tweets.size >= MINMIMUM_TWEET_COUNT) {
                             // Check if it's an upward gesture (negative Y means up)
                             if (y < -50) { // Threshold for upward gesture
-                                isRefreshingAtBottom = true
 
                                 // Trigger the loadmore in TweetListView
                                 triggerLoadMore()
@@ -84,7 +83,6 @@ fun FollowingsTweet(
                                 // Reset the loading state after a short delay
                                 coroutineScope.launch {
                                     kotlinx.coroutines.delay(100) // Small delay to allow TweetListView to process
-                                    isRefreshingAtBottom = false
                                 }
                             }
                         }
@@ -122,7 +120,7 @@ fun FollowingsTweet(
     // Show full-screen video overlay
     if (fullScreenVideoUrl != null) {
         Dialog(
-            onDismissRequest = { fullScreenVideoUrl = null },
+            onDismissRequest = { },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,

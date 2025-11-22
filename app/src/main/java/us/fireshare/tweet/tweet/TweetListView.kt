@@ -138,7 +138,7 @@ fun TweetListView(
         // Debug logging for parameter changes
         if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
             Timber.tag("TweetListView")
-                .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.value}, userId=$currentUserId->${previousUserId.value}")
+                .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.intValue}, userId=$currentUserId->${previousUserId.value}")
             previousTweetsSize.intValue = tweets.size
             previousUserId.value = currentUserId
         }
@@ -169,7 +169,6 @@ fun TweetListView(
         initialFirstVisibleItemScrollOffset = if (restoreScrollPosition) savedScrollPosition.value.second else 0
     )
     val coroutineScope = rememberCoroutineScope()
-    val MINMIMUM_TWEET_COUNT = 4
 
     // Detect user changes and initialize data
     LaunchedEffect(currentUserId) {
@@ -206,7 +205,7 @@ fun TweetListView(
                     }
 
                     // Check if we have enough visible tweets (for logging purposes)
-                    val visibleTweets = tweets.filterNotNull().filter { tweet ->
+                    tweets.filter { tweet ->
                         if (showPrivateTweets) {
                             // Profile screen: show private tweets only if it's the app user's own profile
                             !tweet.isPrivate || tweet.authorId == currentUserId
@@ -215,7 +214,6 @@ fun TweetListView(
                             !tweet.isPrivate
                         }
                     }
-                    val enoughTweets = visibleTweets.size >= MINMIMUM_TWEET_COUNT
 
                     // Move to next page for next iteration
                     pageToLoad++
@@ -295,8 +293,8 @@ fun TweetListView(
 
     // Track scroll state and notify parent
     LaunchedEffect(listState) {
-        var previousFirstVisibleItem = listState.firstVisibleItemIndex
-        var previousScrollOffset = listState.firstVisibleItemScrollOffset
+        val previousFirstVisibleItem = listState.firstVisibleItemIndex
+        val previousScrollOffset = listState.firstVisibleItemScrollOffset
 
         snapshotFlow {
             val isScrolling = listState.isScrollInProgress
@@ -317,10 +315,6 @@ fun TweetListView(
 
                 else -> ScrollDirection.NONE
             }
-
-            // Update previous values
-            previousFirstVisibleItem = firstVisibleItem
-            previousScrollOffset = scrollOffset
 
             ScrollState(isScrolling, direction)
         }
@@ -365,11 +359,8 @@ fun TweetListView(
         onIsAtLastTweetChange?.invoke(isAtLastTweet)
 
         // Track when user was at last tweet
-        if (isAtLastTweet) {
-            wasAtLastTweet = true
-        } else if (wasAtLastTweet) {
+        if (wasAtLastTweet) {
             // User was at last tweet but now scrolled away - reset serverDepleted
-            wasAtLastTweet = false
             if (serverDepleted) {
                 Timber.tag("TweetListView")
                     .d("User scrolled away from last tweet, resetting serverDepleted to false to allow loadmore attempts")
@@ -380,7 +371,7 @@ fun TweetListView(
 
     // Handle external loadmore triggers
     LaunchedEffect(Unit) {
-        onTriggerLoadMore?.let { trigger ->
+        onTriggerLoadMore?.let { _ ->
             // This will be called when the caller wants to trigger loadmore
             // We'll use a shared flow or state to communicate this
             externalLoadMoreRequest = true
@@ -532,7 +523,6 @@ fun TweetListView(
             if (externalLoadMoreRequest) {
                 Timber.tag("TweetListView")
                     .d("External loadmore request detected, triggering loadmore...")
-                externalLoadMoreRequest = false // Reset the request
             }
 
             Timber.tag("TweetListView").d("Triggering load more for page $nextPage...")
@@ -737,7 +727,7 @@ private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Mimei
             tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
             Timber.tag("TweetListView").d("Pure retweet detected at feed index $feedIndex: ${tweet.mid}, fetching original tweet: ${tweet.originalTweetId}")
             
-            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) as? Tweet
+            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
             if (originalTweet != null) {
                 tweetToCheck = originalTweet
                 hasVideo = originalTweet.attachments?.any { attachment ->
@@ -790,25 +780,6 @@ private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Mimei
     }
     
     return result
-}
-
-/**
- * Finds the start index for a tapped video in the video-indexed list.
- * For retweets, finds the first video that comes after the retweet in the feed.
- */
-fun findStartIndexForTappedVideo(videoIndexedList: List<Pair<MimeiId, Int>>, tappedVideoMid: MimeiId): Int {
-    if (videoIndexedList.isEmpty()) return 0
-    
-    // Find the video that matches the tapped video mid
-    val startIndex = videoIndexedList.indexOfFirst { (videoMid, _) -> videoMid == tappedVideoMid }
-    if (startIndex >= 0) {
-        Timber.tag("TweetListView").d("Found start index $startIndex for video $tappedVideoMid")
-        return startIndex
-    }
-    
-    // If not found, start from the beginning
-    Timber.tag("TweetListView").d("Video $tappedVideoMid not found in video list, starting from beginning")
-    return 0
 }
 
 /**

@@ -655,15 +655,6 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * This is specifically for sync user on a node with its main host data.
-     */
-    suspend fun syncUser() {
-        HproseInstance.syncUser(userId)?.let {
-            _user.value = it
-        }
-    }
-
-    /**
      * Refresh user data from appUser if this is the current user.
      * This ensures that when appUser is updated (e.g., after favorite toggle),
      * this ViewModel gets the updated data.
@@ -1085,8 +1076,7 @@ class UserViewModel @AssistedInject constructor(
                         
                         if (appUser.isGuest()) {
                             // Create new user from processed data
-                            val newUser = User.from(processedUserData)
-
+                            User.from(processedUserData)
                             password.value = ""     // clear the password
                             popBack()
                         } else {

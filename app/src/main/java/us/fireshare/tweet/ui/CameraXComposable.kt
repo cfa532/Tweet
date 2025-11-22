@@ -217,7 +217,7 @@ fun CameraXPreview(
             modifier = Modifier.fillMaxSize(),
             update = { pv ->
                 previewView = pv
-                cameraManager.startCamera(pv, onImageCaptured)
+                cameraManager.startCamera(pv)
             }
         )
 
@@ -234,7 +234,7 @@ fun CameraXPreview(
             IconButton(
                 onClick = {
                     previewView?.let { pv ->
-                        cameraManager.switchCamera(pv, onImageCaptured)
+                        cameraManager.switchCamera(pv)
                         isBackCamera = !isBackCamera
                     }
                 },

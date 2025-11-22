@@ -403,7 +403,7 @@ fun ReplyEditorBox(
     // Exit confirmation dialog
     if (showExitConfirmation) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showExitConfirmation = false },
+            onDismissRequest = { },
             title = { Text(stringResource(R.string.discard_reply)) },
             text = { Text(stringResource(R.string.unsaved_content_warning)) },
             confirmButton = {
@@ -415,7 +415,7 @@ fun ReplyEditorBox(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(
-                    onClick = { showExitConfirmation = false }
+                    onClick = { }
                 ) {
                     Text(stringResource(R.string.keep_editing))
                 }
@@ -428,7 +428,7 @@ fun ReplyEditorBox(
         CameraXPreview(
             onImageCaptured = onImageCaptured,
             onVideoRecorded = onVideoRecorded,
-            onDismiss = { showCamera = false },
+            onDismiss = { },
             modifier = Modifier.fillMaxSize()
         )
     }

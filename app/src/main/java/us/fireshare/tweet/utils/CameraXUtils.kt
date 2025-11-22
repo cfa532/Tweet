@@ -77,20 +77,20 @@ class CameraXManager(
         Timber.tag("CameraX").d("Updated use case rotations to: $currentRotation")
     }
 
-    fun startCamera(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
+    fun startCamera(previewView: PreviewView) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         
         cameraProviderFuture.addListener({
             try {
                 cameraProvider = cameraProviderFuture.get()
-                bindCameraUseCases(previewView, onImageCaptured)
+                bindCameraUseCases(previewView)
             } catch (exc: Exception) {
                 Timber.tag("CameraX").e(exc, "Use case binding failed")
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
-    private fun bindCameraUseCases(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
+    private fun bindCameraUseCases(previewView: PreviewView) {
         val cameraProvider = cameraProvider ?: return
 
         Timber.tag("CameraX").d("Binding camera use cases with rotation: ${getCurrentRotationName()} ($currentRotation)")
@@ -131,7 +131,7 @@ class CameraXManager(
                 videoCapture
             )
 
-        } catch (exc: Exception) {
+        } catch (_: Exception) {
             Timber.tag("CameraX").e( "Use case binding failed")
         }
     }
@@ -180,7 +180,7 @@ class CameraXManager(
         )
     }
 
-    fun switchCamera(previewView: PreviewView, onImageCaptured: (Uri) -> Unit) {
+    fun switchCamera(previewView: PreviewView) {
         cameraProvider?.let { provider ->
             try {
                 // Unbind current use cases
@@ -194,7 +194,7 @@ class CameraXManager(
                 }
                 
                 // Rebind with new camera
-                bindCameraUseCases(previewView, onImageCaptured)
+                bindCameraUseCases(previewView)
             } catch (exc: Exception) {
                 Timber.tag("CameraX").e(exc, "Camera switch failed")
             }
@@ -252,14 +252,6 @@ class CameraXManager(
         recording?.stop()
         recording = null
     }
-
-    fun isRecording(): Boolean {
-        return recording != null
-    }
-
-    fun getCurrentRotation(): Int {
-        return currentRotation
-    }
     
     fun getCurrentRotationName(): String {
         return when (currentRotation) {
@@ -268,19 +260,6 @@ class CameraXManager(
             Surface.ROTATION_180 -> "Portrait Upside Down"
             Surface.ROTATION_270 -> "Landscape Left"
             else -> "Unknown"
-        }
-    }
-    
-    fun onOrientationChanged() {
-        // Rebind camera use cases with new rotation
-        cameraProvider?.let { provider ->
-            try {
-                provider.unbindAll()
-                // Get the current preview view from the composable
-                // This will be handled by the UI layer calling startCamera again
-            } catch (exc: Exception) {
-                Timber.tag("CameraX").e(exc, "Failed to rebind camera on orientation change")
-            }
         }
     }
 

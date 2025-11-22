@@ -77,4 +77,9 @@
     <string name="video_error_network_issue">動画の読み込みに失敗しました。インターネット接続を確認して再試行してください。</string>
     <string name="video_retry_playback">再生を再試行</string>
     <string name="domain_to_share">共有ドメイン</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">独自ノードの設定が必要です</string>
+    <string name="node_required_message">新しいツイートを投稿するには、独自のノードを設定する必要があります（10を超えるツイートがあります）。より良いパフォーマンスとストレージのために、独自のノードを確立してください。</string>
+    <string name="node_required_ok">わかりました</string>
 </resources>

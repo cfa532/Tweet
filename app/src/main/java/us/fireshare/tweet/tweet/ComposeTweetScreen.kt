@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -69,14 +70,9 @@ fun ComposeTweetScreen(
     var showExitConfirmation by remember { mutableStateOf(false) }
     var showNodeRequiredDialog by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isSearching by remember { mutableStateOf(false) }
-    
+
     val selectedAttachments = remember { mutableStateListOf<Uri>() }
     var fileSizeWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
-    
-    // Locale for translations
-    val locale = androidx.compose.ui.text.intl.Locale.current
-    val isJapanese = locale.language == "ja"
 
     // Update file size warnings when attachments change
     LaunchedEffect(selectedAttachments) {
@@ -118,10 +114,8 @@ fun ComposeTweetScreen(
 
     // Handle mention search
     val onMentionSearch = { query: String ->
-        isSearching = true
         sharedViewModel.appUserViewModel.viewModelScope.launch {
             suggestions = sharedViewModel.appUserViewModel.getSuggestions(query)
-            isSearching = false
         }
         Unit
     }
@@ -189,7 +183,7 @@ fun ComposeTweetScreen(
     Scaffold(
         topBar = {
             ComposeTopAppBar(
-                title = "Edit",
+                title = stringResource(R.string.edit),
                 showCamera = showCamera,
                 onBackClick = onBackClick,
                 onSendClick = onSendClick,
@@ -246,7 +240,7 @@ fun ComposeTweetScreen(
                 ActionButtonsRow(
                     isChecked = isPrivate,
                     onCheckedChange = { isPrivate = it },
-                    checkboxLabel = "Private",
+                    checkboxLabel = stringResource(R.string.private_tweet),
                     onCameraClick = onCameraClick,
                     onFilePickerClick = onFilePickerClick,
                     onSendClick = onSendClick,
@@ -259,7 +253,7 @@ fun ComposeTweetScreen(
     // Exit confirmation dialog
     ExitConfirmationDialog(
         showDialog = showExitConfirmation,
-        onDismiss = { showExitConfirmation = false },
+        onDismiss = { },
         onConfirm = { navController.popBackStack() }
     )
 
@@ -278,31 +272,27 @@ fun ComposeTweetScreen(
             onDismissRequest = { showNodeRequiredDialog = false },
             icon = {
                 Icon(
-                    imageVector = Icons.Default.Warning,
+                    imageVector = Icons.Filled.Warning,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error
                 )
             },
             title = {
                 Text(
-                    text = if (isJapanese) "独自ノードの設定が必要です" else "需要建立自己的節點",
+                    text = stringResource(R.string.node_required_title),
                     style = MaterialTheme.typography.headlineSmall
                 )
             },
             text = {
                 Text(
-                    text = if (isJapanese) {
-                        "新しいツイートを投稿するには、独自のノードを設定する必要があります（10を超えるツイートがあります）。より良いパフォーマンスとストレージのために、独自のノードを確立してください。"
-                    } else {
-                        "您已發布超過10條推文，需要建立自己的節點才能繼續發布。請建立您自己的節點以獲得更好的性能和存儲。"
-                    }
+                    text = stringResource(R.string.node_required_message)
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = { showNodeRequiredDialog = false }
                 ) {
-                    Text(if (isJapanese) "わかりました" else "我知道了")
+                    Text(stringResource(R.string.node_required_ok))
                 }
             }
         )

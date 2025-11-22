@@ -11,12 +11,11 @@ import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -335,120 +334,6 @@ class MediaUploadService(
     }
 
     /**
-     * Poll video conversion status until completion with retry logic for connection issues
-     */
-    private suspend fun pollVideoConversionStatus(
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        jobId: String,
-        baseUrl: String
-    ): MimeiFileType? {
-        val statusURL = "$baseUrl/convert-video/status/$jobId"
-        var lastProgress = 0
-        var lastMessage = "Starting video processing..."
-        var consecutiveFailures = 0
-        val maxConsecutiveFailures = 10 // Allow more failures for long processing
-        val maxPollingTime = 2 * 60 * 60 * 1000L // 2 hours max polling time for very long videos
-        val startTime = System.currentTimeMillis()
-
-        while (true) {
-            // Check if we've been polling too long
-            if (System.currentTimeMillis() - startTime > maxPollingTime) {
-                throw Exception(context.getString(R.string.error_video_processing_timeout, maxPollingTime / 1000 / 60))
-            }
-
-            try {
-                val statusResponse = httpClient.get(statusURL)
-                
-                if (statusResponse.status == HttpStatusCode.NotFound) {
-                    // Job ID not found - cancel immediately without retry
-                    Timber.tag(TAG).e("Job ID not found: $jobId")
-                    throw Exception(context.getString(R.string.error_job_id_not_found, jobId))
-                }
-                
-                if (statusResponse.status != HttpStatusCode.OK) {
-                    throw Exception(context.getString(R.string.error_status_check_failed, statusResponse.status.toString()))
-                }
-
-                val statusResponseText = statusResponse.bodyAsText()
-                val statusData = Gson().fromJson(statusResponseText, Map::class.java)
-                
-                val success = statusData?.get("success") as? Boolean
-                if (success != true) {
-                    val errorMessage = statusData?.get("message") as? String ?: "Status check failed"
-                    // Check if the error message indicates job not found
-                    if (errorMessage.contains("not found", ignoreCase = true) || 
-                        errorMessage.contains("job not found", ignoreCase = true)) {
-                        Timber.tag(TAG).e("Job ID not found in response: $jobId")
-                        throw Exception(context.getString(R.string.error_job_id_not_found, jobId))
-                    }
-                    throw Exception(errorMessage)
-                }
-
-                val status = statusData["status"] as? String
-                val progress = (statusData["progress"] as? Number)?.toInt() ?: 0
-                val message = statusData["message"] as? String ?: "Processing..."
-
-                // Reset failure counter on successful request
-                consecutiveFailures = 0
-
-                // Log progress updates
-                if (progress != lastProgress || message != lastMessage) {
-                    Timber.tag(TAG).d("Progress: $progress% - $message")
-                    lastProgress = progress
-                    lastMessage = message
-                }
-
-                when (status) {
-                    "completed" -> {
-                        val cid = statusData["cid"] as? String
-                            ?: throw Exception(context.getString(R.string.error_no_cid_in_response))
-                        
-                        @OptIn(UnstableApi::class)
-                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-                        
-                        // Calculate file size from the original URI
-                        val fileSize = getFileSize(uri) ?: 0L
-                        Timber.tag(TAG).d("Video conversion completed: $cid")
-                        return MimeiFileType(
-                            cid,
-                            MediaType.HLS_VIDEO,
-                            fileSize,
-                            fileName,
-                            fileTimestamp,
-                            aspectRatio
-                        )
-                    }
-                    "failed" -> {
-                        val errorMessage = statusData["message"] as? String ?: context.getString(R.string.error_video_conversion_failed)
-                        throw Exception(errorMessage)
-                    }
-                    "uploading", "processing" -> {
-                        // Continue polling
-                        kotlinx.coroutines.delay(3000) // Poll every 3 seconds
-                    }
-                    else -> {
-                        // Unknown status, continue polling with delay
-                        kotlinx.coroutines.delay(3000)
-                    }
-                }
-            } catch (e: Exception) {
-                consecutiveFailures++
-                Timber.tag(TAG).w("Error polling status (attempt $consecutiveFailures/$maxConsecutiveFailures): ${e.message}")
-                
-                if (consecutiveFailures >= maxConsecutiveFailures) {
-                    throw Exception("Max retries exceeded ($maxConsecutiveFailures attempts)")
-                }
-                
-                // Exponential backoff: wait longer between retries
-                val waitTime = minOf(5000L * consecutiveFailures, 30000L)
-                kotlinx.coroutines.delay(waitTime)
-            }
-        }
-    }
-
-    /**
      * Original IPFS upload method for non-video files or fallback
      */
     private suspend fun uploadToIPFSOriginal(
@@ -460,7 +345,7 @@ class MediaUploadService(
     ): MimeiFileType? {
         // Resolve writableUrl before using uploadService (with retry)
         var resolvedUrl: String? = null
-        var lastError: String? = null
+        var lastError: String?
         for (attempt in 1..3) {
             resolvedUrl = appUser.resolveWritableUrl()
             if (!resolvedUrl.isNullOrEmpty()) {
@@ -471,7 +356,7 @@ class MediaUploadService(
                 Timber.tag(TAG).w(lastError)
                 if (attempt < 3) {
                     // Wait a bit before retrying (exponential backoff)
-                    kotlinx.coroutines.delay(1000L * attempt)
+                    delay(1000L * attempt)
                 }
             }
         }

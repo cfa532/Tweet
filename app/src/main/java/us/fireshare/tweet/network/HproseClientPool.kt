@@ -236,48 +236,7 @@ object HproseClientPool {
             }
         }
     }
-    
-    /**
-     * Clear all clients from the pool
-     */
-    fun clearAll() {
-        regularLock.write {
-            val count = regularClients.size
-            regularClients.clear()
-            Timber.tag(TAG).d("Cleared all regular clients (count: $count)")
-        }
-        
-        uploadLock.write {
-            val count = uploadClients.size
-            uploadClients.clear()
-            Timber.tag(TAG).d("Cleared all upload clients (count: $count)")
-        }
-    }
-    
-    /**
-     * Get pool statistics for monitoring and debugging
-     */
-    fun getPoolStats(): PoolStats {
-        val regularStats = regularLock.read {
-            regularClients.values.map { it.referenceCount to it.lastAccessTime }
-        }
-        
-        val uploadStats = uploadLock.read {
-            uploadClients.values.map { it.referenceCount to it.lastAccessTime }
-        }
-        
-        return PoolStats(
-            regularClientCount = regularClients.size,
-            uploadClientCount = uploadClients.size,
-            totalRegularReferences = regularStats.sumOf { it.first },
-            totalUploadReferences = uploadStats.sumOf { it.first },
-            oldestRegularClientAge = if (regularStats.isNotEmpty()) 
-                System.currentTimeMillis() - regularStats.minOf { it.second } else 0L,
-            oldestUploadClientAge = if (uploadStats.isNotEmpty()) 
-                System.currentTimeMillis() - uploadStats.minOf { it.second } else 0L
-        )
-    }
-    
+
     /**
      * Normalize URL for consistent cache key generation
      * Keep the protocol (http:// or https://) as HproseClient needs it
@@ -328,27 +287,7 @@ object HproseClientPool {
             }
         }
     }
-    
-    /**
-     * Pool statistics data class
-     */
-    data class PoolStats(
-        val regularClientCount: Int,
-        val uploadClientCount: Int,
-        val totalRegularReferences: Int,
-        val totalUploadReferences: Int,
-        val oldestRegularClientAge: Long,
-        val oldestUploadClientAge: Long
-    ) {
-        override fun toString(): String {
-            return """
-                HproseClientPool Stats:
-                - Regular clients: $regularClientCount (refs: $totalRegularReferences, oldest: ${oldestRegularClientAge}ms)
-                - Upload clients: $uploadClientCount (refs: $totalUploadReferences, oldest: ${oldestUploadClientAge}ms)
-                - Total clients: ${regularClientCount + uploadClientCount}
-            """.trimIndent()
-        }
-    }
+
 }
 
 
