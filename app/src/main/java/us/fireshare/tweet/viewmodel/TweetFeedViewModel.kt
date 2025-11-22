@@ -90,16 +90,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     /**
      * Reset the ViewModel state for logout or user changes.
      * This clears all data and allows re-initialization.
+     * Don't clear tweet cache on logout - cache persists per user and is cleared periodically or manually (matches iOS behavior)
      */
     fun reset() {
         isInitialized = false
         
-        // Clear cached tweets to prevent stale data
-        tweets.value.forEach {
-            if (it.mid != null) {   // deal with corrupted data
-                dao.deleteCachedTweet(it.mid)
-            }
-        }
+        // Don't clear cached tweets - cache persists per user and is cleared periodically or manually
+        // This matches iOS behavior where cache is not cleared on logout
         
         _tweets.value = emptyList()
         initState.value = true
@@ -528,6 +525,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
+                                
+                                // Cache the new tweet by appUser.mid (matches iOS behavior)
+                                TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid, shouldCache = true)
                             }
 
                             // Update on main thread to ensure UI updates

@@ -974,10 +974,12 @@ class UserViewModel @AssistedInject constructor(
         )
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
+         * Don't clear tweet cache on logout - cache persists per user and is cleared periodically or manually
          * */
         _tweets.value = emptyList()
         _pinnedTweets.value = emptyList()
-        dao.clearAllCachedTweets()
+        // Note: Tweet cache is NOT cleared on logout to match iOS behavior
+        // Cache persists per user and is cleared periodically or manually by user
         
         // Notify TweetFeedViewModel to reset for guest timeline
         TweetNotificationCenter.postAsync(
@@ -1341,6 +1343,9 @@ class UserViewModel @AssistedInject constructor(
                                 .sortedByDescending { it.timestamp }
 
                             _tweets.value = updatedTweets
+                            
+                            // Cache the new tweet by appUser.mid (matches iOS behavior)
+                            TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid, shouldCache = true)
                             
                             // Don't update tweet count here - let UserDataUpdated event handle it
                             // to avoid race conditions with the server refresh

@@ -667,13 +667,13 @@ object HproseInstance {
             val tweetsData = response["tweets"] as? List<Map<String, Any>?>
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
-            // Cache original tweets first
+            // Cache original tweets first - cache by authorId, not appUser.mid
             originalTweetsData?.forEach { originalTweetJson ->
                 if (originalTweetJson != null) {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
                         originalTweet.author = getUser(originalTweet.authorId)
-                        TweetCacheManager.saveTweet(originalTweet, appUser.mid, shouldCache = true)
+                        TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId, shouldCache = true)
                     } catch (e: Exception) {
                         Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
                     }
@@ -695,7 +695,8 @@ object HproseInstance {
                         if (tweet.isPrivate) {
                             null
                         } else {
-                            updateCachedTweet(tweet)
+                            // Mainfeed tweets are cached by appUser.mid (exception to the rule)
+                            updateCachedTweet(tweet, userId = appUser.mid)
                             tweet
                         }
                     } catch (e: Exception) {
@@ -750,7 +751,7 @@ object HproseInstance {
             val tweetsData = response["tweets"] as? List<Map<String, Any>?>
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
-            // Cache original tweets first (same as getTweetFeed)
+            // Cache original tweets first - cache by authorId, not appUser.mid
             originalTweetsData?.forEach { originalTweetJson ->
                 if (originalTweetJson != null) {
                     try {
@@ -758,7 +759,7 @@ object HproseInstance {
                         originalTweet.author = getUser(originalTweet.authorId)
                         TweetCacheManager.saveTweet(
                             originalTweet,
-                            appUser.mid,
+                            originalTweet.authorId,
                             shouldCache = false
                         ) // Memory cache only
                         Timber.tag("getTweetsByUser")
@@ -779,8 +780,10 @@ object HproseInstance {
                         val tweet = Tweet.from(tweetJson)
                         tweet.author = user
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
-                        // Keep tweets only in memory cache (not database cache)
-                        TweetCacheManager.saveTweet(tweet, appUser.mid, shouldCache = false)
+                        // Only cache tweets if it's the appUser's profile, and cache by appUser.mid (matches iOS)
+                        if (user.mid == appUser.mid) {
+                            updateCachedTweet(tweet, userId = appUser.mid, shouldCache = false)
+                        }
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getTweetsByUser").e("Error decoding tweet: $e")
@@ -841,9 +844,10 @@ object HproseInstance {
 
                 Tweet.from(tweetData).apply {
                     this.author = author
+                    // Cache tweet by authorId, not appUser.mid
                     TweetCacheManager.saveTweet(
                         this,
-                        userId = appUser.mid,
+                        userId = authorId,
                         shouldCache = shouldCache
                     )
                 }
@@ -862,9 +866,11 @@ object HproseInstance {
     /**
      * Update cached but keep its timestamp when it was cached.
      * @param shouldCache Whether to cache the tweet (default true for feed, false for profile)
+     * @param userId The user ID to cache under. Defaults to tweet.authorId, but can be overridden for mainfeed (appUser.mid)
      * */
-    fun updateCachedTweet(tweet: Tweet, shouldCache: Boolean = true) {
-        TweetCacheManager.updateCachedTweet(tweet, appUser.mid, shouldCache = shouldCache)
+    fun updateCachedTweet(tweet: Tweet, shouldCache: Boolean = true, userId: MimeiId? = null) {
+        val cacheUserId = userId ?: tweet.authorId
+        TweetCacheManager.updateCachedTweet(tweet, cacheUserId, shouldCache = shouldCache)
     }
 
     /**
@@ -1195,8 +1201,12 @@ object HproseInstance {
             ) ?: return
 
             updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
-                updateCachedTweet(updatedTweet)
+                // Cache updated original tweet by authorId (matches iOS)
+                updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
             }
+
+            // Cache the retweet by appUser.mid (matches iOS behavior)
+            updateCachedTweet(retweet, userId = appUser.mid)
 
             // Post notification for retweet
             TweetNotificationCenter.post(TweetEvent.TweetRetweeted(tweet, retweet))
@@ -1237,7 +1247,8 @@ object HproseInstance {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
                     updatedTweet.author = getUser(updatedTweet.authorId)
-                    updateCachedTweet(updatedTweet)
+                    // Cache by authorId
+                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
                 }
             } else {
@@ -1286,7 +1297,8 @@ object HproseInstance {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
                     updatedTweet.author = getUser(updatedTweet.authorId)
-                    updateCachedTweet(updatedTweet)
+                    // Cache by authorId
+                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
                 }
             } else {
@@ -1453,7 +1465,8 @@ object HproseInstance {
                 val updatedTweet = tweet.copy(
                     commentCount = (response["count"] as? Number)?.toInt() ?: tweet.commentCount
                 )
-                updateCachedTweet(updatedTweet)
+                // Cache by authorId
+                updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
 
                 // Post notification for successful comment upload
                 TweetNotificationCenter.post(

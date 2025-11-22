@@ -99,8 +99,8 @@ fun TweetDropdownMenuItems(
                             if (originTweetViewModel != null) {
                                 applicationScope.launch(IO) {
                                     HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
-                                        // Update cache with the new retweet count
-                                        HproseInstance.updateCachedTweet(updatedOriginTweet)
+                                        // Cache updated original tweet by authorId (matches iOS)
+                                        HproseInstance.updateCachedTweet(updatedOriginTweet, userId = updatedOriginTweet.authorId)
                                         originTweetViewModel.updateRetweetCount(updatedOriginTweet)
                                     }
                                 }
