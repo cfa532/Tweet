@@ -62,18 +62,30 @@ object TweetCacheManager {
 
     /**
      * Get a cached tweet by ID
+     * 
+     * IMPORTANT: Searches across ALL user caches, not just a specific user's cache.
+     * This is necessary because:
+     * - Original tweets are cached under their authorId
+     * - Mainfeed tweets are cached under appUser.mid
+     * - Retweets are cached under appUser.mid
+     * - When we only have a tweet mid, we don't know which user's cache it's in
+     * 
+     * The search is performed by tweet mid (primary key) only, not filtered by uid.
+     * 
      * Note: Expiration checks are not performed when fetching tweets.
      * Timestamps are only used by the system for cleanup purposes.
+     * Cached tweets are expired by timestamp (30 days) or manually by user via settings.
+     * This expiration applies to all caches regardless of which uid they're stored under.
      */
     fun getCachedTweet(tweetId: MimeiId): Tweet? {
         return try {
             synchronized(cacheLock) {
-                // Check memory cache first
+                // Check memory cache first (searches across all tweets by mid)
                 memoryCache[tweetId]?.let { cachedTweet ->
                     return cachedTweet.originalTweet
                 }
 
-                // Check database cache
+                // Check database cache (searches across all caches by mid, not filtered by uid)
                 val dbCachedTweet = HproseInstance.dao.getCachedTweet(tweetId)
                 dbCachedTweet?.let { cachedTweet ->
                     // Add to memory cache for faster access

@@ -120,6 +120,17 @@ interface CachedTweetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) // Use REPLACE strategy
     fun insertOrUpdateCachedTweet(cachedTweet: CachedTweet)
 
+    /**
+     * Get a cached tweet by tweet ID (mid).
+     * 
+     * IMPORTANT: Searches across ALL user caches, not filtered by uid.
+     * This is necessary because tweets can be cached under different uid values:
+     * - Original tweets: cached by authorId
+     * - Mainfeed tweets: cached by appUser.mid
+     * - Retweets: cached by appUser.mid
+     * 
+     * When we only have a tweet mid, we don't know which cache it's in, so we search all caches.
+     */
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
@@ -133,7 +144,17 @@ interface CachedTweetDao {
             " LIMIT :count OFFSET :offset")
     fun getCachedTweetsByUser(userId: MimeiId, offset: Int, count: Int): List<CachedTweet>
 
-    // Delete tweets older than 30 days.
+    /**
+     * Delete expired tweets older than the cutoff date.
+     * 
+     * IMPORTANT: Expiration applies to ALL caches, not filtered by uid.
+     * This ensures all expired tweets are removed regardless of which cache they're stored in:
+     * - Tweets cached by authorId
+     * - Tweets cached by appUser.mid
+     * - All other cached tweets
+     * 
+     * Expiration is based on timestamp only, not on which uid the tweet is cached under.
+     */
     @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
 

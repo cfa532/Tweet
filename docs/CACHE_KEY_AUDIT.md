@@ -110,19 +110,35 @@ private val preloadedVideos = mutableSetOf<MimeiId>()
 
 All video player tracking uses `MimeiId` (media ID) as the key.
 
-### 4. ✅ Tweet Caching (Already Correct)
+### 4. ✅ Tweet Caching (Updated January 2025)
 
 **Location:** `TweetCacheManager.kt`
 
-**Status:** Already using media IDs correctly
+**Status:** Updated to match iOS behavior - tweets cached by author's mid (except mainfeed)
+
+**Cache Strategy:**
+- **Most tweets:** Cached by `tweet.authorId` (author's mid)
+- **Mainfeed tweets:** Cached by `appUser.mid` (exception to the rule)
+- **Cache persistence:** Cache NOT cleared on login/logout
 
 **Cache Operations:**
 ```kotlin
-memoryCache[tweet.mid] = cachedTweet
+// Tweet cache - uses uid (authorId or appUser.mid) as cache key
+memoryCache[tweet.mid] = cachedTweet  // tweet.mid is primary key
+// Database: uid field stores cache key (authorId or appUser.mid)
+
+// User cache - uses userId as key
 userMemoryCache[user.mid] = user
 ```
 
-All tweet and user caching uses `mid` as the key.
+**Details:**
+- Tweets are cached in `CachedTweet` table with `uid` field indicating cache ownership
+- Original tweets always cached by `originalTweet.authorId`
+- Mainfeed tweets cached by `appUser.mid` for persistence
+- Profile tweets only cached if `user.mid == appUser.mid`
+- Cache persists across login/logout (matches iOS behavior)
+
+See `TWEET_CACHING_ALGORITHM.md` for complete details.
 
 ## Benefits of This Fix
 
