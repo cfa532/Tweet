@@ -336,6 +336,15 @@ fun MediaItemView(
                                 fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
                                 fullScreenBitmap = null // Reset bitmap to load new image
                             }
+                        },
+                        onPreviousImage = {
+                            if (currentImageIndexInList > 0) {
+                                // Load previous image - the key(imageMid) will trigger recomposition and animation
+                                val prevIndex = currentImageIndexInList - 1
+                                val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
+                                fullScreenBitmap = null // Reset bitmap to load new image
+                            }
                         }
                     )
                 }

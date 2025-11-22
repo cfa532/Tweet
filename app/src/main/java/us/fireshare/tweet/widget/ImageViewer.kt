@@ -9,8 +9,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -146,7 +146,8 @@ fun AdvancedImageViewer(
     onLoadComplete: (() -> Unit)? = null,
     imageUrls: List<String>? = null, // List of all image URLs for navigation
     currentImageIndex: Int = 0, // Current image index in the list
-    onNextImage: (() -> Unit)? = null // Callback to load next image
+    onNextImage: (() -> Unit)? = null, // Callback to load next image
+    onPreviousImage: (() -> Unit)? = null // Callback to load previous image
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
@@ -366,8 +367,18 @@ fun AdvancedImageViewer(
     }
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var horizontalDragOffset by remember { mutableFloatStateOf(0f) }
     var verticalDragOffset by remember { mutableFloatStateOf(0f) }
     var isClosing by remember { mutableStateOf(false) }
+    var navigationDirection by remember { mutableIntStateOf(0) } // -1 for previous, 1 for next, 0 for none
+    
+    // Reset navigation direction after animation completes
+    LaunchedEffect(imageUrl) {
+        if (navigationDirection != 0) {
+            delay(500) // Wait for animation to complete
+            navigationDirection = 0
+        }
+    }
 
     Box(
         modifier = modifier
@@ -387,39 +398,57 @@ fun AdvancedImageViewer(
                 detectDragGestures(
                     onDragStart = { 
                         dragOffset = 0f
+                        horizontalDragOffset = 0f
                         verticalDragOffset = 0f
                         isClosing = false
                     },
                     onDragEnd = { 
-                        // Check for vertical drag gestures
-                        if (kotlin.math.abs(verticalDragOffset) > 150f && !isClosing) {
-                            if (verticalDragOffset > 300f) {
-                                // Large drag down - exit image viewer
-                                Timber.d("AdvancedImageViewer - Large drag down detected, closing viewer")
-                                isClosing = true
-                                onClose?.invoke()
-                            } else if (imageUrls != null && imageUrls.size > 1 && verticalDragOffset < -150f) {
-                                // Drag up - next image in list
-                                Timber.d("AdvancedImageViewer - Drag up detected, loading next image")
+                        // Check for horizontal drag gestures (left/right swipe)
+                        if (kotlin.math.abs(horizontalDragOffset) > 150f && !isClosing && imageUrls != null && imageUrls.size > 1) {
+                            if (horizontalDragOffset > 150f) {
+                                // Swipe right - next image
+                                Timber.d("AdvancedImageViewer - Swipe right detected, loading next image")
+                                navigationDirection = 1 // Track direction for animation
                                 onNextImage?.invoke()
-                            } else if (verticalDragOffset > 150f) {
-                                // Small drag down - not enough to exit, snap back
-                                Timber.d("AdvancedImageViewer - Small drag down detected, not exiting")
+                            } else if (horizontalDragOffset < -150f) {
+                                // Swipe left - previous image
+                                Timber.d("AdvancedImageViewer - Swipe left detected, loading previous image")
+                                navigationDirection = -1 // Track direction for animation
+                                onPreviousImage?.invoke()
                             }
+                        }
+                        // Check for vertical drag down to exit
+                        if (verticalDragOffset > 300f && !isClosing) {
+                            // Large drag down - exit image viewer
+                            Timber.d("AdvancedImageViewer - Large drag down detected, closing viewer")
+                            isClosing = true
+                            onClose?.invoke()
                         }
                         // Reset all gesture states
                         dragOffset = 0f
+                        horizontalDragOffset = 0f
                         verticalDragOffset = 0f
                         isClosing = false
                     },
                     onDrag = { change, dragAmount ->
-                        // Check if this is primarily a vertical drag
+                        // Check if this is primarily a horizontal or vertical drag
+                        val isHorizontalDrag = kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y)
                         val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
-                        if (isVerticalDrag) {
-                            // Track vertical drag for navigation and exit
+                        
+                        if (isHorizontalDrag) {
+                            // Track horizontal drag for left/right navigation
+                            horizontalDragOffset += dragAmount.x
+                            
+                            // Update dragOffset for visual feedback (horizontal)
+                            dragOffset += dragAmount.x
+                            
+                            // Consume the event to prevent SubsamplingScaleImageView from handling it
+                            change.consume()
+                        } else if (isVerticalDrag && dragAmount.y > 0) {
+                            // Track vertical drag down for exit
                             verticalDragOffset += dragAmount.y
                             
-                            // Update dragOffset for visual feedback (both up and down)
+                            // Update dragOffset for visual feedback (vertical down)
                             dragOffset += dragAmount.y
                             
                             // Consume the event to prevent SubsamplingScaleImageView from handling it
@@ -433,14 +462,31 @@ fun AdvancedImageViewer(
         AnimatedContent(
             targetState = imageUrl,
             transitionSpec = {
-                // Slide up when going to next image (drag up), slide down when going back
-                slideInVertically(
-                    initialOffsetY = { fullHeight -> -fullHeight }, // Slide in from bottom
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
-                ) togetherWith slideOutVertically(
-                    targetOffsetY = { fullHeight -> fullHeight }, // Slide out to top
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
-                )
+                // Determine slide direction based on navigation direction
+                // Swipe right (next, direction=1) = slide left (-1), swipe left (previous, direction=-1) = slide right (1)
+                val slideDirection = when {
+                    navigationDirection > 0 -> -1 // Next image slides in from right (swipe right)
+                    navigationDirection < 0 -> 1  // Previous image slides in from left (swipe left)
+                    else -> 0 // No animation if direction is unknown
+                }
+                if (slideDirection != 0) {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> fullWidth * slideDirection }, // Slide in from side
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                    ) togetherWith slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> -fullWidth * slideDirection }, // Slide out to opposite side
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                    )
+                } else {
+                    // Fallback: no animation if direction is unknown
+                    slideInHorizontally(
+                        initialOffsetX = { 0 },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                    ) togetherWith slideOutHorizontally(
+                        targetOffsetX = { 0 },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                    )
+                }
             },
             label = "image_transition"
         ) { targetUrl ->
@@ -516,26 +562,27 @@ fun AdvancedImageViewer(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            translationY = dragOffset
-                            // Add scaling effect for both drag up and down
-                            val scaleFactor = if (dragOffset < 0) {
-                                // Drag up - scale down slightly
-                                1f - (abs(dragOffset) / 1200f).coerceAtMost(0.15f)
+                            // Use horizontal translation for left/right swipe, vertical for drag down
+                            val isHorizontalSwipe = kotlin.math.abs(horizontalDragOffset) > kotlin.math.abs(verticalDragOffset)
+                            if (isHorizontalSwipe) {
+                                translationX = dragOffset
+                                // Add scaling effect for horizontal swipe
+                                val scaleFactor = 1f - (abs(dragOffset) / 1200f).coerceAtMost(0.15f)
+                                scaleX = scaleFactor
+                                scaleY = scaleFactor
+                                // Add alpha effect for horizontal swipe
+                                val alphaFactor = 1f - (abs(dragOffset) / 600f).coerceAtMost(0.4f)
+                                alpha = alphaFactor
                             } else {
-                                // Drag down - scale down for exit feedback
-                                1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                                translationY = dragOffset
+                                // Add scaling effect for vertical drag down (exit)
+                                val scaleFactor = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                                scaleX = scaleFactor
+                                scaleY = scaleFactor
+                                // Add alpha effect for exit
+                                val alphaFactor = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                                alpha = alphaFactor
                             }
-                            scaleX = scaleFactor
-                            scaleY = scaleFactor
-                            // Add alpha effect - more transparent when dragging
-                            val alphaFactor = if (dragOffset < 0) {
-                                // Drag up - fade out slightly
-                                1f - (abs(dragOffset) / 600f).coerceAtMost(0.4f)
-                            } else {
-                                // Drag down - fade out for exit
-                                1f - (dragOffset / 500f).coerceAtMost(0.3f)
-                            }
-                            alpha = alphaFactor
                         }
                 )
                 } else {
