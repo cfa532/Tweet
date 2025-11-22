@@ -406,15 +406,15 @@ fun AdvancedImageViewer(
                         // Check for horizontal drag gestures (left/right swipe)
                         if (kotlin.math.abs(horizontalDragOffset) > 150f && !isClosing && imageUrls != null && imageUrls.size > 1) {
                             if (horizontalDragOffset > 150f) {
-                                // Swipe right - next image
-                                Timber.d("AdvancedImageViewer - Swipe right detected, loading next image")
-                                navigationDirection = 1 // Track direction for animation
-                                onNextImage?.invoke()
-                            } else if (horizontalDragOffset < -150f) {
-                                // Swipe left - previous image
-                                Timber.d("AdvancedImageViewer - Swipe left detected, loading previous image")
+                                // Swipe right - previous image
+                                Timber.d("AdvancedImageViewer - Swipe right detected, loading previous image")
                                 navigationDirection = -1 // Track direction for animation
                                 onPreviousImage?.invoke()
+                            } else if (horizontalDragOffset < -150f) {
+                                // Swipe left - next image
+                                Timber.d("AdvancedImageViewer - Swipe left detected, loading next image")
+                                navigationDirection = 1 // Track direction for animation
+                                onNextImage?.invoke()
                             }
                         }
                         // Check for vertical drag down to exit
@@ -463,7 +463,7 @@ fun AdvancedImageViewer(
             targetState = imageUrl,
             transitionSpec = {
                 // Determine slide direction based on navigation direction
-                // Swipe right (next, direction=1) = slide left (-1), swipe left (previous, direction=-1) = slide right (1)
+                // Swipe left (next image, direction=1) = slide left (-1), swipe right (previous image, direction=-1) = slide right (1)
                 val slideDirection = when {
                     navigationDirection > 0 -> -1 // Next image slides in from right (swipe right)
                     navigationDirection < 0 -> 1  // Previous image slides in from left (swipe left)

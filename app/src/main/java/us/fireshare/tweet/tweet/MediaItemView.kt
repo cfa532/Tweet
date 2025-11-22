@@ -329,18 +329,26 @@ fun MediaItemView(
                         imageUrls = if (imageUrls.size > 1) imageUrls else null,
                         currentImageIndex = currentImageIndexInList.coerceAtLeast(0),
                         onNextImage = {
-                            if (currentImageIndexInList >= 0 && currentImageIndexInList < imageAttachments.size - 1) {
-                                // Load next image - the key(imageMid) will trigger recomposition and animation
-                                val nextIndex = currentImageIndexInList + 1
+                            if (imageAttachments.isNotEmpty()) {
+                                // Wrap around: if at last image, go to first
+                                val nextIndex = if (currentImageIndexInList >= imageAttachments.size - 1) {
+                                    0 // Wrap to first image
+                                } else {
+                                    currentImageIndexInList + 1
+                                }
                                 val (nextMediaIndex, _) = imageAttachments[nextIndex]
                                 fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
                                 fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         },
                         onPreviousImage = {
-                            if (currentImageIndexInList > 0) {
-                                // Load previous image - the key(imageMid) will trigger recomposition and animation
-                                val prevIndex = currentImageIndexInList - 1
+                            if (imageAttachments.isNotEmpty()) {
+                                // Wrap around: if at first image, go to last
+                                val prevIndex = if (currentImageIndexInList <= 0) {
+                                    imageAttachments.size - 1 // Wrap to last image
+                                } else {
+                                    currentImageIndexInList - 1
+                                }
                                 val (prevMediaIndex, _) = imageAttachments[prevIndex]
                                 fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
                                 fullScreenBitmap = null // Reset bitmap to load new image
