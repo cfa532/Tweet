@@ -275,7 +275,31 @@ fun MediaItemView(
     // Full-screen image overlay
     if (showFullScreenImage && fullScreenImageMid != null) {
         val imageMid = fullScreenImageMid!!
-        val mediaUrl = getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+        
+        // Filter to only image attachments and get their URLs
+        val imageAttachments = mediaItems.mapIndexedNotNull { idx, item ->
+            val inferredType = inferMediaTypeFromAttachment(item)
+            if (inferredType == MediaType.Image) {
+                idx to getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+            } else {
+                null
+            }
+        }
+        
+        // Find current image index in the filtered list
+        val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+            mediaItems[idx].mid == imageMid
+        }
+        
+        // Get current media URL based on current imageMid
+        val mediaUrl = if (currentImageIndexInList >= 0) {
+            imageAttachments[currentImageIndexInList].second
+        } else {
+            getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+        }
+        
+        // Get list of image URLs
+        val imageUrls = imageAttachments.map { (_, url) -> url }
         
         Dialog(
             onDismissRequest = { },
@@ -290,13 +314,27 @@ fun MediaItemView(
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                AdvancedImageViewer(
-                    imageUrl = mediaUrl,
-                    enableLongPress = true,
-                    initialBitmap = fullScreenBitmap,
-                    onClose = { showFullScreenImage = false },
-                    modifier = Modifier.fillMaxSize()
-                )
+                // Use key to force recomposition when image changes - this ensures smooth animation
+                key(imageMid) {
+                    AdvancedImageViewer(
+                        imageUrl = mediaUrl,
+                        enableLongPress = true,
+                        initialBitmap = null, // Always start fresh for smooth animation
+                        onClose = { showFullScreenImage = false },
+                        modifier = Modifier.fillMaxSize(),
+                        imageUrls = if (imageUrls.size > 1) imageUrls else null,
+                        currentImageIndex = currentImageIndexInList.coerceAtLeast(0),
+                        onNextImage = {
+                            if (currentImageIndexInList >= 0 && currentImageIndexInList < imageAttachments.size - 1) {
+                                // Load next image - the key(imageMid) will trigger recomposition and animation
+                                val nextIndex = currentImageIndexInList + 1
+                                val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                fullScreenImageMid = mediaItems[nextMediaIndex].mid
+                                fullScreenBitmap = null // Reset bitmap to load new image
+                            }
+                        }
+                    )
+                }
             }
         }
     }

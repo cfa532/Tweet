@@ -3,10 +3,15 @@ package us.fireshare.tweet.widget
 import android.graphics.PointF
 import android.view.View
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,6 +72,7 @@ import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.min
 import androidx.core.graphics.scale
 
@@ -137,7 +143,10 @@ fun AdvancedImageViewer(
     enableLongPress: Boolean = true,
     initialBitmap: android.graphics.Bitmap? = null,
     onClose: (() -> Unit)? = null,
-    onLoadComplete: (() -> Unit)? = null
+    onLoadComplete: (() -> Unit)? = null,
+    imageUrls: List<String>? = null, // List of all image URLs for navigation
+    currentImageIndex: Int = 0, // Current image index in the list
+    onNextImage: (() -> Unit)? = null // Callback to load next image
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
@@ -350,6 +359,8 @@ fun AdvancedImageViewer(
     }
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var verticalDragOffset by remember { mutableFloatStateOf(0f) }
+    var isClosing by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -369,20 +380,41 @@ fun AdvancedImageViewer(
                 detectDragGestures(
                     onDragStart = { 
                         dragOffset = 0f
+                        verticalDragOffset = 0f
+                        isClosing = false
                     },
                     onDragEnd = { 
-                        // If dragged down more than 150f, close the image viewer
-                        if (dragOffset > 150f) {
-                            onClose?.invoke()
+                        // Check for vertical drag gestures
+                        if (kotlin.math.abs(verticalDragOffset) > 150f && !isClosing) {
+                            if (verticalDragOffset > 300f) {
+                                // Large drag down - exit image viewer
+                                Timber.d("AdvancedImageViewer - Large drag down detected, closing viewer")
+                                isClosing = true
+                                onClose?.invoke()
+                            } else if (imageUrls != null && imageUrls.size > 1 && verticalDragOffset < -150f) {
+                                // Drag up - next image in list
+                                Timber.d("AdvancedImageViewer - Drag up detected, loading next image")
+                                onNextImage?.invoke()
+                            } else if (verticalDragOffset > 150f) {
+                                // Small drag down - not enough to exit, snap back
+                                Timber.d("AdvancedImageViewer - Small drag down detected, not exiting")
+                            }
                         }
+                        // Reset all gesture states
                         dragOffset = 0f
+                        verticalDragOffset = 0f
+                        isClosing = false
                     },
                     onDrag = { change, dragAmount ->
-                        // Only allow downward dragging (positive Y values)
                         // Check if this is primarily a vertical drag
                         val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
-                        if (dragAmount.y > 0 && isVerticalDrag) {
+                        if (isVerticalDrag) {
+                            // Track vertical drag for navigation and exit
+                            verticalDragOffset += dragAmount.y
+                            
+                            // Update dragOffset for visual feedback (both up and down)
                             dragOffset += dragAmount.y
+                            
                             // Consume the event to prevent SubsamplingScaleImageView from handling it
                             change.consume()
                         }
@@ -390,9 +422,26 @@ fun AdvancedImageViewer(
                 )
             }
     ) {
-        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
-            // Always use SubsamplingScaleImageView for consistent rendering and built-in operations
-            AndroidView(
+        // Use AnimatedContent for smooth transitions between images
+        AnimatedContent(
+            targetState = imageUrl,
+            transitionSpec = {
+                // Slide up when going to next image (drag up), slide down when going back
+                slideInVertically(
+                    initialOffsetY = { fullHeight -> -fullHeight }, // Slide in from bottom
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                ) togetherWith slideOutVertically(
+                    targetOffsetY = { fullHeight -> fullHeight }, // Slide out to top
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f)
+                )
+            },
+            label = "image_transition"
+        ) { targetUrl ->
+            // Use key to ensure proper state reset when image changes
+            key(targetUrl) {
+                if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled) {
+                    // Always use SubsamplingScaleImageView for consistent rendering and built-in operations
+                    AndroidView(
                     factory = { context ->
                         SubsamplingScaleImageView(context).apply {
                             setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
@@ -443,27 +492,43 @@ fun AdvancedImageViewer(
                         .fillMaxSize()
                         .graphicsLayer {
                             translationY = dragOffset
-                            // Add some scaling effect as the image is dragged down
-                            scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                            scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                            // Add alpha effect for fade out
-                            alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                            // Add scaling effect for both drag up and down
+                            val scaleFactor = if (dragOffset < 0) {
+                                // Drag up - scale down slightly
+                                1f - (abs(dragOffset) / 1200f).coerceAtMost(0.15f)
+                            } else {
+                                // Drag down - scale down for exit feedback
+                                1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                            }
+                            scaleX = scaleFactor
+                            scaleY = scaleFactor
+                            // Add alpha effect - more transparent when dragging
+                            val alphaFactor = if (dragOffset < 0) {
+                                // Drag up - fade out slightly
+                                1f - (abs(dragOffset) / 600f).coerceAtMost(0.4f)
+                            } else {
+                                // Drag down - fade out for exit
+                                1f - (dragOffset / 500f).coerceAtMost(0.3f)
+                            }
+                            alpha = alphaFactor
                         }
                 )
-        } else {
-            // Check if we have a valid bitmap before showing loading spinner
-            val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
-            if (loadState.isLoading && !hasValidBitmap) {
-                // Show loading state only when actually loading AND no valid bitmap exists
-                // This prevents spinner from showing when image is already loaded
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AnimatedLoadingText(
-                        text = stringResource(R.string.loading),
-                        color = Color.Gray
-                    )
+                } else {
+                    // Check if we have a valid bitmap before showing loading spinner
+                    val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
+                    if (loadState.isLoading && !hasValidBitmap) {
+                        // Show loading state only when actually loading AND no valid bitmap exists
+                        // This prevents spinner from showing when image is already loaded
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AnimatedLoadingText(
+                                text = stringResource(R.string.loading),
+                                color = Color.Gray
+                            )
+                        }
+                    }
                 }
             }
         }

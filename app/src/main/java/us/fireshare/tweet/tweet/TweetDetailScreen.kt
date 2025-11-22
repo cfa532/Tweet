@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.abs
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -116,6 +117,7 @@ fun TweetDetailScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // Scroll-based top app bar visibility
+    var previousFirstVisibleItemIndex by remember { mutableStateOf(0) }
     var previousScrollOffset by remember { mutableStateOf(0) }
     var showTopAppBar by remember { mutableStateOf(true) }
     
@@ -128,17 +130,29 @@ fun TweetDetailScreen(
 
     // Track scroll direction with improved logic
     LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemScrollOffset }
-            .collect { currentOffset ->
-                val scrollDelta = currentOffset - previousScrollOffset
-                
-                // Only change state if there's significant scroll movement
-                if (scrollDelta > 5) { // Scrolling down - hide top bar
-                    showTopAppBar = false
-                } else if (scrollDelta < -5) { // Scrolling up - show top bar
-                    showTopAppBar = true
-                }
+        snapshotFlow { 
+            Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }.collect { (currentIndex, currentOffset) ->
+            val indexDelta = currentIndex - previousFirstVisibleItemIndex
+            val offsetDelta = currentOffset - previousScrollOffset
+            
+            // Update previous values for next comparison
+            previousFirstVisibleItemIndex = currentIndex
+            previousScrollOffset = currentOffset
+            
+            // Determine scroll direction based on both index and offset changes
+            // Scrolling down: index increases OR (index same and offset increases significantly)
+            // Scrolling up: index decreases OR (index same and offset decreases significantly)
+            val isScrollingDown = indexDelta > 0 || (indexDelta == 0 && offsetDelta > 10)
+            val isScrollingUp = indexDelta < 0 || (indexDelta == 0 && offsetDelta < -10)
+            
+            // Only change state if there's significant scroll movement
+            if (isScrollingDown && abs(offsetDelta) > 5) {
+                showTopAppBar = false
+            } else if (isScrollingUp && abs(offsetDelta) > 5) {
+                showTopAppBar = true
             }
+        }
     }
 
     // Pull-to-refresh state
