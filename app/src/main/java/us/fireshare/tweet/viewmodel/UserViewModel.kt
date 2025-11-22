@@ -154,12 +154,14 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Refresh user data with retry logic
      * Always forces refresh from server (skips cache)
+     * Passes empty string for baseUrl to force IP re-resolution (matching iOS fetchUser behavior)
      */
     private suspend fun refreshUserWithRetry(maxRetries: Int = 3) {
         repeat(maxRetries) { attempt ->
             try {
                 // Force refresh from server, skip cache
-                val refreshedUser = HproseInstance.getUser(userId, baseUrl = null, maxRetries = 1, forceRefresh = true)
+                // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                val refreshedUser = HproseInstance.getUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
                     return // Success, exit retry loop

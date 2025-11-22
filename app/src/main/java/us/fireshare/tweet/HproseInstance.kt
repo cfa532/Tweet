@@ -225,14 +225,28 @@ object HproseInstance {
                         if (userId != null && userId != TW_CONST.GUEST_ID) {
                             /**
                              * If there is a valid userId in preference, this is a login user.
-                             * Initiate current account. Get its IP list and choose the best one,
-                             * and assign it to appUser.baseUrl.
+                             * Initiate current account.
+                             * 
+                             * Always force refresh of appUser's baseUrl on app start to ensure we have the latest IP.
+                             * Pass empty string to force IP re-resolution and bypass cache (matching iOS behavior).
+                             * This matches iOS initAppEntry() which calls fetchUser(appUser.mid, baseUrl: "")
                              * */
-                            getProviderIP(userId)?.let { ip ->
-                                TweetCacheManager.removeCachedUser(userId)
-                                appUser = getUser(userId, "http://$ip") ?: appUser
-                                Timber.tag("initAppEntry").d("User initialized. $appId, $appUser")
+                            Timber.tag("initAppEntry").d("Always refreshing appUser's baseUrl on app start for userId: $userId")
+                            // Remove cached user to force fresh fetch
+                            TweetCacheManager.removeCachedUser(userId)
+                            // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                            val refreshedUser = getUser(userId, baseUrl = "", forceRefresh = true)
+                            val refreshedBaseUrl = refreshedUser?.baseUrl
+                            if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
+                                // Use the refreshed user's baseUrl
+                                appUser = refreshedUser
+                                Timber.tag("initAppEntry").d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
+                            } else {
+                                // Fall back to bestIp if user fetch failed or doesn't have a valid baseUrl
+                                Timber.tag("initAppEntry").w("User fetch failed or no baseUrl, using resolved IP: $bestIp")
+                                appUser = appUser.copy(baseUrl = "http://$bestIp")
                             }
+                            Timber.tag("initAppEntry").d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
                         } else {
                             appUser.followingList = getAlphaIds()
                             TweetCacheManager.saveUser(appUser)

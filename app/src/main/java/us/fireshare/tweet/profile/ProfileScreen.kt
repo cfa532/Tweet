@@ -45,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -106,12 +107,23 @@ fun ProfileScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Always refresh user from server when profile screen is opened
+        // Refresh user from server when profile screen is opened
+        // Always refresh baseUrl to ensure we have the latest IP (matching iOS fetchUser with baseUrl: "")
+        // Only refresh if user is not expired (as per user requirement: "when user profile opens and the user is not expired")
         withContext(Dispatchers.IO) {
-            // Invalidate cache first to force fresh fetch
-            TweetCacheManager.removeCachedUser(userId)
-            // Refresh user data from server
-            viewModel.refreshUserData()
+            // Check if user is expired - only refresh baseUrl if user is NOT expired
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            val isUserExpired = cachedUser?.hasExpired == true
+            
+            if (!isUserExpired) {
+                Timber.tag("ProfileScreen").d("Refreshing user data for userId: $userId (user not expired, refreshing baseUrl like iOS)")
+                // Invalidate cache first to force fresh fetch
+                TweetCacheManager.removeCachedUser(userId)
+                // Refresh user data from server with empty baseUrl to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                viewModel.refreshUserData()
+            } else {
+                Timber.tag("ProfileScreen").d("Skipping refresh for expired user: $userId (user is expired, will use cached data)")
+            }
         }
     }
 
