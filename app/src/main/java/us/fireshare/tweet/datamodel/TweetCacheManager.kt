@@ -17,7 +17,7 @@ object TweetCacheManager {
     private const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
 
     // User cache expiration time (30 minutes in milliseconds)
-    private const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
+    internal const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
 
     // In-memory cache for frequently accessed tweets
     private val memoryCache = mutableMapOf<String, CachedTweet>()

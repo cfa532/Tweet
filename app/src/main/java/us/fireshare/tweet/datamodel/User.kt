@@ -482,7 +482,7 @@ data class User(
         get() {
             val timestamp = TweetCacheManager.getUserCacheTimestamp(mid)
             val currentTime = System.currentTimeMillis()
-            return (currentTime - timestamp) > 30 * 60 * 1000L // 30 minutes in milliseconds
+            return (currentTime - timestamp) > TweetCacheManager.USER_CACHE_EXPIRATION_TIME
         }
 
     override fun equals(other: Any?): Boolean {
