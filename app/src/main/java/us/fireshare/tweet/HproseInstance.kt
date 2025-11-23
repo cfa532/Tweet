@@ -1053,7 +1053,11 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            dao.getCachedTweets(startRank, count).mapNotNull { cachedTweet ->
+            // Load tweets cached for mainfeed (uid = appUser.mid)
+            val userId = appUser.mid
+            Timber.tag("loadCachedTweets").d("Loading cached tweets for mainfeed user: $userId")
+            
+            dao.getCachedTweetsByUser(userId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
@@ -1065,13 +1069,13 @@ object HproseInstance {
                 // Always populate author from user cache (author field is not serialized with tweet)
                 tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
                 
-                // If no cached user found, skip this tweet (can't display without author info)
+                // If no cached user found, create a skeleton user object as placeholder for offline loading
                 if (tweet.author == null) {
-                    Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} - author ${tweet.authorId} not in cache")
-                    return@mapNotNull null
+                    tweet.author = getUserInstance(tweet.authorId)
+                    Timber.tag("loadCachedTweets").d("📦 Created skeleton user placeholder for tweet ${tweet.mid} - authorId ${tweet.authorId}")
                 }
                 
-                Timber.tag("loadCachedTweets").d("✅ Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username}")
+                Timber.tag("loadCachedTweets").d("✅ Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username ?: tweet.authorId}")
                 tweet
             }
         } catch (e: Exception) {
