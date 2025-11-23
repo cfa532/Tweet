@@ -228,16 +228,36 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
                         showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
                     } else {
+                        // Update domainToShare from checkUpgrade response
+                        versionInfo["domain"]?.let { domain ->
+                            if (domain.isNotEmpty() && HproseInstance.appUser.domainToShare != domain) {
+                                HproseInstance.appUser = HproseInstance.appUser.copy(domainToShare = domain)
+                                us.fireshare.tweet.datamodel.TweetCacheManager.saveUser(HproseInstance.appUser)
+                                Timber.tag("checkForUpgrade").d("✅ Updated domainToShare from checkUpgrade: $domain")
+                            }
+                        }
+                        
                         // check for mimei of available App entry Urls. Update records in
                         // preference each time the app is run.
                         val mid = BuildConfig.ENTRY_URLS
                         HproseInstance.getProviderIP(mid)?.let { ip ->
                             val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
                             if (response.status == HttpStatusCode.OK) {
-                                val newUrls =
-                                    response.bodyAsText().split(System.lineSeparator()).toSet()
-                                HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                                val newUrls = response.bodyAsText().split(System.lineSeparator())
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
+                                    .toSet()
+                                if (newUrls.isNotEmpty()) {
+                                    HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                                    Timber.tag("checkForUpgrade").d("✅ Updated entry URLs from network: $newUrls")
+                                } else {
+                                    Timber.tag("checkForUpgrade").w("Received empty entry URLs from network")
+                                }
+                            } else {
+                                Timber.tag("checkForUpgrade").w("Failed to fetch entry URLs: HTTP ${response.status}")
                             }
+                        } ?: run {
+                            Timber.tag("checkForUpgrade").w("Could not get provider IP for entry URLs mid: $mid")
                         }
                     }
                 }

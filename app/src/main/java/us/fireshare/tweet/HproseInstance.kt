@@ -2,14 +2,12 @@ package us.fireshare.tweet
 
 import android.app.Application
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import androidx.exifinterface.media.ExifInterface
 import androidx.media3.common.util.UnstableApi
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -2509,81 +2507,6 @@ object HproseInstance {
      */
     suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? =
         mediaUploadService.getImageAspectRatio(uri)
-
-    /**
-     * Legacy getImageAspectRatio - keeping for reference
-     */
-    private suspend fun getImageAspectRatio_Legacy(context: Context, uri: Uri): Float? =
-        withContext(Dispatchers.IO) {
-            return@withContext try {
-                // Try multiple methods to get image dimensions with EXIF orientation consideration
-                var width = 0
-                var height = 0
-                var orientation = ExifInterface.ORIENTATION_NORMAL
-                
-                // Method 1: BitmapFactory with inJustDecodeBounds
-                try {
-                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        BitmapFactory.decodeStream(input, null, options)
-                    }
-                    if (options.outWidth > 0 && options.outHeight > 0) {
-                        width = options.outWidth
-                        height = options.outHeight
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("getImageAspectRatio").w("BitmapFactory method failed: ${e.message}")
-                }
-                
-                // Method 2: Get EXIF data including orientation
-                try {
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        val exif = ExifInterface(input)
-                        
-                        // Get dimensions from EXIF if BitmapFactory failed
-                        if (width == 0) {
-                            width = exif.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
-                            height = exif.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
-                        }
-                        
-                        // Get orientation for proper aspect ratio calculation
-                        orientation = exif.getAttributeInt(
-                            ExifInterface.TAG_ORIENTATION,
-                            ExifInterface.ORIENTATION_NORMAL
-                        )
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("getImageAspectRatio").w("ExifInterface method failed: ${e.message}")
-                }
-                
-                if (width > 0 && height > 0) {
-                    // Calculate aspect ratio considering EXIF orientation
-                    val aspectRatio = when (orientation) {
-                        ExifInterface.ORIENTATION_ROTATE_90,
-                        ExifInterface.ORIENTATION_ROTATE_270,
-                        ExifInterface.ORIENTATION_TRANSPOSE,
-                        ExifInterface.ORIENTATION_TRANSVERSE -> {
-                            // For 90/270 degree rotations, swap width and height for correct aspect ratio
-                            height.toFloat() / width.toFloat()
-                        }
-                        else -> {
-                            // For normal orientation, use width/height
-                            width.toFloat() / height.toFloat()
-                        }
-                    }
-                    
-                    Timber.tag("getImageAspectRatio").d("Image aspect ratio calculated: $aspectRatio (${width}x${height}, orientation: $orientation) for URI: $uri")
-                    aspectRatio
-                } else {
-                    Timber.tag("getImageAspectRatio").w("Could not determine image dimensions for URI: $uri")
-                    null
-                }
-            } catch (e: Exception) {
-                Timber.tag("getImageAspectRatio").e(e, "Error calculating image aspect ratio for URI: $uri")
-                null
-            }
-        }
-
 
     /**
      * Ktor HTTP client with optimized connection pooling for distributed nodes
