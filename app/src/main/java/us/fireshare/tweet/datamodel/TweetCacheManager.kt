@@ -32,7 +32,7 @@ object TweetCacheManager {
      * Save or update a tweet in cache
      * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
-    fun saveTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
+    fun saveTweet(tweet: Tweet?, userId: MimeiId) {
         if (tweet == null) {
             Timber.w("Should not cache: $tweet")
             return
@@ -50,10 +50,8 @@ object TweetCacheManager {
                 // Always update memory cache
                 memoryCache[tweet.mid] = cachedTweet
 
-                // Only update database cache if shouldCache is true
-                if (shouldCache) {
-                    HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
-                }
+                // Always update database cache
+                HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
             }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")
@@ -65,10 +63,8 @@ object TweetCacheManager {
      * 
      * IMPORTANT: Searches across ALL user caches, not just a specific user's cache.
      * This is necessary because:
-     * - Original tweets are cached under their authorId
-     * - Mainfeed tweets are cached under appUser.mid
-     * - Retweets are cached under appUser.mid
-     * - When we only have a tweet mid, we don't know which user's cache it's in
+     * - All tweets are cached under their authorId
+     * - When we only have a tweet mid, we don't know which author's cache it's in
      * 
      * The search is performed by tweet mid (primary key) only, not filtered by uid.
      * 
@@ -103,10 +99,9 @@ object TweetCacheManager {
 
     /**
      * Update an existing cached tweet
-     * @param shouldCache If false, the tweet will not be cached (for profile screens)
      */
-    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId, shouldCache: Boolean = true) {
-        saveTweet(tweet, userId, shouldCache)
+    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
+        saveTweet(tweet, userId)
     }
 
     /**

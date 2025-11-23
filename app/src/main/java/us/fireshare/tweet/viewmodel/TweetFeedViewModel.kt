@@ -441,7 +441,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (deletionFailed && finalTweetToDelete != null) {
             var restoredTweet: Tweet? = null
             try {
-                restoredTweet = HproseInstance.fetchTweet(finalTweetToDelete.mid, finalTweetToDelete.authorId, shouldCache = true)
+                restoredTweet = HproseInstance.fetchTweet(finalTweetToDelete.mid, finalTweetToDelete.authorId)
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").w(e, "Failed to fetch tweet from server")
             }
@@ -555,8 +555,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                     ).show()
                                 }
                                 
-                                // Cache the new tweet by appUser.mid (matches iOS behavior)
-                                TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid, shouldCache = true)
+                                // Cache the new tweet for mainfeed under appUser.mid
+                                TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid)
                             }
 
                             // Update on main thread to ensure UI updates

@@ -544,8 +544,7 @@ class TweetViewModel @AssistedInject constructor(
             try {
                 val originalTweet = HproseInstance.fetchTweet(
                     tweet.originalTweetId!!,
-                    tweet.originalAuthorId!!,
-                    shouldCache = true
+                    tweet.originalAuthorId!!
                 )
                 if (originalTweet != null && !originalTweet.attachments.isNullOrEmpty()) {
                     return originalTweet

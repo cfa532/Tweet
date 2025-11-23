@@ -1,24 +1,24 @@
 # Tweet Caching Algorithm
 
 **Date:** January 2025  
-**Status:** Matches iOS behavior  
+**Status:** Updated - All tweets cached, mainfeed by appUser.mid, others by authorId  
 **Purpose:** Document the tweet caching strategy for Android app
 
 ## Overview
 
-The Android app now uses the same tweet caching algorithm as the iOS version. Tweets are cached by their author's mid (member ID), except for mainfeed tweets which are cached by appUser's mid. The cache persists across login/logout and is cleared periodically or manually by the user.
+The Android app uses a consistent tweet caching algorithm. Tweets are cached by their author's mid (member ID), except for mainfeed tweets which are cached by appUser's mid. The cache persists across login/logout and is cleared periodically or manually by the user.
 
 ## Caching Strategy
 
 ### Core Principle
 
-**Most tweets are cached by `authorId` (tweet.authorId), except mainfeed tweets which are cached by `appUser.mid`.**
+**Mainfeed tweets are cached by `appUser.mid`. All other tweets are cached by their `authorId`.**
 
 This ensures:
-- Original tweets are cached under their author's cache, not the current user's
-- Tweets from different authors are properly segregated
-- Mainfeed tweets persist in the user's personal cache for quick access
-- Cache can be efficiently queried by author
+- Mainfeed tweets are grouped together under the user's cache for quick access
+- User profile tweets are cached by their author for consistency
+- Individual tweets are cached by their author
+- Cache can be efficiently queried by context
 
 ## Caching Rules by Context
 
@@ -28,13 +28,12 @@ This ensures:
 
 **Behavior:**
 - **Original tweets:** Cached by `originalTweet.authorId`
-- **Mainfeed tweets:** Cached by `appUser.mid` (exception to the rule)
+- **Mainfeed tweets:** Cached by `appUser.mid`
 
 **Reasoning:**
 - Mainfeed contains tweets from multiple authors
 - Caching by `appUser.mid` allows all mainfeed tweets to persist together
 - Original tweets are cached by their author for consistency with other contexts
-- Matches iOS behavior exactly
 
 **Implementation:**
 ```kotlin
@@ -42,17 +41,23 @@ This ensures:
 originalTweetsData?.forEach { originalTweetJson ->
     val originalTweet = Tweet.from(originalTweetJson)
     originalTweet.author = getUser(originalTweet.authorId)
-    TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId, shouldCache = true)
+    TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
 }
 
-// Mainfeed tweets - cache by appUser.mid (exception)
+// Mainfeed tweets - cache by appUser.mid
 tweetsData?.map { tweetJson ->
     val tweet = Tweet.from(tweetJson)
     tweet.author = getUser(tweet.authorId)
-    // Mainfeed tweets are cached by appUser.mid (exception to the rule)
+    // Mainfeed tweets are cached by appUser.mid
     updateCachedTweet(tweet, userId = appUser.mid)
     tweet
 }
+```
+
+**Loading:**
+```kotlin
+// Load cached tweets for mainfeed from appUser.mid
+dao.getCachedTweetsByUser(appUser.mid, startRank, count)
 ```
 
 ### 2. User Profile Tweets (`getTweetsByUser`)
@@ -61,12 +66,12 @@ tweetsData?.map { tweetJson ->
 
 **Behavior:**
 - **Original tweets:** Cached by `originalTweet.authorId`
-- **User tweets:** Only cached if `user.mid == appUser.mid`, then cached by `appUser.mid`
+- **User tweets:** Cached by `tweet.authorId` (the profile user's ID)
 
 **Reasoning:**
-- Only the current user's profile tweets are cached to persist across sessions
-- Other users' profile tweets are not cached (memory cache only)
-- Original tweets are always cached by their author for consistency
+- User profile tweets are cached by their author for consistency
+- All tweets are cached to database for offline access
+- Original tweets are always cached by their author
 
 **Implementation:**
 ```kotlin
@@ -74,19 +79,23 @@ tweetsData?.map { tweetJson ->
 originalTweetsData?.forEach { originalTweetJson ->
     val originalTweet = Tweet.from(originalTweetJson)
     originalTweet.author = getUser(originalTweet.authorId)
-    TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId, shouldCache = false)
+    TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
 }
 
-// User tweets - only cache if it's appUser's profile
+// User tweets - cache by authorId
 val result = tweetsData?.map { tweetJson ->
     val tweet = Tweet.from(tweetJson)
     tweet.author = user
-    // Only cache tweets if it's the appUser's profile
-    if (user.mid == appUser.mid) {
-        updateCachedTweet(tweet, userId = appUser.mid, shouldCache = false)
-    }
+    // Cache all tweets by their authorId
+    updateCachedTweet(tweet, userId = tweet.authorId)
     tweet
 }
+```
+
+**Loading:**
+```kotlin
+// Load cached tweets for user profile from authorId (userId)
+dao.getCachedTweetsByUser(userId, startRank, count)
 ```
 
 ### 3. Individual Tweet Fetch (`fetchTweet`)
@@ -105,12 +114,29 @@ val result = tweetsData?.map { tweetJson ->
 ```kotlin
 Tweet.from(tweetData).apply {
     this.author = author
-    // Cache tweet by authorId, not appUser.mid
-    TweetCacheManager.saveTweet(this, userId = authorId, shouldCache = shouldCache)
+    // Cache tweet by authorId
+    TweetCacheManager.saveTweet(this, userId = authorId)
 }
 ```
 
-### 4. Tweet Updates
+### 4. New Tweet Posting
+
+**Location:** `TweetFeedViewModel.uploadTweet()`, `UserViewModel.uploadTweet()`
+
+**Behavior:**
+- **Mainfeed:** Cached by `appUser.mid` (when posted from mainfeed)
+- **User profile:** Cached by `authorId` (when posted from profile)
+
+**Implementation:**
+```kotlin
+// Mainfeed - cache under appUser.mid
+TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid)
+
+// User profile - cache under authorId
+TweetCacheManager.saveTweet(tweetWithAuthor, tweetWithAuthor.authorId)
+```
+
+### 5. Tweet Updates
 
 #### Favorite/Bookmark (`toggleFavorite`, `toggleBookmark`)
 
@@ -125,14 +151,14 @@ updatedTweet.author = getUser(updatedTweet.authorId)
 updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
 ```
 
-#### Retweet (`retweet`)
+#### Retweet (`toggleRetweet`)
 
 **Behavior:**
-- **Retweet itself:** Cached by `appUser.mid`
+- **Retweet itself:** Cached by `retweet.authorId` (the user who retweeted)
 - **Updated original tweet:** Cached by `updatedTweet.authorId`
 
 **Reasoning:**
-- Retweets are created by the current user, so cached in their personal cache
+- Retweets are cached by their author (the user who created the retweet)
 - Original tweet's retweet count is updated, cached under original author
 
 **Implementation:**
@@ -143,8 +169,8 @@ updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
     updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
 }
 
-// Cache the retweet by appUser.mid
-updateCachedTweet(retweet, userId = appUser.mid)
+// Cache the retweet by its authorId
+updateCachedTweet(retweet, userId = retweet.authorId)
 ```
 
 #### Comment Upload (`uploadComment`)
@@ -174,26 +200,6 @@ HproseInstance.updateRetweetCount(originalTweet, tweet.mid, -1)?.let { updatedTw
 }
 ```
 
-### 5. New Uploaded Tweets (`uploadTweet`)
-
-**Behavior:**
-- New tweets posted by appUser cached by `appUser.mid`
-
-**Reasoning:**
-- New tweets are always from the current user
-- Cached in their personal cache for persistence
-
-**Implementation:**
-```kotlin
-// In TweetFeedViewModel and UserViewModel
-is TweetEvent.TweetUploaded -> {
-    val tweetWithAuthor = event.tweet
-    if (tweetWithAuthor.authorId == appUser.mid) {
-        // Cache the new tweet by appUser.mid (matches iOS behavior)
-        TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid, shouldCache = true)
-    }
-}
-```
 
 ## Cache Persistence and Expiration
 
@@ -329,10 +335,19 @@ SELECT * FROM CachedTweet WHERE mid = :tweetId
 
 ### By User ID
 
+**Mainfeed Loading:**
 ```kotlin
-fun fetchCachedTweets(for userId: String, page: Int, pageSize: Int): List<Tweet?> {
-    // Fetches tweets cached under specific userId
-    // Used for loading mainfeed (appUser.mid) or user profiles (authorId)
+// Load cached tweets for mainfeed from appUser.mid
+suspend fun loadCachedTweets(startRank: Int, count: Int): List<Tweet> {
+    dao.getCachedTweetsByUser(appUser.mid, startRank, count)
+}
+```
+
+**User Profile Loading:**
+```kotlin
+// Load cached tweets for user profile from authorId (userId)
+suspend fun loadCachedTweetsByAuthor(authorId: MimeiId, startRank: Int, count: Int): List<Tweet> {
+    dao.getCachedTweetsByUser(authorId, startRank, count)
 }
 ```
 
@@ -352,12 +367,14 @@ fun fetchCachedTweets(for userId: String, page: Int, pageSize: Int): List<Tweet?
 - Cache cleared on logout
 - Inconsistent with iOS behavior
 
-### After (New Algorithm)
+### After (Current Algorithm)
 
-- Most tweets cached by `authorId`
+- All tweets are cached to database
 - Mainfeed tweets cached by `appUser.mid`
+- User profile tweets cached by `authorId`
+- Individual tweets cached by `authorId`
 - Cache persists across login/logout
-- Matches iOS behavior exactly
+- Offline loading works for both mainfeed and user profiles
 
 ## Testing Recommendations
 
@@ -367,13 +384,13 @@ fun fetchCachedTweets(for userId: String, page: Int, pageSize: Int): List<Tweet?
    - Check cache after logout (should persist)
 
 2. **Test Profile Caching:**
-   - View own profile, verify tweets cached by `appUser.mid`
-   - View other user's profile, verify tweets not cached (memory only)
+   - View any user profile, verify tweets cached by `authorId` (userId)
    - Verify original tweets always cached by `authorId`
+   - Check offline loading works for user profiles
 
 3. **Test Tweet Updates:**
    - Favorite/bookmark a tweet, verify cached by `authorId`
-   - Retweet a tweet, verify retweet cached by `appUser.mid`, original by `authorId`
+   - Retweet a tweet, verify retweet cached by `authorId` (retweeter's ID), original by `authorId`
    - Comment on tweet, verify parent cached by `authorId`
 
 4. **Test Cache Persistence:**
@@ -385,23 +402,26 @@ fun fetchCachedTweets(for userId: String, page: Int, pageSize: Int): List<Tweet?
 
 1. **`HproseInstance.kt`**
    - `getTweetFeed()`: Original tweets by `authorId`, mainfeed by `appUser.mid`
-   - `getTweetsByUser()`: Only cache if `user.mid == appUser.mid`
+   - `getTweetsByUser()`: All tweets cached by `authorId`
    - `fetchTweet()`: Cache by `authorId`
-   - `updateCachedTweet()`: Accept optional `userId` parameter
+   - `loadCachedTweets()`: Load mainfeed from `appUser.mid`
+   - `loadCachedTweetsByAuthor()`: Load user profile from `authorId`
+   - `updateCachedTweet()`: Accept `userId` parameter
    - `toggleFavorite()`, `toggleBookmark()`: Cache by `authorId`
-   - `retweet()`: Retweet by `appUser.mid`, original by `authorId`
+   - `toggleRetweet()`: Retweet by `authorId`, original by `authorId`
    - `uploadComment()`: Cache by `authorId`
 
 2. **`TweetFeedViewModel.kt`**
-   - `TweetUploaded` event: Cache new tweets by `appUser.mid`
+   - `TweetUploaded` event: Cache new tweets by `appUser.mid` (mainfeed)
+   - `loadCachedTweetsOnly()`: Load from `appUser.mid`
 
 3. **`UserViewModel.kt`**
-   - `logout()`: Removed cache clearing
-   - `TweetUploaded` event: Cache new tweets by `appUser.mid`
-   - `reset()`: Removed cache clearing
+   - `getTweets()`: Load cached tweets from `authorId` when offline
+   - `TweetUploaded` event: Cache new tweets by `authorId` (user profile)
 
-4. **`TweetDropdownMenuItems.kt`**
-   - Retweet deletion: Cache updated original by `authorId`
+4. **`TweetCacheManager.kt`**
+   - `saveTweet()`: Removed `shouldCache` parameter, all tweets cached
+   - `updateCachedTweet()`: Removed `shouldCache` parameter, all tweets cached
 
 ## References
 

@@ -27,6 +27,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
+import us.fireshare.tweet.HproseInstance.loadCachedTweetsByAuthor
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.FeedResetReason
@@ -682,6 +683,31 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
             }
 
+            // Check if network is available, if not load cached tweets
+            if (user.value.baseUrl == null || appUser.baseUrl == null) {
+                Timber.tag("getTweets").w("Network unavailable, loading cached tweets for user: ${user.value.mid}")
+                val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
+                val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
+                
+                // Update _tweets with cached tweets
+                _tweets.update { currentTweets ->
+                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                    val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                    
+                    if (newCachedTweets.isNotEmpty()) {
+                        val mergedTweets = (currentTweets + newCachedTweets)
+                            .distinctBy { tweet: Tweet -> tweet.mid }
+                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        mergedTweets
+                    } else {
+                        currentTweets
+                    }
+                }
+                
+                Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
+                return cachedTweetsWithNulls
+            }
+
             // Fetch tweets of the author and update _tweets
             val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
 
@@ -817,8 +843,7 @@ class UserViewModel @AssistedInject constructor(
                                 .d("Loading original tweet for pinned quoted tweet: ${tweet.originalTweetId}")
                             val originalTweet = HproseInstance.fetchTweet(
                                 tweet.originalTweetId!!,
-                                tweet.originalAuthorId!!,
-                                shouldCache = false  // Memory cache only for profile screens
+                                tweet.originalAuthorId!!
                             )
 
                             if (originalTweet != null) {
@@ -1334,8 +1359,8 @@ class UserViewModel @AssistedInject constructor(
 
                             _tweets.value = updatedTweets
                             
-                            // Cache the new tweet by appUser.mid (matches iOS behavior)
-                            TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid, shouldCache = true)
+                            // Cache the new tweet by authorId
+                            TweetCacheManager.saveTweet(tweetWithAuthor, tweetWithAuthor.authorId)
                             
                             // Don't update tweet count here - let UserDataUpdated event handle it
                             // to avoid race conditions with the server refresh

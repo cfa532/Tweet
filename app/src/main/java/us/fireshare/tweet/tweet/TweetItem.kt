@@ -177,8 +177,7 @@ private fun RetweetContent(
                             .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
                         originalTweet = HproseInstance.fetchTweet(
                             originalTweetId,
-                            originalAuthorId,
-                            shouldCache = true
+                            originalAuthorId
                         )
                         if (originalTweet != null) {
                             Timber.tag("TweetItem")
@@ -464,8 +463,7 @@ private fun QuotedTweetContent(
                         .d("Fetching quoted original tweet: $originalTweetId from author: ${tweet.originalAuthorId}")
                     originalTweet = HproseInstance.fetchTweet(
                         originalTweetId,
-                        tweet.originalAuthorId!!,
-                        shouldCache = true
+                        tweet.originalAuthorId!!
                     )
                     if (originalTweet != null) {
                         Timber.tag("TweetItem")
