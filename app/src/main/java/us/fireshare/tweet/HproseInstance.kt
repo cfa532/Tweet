@@ -39,6 +39,7 @@ import us.fireshare.tweet.datamodel.ChatMessageDeserializer
 import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.FeedResetReason
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
@@ -102,7 +103,23 @@ object HproseInstance {
             return _appUser
         }
         set(value) {
+            val oldBaseUrl = _appUser.baseUrl
             _appUser = value
+            // If baseUrl changed from null to a valid value, trigger tweet feed refresh
+            if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
+                Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")
+                TweetApplication.applicationScope.launch {
+                    try {
+                        // Post notification to trigger feed refresh
+                        TweetNotificationCenter.post(
+                            TweetEvent.FeedResetRequested(FeedResetReason.BASEURL_AVAILABLE)
+                        )
+                        Timber.tag("appUser").d("Posted FeedResetRequested notification after baseUrl became available: ${value.baseUrl}")
+                    } catch (e: Exception) {
+                        Timber.tag("appUser").e(e, "Error triggering tweet refresh after baseUrl became available")
+                    }
+                }
+            }
         }
 
     private lateinit var chatDatabase: ChatDatabase
@@ -148,11 +165,13 @@ object HproseInstance {
             if (!::preferenceHelper.isInitialized) {
                 this.preferenceHelper = PreferenceHelper(context)
             }
-            // appUser is already initialized with default value, but ensure it has a valid baseUrl
+            // If network is unavailable (all URLs failed), leave baseUrl as null
+            // This will signal to TweetFeedViewModel to load cached tweets only
             if (appUser.baseUrl == null) {
+                Timber.tag("HproseInstance").w("Network unavailable, keeping baseUrl as null for offline mode")
                 appUser = User(
                     mid = TW_CONST.GUEST_ID,
-                    baseUrl = preferenceHelper.getAppUrls().firstOrNull(),
+                    baseUrl = null,  // Explicitly null for offline mode
                     followingList = getAlphaIds()
                 )
             }
@@ -222,7 +241,8 @@ object HproseInstance {
                         Timber.tag("initAppEntry").d("Set baseUrl to IP: http://$bestIp")
                         
                         val userId = preferenceHelper.getUserId()
-                        if (userId != null && userId != TW_CONST.GUEST_ID) {
+                        Timber.tag("initAppEntry").d("Retrieved userId from preferences: $userId")
+                        if (userId != TW_CONST.GUEST_ID) {
                             /**
                              * If there is a valid userId in preference, this is a login user.
                              * Initiate current account.
@@ -1033,12 +1053,29 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            dao.getCachedTweets(startRank, count).map {
-                // cached tweet is full object.
-                it.originalTweet
+            dao.getCachedTweets(startRank, count).mapNotNull { cachedTweet ->
+                val tweet = cachedTweet.originalTweet
+                
+                // Skip tweets with null authorId (should never happen, but safety check)
+                if (tweet.authorId.isNullOrEmpty()) {
+                    Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
+                    return@mapNotNull null
+                }
+                
+                // Always populate author from user cache (author field is not serialized with tweet)
+                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                
+                // If no cached user found, skip this tweet (can't display without author info)
+                if (tweet.author == null) {
+                    Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} - author ${tweet.authorId} not in cache")
+                    return@mapNotNull null
+                }
+                
+                Timber.tag("loadCachedTweets").d("✅ Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username}")
+                tweet
             }
         } catch (e: Exception) {
-            Timber.tag("loadCachedTweets").e("$e")
+            Timber.tag("loadCachedTweets").e("❌ Error loading cached tweets: $e")
             emptyList()
         }
     }

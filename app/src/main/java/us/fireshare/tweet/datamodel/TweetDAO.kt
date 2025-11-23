@@ -60,7 +60,7 @@ class UserConverter {
 
 class TweetConverter {
     private val gson = Gson().newBuilder()
-        .excludeFieldsWithoutExposeAnnotation()
+        // Don't use excludeFieldsWithoutExposeAnnotation() because Tweet class doesn't use @Expose
         .create()
     
     @TypeConverter
@@ -73,7 +73,7 @@ class TweetConverter {
         return try {
             gson.fromJson(str, object : TypeToken<Tweet?>() {}.type)
         } catch (e: Exception) {
-            Timber.tag("toTweet").e("$e")
+            Timber.tag("toTweet").e("Error deserializing tweet: $e")
             null
         }
     }
@@ -165,7 +165,7 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 11)
+@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 12)
 @TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
@@ -183,7 +183,7 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     "tweet_cache_database"
                 )
                     .fallbackToDestructiveMigration(false)
-                    .addMigrations(MIGRATION_10_11)
+                    .addMigrations(MIGRATION_10_11, MIGRATION_11_12)
                     .build()
                 INSTANCE = instance
                 instance
@@ -194,6 +194,14 @@ abstract class TweetCacheDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Add timestamp column to CachedUser table
                 db.execSQL("ALTER TABLE CachedUser ADD COLUMN timestamp INTEGER DEFAULT ${System.currentTimeMillis()}")
+            }
+        }
+        
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Clear corrupted tweet cache (tweets were serialized incorrectly with excludeFieldsWithoutExposeAnnotation)
+                Timber.tag("TweetCacheDatabase").w("Migration 11->12: Clearing corrupted tweet cache")
+                db.execSQL("DELETE FROM CachedTweet")
             }
         }
     }

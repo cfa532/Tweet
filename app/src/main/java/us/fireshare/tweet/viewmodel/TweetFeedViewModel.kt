@@ -73,17 +73,41 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             try {
                 waitForAppUser()
                 if (appUser.baseUrl != null) {
+                    // BaseUrl available, try to load tweets from server
                     refresh(0)
                 } else {
-                    Timber.tag("TweetFeedViewModel").w("AppUser not initialized, showing empty feed and will retry on user update")
-                    _tweets.value = emptyList()
+                    // BaseUrl not available, load cached tweets only
+                    Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, loading cached tweets only")
+                    loadCachedTweetsOnly()
                 }
             } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization")
-                _tweets.value = emptyList()
+                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization, loading cached tweets")
+                // Even on error, try to load cached tweets
+                try {
+                    loadCachedTweetsOnly()
+                } catch (cacheError: Exception) {
+                    Timber.tag("TweetFeedViewModel").e(cacheError, "Failed to load cached tweets")
+                    _tweets.value = emptyList()
+                }
             } finally {
                 initState.value = false
             }
+        }
+    }
+
+    /**
+     * Load cached tweets when server is not available
+     */
+    private suspend fun loadCachedTweetsOnly() {
+        try {
+            val cachedTweets = loadCachedTweets(0, TW_CONST.PAGE_SIZE)
+            _tweets.value = cachedTweets
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+            Timber.tag("TweetFeedViewModel").d("Loaded ${cachedTweets.size} cached tweets")
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").e(e, "Failed to load cached tweets")
+            _tweets.value = emptyList()
         }
     }
     
@@ -118,10 +142,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         fetchTweets(pageNumber)
     }
 
-    private suspend fun waitForAppUser(timeoutMillis: Long = 5000L) {
+    private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
         val startTime = System.currentTimeMillis()
+        Timber.tag("TweetFeedViewModel").d("Waiting for appUser.baseUrl to be available (timeout: ${timeoutMillis}ms)")
         while (appUser.baseUrl.isNullOrBlank() && System.currentTimeMillis() - startTime < timeoutMillis) {
             kotlinx.coroutines.delay(200)
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+        if (appUser.baseUrl.isNullOrBlank()) {
+            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser.baseUrl after ${elapsed}ms")
+        } else {
+            Timber.tag("TweetFeedViewModel").d("appUser.baseUrl became available after ${elapsed}ms: ${appUser.baseUrl}")
         }
     }
 

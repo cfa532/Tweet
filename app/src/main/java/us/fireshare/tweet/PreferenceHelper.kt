@@ -29,8 +29,8 @@ class PreferenceHelper(context: Context) {
         return sharedPreferences.getBoolean("speakerMuted", true)
     }
 
-    fun getUserId(): String? {
-        return sharedPreferences.getString("userId", TW_CONST.GUEST_ID)
+    fun getUserId(): String {
+        return sharedPreferences.getString("userId", TW_CONST.GUEST_ID) ?: TW_CONST.GUEST_ID
     }
     fun setUserId(id: String?) {
         sharedPreferences.edit { putString("userId", id) }

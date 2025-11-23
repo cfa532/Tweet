@@ -11,7 +11,8 @@ import timber.log.Timber
  */
 enum class FeedResetReason {
     LOGIN,
-    LOGOUT
+    LOGOUT,
+    BASEURL_AVAILABLE
 }
 
 sealed class TweetEvent {
