@@ -683,67 +683,72 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
             }
 
-            // Check if network is available, if not load cached tweets
-            if (user.value.baseUrl == null || appUser.baseUrl == null) {
-                Timber.tag("getTweets").w("Network unavailable, loading cached tweets for user: ${user.value.mid}")
-                val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
-                val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
-                
-                // Update _tweets with cached tweets
-                _tweets.update { currentTweets ->
-                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                    val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
-                    
-                    if (newCachedTweets.isNotEmpty()) {
-                        val mergedTweets = (currentTweets + newCachedTweets)
-                            .distinctBy { tweet: Tweet -> tweet.mid }
-                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                        mergedTweets
-                    } else {
-                        currentTweets
-                    }
-                }
-                
-                Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
-                return cachedTweetsWithNulls
-            }
-
-            // Fetch tweets of the author and update _tweets
-            val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
-
-            // Filter out null elements and get valid tweets
-            val newTweets = newTweetsWithNulls.filterNotNull()
-
-            Timber.tag("getTweets")
-                .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
-
-            // Always merge new tweets with existing ones, never replace (like TweetFeedViewModel)
+            // Always load cached tweets first (especially for appUser, whose cache is shared with mainfeed)
+            Timber.tag("getTweets").d("Loading cached tweets for user: ${user.value.mid}")
+            val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
+            val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
+            
+            // Update _tweets with cached tweets
             _tweets.update { currentTweets ->
-                val filteredTweets = newTweets.filterNot { tweet: Tweet ->
-                    tweet.isPrivate && tweet.authorId != appUser.mid
-                }
-
-                // Get current pinned tweet IDs after ensuring they're loaded
-                val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
-                    pinnedTweetIds.contains(tweet.mid)
-                }
-
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val trulyNewTweets = tweetsWithoutPinned.filter { it.mid !in currentTweetIds }
-
-                if (trulyNewTweets.isNotEmpty()) {
-                    val mergedTweets = (currentTweets + trulyNewTweets)
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                
+                if (newCachedTweets.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + newCachedTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    // Don't override tweet count - it should come from server data, not local list size
                     mergedTweets
                 } else {
                     currentTweets
                 }
             }
+            
+            Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
+            
+            // If network is available, fetch more tweets from server
+            if (user.value.baseUrl != null && appUser.baseUrl != null) {
+                Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
+                // Fetch tweets of the author and update _tweets
+                val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
 
-            newTweetsWithNulls
+                // Filter out null elements and get valid tweets
+                val newTweets = newTweetsWithNulls.filterNotNull()
+
+                Timber.tag("getTweets")
+                    .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
+
+                // Always merge new tweets with existing ones, never replace (like TweetFeedViewModel)
+                _tweets.update { currentTweets ->
+                    val filteredTweets = newTweets.filterNot { tweet: Tweet ->
+                        tweet.isPrivate && tweet.authorId != appUser.mid
+                    }
+
+                    // Get current pinned tweet IDs after ensuring they're loaded
+                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                    val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
+                        pinnedTweetIds.contains(tweet.mid)
+                    }
+
+                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                    val trulyNewTweets = tweetsWithoutPinned.filter { it.mid !in currentTweetIds }
+
+                    if (trulyNewTweets.isNotEmpty()) {
+                        val mergedTweets = (currentTweets + trulyNewTweets)
+                            .distinctBy { tweet: Tweet -> tweet.mid }
+                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        // Don't override tweet count - it should come from server data, not local list size
+                        mergedTweets
+                    } else {
+                        currentTweets
+                    }
+                }
+
+                return newTweetsWithNulls
+            } else {
+                // Network unavailable, return cached tweets only
+                Timber.tag("getTweets").w("Network unavailable, returning cached tweets only")
+                return cachedTweetsWithNulls
+            }
         } catch (e: Exception) {
             Timber.tag("getTweets")
                 .e(e, "Error fetching tweets for user: ${user.value.mid}, page: $pageNumber")
