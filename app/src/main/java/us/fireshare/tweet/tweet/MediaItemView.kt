@@ -327,7 +327,6 @@ fun MediaItemView(
                         onClose = { showFullScreenImage = false },
                         modifier = Modifier.fillMaxSize(),
                         imageUrls = if (imageUrls.size > 1) imageUrls else null,
-                        currentImageIndex = currentImageIndexInList.coerceAtLeast(0),
                         onNextImage = {
                             if (imageAttachments.isNotEmpty()) {
                                 // Wrap around: if at last image, go to first

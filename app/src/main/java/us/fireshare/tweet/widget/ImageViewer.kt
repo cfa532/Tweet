@@ -28,17 +28,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -145,7 +142,7 @@ fun AdvancedImageViewer(
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null,
     imageUrls: List<String>? = null, // List of all image URLs for navigation
-    currentImageIndex: Int = 0, // Current image index in the list
+    // Current image index in the list
     onNextImage: (() -> Unit)? = null, // Callback to load next image
     onPreviousImage: (() -> Unit)? = null // Callback to load previous image
 ) {
@@ -400,11 +397,10 @@ fun AdvancedImageViewer(
                         dragOffset = 0f
                         horizontalDragOffset = 0f
                         verticalDragOffset = 0f
-                        isClosing = false
                     },
                     onDragEnd = { 
                         // Check for horizontal drag gestures (left/right swipe)
-                        if (kotlin.math.abs(horizontalDragOffset) > 150f && !isClosing && imageUrls != null && imageUrls.size > 1) {
+                        if (abs(horizontalDragOffset) > 150f && !isClosing && imageUrls != null && imageUrls.size > 1) {
                             if (horizontalDragOffset > 150f) {
                                 // Swipe right - previous image
                                 Timber.d("AdvancedImageViewer - Swipe right detected, loading previous image")
@@ -421,19 +417,17 @@ fun AdvancedImageViewer(
                         if (verticalDragOffset > 300f && !isClosing) {
                             // Large drag down - exit image viewer
                             Timber.d("AdvancedImageViewer - Large drag down detected, closing viewer")
-                            isClosing = true
                             onClose?.invoke()
                         }
                         // Reset all gesture states
                         dragOffset = 0f
                         horizontalDragOffset = 0f
                         verticalDragOffset = 0f
-                        isClosing = false
                     },
                     onDrag = { change, dragAmount ->
                         // Check if this is primarily a horizontal or vertical drag
-                        val isHorizontalDrag = kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y)
-                        val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
+                        val isHorizontalDrag = abs(dragAmount.x) > abs(dragAmount.y)
+                        val isVerticalDrag = abs(dragAmount.y) > abs(dragAmount.x)
                         
                         if (isHorizontalDrag) {
                             // Track horizontal drag for left/right navigation
@@ -535,7 +529,7 @@ fun AdvancedImageViewer(
                                     // Check if SubsamplingScaleImageView already has an image loaded for this imageUrl
                                     val hasImage = try {
                                         imageView.sWidth > 0 && imageView.sHeight > 0
-                                    } catch (e: Exception) {
+                                    } catch (_: Exception) {
                                         false
                                     }
                                     
@@ -563,7 +557,7 @@ fun AdvancedImageViewer(
                         .fillMaxSize()
                         .graphicsLayer {
                             // Use horizontal translation for left/right swipe, vertical for drag down
-                            val isHorizontalSwipe = kotlin.math.abs(horizontalDragOffset) > kotlin.math.abs(verticalDragOffset)
+                            val isHorizontalSwipe = abs(horizontalDragOffset) > abs(verticalDragOffset)
                             if (isHorizontalSwipe) {
                                 translationX = dragOffset
                                 // Add scaling effect for horizontal swipe
@@ -992,7 +986,7 @@ fun ImageViewer(
                     onDrag = { change, dragAmount ->
                         // Only allow downward dragging (positive Y values)
                         // Check if this is primarily a vertical drag
-                        val isVerticalDrag = kotlin.math.abs(dragAmount.y) > kotlin.math.abs(dragAmount.x)
+                        val isVerticalDrag = abs(dragAmount.y) > abs(dragAmount.x)
                         if (dragAmount.y > 0 && isVerticalDrag) {
                             dragOffset += dragAmount.y
                             // Consume the event to prevent SubsamplingScaleImageView from handling it

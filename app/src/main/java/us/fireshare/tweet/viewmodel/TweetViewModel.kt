@@ -78,6 +78,9 @@ class TweetViewModel @AssistedInject constructor(
     private val _mediaGridVideoIndex = MutableStateFlow(-1)
     val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
 
+    private val _isSharing = MutableStateFlow(false)
+    val isSharing: StateFlow<Boolean> get() = _isSharing.asStateFlow()
+
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
 
     // remember current video playback position after configuration changes.
@@ -356,17 +359,24 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     suspend fun shareTweet(context: Context) {
-        /**
-         * Call to checkUpgrade() also returns a map of environmental variables,
-         * which includes environment variables of the App.
-         * */
-        val map = HproseInstance.checkUpgrade() ?: return
-        // Use appUser.domainToShare if available, otherwise fall back to checkUpgrade domain
-        val domain = if (!appUser.domainToShare.isNullOrBlank()) {
-            appUser.domainToShare!!
-        } else {
-            map["domain"] ?: return
-        }
+        _isSharing.value = true
+        try {
+            /**
+             * Call to checkUpgrade() also returns a map of environmental variables,
+             * which includes environment variables of the App.
+             * */
+            val map = HproseInstance.checkUpgrade()
+            if (map == null) {
+                return
+            }
+            // Use appUser.domainToShare if available, otherwise fall back to checkUpgrade domain
+            val domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                appUser.domainToShare!!
+            } else {
+                map["domain"] ?: run {
+                    return
+                }
+            }
         val deepLink = if (BuildConfig.IS_PLAY_VERSION) {
             "http://gplay.fireshare.us/tweet/${tweet.mid}/${tweet.authorId}"
         } else {
@@ -395,65 +405,24 @@ class TweetViewModel @AssistedInject constructor(
             deepLink
         }
 
-        // Try to generate preview image from first attachment (with timeout)
-        val previewImage = try {
-            withContext(Dispatchers.IO) {
-                withTimeoutOrNull(10000L) {
-                    loadAttachmentPreviewImage(context)
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("SHARE").e(e, "Error loading preview image")
-            null
-        }
+        // Skip preview image generation - Android doesn't support sharing text and image together
+        // This makes sharing instant instead of waiting for image processing
+        Timber.tag("SHARE").d("Sharing text only (preview images not supported with text)")
         
-        // Save image file for both sharing and copying
-        var imageUri: Uri? = null
-        if (previewImage != null) {
-            // Use unique filename with timestamp to avoid WeChat cache issues
-            val uniqueFilename = "share_preview_${System.currentTimeMillis()}.jpg"
-            val imageFile = saveBitmapToCache(context, previewImage, uniqueFilename)
-            if (imageFile != null) {
-                imageUri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.provider",
-                    imageFile
-                )
-            }
-        }
-        
-        // Always update clipboard - either with preview image or clear it
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        
-        if (imageUri != null) {
-            // Clear and set new image immediately
-            clipboard.clearPrimaryClip()
-            val clip = ClipData.newUri(context.contentResolver, "Tweet Image", imageUri)
-            clipboard.setPrimaryClip(clip)
-            Timber.tag("SHARE").d("Copied preview image to clipboard")
-        } else {
-            // Clear clipboard
-            clipboard.clearPrimaryClip()
-            Timber.tag("SHARE").d("Cleared clipboard (no preview image)")
-        }
-        
-        // Create share intent - share text only for WeChat compatibility
+        // Create share intent - share text only
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, textToShare)
             type = "text/plain"
-            
-            if (imageUri != null) {
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                Timber.tag("SHARE").d("Sharing text (image already in clipboard)")
-            } else {
-                Timber.tag("SHARE").d("Sharing text only")
-            }
         }
         
         // Create chooser
         val chooserIntent = Intent.createChooser(sendIntent, "Share Tweet")
         context.startActivity(chooserIntent, null)
+        } finally {
+            // Clear loading state after share sheet is shown
+            _isSharing.value = false
+        }
     }
     
     

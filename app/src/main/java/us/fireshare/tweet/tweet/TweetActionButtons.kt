@@ -3,14 +3,17 @@ package us.fireshare.tweet.tweet
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -242,26 +245,44 @@ fun ShareButton(viewModel: TweetViewModel, color: Color? = null) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isSharing by viewModel.isSharing.collectAsState()
 
-    IconButton(onClick = {
-        if (appUser.isGuest()) {
-            viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
+    IconButton(
+        onClick = {
+            if (appUser.isGuest()) {
+                viewModel.viewModelScope.launch {
+                    guestWarning(context, navController)
+                }
+            } else
+                scope.launch(Dispatchers.IO) {
+                    viewModel.shareTweet(context)
+                }
+        },
+        enabled = !isSharing
+    ) {
+        Box(modifier = Modifier.size(ButtonDefaults.IconSize)) {
+            Row(horizontalArrangement = Arrangement.Center) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = stringResource(R.string.share),
+                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                        .padding(1.dp),
+                    tint = if (isSharing) {
+                        (color ?: MaterialTheme.colorScheme.outline).copy(alpha = 0.5f)
+                    } else {
+                        color ?: MaterialTheme.colorScheme.outline
+                    }
+                )
             }
-        } else
-            scope.launch(Dispatchers.IO) {
-                viewModel.shareTweet(context)
+            // Show spinner overlay when sharing
+            if (isSharing) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(ButtonDefaults.IconSize * 2)
+                        .padding(0.dp),
+                    strokeWidth = 3.dp
+                )
             }
-    })
-    {
-        Row(horizontalArrangement = Arrangement.Center) {
-            Icon(
-                imageVector = Icons.Default.Share,
-                contentDescription = stringResource(R.string.share),
-                modifier = Modifier.size(ButtonDefaults.IconSize)
-                    .padding(1.dp),
-                tint = color ?: MaterialTheme.colorScheme.outline
-            )
         }
     }
 }
