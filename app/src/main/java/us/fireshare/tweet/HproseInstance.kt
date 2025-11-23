@@ -149,12 +149,15 @@ object HproseInstance {
             val tweetCache = TweetCacheDatabase.getInstance(context)
             dao = tweetCache.tweetDao()
 
-            // Initialize appUser with minimal state - initAppEntry() will set IP-based baseUrl
+            // Initialize appUser with userId from preferences, or GUEST_ID if not available
+            val storedUserId = preferenceHelper.getUserId()
+            val initialUserId = if (storedUserId != TW_CONST.GUEST_ID) storedUserId else TW_CONST.GUEST_ID
             appUser = User(
-                mid = TW_CONST.GUEST_ID,
+                mid = initialUserId,
                 baseUrl = null,
-                followingList = getAlphaIds()
+                followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
             )
+            Timber.tag("HproseInstance").d("Initialized appUser with mid: ${appUser.mid}")
             
             // CRITICAL: initAppEntry() must complete first and set IP-based baseUrl
             // This is suspend, so init() will wait for it to complete
@@ -165,15 +168,30 @@ object HproseInstance {
             if (!::preferenceHelper.isInitialized) {
                 this.preferenceHelper = PreferenceHelper(context)
             }
-            // If network is unavailable (all URLs failed), leave baseUrl as null
-            // This will signal to TweetFeedViewModel to load cached tweets only
+            // If network is unavailable (all URLs failed), try to load cached user
             if (appUser.baseUrl == null) {
-                Timber.tag("HproseInstance").w("Network unavailable, keeping baseUrl as null for offline mode")
-                appUser = User(
-                    mid = TW_CONST.GUEST_ID,
-                    baseUrl = null,  // Explicitly null for offline mode
-                    followingList = getAlphaIds()
-                )
+                Timber.tag("HproseInstance").w("Network unavailable, attempting to load cached user for offline mode")
+                val storedUserId = preferenceHelper.getUserId()
+                if (storedUserId != TW_CONST.GUEST_ID) {
+                    // Try to load the cached user
+                    val cachedUser = TweetCacheManager.getCachedUser(storedUserId)
+                    if (cachedUser != null) {
+                        // Use the cached user but keep baseUrl as null for offline mode
+                        appUser = cachedUser.copy(baseUrl = null)
+                        Timber.tag("HproseInstance").d("✅ Loaded cached user for offline mode: userId=${appUser.mid}, username=${appUser.username}")
+                    } else {
+                        // No cached user found, keep the userId from preferences but set baseUrl to null
+                        Timber.tag("HproseInstance").w("No cached user found for userId: $storedUserId, keeping userId but baseUrl is null")
+                        appUser = appUser.copy(baseUrl = null)
+                    }
+                } else {
+                    // Guest user
+                    Timber.tag("HproseInstance").d("Guest user, using alpha IDs")
+                    appUser = appUser.copy(
+                        baseUrl = null,
+                        followingList = getAlphaIds()
+                    )
+                }
             }
             // Re-throw the exception so the calling code can handle it
             throw e
@@ -252,19 +270,28 @@ object HproseInstance {
                              * This matches iOS initAppEntry() which calls fetchUser(appUser.mid, baseUrl: "")
                              * */
                             Timber.tag("initAppEntry").d("Always refreshing appUser's baseUrl on app start for userId: $userId")
-                            // Remove cached user to force fresh fetch
-                            TweetCacheManager.removeCachedUser(userId)
                             // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                            // forceRefresh ensures fresh data from server without needing to clear cache
                             val refreshedUser = getUser(userId, baseUrl = "", forceRefresh = true)
                             val refreshedBaseUrl = refreshedUser?.baseUrl
                             if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
                                 // Use the refreshed user's baseUrl
                                 appUser = refreshedUser
+                                TweetCacheManager.saveUser(refreshedUser) // Ensure the refreshed user is saved to cache
                                 Timber.tag("initAppEntry").d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
                             } else {
-                                // Fall back to bestIp if user fetch failed or doesn't have a valid baseUrl
-                                Timber.tag("initAppEntry").w("User fetch failed or no baseUrl, using resolved IP: $bestIp")
-                                appUser = appUser.copy(baseUrl = "http://$bestIp")
+                                // Network fetch failed, try to load cached user
+                                Timber.tag("initAppEntry").w("User fetch failed, attempting to load cached user for userId: $userId")
+                                val cachedUser = TweetCacheManager.getCachedUser(userId)
+                                if (cachedUser != null) {
+                                    // Use cached user but update baseUrl to the resolved IP
+                                    appUser = cachedUser.copy(baseUrl = "http://$bestIp")
+                                    Timber.tag("initAppEntry").d("✅ Loaded cached user with resolved IP baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+                                } else {
+                                    // No cached user found, fall back to bestIp with current userId
+                                    Timber.tag("initAppEntry").w("No cached user found, using resolved IP: $bestIp")
+                                    appUser = appUser.copy(baseUrl = "http://$bestIp")
+                                }
                             }
                             Timber.tag("initAppEntry").d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
                         } else {
