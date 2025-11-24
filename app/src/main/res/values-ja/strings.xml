@@ -82,4 +82,17 @@
     <string name="node_required_title">独自ノードの設定が必要です</string>
     <string name="node_required_message">新しいツイートを投稿するには、独自のノードを設定する必要があります（10を超えるツイートがあります）。より良いパフォーマンスとストレージのために、独自のノードを確立してください。</string>
     <string name="node_required_ok">わかりました</string>
+    
+    <!-- Profile screen strings -->
+    <string name="fans">フォロワー</string>
+    <string name="followings">フォロー中</string>
+    <string name="user_bookmarks">ブックマーク</string>
+    <string name="user_favorites">お気に入り</string>
+    <string name="your_followings">あなたのフォロー中</string>
+    <string name="your_fans">あなたのフォロワー</string>
+    <string name="your_followings_title">あなたのフォロー中</string>
+    <string name="your_bookmarks">あなたのブックマーク</string>
+    <string name="your_favorites">あなたのお気に入り</string>
+    <string name="fans_at_username">%sのフォロワー</string>
+    <string name="followings_at_username">%sのフォロー中</string>
 </resources>

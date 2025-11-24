@@ -79,6 +79,12 @@
     <string name="user_favorites">喜欢</string>
     <string name="upload_comment">后台上传评论。。。</string>
     <string name="your_followings">你的关注</string>
+    <string name="your_fans">你的粉丝</string>
+    <string name="your_followings_title">你的关注</string>
+    <string name="your_bookmarks">你的书签</string>
+    <string name="your_favorites">你的收藏</string>
+    <string name="fans_at_username">%s的粉丝</string>
+    <string name="followings_at_username">%s的关注</string>
     <string name="recommendation">推荐内容</string>
     <string name="update_following">更新关注。。。</string>
     <string name="follow_operation_failed">关注操作失败，请重试。</string>

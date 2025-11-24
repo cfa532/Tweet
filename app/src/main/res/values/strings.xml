@@ -78,6 +78,12 @@
     <string name="user_favorites">Favorites</string>
     <string name="upload_comment">Uploading comment</string>
     <string name="your_followings">Your followings</string>
+    <string name="your_fans">Your Fans</string>
+    <string name="your_followings_title">Your Followings</string>
+    <string name="your_bookmarks">Your Bookmarks</string>
+    <string name="your_favorites">Your Favorites</string>
+    <string name="fans_at_username">Fans@%s</string>
+    <string name="followings_at_username">Followings@%s</string>
     <string name="recommendation">Recommendation</string>
     <string name="update_following">Update following status</string>
     <string name="follow_operation_failed">Follow operation failed. Please try again.</string>

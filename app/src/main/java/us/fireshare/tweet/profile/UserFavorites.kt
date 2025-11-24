@@ -71,7 +71,7 @@ fun UserFavorites(
                     Column {
                         UserAvatar(user = user, size = 36)
                         Text(
-                            text = stringResource(R.string.user_favorites),
+                            text = stringResource(R.string.your_favorites),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
                         )

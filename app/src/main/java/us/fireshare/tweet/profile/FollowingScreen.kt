@@ -71,7 +71,12 @@ fun FollowingScreen(
                     Column {
                         UserAvatar(user = userOfProfile, size = 36)
                         Text(
-                            text = userOfProfile.name ?: "No One",
+                            text = if (userId == appUser.mid) {
+                                stringResource(R.string.your_followings_title)
+                            } else {
+                                val displayName = userOfProfile.name ?: userOfProfile.username ?: stringResource(R.string.no_one)
+                                stringResource(R.string.followings_at_username, displayName)
+                            },
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(top = 2.dp)
                         )

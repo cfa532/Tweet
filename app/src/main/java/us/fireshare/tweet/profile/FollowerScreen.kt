@@ -72,7 +72,12 @@ fun FollowerScreen(
                     Column {
                         UserAvatar(user = userOfProfile, size = 36)
                         Text(
-                            text = userOfProfile.name ?: "No One",
+                            text = if (userId == appUser.mid) {
+                                stringResource(R.string.your_fans)
+                            } else {
+                                val displayName = userOfProfile.name ?: userOfProfile.username ?: stringResource(R.string.no_one)
+                                stringResource(R.string.fans_at_username, displayName)
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
                         )
