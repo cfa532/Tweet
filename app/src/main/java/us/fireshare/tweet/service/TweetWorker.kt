@@ -39,6 +39,22 @@ class UploadCommentWorker @AssistedInject constructor(
             val tweetId = inputData.getString("tweetId") ?: return Result.failure()
             val authorId = inputData.getString("authorId") ?: return Result.failure()
             
+            // Force baseUrl refresh on retries (matching iOS behavior)
+            if (runAttemptCount > 1) {
+                Timber.tag("UploadCommentWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for target user: $authorId")
+                try {
+                    // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
+                    val refreshedUser = HproseInstance.getUser(authorId, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                    if (refreshedUser != null) {
+                        Timber.tag("UploadCommentWorker").d("Successfully refreshed baseUrl for user $authorId during comment upload retry")
+                    } else {
+                        Timber.tag("UploadCommentWorker").w("Failed to refresh baseUrl for user $authorId during comment upload retry")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("UploadCommentWorker").e(e, "Error refreshing baseUrl for user $authorId during comment upload retry")
+                }
+            }
+            
             // Fetch the parent tweet using ID and author ID
             val parentTweet = HproseInstance.fetchTweet(tweetId, authorId) ?: return Result.failure()
 
@@ -122,6 +138,24 @@ class UploadTweetWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val runAttemptCount = runAttemptCount
         return try {
+            // Force baseUrl refresh on retries (matching iOS behavior)
+            if (runAttemptCount > 1) {
+                Timber.tag("UploadTweetWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
+                try {
+                    // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
+                    val refreshedUser = HproseInstance.getUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                    if (refreshedUser != null && !refreshedUser.isGuest()) {
+                        // Update appUser with refreshed data
+                        HproseInstance.appUser = refreshedUser
+                        Timber.tag("UploadTweetWorker").d("Successfully refreshed baseUrl for appUser during tweet upload retry")
+                    } else {
+                        Timber.tag("UploadTweetWorker").w("Failed to refresh baseUrl for appUser during tweet upload retry")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("UploadTweetWorker").e(e, "Error refreshing baseUrl for appUser during tweet upload retry")
+                }
+            }
+            
             val tweetContent = inputData.getString("tweetContent")
             val attachmentUris =
                 inputData.getStringArray("attachmentUris")?.toList() ?: emptyList()

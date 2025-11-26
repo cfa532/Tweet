@@ -28,9 +28,13 @@ class AppUserRefreshWorker @AssistedInject constructor(
                 Timber.tag("AppUserRefreshWorker").d("Refreshing appUser data for user: ${HproseInstance.appUser.mid}")
                 
                 // Use the existing getUser function to refresh appUser
+                // Force refresh to always fetch fresh data from server (bypass cache)
+                // Use current baseUrl (don't force IP refresh during periodic refresh)
                 val refreshedUser = HproseInstance.getUser(
                     HproseInstance.appUser.mid, 
-                    HproseInstance.appUser.baseUrl
+                    HproseInstance.appUser.baseUrl,
+                    maxRetries = 3,
+                    forceRefresh = true  // Always fetch fresh data, don't use cache
                 )
                 
                 if (refreshedUser != null) {
