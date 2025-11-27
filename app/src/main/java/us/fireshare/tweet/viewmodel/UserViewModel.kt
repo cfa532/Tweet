@@ -24,7 +24,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
 import us.fireshare.tweet.HproseInstance.loadCachedTweetsByAuthor
@@ -162,7 +161,7 @@ class UserViewModel @AssistedInject constructor(
             try {
                 // Force refresh from server, skip cache
                 // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-                val refreshedUser = HproseInstance.getUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                val refreshedUser = getUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
                     return // Success, exit retry loop
@@ -339,10 +338,9 @@ class UserViewModel @AssistedInject constructor(
                         .d("No more followers to return for page: $pageNumber")
                     emptyList()
                 } else {
-                    val filteredSlice = slice
                     Timber.tag("fetchFollowers")
-                        .d("Returning slice for page $pageNumber: ${filteredSlice.size} user IDs")
-                    filteredSlice
+                        .d("Returning slice for page $pageNumber: ${slice.size} user IDs")
+                    slice
                 }
             }
         } catch (e: Exception) {
@@ -618,7 +616,7 @@ class UserViewModel @AssistedInject constructor(
         startListeningToNotifications()
         
         if (userId != TW_CONST.GUEST_ID) {
-            viewModelScope.launch(Dispatchers.IO) {
+            viewModelScope.launch(IO) {
                 val loadedUser =
                     getUser(userId, maxRetries = 3) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 _user.value = loadedUser
@@ -814,7 +812,7 @@ class UserViewModel @AssistedInject constructor(
                             val tweetWithAuthor = if (tweet.author == null) {
                                 // Check cache first before fetching from server
                                 val cachedAuthor = TweetCacheManager.getCachedUser(tweet.authorId)
-                                tweet.copy(author = cachedAuthor ?: HproseInstance.getUser(tweet.authorId))
+                                tweet.copy(author = cachedAuthor ?: getUser(tweet.authorId))
                             } else {
                                 tweet
                             }
@@ -1060,9 +1058,9 @@ class UserViewModel @AssistedInject constructor(
         }
         var updatedUser = User(
             baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
-            name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
+            name = name.value.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim(),
+            profile = profile.value.trim(),
             domainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim(),
             cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
         )
@@ -1081,7 +1079,7 @@ class UserViewModel @AssistedInject constructor(
                                 is String -> {
                                     try {
                                         processedUserData["timestamp"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
+                                    } catch (_: NumberFormatException) {
                                         Timber.w("Failed to parse timestamp: $value")
                                         processedUserData["timestamp"] = System.currentTimeMillis()
                                     }
@@ -1096,7 +1094,7 @@ class UserViewModel @AssistedInject constructor(
                                 is String -> {
                                     try {
                                         processedUserData["lastLogin"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
+                                    } catch (_: NumberFormatException) {
                                         Timber.w("Failed to parse lastLogin: $value")
                                         processedUserData["lastLogin"] = System.currentTimeMillis()
                                     }
@@ -1186,7 +1184,6 @@ class UserViewModel @AssistedInject constructor(
                             val userType = object : TypeToken<User>() {}.type
                             
                             if (appUser.isGuest()) {
-                                val newUser: User = gson.fromJson(processedJson, userType)
                                 password.value = ""
                                 popBack()
                             } else {
