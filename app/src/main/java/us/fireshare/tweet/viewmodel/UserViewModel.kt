@@ -1112,6 +1112,14 @@ class UserViewModel @AssistedInject constructor(
                         } else {
                             // Update existing user profile
                             appUser.from(processedUserData)
+                            
+                            // CRITICAL: Update cloudDrivePort and domainToShare directly with values that were sent
+                            // This matches iOS behavior and ensures consistency even if server response is incomplete
+                            val savedCloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+                            val savedDomainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim()
+                            appUser.cloudDrivePort = savedCloudDrivePort
+                            appUser.domainToShare = savedDomainToShare
+                            
                             _user.value = appUser
                             
                             // Update the shared appUserViewModel if this is the current user's profile
@@ -1136,8 +1144,6 @@ class UserViewModel @AssistedInject constructor(
                                 // Save the updated user to cache
                                 TweetCacheManager.saveUser(appUser)
                                 
-
-                                
                                 // Force refresh of the shared appUserViewModel by updating its user state
                                 // This ensures that all components using the shared ViewModel get updated
                                 viewModelScope.launch {
@@ -1153,7 +1159,6 @@ class UserViewModel @AssistedInject constructor(
                                     context.getString(R.string.profile_update_ok),
                                     Toast.LENGTH_SHORT
                                 ).show()
-                                // Auto exit after successful save
                                 popBack()
                             }
                         }
@@ -1186,12 +1191,16 @@ class UserViewModel @AssistedInject constructor(
                                 popBack()
                             } else {
                                 updatedUser = gson.fromJson(processedJson, userType)
-                                appUser = appUser.copy(
-                                    name = updatedUser.name, profile = updatedUser.profile,
-                                    username = updatedUser.username, hostIds = updatedUser.hostIds,
-                                    domainToShare = updatedUser.domainToShare,
-                                    cloudDrivePort = updatedUser.cloudDrivePort
-                                )
+                                // Update existing user profile using from() method to properly update singleton instance
+                                appUser.from(updatedUser)
+                                
+                                // CRITICAL: Update cloudDrivePort and domainToShare directly with values that were sent
+                                // This matches iOS behavior and ensures consistency even if server response is incomplete
+                                val savedCloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+                                val savedDomainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim()
+                                appUser.cloudDrivePort = savedCloudDrivePort
+                                appUser.domainToShare = savedDomainToShare
+                                
                                 _user.value = appUser
                                 
                                 // Update the shared appUserViewModel if this is the current user's profile
@@ -1216,8 +1225,6 @@ class UserViewModel @AssistedInject constructor(
                                     // Save the updated user to cache
                                     TweetCacheManager.saveUser(appUser)
                                     
-
-                                    
                                     // Force refresh of the shared appUserViewModel by updating its user state
                                     // This ensures that all components using the shared ViewModel get updated
                                     viewModelScope.launch {
@@ -1233,7 +1240,6 @@ class UserViewModel @AssistedInject constructor(
                                         context.getString(R.string.profile_update_ok),
                                         Toast.LENGTH_SHORT
                                     ).show()
-                                    // Auto exit after successful save
                                     popBack()
                                 }
                             }

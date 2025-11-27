@@ -194,7 +194,15 @@ fun EditProfileScreen(
         showConfirm.value = password.isNotEmpty()
     }
     // Sync ViewModel values with current appUser when screen opens or appUser changes
-    LaunchedEffect(appUser.name, appUser.profile, appUser.domainToShare, appUser.cloudDrivePort) {
+    // Use a key that includes all relevant fields to detect changes even when appUser object is mutated
+    LaunchedEffect(
+        appUser.name,
+        appUser.profile,
+        appUser.domainToShare,
+        appUser.cloudDrivePort,
+        appUser.mid,
+        appUser.avatar
+    ) {
         // Sync ViewModel values with current appUser to ensure no false unsaved changes detection
         viewModel.name.value = appUser.name ?: ""
         viewModel.profile.value = appUser.profile ?: ""
@@ -205,6 +213,11 @@ fun EditProfileScreen(
     LaunchedEffect(Unit) {
         keyboardController?.show()
         viewModel.onPasswordChange("")
+        // Force sync ViewModel values with current appUser when screen opens
+        viewModel.name.value = appUser.name ?: ""
+        viewModel.profile.value = appUser.profile ?: ""
+        viewModel.domainToShare.value = appUser.domainToShare ?: ""
+        viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
         // get hostId if not exists
         if (hostId.isEmpty()) {
             viewModel.getHostId()
@@ -384,12 +397,9 @@ fun EditProfileScreen(
                             return@launch
                         }
                         viewModel.register(context) {
+                            // Callback is not used by register function - navigation is handled internally
+                            // Registration success message is shown in register function for new registrations only
                             viewModel.viewModelScope.launch(Dispatchers.Main) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.registration_ok),
-                                    Toast.LENGTH_LONG
-                                ).show()
                                 navController.popBackStack()
                             }
                         }
