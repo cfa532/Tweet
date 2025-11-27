@@ -371,8 +371,27 @@ data class User(
             avatar = processedData["avatar"] as? String ?: avatar
             email = processedData["email"] as? String ?: email
             profile = processedData["profile"] as? String ?: profile
-            domainToShare = processedData["domainToShare"] as? String ?: domainToShare
-            cloudDrivePort = (processedData["cloudDrivePort"] as? Number)?.toInt() ?: cloudDrivePort
+            // Handle domainToShare: update if present in response (including null), otherwise keep existing
+            if (processedData.containsKey("domainToShare")) {
+                domainToShare = processedData["domainToShare"] as? String
+            }
+            // Handle cloudDrivePort: update if present in response (including null), handle both Number and String types
+            if (processedData.containsKey("cloudDrivePort")) {
+                val value = processedData["cloudDrivePort"]
+                cloudDrivePort = when {
+                    value == null -> 0
+                    value is Number -> value.toInt()
+                    value is String -> {
+                        try {
+                            value.toIntOrNull() ?: 0
+                        } catch (e: NumberFormatException) {
+                            Timber.w("Failed to parse cloudDrivePort: $value")
+                            cloudDrivePort
+                        }
+                    }
+                    else -> cloudDrivePort
+                }
+            }
             
             tweetCount = (processedData["tweetCount"] as? Number)?.toInt() ?: tweetCount
             followingCount = (processedData["followingCount"] as? Number)?.toInt() ?: followingCount

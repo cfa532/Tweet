@@ -166,13 +166,19 @@ fun EditProfileScreen(
     val defaultDomainPlaceholder = remember { mutableStateOf<String?>(null) }
     
     // Simple check for unsaved changes (excluding avatar and username which can't be changed)
+    // Note: name and profile are non-nullable Strings in ViewModel (initialized with ?: "")
     val hasUnsavedChanges = remember {
         derivedStateOf {
-            name != appUser.name || 
-            profile != appUser.profile || 
+            // Compare name - both are non-nullable Strings
+            name != (appUser.name ?: "") ||
+            // Compare profile - both are non-nullable Strings
+            profile != (appUser.profile ?: "") ||
+            // Check if password has been entered
             password.isNotEmpty() ||
+            // Compare domainToShare - handle nulls by converting to empty string
             domainToShare != (appUser.domainToShare ?: "") ||
-            cloudDrivePort != appUser.cloudDrivePort.toString()
+            // Compare cloudDrivePort - ViewModel converts 0 to "", so compare accordingly
+            cloudDrivePort != (if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
         }
     }
     
@@ -187,6 +193,15 @@ fun EditProfileScreen(
     LaunchedEffect(password) {
         showConfirm.value = password.isNotEmpty()
     }
+    // Sync ViewModel values with current appUser when screen opens or appUser changes
+    LaunchedEffect(appUser.name, appUser.profile, appUser.domainToShare, appUser.cloudDrivePort) {
+        // Sync ViewModel values with current appUser to ensure no false unsaved changes detection
+        viewModel.name.value = appUser.name ?: ""
+        viewModel.profile.value = appUser.profile ?: ""
+        viewModel.domainToShare.value = appUser.domainToShare ?: ""
+        viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
+    }
+    
     LaunchedEffect(Unit) {
         keyboardController?.show()
         viewModel.onPasswordChange("")

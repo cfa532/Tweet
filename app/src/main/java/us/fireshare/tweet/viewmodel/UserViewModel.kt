@@ -86,8 +86,8 @@ class UserViewModel @AssistedInject constructor(
     // variable for login management
     var username = mutableStateOf(appUser.username)
     var password = mutableStateOf("")
-    var name = mutableStateOf(appUser.name)
-    var profile = mutableStateOf(appUser.profile)
+    var name = mutableStateOf(appUser.name ?: "")
+    var profile = mutableStateOf(appUser.profile ?: "")
     var domainToShare = mutableStateOf(appUser.domainToShare ?: "")
     var hostId = mutableStateOf("")
     var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
@@ -1124,8 +1124,8 @@ class UserViewModel @AssistedInject constructor(
                                 _tweetCount.value = appUser.tweetCount
                                 
                                 // Update profile state variables to match saved values
-                                name.value = appUser.name
-                                profile.value = appUser.profile
+                                name.value = appUser.name ?: ""
+                                profile.value = appUser.profile ?: ""
                                 domainToShare.value = appUser.domainToShare ?: ""
                                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
@@ -1204,8 +1204,8 @@ class UserViewModel @AssistedInject constructor(
                                     _tweetCount.value = appUser.tweetCount
                                     
                                     // Update profile state variables to match saved values
-                                    name.value = appUser.name
-                                    profile.value = appUser.profile
+                                    name.value = appUser.name ?: ""
+                                    profile.value = appUser.profile ?: ""
                                     domainToShare.value = appUser.domainToShare ?: ""
                                     hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                     cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
