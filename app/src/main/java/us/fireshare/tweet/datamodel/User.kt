@@ -73,7 +73,7 @@ data class User(
                         is String -> {
                             try {
                                 processedDict["timestamp"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
+                            } catch (_: NumberFormatException) {
                                 Timber.w("Failed to parse timestamp: $value")
                             }
                         }
@@ -86,7 +86,7 @@ data class User(
                         is String -> {
                             try {
                                 processedDict["lastLogin"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
+                            } catch (_: NumberFormatException) {
                                 Timber.w("Failed to parse lastLogin: $value")
                             }
                         }
@@ -201,14 +201,6 @@ data class User(
         }
         HproseClientPool.clearClient(baseUrl)
         _lastBaseUrl = null
-    }
-    
-    /**
-     * Clear all cached services to force recreation on next access
-     */
-    fun clearAllServices() {
-        clearHproseService()
-        clearUploadService()
     }
 
     @IgnoredOnParcel
@@ -352,7 +344,7 @@ data class User(
                     is String -> {
                         try {
                             processedData["timestamp"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse timestamp: $value")
                         }
                     }
@@ -365,7 +357,7 @@ data class User(
                     is String -> {
                         try {
                             processedData["lastLogin"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse lastLogin: $value")
                         }
                     }

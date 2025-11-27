@@ -591,6 +591,7 @@ object HproseInstance {
              * */
             "set_author_core_data"
         }
+        
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",

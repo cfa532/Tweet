@@ -1126,6 +1126,7 @@ class UserViewModel @AssistedInject constructor(
                                 // Update profile state variables to match saved values
                                 name.value = appUser.name
                                 profile.value = appUser.profile
+                                domainToShare.value = appUser.domainToShare ?: ""
                                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                 
