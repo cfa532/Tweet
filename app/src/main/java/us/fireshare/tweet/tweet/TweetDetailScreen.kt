@@ -201,33 +201,41 @@ fun TweetDetailScreen(
             }
     }
 
-    // Track initial loading completion
-    LaunchedEffect(comments) {
-        if (isInitialLoading) {
-            // Set loading to false when we receive any response (empty or not)
-            isInitialLoading = false
+    // Initial comment load when tweet is available
+    LaunchedEffect(tweet.mid) {
+        if (tweet.mid != null) {
+            // Load comments if we haven't loaded any yet (initial loading) or if comments list is empty
+            if (isInitialLoading || (comments.isEmpty() && lastLoadedPage < 0)) {
+                withContext(Dispatchers.IO) {
+                    viewModel.loadComments(tweet, 0)
+                    currentPage = 0
+                    lastLoadedPage = 0
+                    isInitialLoading = false
+                }
+            }
         }
     }
 
-    // Initial comment load when tweet is available
-    LaunchedEffect(tweet.mid) {
-        if (tweet.mid != null && isInitialLoading) {
-            withContext(Dispatchers.IO) {
-                viewModel.loadComments(tweet, 0)
-                lastLoadedPage = 0
-            }
+    // Track initial loading completion (fallback in case LaunchedEffect doesn't trigger)
+    LaunchedEffect(comments) {
+        if (isInitialLoading && comments.isNotEmpty()) {
+            // Only set loading to false when we actually receive comments
+            isInitialLoading = false
         }
     }
 
     // Infinite scroll for comments
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && currentPage > lastLoadedPage) {
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
-                        val pageToLoad = currentPage + 1
-                        viewModel.loadComments(tweet, pageToLoad)
+                        val nextPage = lastLoadedPage + 1
+                        viewModel.loadComments(tweet, nextPage)
+                        // Update page tracking after load
+                        currentPage = nextPage
+                        lastLoadedPage = nextPage
                     }
                 } finally {
                     isRefreshingAtBottom = false
