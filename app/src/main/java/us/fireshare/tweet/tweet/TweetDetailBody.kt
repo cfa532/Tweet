@@ -260,7 +260,8 @@ fun AttachmentBrowser(
     ) {
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            userScrollEnabled = mediaItems.size > 1
         ) { page ->
             val aspectRatio = mediaItems[page].aspectRatio
                 ?.takeIf { it > 0f }
