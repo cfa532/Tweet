@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.DropdownMenu
@@ -25,6 +26,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -138,14 +140,16 @@ fun CommentItem(
                     }
                 }
                 // attached media files
-                comment.attachments?.let {
-                    Box(
+                if (!comment.attachments.isNullOrEmpty()) {
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .wrapContentHeight()
-                            .heightIn(max = 600.dp) // Max height for media grid in comments
+                            .padding(top = 4.dp)
+                            .heightIn(min = 20.dp, max = 600.dp), // Max height for media grid in comments
+                        tonalElevation = 4.dp,
+                        shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaGrid(it, viewModel)
+                        MediaGrid(comment.attachments!!, viewModel)
                     }
                 }
             }
