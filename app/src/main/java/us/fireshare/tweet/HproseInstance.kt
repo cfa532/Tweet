@@ -1568,10 +1568,26 @@ object HproseInstance {
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
         return try {
+            // CRITICAL: Use the tweet's author's baseUrl to fetch comments
+            // Comments are stored on the tweet author's node, not the appUser's node
+            // Fetch author if not already loaded
             if (tweet.author == null) {
                 // Check cache first before fetching from server
                 tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: getUser(tweet.authorId)
             }
+            
+            // Ensure author has a baseUrl (hproseService requires baseUrl)
+            val author = tweet.author
+            if (author == null || author.baseUrl.isNullOrEmpty()) {
+                // Fetch author to ensure we have their baseUrl
+                val fetchedAuthor = getUser(tweet.authorId)
+                if (fetchedAuthor == null || fetchedAuthor.baseUrl.isNullOrEmpty()) {
+                    Timber.tag("getComments()").e("Cannot fetch author or author has no baseUrl for tweet ${tweet.mid}")
+                    return null
+                }
+                tweet.author = fetchedAuthor
+            }
+            
             val entry = "get_comments"
             val params = mapOf(
                 "aid" to appId,
@@ -1581,8 +1597,16 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize
             )
-            val response =
-                tweet.author?.hproseService?.runMApp<List<Map<String, Any>?>>(entry, params)
+            
+            // Use author's hproseService - comments are on author's node
+            val authorService = tweet.author?.hproseService
+            if (authorService == null) {
+                Timber.tag("getComments()").e("Author's hproseService is null. baseUrl: ${tweet.author?.baseUrl} for tweet ${tweet.mid}")
+                return null
+            }
+            
+            Timber.tag("getComments()").d("Using author's baseUrl (${tweet.author?.baseUrl}) for tweet ${tweet.mid}")
+            val response = authorService.runMApp<List<Map<String, Any>?>>(entry, params)
 
             response?.mapNotNull { tweetJson -> tweetJson?.let { Tweet.from(it) } }
         } catch (e: Exception) {

@@ -138,7 +138,10 @@ data class User(
                 lastLogin = user.lastLogin
                 cloudDrivePort = user.cloudDrivePort
                 hostIds = user.hostIds
-                baseUrl = user.baseUrl
+                // CRITICAL: Never overwrite baseUrl from user parameter - it might be from hostId[0]
+                // baseUrl should only be set via getProviderIP(user.mid) in HproseInstance
+                // Preserve the existing baseUrl that was correctly resolved from provider IP
+                // Note: baseUrl is preserved above in User.from(dict:), so we don't overwrite it here
                 writableUrl = user.writableUrl
                 
                 tweetCount = user.tweetCount
