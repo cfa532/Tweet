@@ -333,14 +333,18 @@ fun TweetDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Transparent)
-                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(
+                    top = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+                    bottom = innerPadding.calculateBottomPadding(),
+                    start = innerPadding.calculateLeftPadding(LocalLayoutDirection.current),
+                    end = innerPadding.calculateRightPadding(LocalLayoutDirection.current)
+                )
                 .pullRefresh(pullRefreshState)
         ) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset(y = if (showTopAppBar) 0.dp else -innerPadding.calculateTopPadding())
                     .background(MaterialTheme.colorScheme.background),
                 state = listState,
                 contentPadding = PaddingValues(bottom = 60.dp)
