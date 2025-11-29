@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -76,6 +77,26 @@ fun AppUserAvatar(
     // Use appUser directly instead of ViewModel user data
     val user = appUser
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    // Remember the previous avatar to show during upload transition
+    val previousAvatar = remember { mutableStateOf<String?>(user.avatar) }
+    
+    // Capture avatar when upload starts
+    LaunchedEffect(isUploading, isLoading) {
+        if (isUploading || isLoading) {
+            // Capture current avatar when upload starts
+            if (previousAvatar.value == null || previousAvatar.value != user.avatar) {
+                previousAvatar.value = user.avatar
+            }
+        }
+    }
+    
+    // Update previous avatar when upload completes and new avatar is loaded
+    LaunchedEffect(user.avatar) {
+        if (!isUploading && !isLoading) {
+            previousAvatar.value = user.avatar
+        }
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -90,26 +111,38 @@ fun AppUserAvatar(
                     .clip(CircleShape)
                     .clickable(onClick = onAvatarClick)
             ) {
-                // Show current avatar from appUser - key forces recomposition
-                key(user.avatar) {
-                    UserAvatar(user = user, size = 120)
+                // Show avatar - use previous avatar during upload to avoid showing default
+                val avatarToShow = if (isUploading || isLoading) {
+                    // Show previous avatar during upload transition
+                    user.copy(avatar = previousAvatar.value)
+                } else {
+                    // Show current avatar after upload
+                    user
                 }
+                UserAvatar(user = avatarToShow, size = 120)
             }
             
-            // Show loading spinner overlay when uploading (check both local state and ViewModel)
+            // Show uploading message overlay when uploading
             if (isUploading || isLoading) {
                 Box(
                     modifier = Modifier
                         .matchParentSize()
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 4.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.uploading_avatar),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
                 }
             }
             
@@ -128,14 +161,16 @@ fun AppUserAvatar(
             }
         }
         
-        // Show error message if upload failed
-        uploadError?.let { error ->
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+        // Show error message if upload failed (but not during upload)
+        if (!isUploading && !isLoading) {
+            uploadError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }
@@ -268,6 +303,7 @@ fun EditProfileScreen(
             onUploadStart = {
                 // Set upload state when upload starts
                 isUploading.value = true
+                // Ensure state is observed - the spinner will animate automatically
             }
         )
     } else {
@@ -441,7 +477,8 @@ fun EditProfileScreen(
                 Text(stringResource(R.string.save))
             }
         }
-        if (isLoading) {
+        // Only show full-screen spinner if NOT uploading avatar (to avoid duplicate spinners)
+        if (isLoading && !isUploading.value) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center)
             )
