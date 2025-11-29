@@ -56,7 +56,11 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.viewModelScope
 import com.davemorrissey.labs.subscaleview.ImageSource
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -74,6 +78,7 @@ fun AvatarCropScreen(
     viewModel: UserViewModel,
     onNavigateBack: () -> Unit,
     onCropComplete: () -> Unit,
+    onUploadStart: (() -> Unit)? = null,
     initialImageUri: Uri? = null
 ) {
     val context = LocalContext.current
@@ -82,7 +87,7 @@ fun AvatarCropScreen(
     // State for image handling
     var selectedImageUri by remember { mutableStateOf<Uri?>(initialImageUri) }
     var originalBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var isUploading by remember { mutableStateOf(false) }
+    var isCropping by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
     
     // State for image transformation
@@ -144,24 +149,62 @@ fun AvatarCropScreen(
                             onClick = {
                                 // Crop and upload the image
                                 originalBitmap?.let { bitmap ->
+                                    viewModel.viewModelScope.launch(Dispatchers.Main) {
+                                        try {
+                                            // Show cropping message and ensure UI updates
+                                            isCropping = true
+                                            // Force recomposition with multiple yields and delay
+                                            repeat(3) {
+                                                yield()
+                                            }
+                                            delay(200) // Give time for message to be visible
+                                            
+                                            // Capture view state on main thread
+                                            val currentImageView = imageView
+                                            val viewScale = currentImageView?.scale ?: 1f
+                                            val viewCenter = currentImageView?.center
+                                            
+                                            // Do heavy work on background thread
+                                            val croppedBitmap = withContext(Dispatchers.Default) {
+                                                cropCircularImageFromView(
+                                                    bitmap = bitmap,
+                                                    scale = viewScale,
+                                                    center = viewCenter,
+                                                    cropSizePx = cropSizePx
+                                                )
+                                            }
 
-                                    viewModel.viewModelScope.launch {
-                                        val croppedBitmap = cropCircularImageFromView(
-                                            bitmap = bitmap,
-                                            imageView = imageView,
-                                            cropSizePx = cropSizePx
-                                        )
-
-                                        // Convert to URI and upload
-                                        val croppedUri = bitmapToUri(context, croppedBitmap)
-                                        viewModel.updateAvatar(context, croppedUri)
-
-                                        // Success - navigate back
-                                        onCropComplete()
+                                            // Convert to URI on background thread
+                                            val croppedUri = withContext(Dispatchers.Default) {
+                                                bitmapToUri(context, croppedBitmap)
+                                            }
+                                            
+                                            // Clear cropping state and update UI
+                                            isCropping = false
+                                            yield()
+                                            
+                                            // Notify that upload is starting BEFORE navigating
+                                            // This must happen on main thread and before navigation
+                                            onUploadStart?.invoke()
+                                            yield() // Ensure state is set
+                                            
+                                            // Navigate back immediately so spinner shows during upload
+                                            onCropComplete()
+                                            
+                                            // Upload the avatar AFTER navigating (so spinner is visible)
+                                            // Launch in separate coroutine to continue after navigation
+                                            viewModel.viewModelScope.launch {
+                                                viewModel.updateAvatar(context, croppedUri)
+                                            }
+                                        } catch (e: Exception) {
+                                            Timber.e("Error during crop/upload: ${e.message}")
+                                            isCropping = false
+                                            uploadError = "Failed to process image"
+                                        }
                                     }
                                 }
                             },
-                            enabled = !isUploading,
+                            enabled = !isCropping,
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Text(stringResource(R.string.choose))
@@ -186,12 +229,30 @@ fun AvatarCropScreen(
                 )
             } else {
                 // Show cropping interface
-                CroppingInterface(
-                    bitmap = originalBitmap!!,
-                    cropSizePx = cropSizePx,
-                    onImageViewReady = { },
-                    modifier = Modifier.weight(1f)
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    CroppingInterface(
+                        bitmap = originalBitmap!!,
+                        cropSizePx = cropSizePx,
+                        onImageViewReady = { view -> imageView = view },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    
+                    // Show cropping message overlay when cropping
+                    if (isCropping) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.cropping_avatar),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
             
             // Show error message if upload failed
@@ -214,8 +275,7 @@ fun AvatarCropScreen(
                 ) {
                     Button(
                         onClick = { photoPickerLauncher.launch("image/*") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isUploading
+                        modifier = Modifier.weight(1f)
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoCamera,
@@ -225,33 +285,6 @@ fun AvatarCropScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.choose_photo))
                     }
-                }
-            }
-        }
-        
-        // Show loading spinner overlay when uploading
-        if (isUploading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 4.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Processing...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
         }
@@ -464,20 +497,16 @@ private fun loadAndRotateImage(inputStream: InputStream): Bitmap? {
  */
 private fun cropCircularImageFromView(
     bitmap: Bitmap,
-    imageView: SubsamplingScaleImageView?,
+    scale: Float,
+    center: android.graphics.PointF?,
     cropSizePx: Float
 ): Bitmap {
     val cropSize = cropSizePx.toInt()
     
-    if (imageView != null) {
-        // Get the current scale and pan from the view
-        val scale = imageView.scale
-        val center = imageView.center
-        
-        // Calculate the source rectangle in the original bitmap
-        val sourceCenterX = center?.x ?: (bitmap.width / 2f)
-        val sourceCenterY = center?.y ?: (bitmap.height / 2f)
-        val sourceSize = cropSize / scale
+    // Calculate the source rectangle in the original bitmap
+    val sourceCenterX = center?.x ?: (bitmap.width / 2f)
+    val sourceCenterY = center?.y ?: (bitmap.height / 2f)
+    val sourceSize = cropSize / scale
         
         val sourceX = (sourceCenterX - sourceSize / 2f).toInt().coerceAtLeast(0)
         val sourceY = (sourceCenterY - sourceSize / 2f).toInt().coerceAtLeast(0)
@@ -512,10 +541,6 @@ private fun cropCircularImageFromView(
         canvas.drawBitmap(bitmap, sourceRect, destRect, null)
         
         return result
-    } else {
-        // Fallback: return original bitmap if imageView is null
-        return bitmap
-    }
 }
 
 /**

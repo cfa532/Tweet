@@ -75,6 +75,7 @@ fun AppUserAvatar(
 ) {
     // Use appUser directly instead of ViewModel user data
     val user = appUser
+    val isLoading by viewModel.isLoading.collectAsState()
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -95,7 +96,22 @@ fun AppUserAvatar(
                 }
             }
             
-            // No loading indicator - keep selected image visible during upload
+            // Show loading spinner overlay when uploading (check both local state and ViewModel)
+            if (isUploading || isLoading) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        strokeWidth = 4.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
             
             IconButton(
                 onClick = onAvatarClick,
@@ -210,6 +226,14 @@ fun EditProfileScreen(
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
     }
     
+    // Watch isLoading to clear upload state when done
+    LaunchedEffect(isLoading) {
+        if (!isLoading && isUploading.value) {
+            // Upload is complete
+            isUploading.value = false
+        }
+    }
+    
     LaunchedEffect(Unit) {
         keyboardController?.show()
         viewModel.onPasswordChange("")
@@ -240,7 +264,10 @@ fun EditProfileScreen(
             },
             onCropComplete = {
                 showCropScreen.value = false
-                // Avatar is updated in the cropping screen
+            },
+            onUploadStart = {
+                // Set upload state when upload starts
+                isUploading.value = true
             }
         )
     } else {
