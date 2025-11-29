@@ -44,12 +44,25 @@ fun ToggleFollowingButton(
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     var localFollowState by remember { mutableStateOf(isFollowing) }
-    var isOperationInProgress by remember { mutableStateOf(false) }
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val followOperationFailed by appUserViewModel.followOperationFailed.collectAsState()
 
     // Update local state when followings change
     LaunchedEffect(followings) {
         localFollowState = isFollowing
+    }
+    
+    // Show toast when follow operation fails
+    LaunchedEffect(followOperationFailed) {
+        if (followOperationFailed == userId) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.follow_operation_failed),
+                Toast.LENGTH_LONG
+            ).show()
+            // Reset the failure signal
+            appUserViewModel.clearFollowOperationFailed()
+        }
     }
 
     DebouncedButton(
@@ -62,65 +75,41 @@ fun ToggleFollowingButton(
                 return@DebouncedButton
             }
 
-            // Prevent multiple simultaneous operations
-            if (isOperationInProgress) {
-                return@DebouncedButton
-            }
-
-            appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    // Attempt the actual toggle operation
-                    val result = appUserViewModel.toggleFollowingWithResult(
-                        userId,
-                        appUser.mid
-                    ) { isFollowingResult ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            tweetFeedViewModel.updateFollowingsTweets(
-                                userId,
-                                isFollowingResult
-                            )
-                            
-                            // Remove cache of the followed/unfollowed user to force refresh from server
-                            TweetCacheManager.removeCachedUser(userId)
-                            
-                            // Refresh user data for the followed/unfollowed user
-                            try {
-                                // Get fresh user data from server and cache it
-                                getUser(userId)?.let { refreshedUser ->
-                                    TweetCacheManager.saveUser(refreshedUser)
-                                    // Refresh the current viewmodel's user data
-                                    viewModel.refreshUserData()
-                                    Timber.tag("ToggleFollowingButton").d("Refreshed user data for: $userId")
-                                }
-                            } catch (e: Exception) {
-                                Timber.tag("ToggleFollowingButton").e("Failed to refresh user data for $userId: $e")
+            // Optimistically update followingList and enqueue worker
+            appUserViewModel.toggleFollowingOptimistic(
+                userId,
+                appUser.mid,
+                context,
+                updateTweetFeed = { isFollowingResult ->
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        tweetFeedViewModel.updateFollowingsTweets(
+                            userId,
+                            isFollowingResult
+                        )
+                        
+                        // Remove cache of the followed/unfollowed user to force refresh from server
+                        TweetCacheManager.removeCachedUser(userId)
+                        
+                        // Refresh user data for the followed/unfollowed user
+                        try {
+                            // Get fresh user data from server and cache it
+                            getUser(userId)?.let { refreshedUser ->
+                                TweetCacheManager.saveUser(refreshedUser)
+                                // Refresh the current viewmodel's user data
+                                viewModel.refreshUserData()
+                                Timber.tag("ToggleFollowingButton").d("Refreshed user data for: $userId")
                             }
+                        } catch (e: Exception) {
+                            Timber.tag("ToggleFollowingButton").e("Failed to refresh user data for $userId: $e")
                         }
                     }
-
-                    withContext(Dispatchers.Main) {
-
-                        if (result == null) {
-                            // Operation failed, revert the local state
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.follow_operation_failed),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        // If result is not null, the operation succeeded and local state is correct
-                    }
-                } catch (_: Exception) {
-                    // Exception occurred, revert the local state
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.follow_operation_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                },
+                rollbackTweetFeed = { attemptedIsFollowing ->
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        tweetFeedViewModel.rollbackFollowingsTweets(userId, attemptedIsFollowing)
                     }
                 }
-            }
+            )
         },
         textColor = if (localFollowState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         textStyle = MaterialTheme.typography.bodyMedium,

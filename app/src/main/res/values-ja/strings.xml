@@ -92,7 +92,15 @@
     <string name="your_fans">あなたのフォロワー</string>
     <string name="your_followings_title">あなたのフォロー中</string>
     <string name="your_bookmarks">あなたのブックマーク</string>
+    <string name="follow_operation_failed">フォロー操作に失敗しました。もう一度お試しください。</string>
+    <string name="follow_operation_failed_refresh_message">フォローリストを更新するには、フォローリストを更新してください。</string>
     <string name="your_favorites">あなたのお気に入り</string>
     <string name="fans_at_username">%sのフォロワー</string>
     <string name="followings_at_username">%sのフォロー中</string>
+    <string name="choose">選択</string>
+    <string name="choose_photo">写真を選択</string>
+    <string name="select_photo_to_crop">クロップする写真を選択</string>
+    <string name="crop_instructions">ドラッグして位置を調整し、ピンチしてズームします。円形の領域がアバターになります。</string>
+    <string name="cropping_avatar">アバターをクロップ中...</string>
+    <string name="uploading_avatar">アバターをアップロード中...</string>
 </resources>

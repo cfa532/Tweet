@@ -25,6 +25,7 @@ object SystemNotificationManager {
     // Notification IDs
     private const val NOTIFICATION_ID_CHAT_MESSAGE = 1001
     private const val NOTIFICATION_ID_SYSTEM_UPDATE = 1003
+    private const val NOTIFICATION_ID_FOLLOW_OPERATION_FAILED = 1004
     
     /**
      * Initialize default notification channel (required for Android 8+)
@@ -126,6 +127,58 @@ object SystemNotificationManager {
         }
     }
 
+
+    /**
+     * Show notification for failed follow operation
+     * Notifies user that the follow operation failed and they should refresh their following list
+     */
+    fun showFollowOperationFailedNotification(
+        context: Context,
+        userId: String
+    ) {
+        Timber.d("Attempting to show follow operation failed notification for user: $userId")
+        
+        if (!NotificationPermissionManager.isNotificationPermissionGranted(context)) {
+            Timber.w("Notification permission not granted, skipping follow operation failed notification")
+            return
+        }
+        
+        try {
+            val intent = Intent(context, TweetActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("navigate_to", "user_profile")
+                putExtra("userId", userId)
+            }
+            
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                NOTIFICATION_ID_FOLLOW_OPERATION_FAILED,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            val notification = NotificationCompat.Builder(context, DEFAULT_CHANNEL)
+                .setSmallIcon(R.drawable.ic_notice)
+                .setContentTitle(context.getString(R.string.follow_operation_failed))
+                .setContentText(context.getString(R.string.follow_operation_failed_refresh_message))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build()
+            
+            try {
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_FOLLOW_OPERATION_FAILED, notification)
+            } catch (e: SecurityException) {
+                Timber.e(e, "Security exception when showing notification - permission may be denied")
+            }
+            Timber.d("Follow operation failed notification shown for user: $userId")
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to show follow operation failed notification")
+        }
+    }
 
     /**
      * Clear specific notification by ID

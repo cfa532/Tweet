@@ -38,11 +38,22 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
+import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequest
+import androidx.work.BackoffPolicy
+import androidx.work.WorkInfo
+import androidx.work.workDataOf
+import us.fireshare.tweet.service.FollowUserWorker
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId
 ): ViewModel() {
+    // Track active work observers to clean up on ViewModel destruction
+    private val activeWorkObservers = mutableMapOf<java.util.UUID, androidx.lifecycle.Observer<WorkInfo?>>()
+    
+    // Track users with pending operations to prevent race conditions
+    private val pendingOperations = mutableSetOf<MimeiId>()
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -58,6 +69,10 @@ class UserViewModel @AssistedInject constructor(
     val followers: StateFlow<List<MimeiId>> get() = _followers.asStateFlow()
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
+    
+    // Signal for follow operation failures - emits userId when operation fails
+    private val _followOperationFailed = MutableStateFlow<MimeiId?>(null)
+    val followOperationFailed: StateFlow<MimeiId?> get() = _followOperationFailed.asStateFlow()
 
     var isLoading = MutableStateFlow(false)
 
@@ -239,46 +254,169 @@ class UserViewModel @AssistedInject constructor(
 
 
     /**
+     * Optimistically update followingList and enqueue background worker.
+     * Immediately updates the followingList, then handles the actual operation in background.
+     * If the operation fails, the worker will send a notification.
+     * 
      * @param subjectUserId to add/remove it to/from the following list
-     * @return Boolean? - true if now following, false if now unfollowing, null if operation failed
-     * */
-    suspend fun toggleFollowingWithResult(
+     * @param userId the user performing the follow action (defaults to appUser.mid)
+     * @param context context for WorkManager
+     * @param updateTweetFeed callback to update tweet feed
+     */
+    fun toggleFollowingOptimistic(
         subjectUserId: MimeiId,
         userId: MimeiId = appUser.mid,
-        updateTweetFeed: (Boolean) -> Unit
-    ): Boolean? {
-        // toggle the Following status on the given UserId
-        return HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
-            _followings.update { list ->
-                if (isFollowing)
-                    (listOf(subjectUserId) + list).toSet().toList()
-                else
-                    list.filterNot { it == subjectUserId }
-            }
-            // Update the count manually - increment/decrement based on the action
-            val newCount = if (isFollowing) {
-                _followingsCount.value + 1
-            } else {
-                _followingsCount.value - 1
-            }
-            _followingsCount.value = newCount
-            
-            // Update the user object with the correct count
-            _user.value = user.value.copy(followingCount = newCount)
-            
-            // Also update appUser.followingCount so refreshUserData uses the correct value
-            if (userId == appUser.mid) {
-                appUser.followingCount = newCount
-            }
-            
-            withContext(IO) {
-                // Save the updated user object to cache
-                TweetCacheManager.saveUser(_user.value)
-            }
-            // callback to update tweet feed. Load or remove tweets of the others.
-            updateTweetFeed(isFollowing)
-            isFollowing
+        context: Context,
+        updateTweetFeed: (Boolean) -> Unit,
+        rollbackTweetFeed: (Boolean) -> Unit
+    ) {
+        // Prevent concurrent operations on the same user
+        if (pendingOperations.contains(subjectUserId)) {
+            Timber.tag("UserViewModel").w("Follow operation already in progress for user: $subjectUserId, ignoring duplicate request")
+            return
         }
+        
+        val currentlyFollowing = _followings.value.contains(subjectUserId)
+        val newFollowingState = !currentlyFollowing
+        
+        // Store previous state for rollback
+        val previousCount = _followingsCount.value
+        
+        // Mark operation as pending
+        pendingOperations.add(subjectUserId)
+        
+        // Optimistically update the following list immediately
+        _followings.update { list ->
+            if (newFollowingState)
+                (listOf(subjectUserId) + list).toSet().toList()
+            else
+                list.filterNot { it == subjectUserId }
+        }
+        
+        // Update the count manually - increment/decrement based on the action
+        val newCount = if (newFollowingState) {
+            _followingsCount.value + 1
+        } else {
+            _followingsCount.value - 1
+        }
+        _followingsCount.value = newCount
+        
+        // Update the user object with the correct count
+        _user.value = user.value.copy(followingCount = newCount)
+        
+        // Also update appUser.followingCount so refreshUserData uses the correct value
+        if (userId == appUser.mid) {
+            appUser.followingCount = newCount
+        }
+        
+        // Update tweet feed optimistically
+        viewModelScope.launch(IO) {
+            updateTweetFeed(newFollowingState)
+        }
+        
+        // Enqueue background worker to handle the actual operation
+        val data = workDataOf(
+            "followedId" to subjectUserId,
+            "followingId" to userId,
+            "isFollowing" to newFollowingState
+        )
+        val followRequest = OneTimeWorkRequest.Builder(FollowUserWorker::class.java)
+            .setInputData(data)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
+            .build()
+        
+        WorkManager.getInstance(context).enqueue(followRequest)
+        
+        // Observe work status to rollback on failure
+        viewModelScope.launch {
+            val observer = androidx.lifecycle.Observer<WorkInfo?> { workInfo ->
+                when (workInfo?.state) {
+                    WorkInfo.State.FAILED -> {
+                        // Rollback the optimistic update
+                        Timber.tag("UserViewModel").d("Follow operation failed, rolling back for: $subjectUserId")
+                        
+                        // Rollback following list
+                        _followings.update { list ->
+                            if (newFollowingState)
+                                list.filterNot { it == subjectUserId }
+                            else
+                                (listOf(subjectUserId) + list).toSet().toList()
+                        }
+                        
+                        // Rollback count
+                        _followingsCount.value = previousCount
+                        
+                        // Rollback user object count
+                        _user.value = user.value.copy(followingCount = previousCount)
+                        
+                        // Rollback appUser.followingCount
+                        if (userId == appUser.mid) {
+                            appUser.followingCount = previousCount
+                        }
+                        
+                        // Rollback tweet feed
+                        viewModelScope.launch(IO) {
+                            rollbackTweetFeed(newFollowingState)
+                        }
+                        
+                        // Signal failure to UI for toast notification
+                        _followOperationFailed.value = subjectUserId
+                        
+                        // Clean up
+                        cleanupObserver(context, followRequest.id, subjectUserId)
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
+                        // Clean up
+                        cleanupObserver(context, followRequest.id, subjectUserId)
+                    }
+                    else -> {
+                        // Still in progress or other state
+                    }
+                }
+            }
+            
+            // Store observer for cleanup
+            activeWorkObservers[followRequest.id] = observer
+            
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdLiveData(followRequest.id)
+                .observeForever(observer)
+        }
+    }
+    
+    /**
+     * Clean up observer and remove from pending operations
+     */
+    private fun cleanupObserver(context: Context, workId: java.util.UUID, userId: MimeiId) {
+        activeWorkObservers[workId]?.let { observer ->
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdLiveData(workId)
+                .removeObserver(observer)
+            activeWorkObservers.remove(workId)
+        }
+        pendingOperations.remove(userId)
+    }
+    
+    /**
+     * Clear the follow operation failed signal (called by UI after showing toast)
+     */
+    fun clearFollowOperationFailed() {
+        _followOperationFailed.value = null
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Clean up all active observers when ViewModel is destroyed
+        // Note: We can't access context here, so we'll rely on WorkManager's lifecycle
+        // The observers will be automatically cleaned up when the app context is destroyed
+        activeWorkObservers.clear()
+        pendingOperations.clear()
+        Timber.tag("UserViewModel").d("ViewModel cleared, cleaned up ${activeWorkObservers.size} observers and ${pendingOperations.size} pending operations")
     }
 
     suspend fun refreshFollowingsAndFans() {

@@ -1305,9 +1305,63 @@ object HproseInstance {
             "userid" to followingId
         )
         return try {
-            appUser.hproseService?.runMApp<Boolean>(entry, params)
+            Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}")
+            if (appUser.hproseService == null) {
+                Timber.tag("toggleFollowing").e("hproseService is null! Cannot call toggle_following")
+                return null
+            }
+            Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
+            val startTime = System.currentTimeMillis()
+            
+            // Wrap in try-catch to catch any exceptions from hprose client
+            val rawResponse = try {
+                appUser.hproseService?.runMApp<Any>(entry, params)
+            } catch (e: Throwable) {
+                Timber.tag("toggleFollowing").e(e, "Exception thrown by runMApp: ${e.javaClass.simpleName}, message: ${e.message}")
+                Timber.tag("toggleFollowing").e(e, "Full exception: $e")
+                // Re-throw to be caught by outer catch
+                throw e
+            }
+            
+            val duration = System.currentTimeMillis() - startTime
+            Timber.tag("toggleFollowing").d("toggle_following completed in ${duration}ms, rawResponse: $rawResponse (type: ${rawResponse?.javaClass?.simpleName})")
+            
+            when (rawResponse) {
+                is Boolean -> {
+                    Timber.tag("toggleFollowing").d("toggle_following returned boolean: $rawResponse")
+                    rawResponse
+                }
+                is Map<*, *> -> {
+                    // Server might have returned an error object or wrapped response
+                    Timber.tag("toggleFollowing").e("toggle_following returned Map instead of Boolean: $rawResponse")
+                    // Check if it's an error response
+                    val error = (rawResponse as? Map<String, Any>)?.get("message") as? String
+                    if (error != null) {
+                        Timber.tag("toggleFollowing").e("Server returned error: $error")
+                    }
+                    null
+                }
+                null -> {
+                    Timber.tag("toggleFollowing").w("toggle_following returned null after ${duration}ms - backend may have failed, timed out, or returned undefined")
+                    Timber.tag("toggleFollowing").w("This could indicate: 1) Server error/exception, 2) Timeout, 3) Server returned undefined")
+                    null
+                }
+                else -> {
+                    Timber.tag("toggleFollowing").e("toggle_following returned unexpected type: ${rawResponse.javaClass.simpleName}, value: $rawResponse")
+                    null
+                }
+            }
         } catch (e: Exception) {
-            Timber.tag("toggleFollowing()").e(e)
+            Timber.tag("toggleFollowing").e(e, "Error calling toggle_following: ${e.message}")
+            Timber.tag("toggleFollowing").e(e, "Exception type: ${e.javaClass.simpleName}")
+            Timber.tag("toggleFollowing").e(e, "Full stack trace:")
+            e.printStackTrace()
+            null
+        } catch (e: Throwable) {
+            // Catch any other throwables (like Errors)
+            Timber.tag("toggleFollowing").e(e, "Throwable caught calling toggle_following: ${e.message}")
+            Timber.tag("toggleFollowing").e(e, "Throwable type: ${e.javaClass.simpleName}")
+            e.printStackTrace()
             null
         }
     }
@@ -1840,22 +1894,76 @@ object HproseInstance {
                 when (response) {
                     is String -> {
                         // User data not found on this node, but IP of a valid provider is returned.
-                        Timber.tag("updateUserFromServer").d("🔄 PROVIDER IP RECEIVED: userId: ${user.mid}, providerIP: $response")
+                        val providerIP = response.trim()
+                        Timber.tag("updateUserFromServer").d("🔄 PROVIDER IP RECEIVED: userId: ${user.mid}, providerIP: $providerIP")
+                        
+                        // Normalize IPs for redirect loop detection (remove http:// prefix)
+                        val normalizedRedirectIp = providerIP.removePrefix("http://").removePrefix("http")
+                        val currentBaseUrlString = user.baseUrl ?: ""
+                        val normalizedCurrentIp = currentBaseUrlString.removePrefix("http://")
+                        
+                        // Check for redirect loop - being redirected to the same IP we're already on
+                        if (normalizedCurrentIp == normalizedRedirectIp && normalizedCurrentIp.isNotEmpty()) {
+                            Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected to same IP: $providerIP (current: $currentBaseUrlString)")
+                            BlackList.recordFailure(user.mid)
+                            throw Exception("Redirect loop detected - redirected to same IP: $providerIP")
+                        }
+                        
                         // Provider IP received, update baseUrl and retry
-                        val providerIP = response
-                        user.baseUrl = "http://$providerIP"
+                        val redirectedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
+                            providerIP
+                        } else {
+                            "http://$providerIP"
+                        }
+                        user.baseUrl = redirectedUrl
                         Timber.tag("updateUserFromServer").d("🌐 RETRYING WITH NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
-                        user.hproseService?.runMApp<Map<String, Any>?>(entry, params)?.let { userData ->
-                            // Record successful access
-                            BlackList.recordSuccess(user.mid)
-                            Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${userData.keys}")
-                            user.from(userData)
-                            // Validate that user data is not null or empty
-                            if (user.mid.isNotEmpty() && user.username != null) {
-                                Timber.tag("updateUserFromServer").d("✅ USER UPDATE SUCCESS: userId: ${user.mid}, username: ${user.username}")
-                                return true // Success, exit retry loop
-                            } else {
-                                Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
+                        
+                        // Clear hproseService to force reconnection with new baseUrl
+                        user.clearHproseService()
+                        
+                        // Retry with new baseUrl - use Any to handle both String and Map responses
+                        val retryResponse = user.hproseService?.runMApp<Any>(entry, params)
+                        when (retryResponse) {
+                            is String -> {
+                                // Second redirect returned - check if it's the same IP (redirect loop)
+                                val newIpAddress = retryResponse.trim()
+                                val newNormalizedIp = newIpAddress.removePrefix("http://").removePrefix("http")
+                                
+                                // Compare with the redirect IP we just tried
+                                if (newNormalizedIp == normalizedRedirectIp) {
+                                    // Redirect loop - same IP returned twice
+                                    Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected server returned same IP: $newIpAddress (same as first redirect: $providerIP)")
+                                    BlackList.recordFailure(user.mid)
+                                    throw Exception("Redirect loop detected - redirected server returned same IP: $newIpAddress")
+                                }
+                                
+                                // Second redirect returned - user not found on this server either
+                                Timber.tag("updateUserFromServer").w("⚠️ USER NOT FOUND AFTER REDIRECT: userId: ${user.mid}, second IP returned: $newIpAddress")
+                                BlackList.recordFailure(user.mid)
+                                throw Exception("User not found after redirect - second IP returned: $newIpAddress")
+                            }
+                            is Map<*, *> -> {
+                                // Record successful access
+                                BlackList.recordSuccess(user.mid)
+                                Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${retryResponse.keys}")
+                                user.from(retryResponse as Map<String, Any>)
+                                // Validate that user data is not null or empty
+                                if (user.mid.isNotEmpty() && user.username != null) {
+                                    Timber.tag("updateUserFromServer").d("✅ USER UPDATE SUCCESS: userId: ${user.mid}, username: ${user.username}")
+                                    return true // Success, exit retry loop
+                                } else {
+                                    Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
+                                }
+                            }
+                            null -> {
+                                Timber.tag("updateUserFromServer").w("⚠️ NULL RESPONSE AFTER REDIRECT: userId: ${user.mid}")
+                                BlackList.recordFailure(user.mid)
+                                throw Exception("User not found after redirect - null response")
+                            }
+                            else -> {
+                                Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE AFTER PROVIDER IP: userId: ${user.mid}, type: ${retryResponse.javaClass.simpleName}")
+                                BlackList.recordFailure(user.mid)
+                                throw Exception("Unexpected response type after redirect: ${retryResponse.javaClass.simpleName}")
                             }
                         }
                     }

@@ -87,6 +87,7 @@
     <string name="recommendation">Recommendation</string>
     <string name="update_following">Update following status</string>
     <string name="follow_operation_failed">Follow operation failed. Please try again.</string>
+    <string name="follow_operation_failed_refresh_message">Please refresh your following list to update it.</string>
     <string name="post_your_reply">Post your reply</string>
     <string name="reply">Reply</string>
     <string name="delete_tweet">Deleting tweet</string>
@@ -280,6 +281,8 @@
     <string name="choose_photo">Choose Photo</string>
     <string name="select_photo_to_crop">Select a photo to crop</string>
     <string name="crop_instructions">Drag to reposition and pinch to zoom. The circular area will be your avatar.</string>
+    <string name="cropping_avatar">Cropping avatar...</string>
+    <string name="uploading_avatar">Uploading avatar...</string>
     
     <!-- Additional missing strings -->
     <string name="downloading_file">Downloading file...</string>

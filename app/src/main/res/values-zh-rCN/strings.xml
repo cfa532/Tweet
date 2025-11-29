@@ -88,6 +88,7 @@
     <string name="recommendation">推荐内容</string>
     <string name="update_following">更新关注。。。</string>
     <string name="follow_operation_failed">关注操作失败，请重试。</string>
+    <string name="follow_operation_failed_refresh_message">请刷新您的关注列表以更新它。</string>
     <string name="post_your_reply">发布你的回复</string>
     <string name="reply">回复</string>
     <string name="delete_tweet">删除推文。。。</string>
@@ -267,4 +268,6 @@
     <string name="choose_photo">选择照片</string>
     <string name="select_photo_to_crop">选择要裁剪的照片</string>
     <string name="crop_instructions">拖拽重新定位，双指缩放。圆形区域将是您的头像。</string>
+    <string name="cropping_avatar">正在裁剪头像...</string>
+    <string name="uploading_avatar">正在上传头像...</string>
 </resources>

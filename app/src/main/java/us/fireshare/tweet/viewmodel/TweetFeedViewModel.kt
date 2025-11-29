@@ -331,16 +331,40 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     /**
      * When appUser toggles following status on a User, update tweet feed correspondingly.
      * Remove it if unfollowing, add it if following.
+     * 
+     * When following: Fetch tweets directly from the user's node immediately.
+     * The server will eventually add tweetIds to appuser's tweetlist, but that takes time.
+     * When unfollowing: Remove all tweets of this user from the local feed.
      * */
     suspend fun updateFollowingsTweets(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
             // add the tweets of a user after following it.
+            // Fetch directly from user's node since server update takes time
             getTweets(userId)
         } else {
             // remove all tweets of this user from list after unfollowing it.
             _tweets.update { currentTweets ->
                 currentTweets.filterNot { it.authorId == userId }
             }
+        }
+    }
+
+    /**
+     * Rollback tweet feed changes when follow operation fails.
+     * If following failed: Remove tweets that were added.
+     * If unfollowing failed: We can't restore removed tweets, so this is a no-op.
+     * */
+    suspend fun rollbackFollowingsTweets(userId: MimeiId, attemptedIsFollowing: Boolean) {
+        if (attemptedIsFollowing) {
+            // Following failed - remove tweets that were optimistically added
+            _tweets.update { currentTweets ->
+                currentTweets.filterNot { it.authorId == userId }
+            }
+            Timber.tag("rollbackFollowingsTweets").d("Rolled back tweets for user: $userId (following failed)")
+        } else {
+            // Unfollowing failed - we can't restore removed tweets without fetching from server
+            // This is a limitation, but the user can refresh their feed manually
+            Timber.tag("rollbackFollowingsTweets").d("Unfollowing failed for user: $userId, but cannot restore removed tweets")
         }
     }
 
