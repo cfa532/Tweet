@@ -158,6 +158,17 @@ android {
         compose = true
         buildConfig = true
     }
+    
+    // Create shared source set for full and play variants (both use FFmpeg)
+    // Both variants share the same FFmpeg-based video processing code
+    sourceSets {
+        getByName("full") {
+            java.srcDir("src/fullPlay/java")
+        }
+        getByName("play") {
+            java.srcDir("src/fullPlay/java")
+        }
+    }
     @Suppress("UnstableApiUsage")
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"

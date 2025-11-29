@@ -48,13 +48,31 @@ class LocalVideoProcessingService(
         fileTimestamp: Long,
         referenceId: MimeiId?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
-        try {
-            // Create temporary directory for HLS conversion
-            val tempDir = createTempDirectory()
-            
             try {
-                // Convert video to HLS format
-                val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName)
+                // Create temporary directory for HLS conversion
+                val tempDir = createTempDirectory()
+                
+                // Calculate file size before conversion
+                val fileSize = withContext(Dispatchers.IO) {
+                    try {
+                        var size: Long = 0L
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val buffer = ByteArray(8192) // 8KB buffer
+                            var bytesRead: Int
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                size += bytesRead
+                            }
+                        }
+                        size
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Failed to calculate video file size")
+                        0L
+                    }
+                }
+                
+                try {
+                    // Convert video to HLS format
+                    val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName, fileSize)
                 
                 when (hlsResult) {
                     is LocalHLSConverter.HLSConversionResult.Success -> {
@@ -76,24 +94,6 @@ class LocalVideoProcessingService(
                                     is ZipUploadService.ZipProcessingResult.Success -> {
                                         // Get aspect ratio for the result
                                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-                                        
-                                        // Calculate file size from the original URI
-                                        val fileSize = withContext(Dispatchers.IO) {
-                                            try {
-                                                var size: Long = 0L
-                                                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                                                    val buffer = ByteArray(8192) // 8KB buffer
-                                                    var bytesRead: Int
-                                                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                                                        size += bytesRead
-                                                    }
-                                                }
-                                                size
-                                            } catch (e: Exception) {
-                                                Timber.tag(TAG).e(e, "Failed to calculate video file size")
-                                                0L
-                                            }
-                                        }
                                         
                                         Timber.tag(TAG).d("HLS video processed: ${processingResult.cid}")
                                         VideoProcessingResult.Success(

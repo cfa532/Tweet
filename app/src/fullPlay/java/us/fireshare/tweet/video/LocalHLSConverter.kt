@@ -29,15 +29,39 @@ class LocalHLSConverter(private val context: Context) {
      * @param inputUri Input video URI
      * @param outputDir Output directory for HLS files
      * @param fileName Original filename (without extension)
+     * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
      * @return Result containing the output directory path and success status
      */
     suspend fun convertToHLS(
         inputUri: Uri,
         outputDir: File,
-        fileName: String
+        fileName: String,
+        fileSizeBytes: Long
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
+            
+            // Determine configuration based on file size
+            val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
+            val sizeThreshold256MB = 256.0
+            
+            val resolution720pBitrate: String
+            val lowerResolution: Int
+            val lowerResolutionBitrate: String
+            
+            if (fileSizeMB >= sizeThreshold256MB) {
+                // >= 256MB: 720p (1000kb) + 360p (1000kb)
+                resolution720pBitrate = "1000k"
+                lowerResolution = 360
+                lowerResolutionBitrate = "1000k"
+                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB >= 256MB, using 720p (1000k) + 360p (1000k)")
+            } else {
+                // < 256MB: 720p (3000kb) + 480p (1500kb)
+                resolution720pBitrate = "3000k"
+                lowerResolution = 480
+                lowerResolutionBitrate = "1500k"
+                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB < 256MB, using 720p (3000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
+            }
             
             // Check video resolution to determine if we should use COPY codec
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
@@ -55,15 +79,15 @@ class LocalHLSConverter(private val context: Context) {
             copyUriToFile(inputUri, tempInputFile)
 
             // Create resolution-specific directories
-            val dir720 = File(outputDir, "720")
-            val dir480 = File(outputDir, "480")
+            val dir720 = File(outputDir, "720p")
+            val lowerResDir = File(outputDir, "${lowerResolution}p")
             dir720.mkdirs()
-            dir480.mkdirs()
+            lowerResDir.mkdirs()
 
             // Create master playlist and individual resolution playlists in their folders
             val masterPlaylistPath = File(outputDir, "master.m3u8").absolutePath
             val playlist720Path = File(dir720, "playlist.m3u8").absolutePath
-            val playlist480Path = File(dir480, "playlist.m3u8").absolutePath
+            val lowerResPlaylistPath = File(lowerResDir, "playlist.m3u8").absolutePath
 
             // Calculate proper 720p dimensions based on aspect ratio
             val (width720, height720) = calculateActualResolution(720, videoResolution)
@@ -74,7 +98,7 @@ class LocalHLSConverter(private val context: Context) {
                 outputPath = playlist720Path,
                 width = width720,
                 height = height720,
-                bitrate = "1000k",
+                bitrate = resolution720pBitrate,
                 audioBitrate = "128k",
                 shouldUseCopyCodec = shouldUseCopyCodec,
                 resolution = "720p"
@@ -85,24 +109,24 @@ class LocalHLSConverter(private val context: Context) {
                 return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed with both COPY and libx264")
             }
 
-            // Calculate proper 480p dimensions based on aspect ratio
-            val (width480, height480) = calculateActualResolution(480, videoResolution)
+            // Calculate proper lower resolution dimensions based on aspect ratio
+            val (widthLower, heightLower) = calculateActualResolution(lowerResolution, videoResolution)
             
-            // Execute FFmpeg command for 480p with fallback
-            val success480 = executeFFmpegWithFallback(
+            // Execute FFmpeg command for lower resolution with fallback
+            val successLower = executeFFmpegWithFallback(
                 inputPath = tempInputFile.absolutePath,
-                outputPath = playlist480Path,
-                width = width480,
-                height = height480,
-                bitrate = "500k",
-                audioBitrate = "96k",
+                outputPath = lowerResPlaylistPath,
+                width = widthLower,
+                height = heightLower,
+                bitrate = lowerResolutionBitrate,
+                audioBitrate = "128k",
                 shouldUseCopyCodec = shouldUseCopyCodec,
-                resolution = "480p"
+                resolution = "${lowerResolution}p"
             )
 
-            if (!success480) {
+            if (!successLower) {
                 tempInputFile.delete()
-                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed with both COPY and libx264")
+                return@withContext HLSConversionResult.Error("FFmpeg ${lowerResolution}p conversion failed with both COPY and libx264")
             }
 
             // Clean up temporary input file
@@ -112,24 +136,33 @@ class LocalHLSConverter(private val context: Context) {
             Timber.tag(TAG).d("Multi-resolution HLS conversion completed successfully")
             
             // Create master playlist manually to ensure proper structure
-            createMasterPlaylist(outputDir, width720, height720, width480, height480)
+            createMasterPlaylist(
+                outputDir, 
+                width720, 
+                height720, 
+                widthLower, 
+                heightLower,
+                resolution720pBitrate,
+                lowerResolution,
+                lowerResolutionBitrate
+            )
             
             // Verify that required files were created
             val masterFile = File(masterPlaylistPath)
             val playlist720File = File(playlist720Path)
-            val playlist480File = File(playlist480Path)
+            val lowerResPlaylistFile = File(lowerResPlaylistPath)
             
-            if (masterFile.exists() && playlist720File.exists() && playlist480File.exists()) {
+            if (masterFile.exists() && playlist720File.exists() && lowerResPlaylistFile.exists()) {
                 Timber.tag(TAG).d("HLS conversion successful - all required files created")
                 Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")
                 Timber.tag(TAG).d("720p playlist: ${playlist720File.absolutePath}")
-                Timber.tag(TAG).d("480p playlist: ${playlist480File.absolutePath}")
+                Timber.tag(TAG).d("${lowerResolution}p playlist: ${lowerResPlaylistFile.absolutePath}")
                 HLSConversionResult.Success(outputDir)
             } else {
                 Timber.tag(TAG).e("Required HLS files not created")
                 Timber.tag(TAG).e("Master exists: ${masterFile.exists()}")
                 Timber.tag(TAG).e("720p playlist exists: ${playlist720File.exists()}")
-                Timber.tag(TAG).e("480p playlist exists: ${playlist480File.exists()}")
+                Timber.tag(TAG).e("${lowerResolution}p playlist exists: ${lowerResPlaylistFile.exists()}")
                 HLSConversionResult.Error("Required HLS files not created")
             }
         } catch (e: Exception) {
@@ -215,7 +248,12 @@ class LocalHLSConverter(private val context: Context) {
     private fun calculateActualResolution(targetResolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, Int> {
         if (videoResolution == null) {
             // Default to landscape if no aspect ratio
-            return if (targetResolution == 720) Pair(1280, 720) else Pair(854, 480)
+            return when (targetResolution) {
+                720 -> Pair(1280, 720)
+                480 -> Pair(854, 480)
+                360 -> Pair(640, 360)
+                else -> Pair(targetResolution * 16 / 9, targetResolution)
+            }
         }
         
         val (width, height) = videoResolution
@@ -332,22 +370,35 @@ class LocalHLSConverter(private val context: Context) {
      * Create master playlist file for videoPreview compatibility
      * videoPreview expects master.m3u8 in root with folder-based structure
      */
-    private fun createMasterPlaylist(outputDir: File, width720: Int, height720: Int, width480: Int, height480: Int) {
+    private fun createMasterPlaylist(
+        outputDir: File, 
+        width720: Int, 
+        height720: Int, 
+        widthLower: Int, 
+        heightLower: Int,
+        resolution720pBitrate: String,
+        lowerResolution: Int,
+        lowerResolutionBitrate: String
+    ) {
+        // Convert bitrate strings (e.g., "3000k") to bandwidth integers (e.g., 3000000)
+        val bandwidth720p = resolution720pBitrate.replace("k", "").toIntOrNull() ?: 2000
+        val bandwidthLower = lowerResolutionBitrate.replace("k", "").toIntOrNull() ?: 1000
+        
         // Create master.m3u8 with calculated resolution references
         val masterPlaylistContent = """
             #EXTM3U
             #EXT-X-VERSION:3
-            #EXT-X-STREAM-INF:BANDWIDTH=1128000,RESOLUTION=${width720}x${height720}
-            720/playlist.m3u8
-            #EXT-X-STREAM-INF:BANDWIDTH=596000,RESOLUTION=${width480}x${height480}
-            480/playlist.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidth720p * 1000},RESOLUTION=${width720}x${height720}
+            720p/playlist.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidthLower * 1000},RESOLUTION=${widthLower}x${heightLower}
+            ${lowerResolution}p/playlist.m3u8
         """.trimIndent()
 
         val masterFile = File(outputDir, "master.m3u8")
         masterFile.writeText(masterPlaylistContent)
         
         Timber.tag(TAG).d("Created master playlist: ${masterFile.absolutePath}")
-        Timber.tag(TAG).d("720p resolution: ${width720}x${height720}, 480p resolution: ${width480}x${height480}")
+        Timber.tag(TAG).d("720p resolution: ${width720}x${height720} (${resolution720pBitrate}), ${lowerResolution}p resolution: ${widthLower}x${heightLower} (${lowerResolutionBitrate})")
     }
 
     /**
