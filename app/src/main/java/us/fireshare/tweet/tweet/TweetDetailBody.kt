@@ -251,7 +251,17 @@ fun AttachmentBrowser(
     mediaItems: List<MimeiFileType>,
     viewModel: TweetViewModel
 ) {
-    val pagerState = rememberPagerState(pageCount = { mediaItems.size })
+    // Stabilize attachments to prevent recomposition issues (like iOS implementation)
+    val stableAttachments = remember(mediaItems.map { it.mid }) {
+        mediaItems
+    }
+    
+    // Calculate fixed aspect ratio to prevent height jumping (like iOS calculateFixedAspectRatio)
+    val fixedAspectRatio = remember(stableAttachments.map { it.mid }) {
+        calculateFixedAspectRatio(stableAttachments)
+    }
+    
+    val pagerState = rememberPagerState(pageCount = { stableAttachments.size })
 
     Column(
         modifier = Modifier
@@ -261,20 +271,15 @@ fun AttachmentBrowser(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
-            userScrollEnabled = mediaItems.size > 1
+            userScrollEnabled = stableAttachments.size > 1
         ) { page ->
-            val aspectRatio = mediaItems[page].aspectRatio
-                ?.takeIf { it > 0f }
-                ?.coerceIn(0.6f, 1.8f)
-                ?: 1f
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(aspectRatio)
+                    .aspectRatio(fixedAspectRatio)
             ) {
                 MediaItemView(
-                    mediaItems = mediaItems,
+                    mediaItems = stableAttachments,
                     modifier = Modifier.fillMaxSize(),
                     index = page,
                     autoPlay = pagerState.currentPage == page,
@@ -288,7 +293,7 @@ fun AttachmentBrowser(
             }
         }
 
-        if (mediaItems.size > 1) {
+        if (stableAttachments.size > 1) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -296,7 +301,7 @@ fun AttachmentBrowser(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                repeat(mediaItems.size) { index ->
+                repeat(stableAttachments.size) { index ->
                     val isSelected = pagerState.currentPage == index
                     Box(
                         modifier = Modifier
@@ -312,6 +317,49 @@ fun AttachmentBrowser(
             }
         }
     }
+}
+
+/**
+ * Calculate a fixed aspect ratio for all attachments to prevent height jumping.
+ * Similar to iOS calculateFixedAspectRatio implementation:
+ * - If all same orientation, use average
+ * - If mixed orientations, use minimum aspect ratio (ensures container is tall enough)
+ * - Clamp to reasonable bounds (0.5 to 2.0)
+ */
+private fun calculateFixedAspectRatio(attachments: List<MimeiFileType>): Float {
+    if (attachments.isEmpty()) return 1.0f
+    
+    // Collect all aspect ratios
+    val aspectRatios = attachments.map { attachment ->
+        when {
+            attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO -> {
+                attachment.aspectRatio?.takeIf { it > 0f } ?: (4f / 3f)
+            }
+            attachment.type == MediaType.Image -> {
+                attachment.aspectRatio?.takeIf { it > 0f } ?: 1.0f
+            }
+            else -> 1.0f
+        }
+    }
+    
+    // Separate portrait and landscape
+    val portraits = aspectRatios.filter { it < 1.0f }
+    val landscapes = aspectRatios.filter { it >= 1.0f }
+    
+    // If all are same orientation, use average
+    if (portraits.isEmpty() || landscapes.isEmpty()) {
+        val average = aspectRatios.average().toFloat()
+        // Clamp to reasonable bounds (0.5 to 2.0)
+        return maxOf(0.5f, minOf(2.0f, average))
+    }
+    
+    // Mixed orientations: use the minimum aspect ratio
+    // This ensures the container is tall enough for all content
+    // (minimum aspect ratio = tallest content = maximum height needed)
+    val minAspectRatio = aspectRatios.minOrNull() ?: 1.0f
+    
+    // Clamp to reasonable bounds
+    return maxOf(0.5f, minOf(2.0f, minAspectRatio))
 }
 
 @Composable
