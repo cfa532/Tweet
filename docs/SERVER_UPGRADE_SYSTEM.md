@@ -2,7 +2,7 @@
 
 ## Overview
 
-The app implements a **server-driven upgrade check** that works uniformly for both mini and full versions. When the server has a new version available, **all installations** (mini and full) are notified and can upgrade.
+The app implements a **server-driven upgrade check** that works uniformly for both mini and full versions. When the server's versionName is **larger than** the app's versionName, a new full version upgrade is available for download. This applies to **mini and full versions only**; the **Play variant is upgraded through Google Play Store**, not via the server upgrade mechanism.
 
 ## How It Works
 
@@ -11,21 +11,28 @@ The app implements a **server-driven upgrade check** that works uniformly for bo
 1. **App launches** and waits 15 seconds
 2. **Calls** `HproseInstance.checkUpgrade()` to query server
 3. **Server returns** version info with `packageId`
-4. **Compares** current version with server version
-5. **If newer version exists**, shows upgrade dialog
-6. **Downloads** from `http://{hostIp}/mm/{packageId}`
+4. **Compares** current app versionName with server versionName
+5. **If server versionName > app versionName**, a new full version upgrade is available
+6. **Shows upgrade dialog** with download link
+7. **Downloads** full version APK from `http://{hostIp}/mm/{packageId}`
 
 ### Key Mechanism
 
 ```kotlin
-// Server upgrade check (works for both mini and full versions)
+// Server upgrade check (works for mini and full versions, NOT Play variant)
 fun checkForUpgrade(context: Context) {
+    // Play variant doesn't support server upgrades (uses Google Play Store)
+    if (BuildConfig.IS_PLAY_VERSION) {
+        return  // Skip upgrade check for Play variant
+    }
+    
     val versionInfo = HproseInstance.checkUpgrade() // Query server
     val currentVersion = versionName.replace("-mini", "").toInt()
     val serverVersion = versionInfo["version"]?.toInt()
     
+    // If server versionName > app versionName, upgrade is available
     if (currentVersion < serverVersion) {
-        // Show upgrade dialog with download URL
+        // Show upgrade dialog with download URL for full version APK
         showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
     }
 }
@@ -35,13 +42,22 @@ fun checkForUpgrade(context: Context) {
 
 ### Mini Version
 - **versionName**: `"38-mini"`
+- **versionCode**: `67` (must be smaller than full version)
 - **For comparison**: Strips "-mini" → `38`
 - **Receives**: Full version APK from server (becomes full version after upgrade)
 
 ### Full Version  
 - **versionName**: `"38"`
+- **versionCode**: `68` (must be higher than mini version)
 - **For comparison**: `38` (no suffix)
 - **Receives**: Newer full version APK from server
+
+### Critical Requirement
+
+**For mini → full upgrade to work correctly**:
+- ✅ Mini versionCode **must be smaller** than full versionCode
+- ❌ If mini versionCode ≥ full versionCode, Android will install them as separate apps
+- **Example**: Mini (67) < Full (68) → Full replaces Mini ✅
 
 ## Unified Upgrade Path
 
@@ -61,6 +77,25 @@ When server has version 39:
 4. **Downloads**: Full version 39 from server
 5. **Result**: Full user upgrades to full version 39
 
+### Play Variant Users
+**Play variant does NOT use server upgrade mechanism**:
+- ❌ No server upgrade check performed
+- ❌ No upgrade dialog shown
+- ✅ Upgrades managed by **Google Play Store**
+- ✅ Users receive updates through Play Store's standard update mechanism
+- **Reason**: Play Store policy requires all updates to go through the Play Store, not external APK downloads
+
+## Upgrade Availability Rule
+
+**When is an upgrade available?**
+- ✅ **Server versionName > App versionName** → New full version upgrade available
+- ❌ **Server versionName ≤ App versionName** → No upgrade needed
+
+**Examples:**
+- App versionName: "38" or "38-mini", Server versionName: "39" → Upgrade available ✅
+- App versionName: "39", Server versionName: "39" → No upgrade needed
+- App versionName: "40", Server versionName: "39" → No upgrade (app is newer)
+
 ## Two Upgrade Mechanisms
 
 The app now has **two complementary upgrade mechanisms**:
@@ -70,10 +105,11 @@ The app now has **two complementary upgrade mechanisms**:
 
 **Characteristics**:
 - ✅ Server controls when upgrades are available
-- ✅ Works for both mini and full versions identically
+- ✅ Works for **mini and full versions only** (Play variant excluded)
 - ✅ Uses server's package repository
 - ✅ Authoritative source of truth
-- ✅ Uniform experience for all users
+- ✅ Uniform experience for mini and full users
+- ❌ **Play variant**: Upgraded through Google Play Store instead
 
 **Flow**:
 ```
@@ -154,7 +190,8 @@ class TweetActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // ...
         lifecycleScope.launch {
-            // Start server upgrade check after 15 seconds
+            // Start server upgrade check after 15 seconds (mini and full only)
+            // Play variant skips this check automatically
             activityViewModel.checkForUpgrade(this@TweetActivity)
             
             // Also start background download for mini version (fallback)
@@ -165,6 +202,8 @@ class TweetActivity : ComponentActivity() {
     }
 }
 ```
+
+**Note**: The `checkForUpgrade()` function automatically skips the upgrade check if `BuildConfig.IS_PLAY_VERSION` is true, as Play variant upgrades are managed by Google Play Store.
 
 ### Version Comparison
 ```kotlin
@@ -193,11 +232,17 @@ if (currentVersion < serverVersion) {
 ✅ **Same experience**: Identical upgrade flow as mini users
 ✅ **Version continuity**: Full → Newer Full
 
+### For Play Variant Users
+✅ **Google Play Store**: Standard Play Store update mechanism
+✅ **No server checks**: Upgrade system is disabled for Play variant
+✅ **Compliance**: Follows Play Store policies (no external APK downloads)
+
 ### For Developers
-✅ **Single codebase**: No separate upgrade logic
-✅ **Server control**: Push upgrades to all users at once
+✅ **Single codebase**: No separate upgrade logic (except Play variant exclusion)
+✅ **Server control**: Push upgrades to mini and full users at once
 ✅ **Flexible versioning**: Mini and full can have different version suffixes
-✅ **Reliable**: Server is authoritative source
+✅ **Reliable**: Server is authoritative source for mini and full versions
+✅ **Clear separation**: Play variant uses Play Store, others use server upgrade
 
 ## Implementation Details
 
@@ -251,7 +296,7 @@ Server must provide:
 
 ## Deployment Workflow
 
-### Publishing New Version
+### Publishing New Version (Mini & Full)
 
 1. **Build full version**:
 ```bash
@@ -273,9 +318,18 @@ checkUpgrade() returns {
 }
 ```
 
-4. **All installations notified**:
+4. **All installations notified** (mini and full only):
 - Mini version users: 38-mini → 39 (full)
 - Full version users: 38 → 39 (full)
+- **Play variant users**: Not affected (upgrade via Google Play Store)
+
+### Publishing Play Variant Updates
+
+**Play variant uses a separate deployment process**:
+1. Build Play variant: `./gradlew assemblePlayRelease`
+2. Upload APK/AAB to **Google Play Console**
+3. Release through Play Store's standard update mechanism
+4. **No server upgrade check** - Play Store handles notifications and downloads
 
 ## Testing
 
@@ -317,22 +371,46 @@ adb install app/build/outputs/apk/full/debug/app-full-debug.apk
 # Result: Full 38 → Full 39
 ```
 
+### Test Play Variant (No Server Upgrade)
+
+```bash
+# Install Play variant
+./gradlew assemblePlayDebug
+adb install app/build/outputs/apk/play/debug/app-play-debug.apk
+
+# Wait 15 seconds after app launch
+# Expected: NO upgrade dialog (server upgrade disabled)
+# Expected: Log shows "Play version detected, skipping upgrade check"
+# Result: Play variant does not check for server upgrades
+# Note: Play variant upgrades are managed by Google Play Store only
+```
+
 ## Troubleshooting
 
-### Upgrade Not Showing
+### Upgrade Not Showing (Mini & Full Versions)
 - Check server returns version info: `HproseInstance.checkUpgrade()`
-- Verify version comparison logic
+- Verify version comparison: **server versionName must be > app versionName**
 - Check logs: `adb logcat | grep checkForUpgrade`
+- Ensure app is not Play variant (Play variant doesn't use server upgrade)
 
 ### Version Comparison Issues
 - Ensure "-mini" suffix is stripped: `replace("-mini", "")`
 - Verify both versions parse to Int correctly
 - Check server version is valid integer
+- **Remember**: Upgrade available when `serverVersionName > appVersionName`
 
 ### Download Fails
 - Verify server URL is accessible: `http://{hostIp}/mm/{packageId}`
 - Check network connectivity
 - Verify DownloadManager permissions
+
+### Play Variant Upgrade Questions
+- **Q**: Why doesn't Play variant show upgrade dialog?
+  - **A**: Play variant upgrades are managed by Google Play Store only. Server upgrade check is disabled for Play variant.
+- **Q**: How do Play variant users get updates?
+  - **A**: Through Google Play Store's standard update mechanism, same as any other Play Store app.
+- **Q**: Can Play variant be upgraded via server?
+  - **A**: No. Play Store policy requires all updates to go through Play Store, not external APK downloads.
 
 ## Related Documentation
 
@@ -342,7 +420,19 @@ adb install app/build/outputs/apk/full/debug/app-full-debug.apk
 
 ---
 
-**Last Updated**: October 14, 2025
-**Implementation**: `TweetActivity.kt` (ActivityViewModel.checkForUpgrade)
-**Server API**: `HproseInstance.checkUpgrade()`
+**Last Updated**: December 2024  
+**Implementation**: `TweetActivity.kt` (ActivityViewModel.checkForUpgrade)  
+**Server API**: `HproseInstance.checkUpgrade()`  
+
+## Summary
+
+### Upgrade Availability
+- ✅ **When server versionName > app versionName**: New full version upgrade is available
+- ✅ **Applies to**: Mini and Full versions only
+- ❌ **Play variant**: Upgraded through Google Play Store, not server upgrade mechanism
+
+### Version Variants
+- **Mini**: Uses server upgrade, downloads full version APK from server
+- **Full**: Uses server upgrade, downloads newer full version APK from server  
+- **Play**: Uses Google Play Store updates only (server upgrade disabled)
 

@@ -8,6 +8,8 @@ When installing full version after mini version, it installed as a **separate ap
 
 Android requires the upgrade APK to have a **higher versionCode** than the currently installed app. Both mini and full had the same versionCode (67), so Android treated them as different apps.
 
+**Critical Requirement**: The **mini version's versionCode must be smaller** than the **full version's versionCode** for the full version to replace the mini version during upgrade. If they are equal or mini's is higher, Android will install the full version as a separate app instead of replacing it.
+
 ## Solution
 
 Assigned different versionCodes to each flavor:
@@ -43,6 +45,10 @@ For one APK to replace another:
 1. ✅ Same `applicationId` - "us.fireshare.tweet"
 2. ✅ Same signing certificate - Your keystore
 3. ✅ Higher `versionCode` - Full (68) > Mini (67)
+
+**Key Rule**: 
+- **Mini versionCode (67) < Full versionCode (68)** ✅
+- If Mini versionCode ≥ Full versionCode, Android will install them as separate apps ❌
 
 **Result**: Full version can now replace mini version! ✅
 

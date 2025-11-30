@@ -2,21 +2,27 @@
 
 ## Overview
 
-The app uses a **unified upgrade mechanism** where both mini and full version users receive upgrades from the **same server package**. This ensures consistency and allows mini users to seamlessly upgrade to full version using the authoritative server source.
+The app uses a **unified upgrade mechanism** where both mini and full version users receive upgrades from the **same server package**. When the server's versionName is **larger than** the app's versionName, a new full version upgrade is available. This ensures consistency and allows mini users to seamlessly upgrade to full version using the authoritative server source.
+
+**Note**: The **Play variant is excluded** from this server upgrade mechanism and is upgraded through **Google Play Store** instead.
 
 ## Key Principle
 
-**All upgrade requests use the server package from `checkForUpgrade()`**:
+**Upgrade availability rule**: When server versionName > app versionName, a new full version upgrade is available.
+
+**All upgrade requests use the server package from `checkForUpgrade()`** (mini and full versions only):
 - ✅ Automatic upgrade check (15s after app start)
 - ✅ Posting restriction upgrade (mini version, > 5 tweets)
 - ✅ Manual upgrade from banner (mini version)
+- ❌ **Play variant excluded**: Upgraded through Google Play Store, not server upgrade
 
 ## Upgrade Triggers
 
 ### 1. Automatic Server Check
 **When**: 15 seconds after app launch
-**Who**: All users (mini and full)
+**Who**: Mini and Full version users (Play variant excluded)
 **How**: `ActivityViewModel.checkForUpgrade()`
+**Condition**: Shows upgrade dialog when server versionName > app versionName
 
 ```kotlin
 // In TweetActivity.kt
