@@ -529,7 +529,8 @@ class SearchViewModel @Inject constructor() : ViewModel() {
     private suspend fun fetchExactUser(query: String): User? {
         return try {
             val exactId = getUserId(query) ?: getUserId(query.lowercase())
-            exactId?.let { getUser(it) }
+            // Use skipRetryAndBlacklist = true for search operations - don't retry or update blacklist
+            exactId?.let { getUser(it, skipRetryAndBlacklist = true) }
         } catch (e: Exception) {
             Timber.tag("SearchViewModel").v(e, "Exact user lookup failed for query: $query")
             null

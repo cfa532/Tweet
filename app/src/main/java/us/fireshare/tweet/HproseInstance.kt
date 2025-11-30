@@ -1924,14 +1924,14 @@ object HproseInstance {
      * Includes retry logic with exponential backoff for network-related failures.
      */
     @Suppress("SENSELESS_COMPARISON")
-    suspend fun getUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false): User? {
+    suspend fun getUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false, skipRetryAndBlacklist: Boolean = false): User? {
         if (userId == null) {
             Timber.tag("getUser").w("Null userId, returning null")
             return null
         }
 
-        // Check if user is blacklisted
-        if (BlackList.isBlacklisted(userId)) {
+        // Check if user is blacklisted (skip for search operations)
+        if (!skipRetryAndBlacklist && BlackList.isBlacklisted(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
         }
@@ -2022,8 +2022,9 @@ object HproseInstance {
 
             // Step 4: Set the base URL and fetch user data with retry logic
             user.baseUrl = finalBaseUrl
-            Timber.tag("getUser").d("🚀 FETCHING USER FROM SERVER: userId: $userId, finalBaseUrl: $finalBaseUrl")
-            val fetchSuccess = updateUserFromServerWithRetry(user, maxRetries)  // user object is updated in this function
+            Timber.tag("getUser").d("🚀 FETCHING USER FROM SERVER: userId: $userId, finalBaseUrl: $finalBaseUrl, skipRetryAndBlacklist: $skipRetryAndBlacklist")
+            val effectiveMaxRetries = if (skipRetryAndBlacklist) 1 else maxRetries
+            val fetchSuccess = updateUserFromServerWithRetry(user, effectiveMaxRetries, skipRetryAndBlacklist)  // user object is updated in this function
 
             // Step 5: Only cache the user if fetch was successful and user data is valid
             if (fetchSuccess && user.mid.isNotEmpty() && user.username != null) {
@@ -2048,7 +2049,7 @@ object HproseInstance {
      * Update user data from server using "get_user" entry with retry logic
      * @return true if user data was successfully fetched and updated, false otherwise
      */
-    private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3): Boolean {
+    private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3, skipRetryAndBlacklist: Boolean = false): Boolean {
         Timber.tag("updateUserFromServer").d("🔄 STARTING USER UPDATE WITH RETRY: userId: ${user.mid}, maxRetries: $maxRetries")
         val originalBaseUrl = user.baseUrl
         var hasTriedEmptyBaseUrl = false
@@ -2081,7 +2082,9 @@ object HproseInstance {
                         // Check for redirect loop - being redirected to the same IP we're already on
                         if (normalizedCurrentIp == normalizedRedirectIp && normalizedCurrentIp.isNotEmpty()) {
                             Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected to same IP: $providerIP (current: $currentBaseUrlString)")
-                            BlackList.recordFailure(user.mid)
+                            if (!skipRetryAndBlacklist) {
+                                BlackList.recordFailure(user.mid)
+                            }
                             throw Exception("Redirect loop detected - redirected to same IP: $providerIP")
                         }
                         
@@ -2109,18 +2112,24 @@ object HproseInstance {
                                 if (newNormalizedIp == normalizedRedirectIp) {
                                     // Redirect loop - same IP returned twice
                                     Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected server returned same IP: $newIpAddress (same as first redirect: $providerIP)")
-                                    BlackList.recordFailure(user.mid)
+                                    if (!skipRetryAndBlacklist) {
+                                        BlackList.recordFailure(user.mid)
+                                    }
                                     throw Exception("Redirect loop detected - redirected server returned same IP: $newIpAddress")
                                 }
                                 
                                 // Second redirect returned - user not found on this server either
                                 Timber.tag("updateUserFromServer").w("⚠️ USER NOT FOUND AFTER REDIRECT: userId: ${user.mid}, second IP returned: $newIpAddress")
-                                BlackList.recordFailure(user.mid)
+                                if (!skipRetryAndBlacklist) {
+                                    BlackList.recordFailure(user.mid)
+                                }
                                 throw Exception("User not found after redirect - second IP returned: $newIpAddress")
                             }
                             is Map<*, *> -> {
-                                // Record successful access
-                                BlackList.recordSuccess(user.mid)
+                                // Record successful access (skip for search operations)
+                                if (!skipRetryAndBlacklist) {
+                                    BlackList.recordSuccess(user.mid)
+                                }
                                 Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${retryResponse.keys}")
                                 user.from(retryResponse as Map<String, Any>)
                                 // Validate that user data is not null or empty
@@ -2133,20 +2142,26 @@ object HproseInstance {
                             }
                             null -> {
                                 Timber.tag("updateUserFromServer").w("⚠️ NULL RESPONSE AFTER REDIRECT: userId: ${user.mid}")
-                                BlackList.recordFailure(user.mid)
+                                if (!skipRetryAndBlacklist) {
+                                    BlackList.recordFailure(user.mid)
+                                }
                                 throw Exception("User not found after redirect - null response")
                             }
                             else -> {
                                 Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE AFTER PROVIDER IP: userId: ${user.mid}, type: ${retryResponse.javaClass.simpleName}")
-                                BlackList.recordFailure(user.mid)
+                                if (!skipRetryAndBlacklist) {
+                                    BlackList.recordFailure(user.mid)
+                                }
                                 throw Exception("Unexpected response type after redirect: ${retryResponse.javaClass.simpleName}")
                             }
                         }
                     }
 
                     is Map<*, *> -> {
-                        // Record successful access
-                        BlackList.recordSuccess(user.mid)
+                        // Record successful access (skip for search operations)
+                        if (!skipRetryAndBlacklist) {
+                            BlackList.recordSuccess(user.mid)
+                        }
                         Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${response.keys}")
                         user.from(response as Map<String, Any>)
                         // Validate that user data is not null or empty
@@ -2160,8 +2175,8 @@ object HproseInstance {
                     
                     null -> {
                         Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE: userId: ${user.mid}, attempt: ${attempt + 1}")
-                        // On first failure with null response, try with empty baseUrl to refresh IP
-                        if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
+                        // On first failure with null response, try with empty baseUrl to refresh IP (skip for search operations)
+                        if (!skipRetryAndBlacklist && !hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
                             Timber.tag("updateUserFromServer").d("🔄 NULL RESPONSE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
                             user.clearHproseService()
                             user.baseUrl = ""
@@ -2179,8 +2194,10 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
-                // Record failed access
-                BlackList.recordFailure(user.mid)
+                // Record failed access (skip for search operations)
+                if (!skipRetryAndBlacklist) {
+                    BlackList.recordFailure(user.mid)
+                }
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: ${attempt + 1}, error: ${e.message}")
                 
                 // Check if it's a network-related error that should be retried
@@ -2194,8 +2211,8 @@ object HproseInstance {
                     Timber.tag("updateUserFromServer").d("🌐 NETWORK ERROR: userId: ${user.mid}, will retry, error: ${e.message}")
                 }
                 
-                // On first failure (network error or null response), try with empty baseUrl to refresh IP
-                if (!hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
+                // On first failure (network error or null response), try with empty baseUrl to refresh IP (skip for search operations)
+                if (!skipRetryAndBlacklist && !hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
                     Timber.tag("updateUserFromServer").d("🔄 FIRST FAILURE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
                     // Clear the cached service first
                     user.clearHproseService()
