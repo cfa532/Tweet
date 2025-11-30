@@ -24,6 +24,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -327,56 +328,229 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
+    /**
+     * Send a chat message to a recipient.
+     * This function performs two steps:
+     * 1. Send message_outgoing to sender's own node (with retry and baseUrl refresh)
+     * 2. Send message_incoming to recipient's node (with retry and baseUrl refresh)
+     */
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage): Pair<Boolean, String?> {
-        val entry = "message_outgoing"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "entry" to entry,
-            "userid" to appUser.mid,
-            "receiptid" to receiptId,
-            "msg" to Json.encodeToString(msg),
-            "hostid" to (appUser.hostIds?.first() ?: "")
-        )
-        try {
-            val response = appUser.hproseService?.runMApp<Boolean>(entry, params)
-
-            if (response == true) {
-                getUser(receiptId)?.let { receipt ->
-                    val receiptEntry = "message_incoming"
-                    val receiptParams = mapOf(
-                        "aid" to appId,
-                        "ver" to "last",
-                        "entry" to receiptEntry,
-                        "senderid" to appUser.mid,
-                        "receiptid" to receiptId,
-                        "msg" to Json.encodeToString(msg)
-                    )
-                    try {
-                        val receiptResponse = receipt.hproseService?.runMApp<Map<String, Any>>(receiptEntry, receiptParams)
-                        
-                        // Check if the response indicates success or failure
-                        val success = receiptResponse?.get("success") as? Boolean ?: true
-                        val errorMsg = receiptResponse?.get("error") as? String
-
-                        return if (success) {
-                            Pair(true, null)
-                        } else {
-                            Pair(false, errorMsg ?: applicationContext.getString(R.string.error_unknown))
+        // Step 1: Send to sender's own node (message_outgoing) with retry
+        Timber.tag("sendMessage").d("📤 Step 1: Sending message_outgoing to sender's node")
+        val senderSendResult = sendToSenderNodeWithRetry(receiptId, msg, maxRetries = 2)
+        
+        if (!senderSendResult.first) {
+            return senderSendResult
+        }
+        
+        Timber.tag("sendMessage").d("✅ Step 1 completed: Successfully sent to sender's node")
+        
+        // Step 2: Send to recipient's node (message_incoming) with retry
+        Timber.tag("sendMessage").d("📤 Step 2: Sending message_incoming to recipient's node")
+        val recipientSendResult = sendToRecipientNodeWithRetry(receiptId, msg, maxRetries = 2)
+        
+        if (!recipientSendResult.first) {
+            return recipientSendResult
+        }
+        
+        Timber.tag("sendMessage").d("✅ Step 2 completed: Successfully sent to recipient's node")
+        
+        // Both steps succeeded
+        return Pair(true, null)
+    }
+    
+    /**
+     * Helper function to send message_outgoing to sender's own node with retry and baseUrl refresh
+     */
+    private suspend fun sendToSenderNodeWithRetry(
+        receiptId: MimeiId,
+        msg: ChatMessage,
+        maxRetries: Int = 2
+    ): Pair<Boolean, String?> {
+        var lastError: String? = null
+        
+        for (attempt in 0..maxRetries) {
+            val forceRefresh = attempt > 0
+            if (forceRefresh) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing sender's baseUrl")
+            }
+            
+            // Refresh appUser's baseUrl if needed
+            if (forceRefresh) {
+                val refreshedUser = getUser(appUser.mid, baseUrl = "", forceRefresh = true)
+                if (refreshedUser != null && refreshedUser.baseUrl != appUser.baseUrl) {
+                    appUser.baseUrl = refreshedUser.baseUrl
+                    Timber.tag("sendMessage").d("✅ Updated sender's baseUrl to: ${refreshedUser.baseUrl}")
+                }
+            }
+            
+            val entry = "message_outgoing"
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "entry" to entry,
+                "userid" to appUser.mid,
+                "receiptid" to receiptId,
+                "msg" to Json.encodeToString(msg),
+                "hostid" to (appUser.hostIds?.first() ?: "")
+            )
+            
+            if (appUser.hproseService == null) {
+                val errorMsg = "Failed to create client for sender node"
+                Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${appUser.baseUrl}")
+                if (attempt < maxRetries) {
+                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                    continue
+                }
+                return Pair(false, errorMsg)
+            }
+            
+            Timber.tag("sendMessage").d("📤 Sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}) - baseUrl: ${appUser.baseUrl}")
+            
+            try {
+                val response = appUser.hproseService?.runMApp<Any>(entry, params)
+                
+                // Handle different response types
+                val isSuccess = when (response) {
+                    is Boolean -> response
+                    is Map<*, *> -> {
+                        val responseMap = response as? Map<String, Any>
+                        val success = responseMap?.get("success") as? Boolean
+                        if (success == false) {
+                            lastError = responseMap?.get("error") as? String ?: "Unknown error"
                         }
-                    } catch (e: Exception) {
-                        Timber.tag("sendMessage").e("Error sending to receipt: $e")
-                        return Pair(false, ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e))
+                        success ?: false
+                    }
+                    else -> false
+                }
+                
+                if (isSuccess) {
+                    Timber.tag("sendMessage").d("✅ Successfully sent to sender node (attempt ${attempt + 1})")
+                    return Pair(true, null)
+                } else {
+                    lastError = lastError ?: applicationContext.getString(R.string.error_send_outgoing_message)
+                    Timber.tag("sendMessage").e("❌ Failed to send to sender node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                    
+                    if (attempt < maxRetries) {
+                        val delay = (attempt + 1) * 2000L // 2, 4 seconds
+                        Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
+                        kotlinx.coroutines.delay(delay)
+                        continue
                     }
                 }
-                return Pair(true, null) // No receipt user found, but outgoing was successful
-            } else {
-                return Pair(false, applicationContext.getString(R.string.error_send_outgoing_message))
+            } catch (e: Exception) {
+                lastError = e.message ?: applicationContext.getString(R.string.error_network)
+                Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                
+                if (attempt < maxRetries) {
+                    kotlinx.coroutines.delay((attempt + 1) * 2000L)
+                    continue
+                }
             }
-        } catch (e: Exception) {
-            Timber.tag("sendMessage").e(e)
-            return Pair(false, e.message ?: applicationContext.getString(R.string.error_network))
         }
+        
+        // All retries exhausted
+        val finalError = lastError ?: "Failed to send message to sender node after ${maxRetries + 1} attempts"
+        Timber.tag("sendMessage").e("❌ All retry attempts exhausted for sender node: $finalError")
+        return Pair(false, finalError)
+    }
+    
+    /**
+     * Helper function to send message_incoming to recipient's node with retry and baseUrl refresh
+     */
+    private suspend fun sendToRecipientNodeWithRetry(
+        receiptId: MimeiId,
+        msg: ChatMessage,
+        maxRetries: Int = 2
+    ): Pair<Boolean, String?> {
+        var receiptUser: User? = null
+        var lastError: String? = null
+        
+        for (attempt in 0..maxRetries) {
+            val forceRefresh = attempt > 0
+            if (forceRefresh) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing recipient's baseUrl for userId: $receiptId")
+            }
+            
+            // Fetch recipient user (with forced refresh on retry)
+            receiptUser = getUser(receiptId, baseUrl = if (forceRefresh) "" else null)
+            
+            if (receiptUser == null) {
+                val errorMsg = "Recipient user not found"
+                Timber.tag("sendMessage").e("❌ $errorMsg for userId: $receiptId")
+                return Pair(false, errorMsg)
+            }
+            
+            val receiptEntry = "message_incoming"
+            val receiptParams = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "entry" to receiptEntry,
+                "senderid" to appUser.mid,
+                "receiptid" to receiptId,
+                "msg" to Json.encodeToString(msg)
+            )
+            
+            if (receiptUser.hproseService == null) {
+                val errorMsg = "Failed to create client for recipient node"
+                Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${receiptUser.baseUrl}")
+                if (attempt < maxRetries) {
+                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                    continue
+                }
+                return Pair(false, errorMsg)
+            }
+            
+            Timber.tag("sendMessage").d("📤 Sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}) - baseUrl: ${receiptUser.baseUrl}")
+            
+            try {
+                val receiptResponse = receiptUser.hproseService?.runMApp<Any>(receiptEntry, receiptParams)
+                
+                // Handle different response types
+                val success = when (receiptResponse) {
+                    is Boolean -> receiptResponse
+                    is Map<*, *> -> {
+                        val responseMap = receiptResponse as? Map<String, Any>
+                        val successValue = responseMap?.get("success") as? Boolean
+                        if (successValue == false) {
+                            lastError = responseMap?.get("error") as? String ?: "Failed to send to recipient node"
+                        }
+                        successValue ?: true // Default to true for backward compatibility
+                    }
+                    else -> true // Default to true for backward compatibility
+                }
+                
+                if (success) {
+                    Timber.tag("sendMessage").d("✅ Successfully sent to recipient node (attempt ${attempt + 1})")
+                    return Pair(true, null)
+                } else {
+                    lastError = lastError ?: "Failed to send to recipient node"
+                    Timber.tag("sendMessage").e("❌ Failed to send to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                    
+                    if (attempt < maxRetries) {
+                        val delay = (attempt + 1) * 2000L // 2, 4 seconds
+                        Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
+                        kotlinx.coroutines.delay(delay)
+                        continue
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e)
+                Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                
+                if (attempt < maxRetries) {
+                    kotlinx.coroutines.delay((attempt + 1) * 2000L)
+                    continue
+                }
+            }
+        }
+        
+        // All retries exhausted
+        val finalError = lastError ?: "Failed to send message to recipient node after ${maxRetries + 1} attempts"
+        Timber.tag("sendMessage").e("❌ All retry attempts exhausted for recipient node: $finalError")
+        return Pair(false, finalError)
     }
 
     // get the recent unread message from a sender.
@@ -385,6 +559,7 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
+            "version" to "v2",
             "entry" to entry,
             "userid" to appUser.mid,
             "senderid" to senderId
@@ -414,6 +589,7 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
+            "version" to "v2",
             "entry" to entry,
             "userid" to appUser.mid
         )

@@ -196,6 +196,16 @@
     <string name="uploading_attachment">You can continue chatting while it uploads</string>
     <string name="attachment_sent">Attachment sent</string>
     <string name="attachment_received">Attachment received</string>
+    <string name="image_sent">Image sent</string>
+    <string name="image_received">Image received</string>
+    <string name="video_sent">Video sent</string>
+    <string name="video_received">Video received</string>
+    <string name="audio_sent">Audio sent</string>
+    <string name="audio_received">Audio received</string>
+    <string name="document_sent">Document sent</string>
+    <string name="document_received">Document received</string>
+    <string name="archive_sent">Archive sent</string>
+    <string name="archive_received">Archive received</string>
     <string name="unknown_file">Unknown file</string>
     <string name="new_chat_started">New chat started</string>
     <string name="no_one">No One</string>

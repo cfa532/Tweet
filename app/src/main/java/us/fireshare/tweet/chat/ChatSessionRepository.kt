@@ -1,6 +1,9 @@
 package us.fireshare.tweet.chat
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatMessageEntity
@@ -12,10 +15,12 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.toChatMessage
 import us.fireshare.tweet.datamodel.toChatSession
 import us.fireshare.tweet.datamodel.toEntity
+import javax.inject.Inject
 
-class ChatSessionRepository(
+class ChatSessionRepository @Inject constructor(
     private val chatSessionDao: ChatSessionDao,
-    private val chatMessageDao: ChatMessageDao
+    private val chatMessageDao: ChatMessageDao,
+    @ApplicationContext private val context: Context
 ) {
 
     suspend fun getAllSessions(): List<ChatSession> {
@@ -23,10 +28,10 @@ class ChatSessionRepository(
         return sessionEntities.mapNotNull { sessionEntity ->
             val lastMessageEntity = chatMessageDao.getMessageById(sessionEntity.lastMessageId)
             lastMessageEntity?.let { messageEntity ->
-                val previewEntity = messageEntity
-                    .copy(sessionId = sessionEntity.id)
-                    .withAttachmentPreview()
-                sessionEntity.toChatSession(previewEntity.toChatMessage())
+                val message = messageEntity.copy(sessionId = sessionEntity.id).toChatMessage()
+                // Create preview message for display (original message content is preserved in database)
+                val previewMessage = message.withAttachmentPreview(context)
+                sessionEntity.toChatSession(previewMessage)
             }
         }
     }
@@ -55,28 +60,34 @@ class ChatSessionRepository(
             message.copy(sessionId = sessionId)
         }
 
-        val previewMessage = normalizedMessage.withAttachmentPreview()
-        val existingEntity = chatMessageDao.getMessageByMessageId(previewMessage.id)
-
+        // Store the original message (without preview text) in the database
+        val existingEntity = chatMessageDao.getMessageByMessageId(normalizedMessage.id)
         if (existingEntity != null) {
-            val previewEntity = existingEntity.copy(
-                content = previewMessage.content,
-                attachments = previewMessage.attachments,
-                timestamp = previewMessage.timestamp,
+            val entityToStore = existingEntity.copy(
+                content = normalizedMessage.content, // Use original content, not preview
+                attachments = normalizedMessage.attachments,
+                timestamp = normalizedMessage.timestamp,
                 sessionId = sessionId
             )
-            chatMessageDao.insertMessage(previewEntity)
-            updateSessionWithEntity(sessionId, previewEntity, hasNews)
-            return previewEntity.toChatMessage()
+            chatMessageDao.insertMessage(entityToStore)
+            // Create preview message for session's lastMessage (for display only)
+            val previewMessage = normalizedMessage.withAttachmentPreview(context)
+            updateSessionWithEntity(sessionId, entityToStore, hasNews)
+            return previewMessage
         }
 
-        chatMessageDao.insertMessage(previewMessage.toEntity())
-        chatMessageDao.getMessageByMessageId(previewMessage.id)?.let { inserted ->
+        // Store original message in database
+        chatMessageDao.insertMessage(normalizedMessage.toEntity())
+        chatMessageDao.getMessageByMessageId(normalizedMessage.id)?.let { inserted ->
             val entityWithSession = inserted.copy(sessionId = sessionId)
             chatMessageDao.insertMessage(entityWithSession)
+            // Create preview message for session's lastMessage (for display only)
+            val previewMessage = normalizedMessage.withAttachmentPreview(context)
             updateSessionWithEntity(sessionId, entityWithSession, hasNews)
+            return previewMessage
         }
-        return previewMessage
+        // Create preview message for session's lastMessage (for display only)
+        return normalizedMessage.withAttachmentPreview(context)
     }
 
     private suspend fun updateSessionWithEntity(
@@ -193,7 +204,8 @@ class ChatSessionRepository(
 
         val updatedSessions = existingSessions.toMutableList()
         messageMap.forEach { (key, rawMessage) ->
-            val msg = rawMessage.withAttachmentPreview()
+            // Create preview message for display (original message content is preserved)
+            val msg = rawMessage.withAttachmentPreview(context)
             val es =
                 existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
             if (es == null) {
@@ -229,27 +241,22 @@ class ChatSessionRepository(
         return updatedSessions.toList()
     }
 
-    private fun ChatMessage.withAttachmentPreview(): ChatMessage {
-        val preview = buildAttachmentPreview(authorId, attachments) ?: return this
+    private fun ChatMessage.withAttachmentPreview(context: Context): ChatMessage {
+        val preview = buildAttachmentPreview(context, authorId, attachments) ?: return this
         return copy(content = preview)
     }
 
-    private fun ChatMessageEntity.withAttachmentPreview(): ChatMessageEntity {
-        val preview = buildAttachmentPreview(authorId, attachments) ?: return this
-        return copy(content = preview)
-    }
-
-    private fun buildAttachmentPreview(authorId: MimeiId, attachments: List<MimeiFileType>?): String? {
+    private fun buildAttachmentPreview(context: Context, authorId: MimeiId, attachments: List<MimeiFileType>?): String? {
         val attachment = attachments?.firstOrNull() ?: return null
-        val baseLabel = when (attachment.type) {
-            MediaType.Image -> "Image"
-            MediaType.Video, MediaType.HLS_VIDEO -> "Video"
-            MediaType.Audio -> "Audio"
-            MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT, MediaType.Txt, MediaType.Html -> "Document"
-            MediaType.Zip -> "Archive"
-            MediaType.Unknown -> "Attachment"
+        val stringResId = when (attachment.type) {
+            MediaType.Image -> if (authorId == appUser.mid) R.string.image_sent else R.string.image_received
+            MediaType.Video, MediaType.HLS_VIDEO -> if (authorId == appUser.mid) R.string.video_sent else R.string.video_received
+            MediaType.Audio -> if (authorId == appUser.mid) R.string.audio_sent else R.string.audio_received
+            MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT, MediaType.Txt, MediaType.Html -> 
+                if (authorId == appUser.mid) R.string.document_sent else R.string.document_received
+            MediaType.Zip -> if (authorId == appUser.mid) R.string.archive_sent else R.string.archive_received
+            MediaType.Unknown -> if (authorId == appUser.mid) R.string.attachment_sent else R.string.attachment_received
         }
-        val direction = if (authorId == appUser.mid) "sent" else "received"
-        return "$baseLabel $direction"
+        return context.getString(stringResId)
     }
 }

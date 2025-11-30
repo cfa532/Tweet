@@ -73,9 +73,10 @@ object AppModule {
     @Singleton
     fun provideChatSessionRepository(
         chatSessionDao: ChatSessionDao,
-        chatMessageDao: ChatMessageDao
+        chatMessageDao: ChatMessageDao,
+        @ApplicationContext context: Context
     ): ChatSessionRepository {
-        return ChatSessionRepository(chatSessionDao, chatMessageDao)
+        return ChatSessionRepository(chatSessionDao, chatMessageDao, context)
     }
 }
 

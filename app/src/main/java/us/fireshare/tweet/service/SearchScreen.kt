@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -141,16 +142,30 @@ fun SearchScreen(
                     }),
                     shape = RoundedCornerShape(32.dp),
                     trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                viewModel.submitSearch()
-                                focusManager.clearFocus()
-                            },
-                        ) {
-                            Icon(
-                                Icons.Filled.Search,
-                                contentDescription = stringResource(R.string.search)
-                            )
+                        if (uiState.query.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.updateQuery("")
+                                    focusManager.clearFocus()
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = stringResource(R.string.clear)
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    viewModel.submitSearch()
+                                    focusManager.clearFocus()
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Filled.Search,
+                                    contentDescription = stringResource(R.string.search)
+                                )
+                            }
                         }
                     }
                 )
@@ -403,9 +418,15 @@ class SearchViewModel @Inject constructor() : ViewModel() {
             )
 
             try {
+                val isUsernameOnly = sanitizedQuery.startsWith("@")
                 val userQuery = sanitizedQuery.removePrefix("@").trim()
                 val completionCounter = AtomicInteger(0)
-                val expectedCompletions = if (userQuery.isNotEmpty()) 2 else 1
+                // If @ sign is present, only search users. Otherwise search both users and tweets.
+                val expectedCompletions = when {
+                    isUsernameOnly && userQuery.isNotEmpty() -> 1 // Only user search
+                    !isUsernameOnly -> 2 // Both user and tweet search
+                    else -> 1 // Empty query
+                }
 
                 fun checkCompletion() {
                     if (completionCounter.incrementAndGet() >= expectedCompletions) {
@@ -418,7 +439,12 @@ class SearchViewModel @Inject constructor() : ViewModel() {
                     launch {
                         try {
                             val localUsers = TweetCacheManager.searchUsers(userQuery, USER_RESULT_LIMIT)
-                            val exactUser = fetchExactUser(userQuery)
+                            // Only do API call for exact username match if query doesn't contain spaces (like iOS)
+                            val exactUser = if (!userQuery.contains(" ")) {
+                                fetchExactUser(userQuery)
+                            } else {
+                                null
+                            }
                             val mergedUsers = mergeUserResults(exactUser, localUsers)
                             _uiState.value = _uiState.value.copy(
                                 userResults = mergedUsers,
@@ -439,19 +465,29 @@ class SearchViewModel @Inject constructor() : ViewModel() {
                     checkCompletion()
                 }
 
-                // Launch tweet search and update UI as soon as it completes
-                launch {
-                    try {
-                        val tweetResults = TweetCacheManager.searchTweets(sanitizedQuery, TWEET_RESULT_LIMIT)
-                        _uiState.value = _uiState.value.copy(
-                            tweetResults = tweetResults,
-                            lastQuery = sanitizedQuery
-                        )
-                        checkCompletion()
-                    } catch (e: Exception) {
-                        Timber.tag("SearchViewModel").e(e, "Tweet search failed")
-                        checkCompletion()
+                // Only search tweets if query doesn't start with @ (username-only search)
+                if (!isUsernameOnly) {
+                    // Launch tweet search and update UI as soon as it completes
+                    launch {
+                        try {
+                            val tweetResults = TweetCacheManager.searchTweets(sanitizedQuery, TWEET_RESULT_LIMIT)
+                            _uiState.value = _uiState.value.copy(
+                                tweetResults = tweetResults,
+                                lastQuery = sanitizedQuery
+                            )
+                            checkCompletion()
+                        } catch (e: Exception) {
+                            Timber.tag("SearchViewModel").e(e, "Tweet search failed")
+                            checkCompletion()
+                        }
                     }
+                } else {
+                    // If @ sign is present, skip tweet search and mark as complete
+                    _uiState.value = _uiState.value.copy(
+                        tweetResults = emptyList(),
+                        lastQuery = sanitizedQuery
+                    )
+                    checkCompletion()
                 }
             } catch (e: Exception) {
                 Timber.tag("SearchViewModel").e(e)
@@ -478,7 +514,8 @@ class SearchViewModel @Inject constructor() : ViewModel() {
 
     private fun mergeUserResults(exactUser: User?, localUsers: List<User>): List<User> {
         val merged = LinkedHashMap<String, User>(USER_RESULT_LIMIT)
-        if (exactUser != null) {
+        // Validate exact user has username before adding (like iOS)
+        if (exactUser != null && !exactUser.username.isNullOrBlank()) {
             merged[exactUser.mid] = exactUser
         }
         for (user in localUsers) {

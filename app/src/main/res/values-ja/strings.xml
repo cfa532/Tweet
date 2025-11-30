@@ -103,4 +103,27 @@
     <string name="crop_instructions">ドラッグして位置を調整し、ピンチしてズームします。円形の領域がアバターになります。</string>
     <string name="cropping_avatar">アバターをクロップ中...</string>
     <string name="uploading_avatar">アバターをアップロード中...</string>
+    
+    <!-- Chat-related strings -->
+    <string name="uploading_attachment">アップロード中でもチャットを続けることができます</string>
+    <string name="attachment_sent">添付ファイルを送信しました</string>
+    <string name="attachment_received">添付ファイルを受信しました</string>
+    <string name="image_sent">画像を送信しました</string>
+    <string name="image_received">画像を受信しました</string>
+    <string name="video_sent">動画を送信しました</string>
+    <string name="video_received">動画を受信しました</string>
+    <string name="audio_sent">音声を送信しました</string>
+    <string name="audio_received">音声を受信しました</string>
+    <string name="document_sent">ドキュメントを送信しました</string>
+    <string name="document_received">ドキュメントを受信しました</string>
+    <string name="archive_sent">アーカイブを送信しました</string>
+    <string name="archive_received">アーカイブを受信しました</string>
+    <string name="unknown_file">不明なファイル</string>
+    <string name="new_chat_started">新しいチャットを開始しました</string>
+    <string name="no_one">誰もいません</string>
+    <string name="remove_attachment">添付ファイルを削除</string>
+    <string name="file_attachment">ファイル添付</string>
+    <string name="no_more_messages">これ以上のメッセージはありません</string>
+    <string name="loading_older_messages">古いメッセージを読み込み中...</string>
+    <string name="failed_to_send_message">メッセージの送信に失敗しました：%s</string>
 </resources>

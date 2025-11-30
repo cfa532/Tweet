@@ -196,6 +196,16 @@
     <string name="uploading_attachment">您可以继续聊天，文件正在后台上传</string>
     <string name="attachment_sent">附件已发送</string>
     <string name="attachment_received">附件已接收</string>
+    <string name="image_sent">图片已发送</string>
+    <string name="image_received">图片已接收</string>
+    <string name="video_sent">视频已发送</string>
+    <string name="video_received">视频已接收</string>
+    <string name="audio_sent">音频已发送</string>
+    <string name="audio_received">音频已接收</string>
+    <string name="document_sent">文档已发送</string>
+    <string name="document_received">文档已接收</string>
+    <string name="archive_sent">压缩包已发送</string>
+    <string name="archive_received">压缩包已接收</string>
     <string name="unknown_file">未知文件</string>
     <string name="new_chat_started">新对话已开始</string>
     <string name="no_one">未知用户</string>

@@ -431,9 +431,9 @@ fun ChatSession(
             Text(
                 text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
                     if (chatMessage.authorId == appUser.mid) {
-                        "Attachment sent"
+                        stringResource(R.string.attachment_sent)
                     } else {
-                        "Attachment received"
+                        stringResource(R.string.attachment_received)
                     }
                 } else {
                     chatMessage.content ?: ""

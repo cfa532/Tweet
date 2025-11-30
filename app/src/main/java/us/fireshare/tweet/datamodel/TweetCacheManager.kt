@@ -449,7 +449,8 @@ object TweetCacheManager {
         lowercase(Locale.getDefault()).trim()
 
     private fun User.matchScore(query: String): Int? {
-        val usernameValue = username?.normalizedLowercase() ?: ""
+        // Validate username exists (like iOS) - skip users without valid username
+        val usernameValue = username?.takeIf { it.isNotBlank() }?.normalizedLowercase() ?: return null
         val nameValue = name?.normalizedLowercase() ?: ""
 
         return when {
@@ -460,16 +461,13 @@ object TweetCacheManager {
     }
 
     private fun Tweet.matchScore(query: String): Int? {
+        // Search only in content and title, not in author username or name
         val contentValue = content?.normalizedLowercase() ?: ""
         val titleValue = title?.normalizedLowercase() ?: ""
-        val authorUsername = author?.username?.normalizedLowercase() ?: ""
-        val authorName = author?.name?.normalizedLowercase() ?: ""
 
         return when {
             contentValue.contains(query) -> if (contentValue.startsWith(query)) 0 else 1
             titleValue.contains(query) -> if (titleValue.startsWith(query)) 2 else 3
-            authorUsername.contains(query) -> if (authorUsername.startsWith(query)) 4 else 5
-            authorName.contains(query) -> if (authorName.startsWith(query)) 6 else 7
             else -> null
         }
     }

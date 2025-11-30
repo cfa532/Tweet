@@ -1,8 +1,10 @@
 package us.fireshare.tweet.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +14,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
@@ -20,7 +23,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
-    private val chatSessionRepository: ChatSessionRepository
+    private val chatSessionRepository: ChatSessionRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     // chat between pair of users
     private val _chatSessions = MutableStateFlow<List<ChatSession>>(emptyList())
@@ -142,14 +146,14 @@ class ChatListViewModel @Inject constructor(
             )
         }
 
-        // Enhance messages for UI display only
+        // Enhance messages for UI display only (fallback if preview wasn't set)
         val enhancedSessions = updatedSessions.map { chatSession ->
             val lastMessage = chatSession.lastMessage
             if (!lastMessage.attachments.isNullOrEmpty() && lastMessage.content.isNullOrBlank()) {
                 val attachmentText = if (lastMessage.authorId == appUser.mid) {
-                    "Attachment sent"
+                    context.getString(R.string.attachment_sent)
                 } else {
-                    "Attachment received"
+                    context.getString(R.string.attachment_received)
                 }
                 chatSession.copy(lastMessage = lastMessage.copy(content = attachmentText))
             } else {

@@ -434,7 +434,11 @@ fun ChatScreen(
         when (attachment.type) {
             MediaType.Image -> {
                 Dialog(
-                    onDismissRequest = { },
+                    onDismissRequest = { 
+                        showFullScreen = false
+                        fullScreenAttachment = null
+                        fullScreenBitmap = null
+                    },
                     properties = DialogProperties(
                         usePlatformDefaultWidth = false,
                         dismissOnBackPress = true,
@@ -450,7 +454,11 @@ fun ChatScreen(
                     imageUrl = mediaUrl,
                     enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
-                    onClose = { },
+                    onClose = { 
+                        showFullScreen = false
+                        fullScreenAttachment = null
+                        fullScreenBitmap = null
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
                     }
@@ -468,6 +476,9 @@ fun ChatScreen(
                         onClose = {
                             // Return player back to VideoManager when closed
                             VideoManager.returnFromFullScreen(attachment.mid)
+                            showFullScreen = false
+                            fullScreenAttachment = null
+                            fullScreenBitmap = null
                         },
                         enableImmersiveMode = true
                     )
@@ -475,7 +486,11 @@ fun ChatScreen(
                     // Fallback to regular full-screen player
                     FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
-                        onClose = { },
+                        onClose = { 
+                            showFullScreen = false
+                            fullScreenAttachment = null
+                            fullScreenBitmap = null
+                        },
                         enableImmersiveMode = true,
                         autoReplay = true
                     )
