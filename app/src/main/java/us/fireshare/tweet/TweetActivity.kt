@@ -70,13 +70,11 @@ class TweetActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
-//        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // Lock the app to portrait orientation by default
         OrientationManager.lockToPortrait(this)
 
-//        setTheme(R.style.Theme_Tweet)
         installSplashScreen().apply {
             setKeepOnScreenCondition {
                 !activityViewModel.isAppReady.value
@@ -210,59 +208,131 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
 
+    /**
+     * Load entry URLs from BuildConfig.ENTRY_URLS.
+     * This should be called for all versions including Play variant.
+     */
+    fun loadEntryUrls() {
+        viewModelScope.launch(IO) {
+            try {
+                // check for mimei of available App entry Urls. Update records in
+                // preference each time the app is run.
+                val mid = BuildConfig.ENTRY_URLS
+                HproseInstance.getProviderIP(mid)?.let { ip ->
+                    val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                    if (response.status == HttpStatusCode.OK) {
+                        val newUrls = response.bodyAsText().split(System.lineSeparator())
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .toSet()
+                        if (newUrls.isNotEmpty()) {
+                            HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                            Timber.tag("loadEntryUrls").d("✅ Updated entry URLs from network: $newUrls")
+                        } else {
+                            Timber.tag("loadEntryUrls").w("Received empty entry URLs from network")
+                        }
+                    } else {
+                        Timber.tag("loadEntryUrls").w("Failed to fetch entry URLs: HTTP ${response.status}")
+                    }
+                } ?: run {
+                    Timber.tag("loadEntryUrls").w("Could not get provider IP for entry URLs mid: $mid")
+                }
+            } catch (e: Exception) {
+                Timber.tag("loadEntryUrls").e(e, "Error loading entry URLs")
+            }
+        }
+    }
+
     // Check for upgrade using versionName comparison (for all versions except play)
     fun checkForUpgrade(context: Context) {
         // Play version doesn't support upgrades
         if (BuildConfig.IS_PLAY_VERSION) {
+            Timber.tag("checkForUpgrade").d("Play version detected, skipping upgrade check")
             return
         }
         viewModelScope.launch(IO) {
             try {
+                Timber.tag("checkForUpgrade").d("Starting upgrade check...")
                 delay(15000)    // delay 15s before checking for upgrade.
-                val versionInfo = HproseInstance.checkUpgrade() ?: return@launch
-                val currentVersion =
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                        ?.removeSuffix("-mini") ?: return@launch
                 
-                HproseInstance.appUser.baseUrl?.let { hostIp ->
-                    if (currentVersion.toInt() < (versionInfo["version"]?.toInt() ?: 0)) {
-                        showUpdateDialog(context, "$hostIp/mm/${versionInfo["packageId"]}")
-                    } else {
-                        // Update domainToShare from checkUpgrade response
-                        versionInfo["domain"]?.let { domain ->
-                            if (domain.isNotEmpty() && HproseInstance.appUser.domainToShare != domain) {
-                                HproseInstance.appUser = HproseInstance.appUser.copy(domainToShare = domain)
-                                us.fireshare.tweet.datamodel.TweetCacheManager.saveUser(HproseInstance.appUser)
-                                Timber.tag("checkForUpgrade").d("✅ Updated domainToShare from checkUpgrade: $domain")
-                            }
-                        }
-                        
-                        // check for mimei of available App entry Urls. Update records in
-                        // preference each time the app is run.
-                        val mid = BuildConfig.ENTRY_URLS
-                        HproseInstance.getProviderIP(mid)?.let { ip ->
-                            val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
-                            if (response.status == HttpStatusCode.OK) {
-                                val newUrls = response.bodyAsText().split(System.lineSeparator())
-                                    .map { it.trim() }
-                                    .filter { it.isNotEmpty() }
-                                    .toSet()
-                                if (newUrls.isNotEmpty()) {
-                                    HproseInstance.preferenceHelper.setAppUrls(newUrls)
-                                    Timber.tag("checkForUpgrade").d("✅ Updated entry URLs from network: $newUrls")
-                                } else {
-                                    Timber.tag("checkForUpgrade").w("Received empty entry URLs from network")
-                                }
-                            } else {
-                                Timber.tag("checkForUpgrade").w("Failed to fetch entry URLs: HTTP ${response.status}")
-                            }
-                        } ?: run {
-                            Timber.tag("checkForUpgrade").w("Could not get provider IP for entry URLs mid: $mid")
+                // Get current version
+                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                val currentVersionName = packageInfo.versionName
+                val currentVersionString = currentVersionName?.removeSuffix("-mini")
+                if (currentVersionString == null) {
+                    Timber.tag("checkForUpgrade").e("Failed to get current versionName")
+                    return@launch
+                }
+                Timber.tag("checkForUpgrade").d("Current versionName: $currentVersionName (comparing as: $currentVersionString)")
+                
+                // Query server for upgrade info
+                val versionInfo = HproseInstance.checkUpgrade()
+                if (versionInfo == null) {
+                    Timber.tag("checkForUpgrade").e("Server returned null version info")
+                    return@launch
+                }
+                Timber.tag("checkForUpgrade").d("Server versionInfo: $versionInfo")
+                
+                // Get server version
+                val serverVersionString = versionInfo["version"]
+                if (serverVersionString == null) {
+                    Timber.tag("checkForUpgrade").e("Server versionInfo missing 'version' key")
+                    return@launch
+                }
+                Timber.tag("checkForUpgrade").d("Server version: $serverVersionString")
+                
+                // Parse and compare versions
+                val currentVersion = try {
+                    currentVersionString.toInt()
+                } catch (e: NumberFormatException) {
+                    Timber.tag("checkForUpgrade").e(e, "Failed to parse current version as Int: $currentVersionString")
+                    return@launch
+                }
+                
+                val serverVersion = try {
+                    serverVersionString.toInt()
+                } catch (e: NumberFormatException) {
+                    Timber.tag("checkForUpgrade").e(e, "Failed to parse server version as Int: $serverVersionString")
+                    return@launch
+                }
+                
+                Timber.tag("checkForUpgrade").d("Version comparison: current=$currentVersion, server=$serverVersion")
+                
+                val hostIp = HproseInstance.appUser.baseUrl
+                if (hostIp == null) {
+                    Timber.tag("checkForUpgrade").e("Cannot check upgrade: baseUrl is null")
+                    return@launch
+                }
+                
+                if (currentVersion < serverVersion) {
+                    Timber.tag("checkForUpgrade").d("✅ Upgrade available! current=$currentVersion < server=$serverVersion")
+                    
+                    val packageId = versionInfo["packageId"]
+                    if (packageId == null) {
+                        Timber.tag("checkForUpgrade").e("Cannot show upgrade dialog: packageId is null")
+                        return@launch
+                    }
+                    
+                    val downloadUrl = "$hostIp/mm/$packageId"
+                    Timber.tag("checkForUpgrade").d("Showing upgrade dialog with URL: $downloadUrl")
+                    showUpdateDialog(context, downloadUrl)
+                } else {
+                    Timber.tag("checkForUpgrade").d("No upgrade needed (current=$currentVersion >= server=$serverVersion)")
+                    
+                    // Update domainToShare from checkUpgrade response
+                    versionInfo["domain"]?.let { domain ->
+                        if (domain.isNotEmpty() && HproseInstance.appUser.domainToShare != domain) {
+                            HproseInstance.appUser = HproseInstance.appUser.copy(domainToShare = domain)
+                            us.fireshare.tweet.datamodel.TweetCacheManager.saveUser(HproseInstance.appUser)
+                            Timber.tag("checkForUpgrade").d("✅ Updated domainToShare from checkUpgrade: $domain")
                         }
                     }
+                    
+                    // Load entry URLs (works for all versions including Play)
+                    loadEntryUrls()
                 }
             } catch (e: Exception) {
-                Timber.tag("checkForUpgrade").e(e)
+                Timber.tag("checkForUpgrade").e(e, "Error during upgrade check: ${e.message}")
             }
         }
     }

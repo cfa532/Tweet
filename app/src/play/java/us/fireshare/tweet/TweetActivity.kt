@@ -33,10 +33,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.NotificationPermissionManager
@@ -89,6 +90,12 @@ class PlayTweetActivity : ComponentActivity() {
 
                 // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
+
+                // Load entry URLs (required for all versions including Play)
+                launch {
+                    delay(15000) // Same delay as checkForUpgrade
+                    activityViewModel.loadEntryUrls()
+                }
 
                 setContent {
                     // Initialize theme manager with current preference
@@ -163,4 +170,39 @@ class PlayTweetActivity : ComponentActivity() {
 
 class PlayActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
+
+    /**
+     * Load entry URLs from BuildConfig.ENTRY_URLS.
+     * This should be called for all versions including Play variant.
+     */
+    fun loadEntryUrls() {
+        viewModelScope.launch(IO) {
+            try {
+                // check for mimei of available App entry Urls. Update records in
+                // preference each time the app is run.
+                val mid = BuildConfig.ENTRY_URLS
+                HproseInstance.getProviderIP(mid)?.let { ip ->
+                    val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
+                    if (response.status == HttpStatusCode.OK) {
+                        val newUrls = response.bodyAsText().split(System.lineSeparator())
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .toSet()
+                        if (newUrls.isNotEmpty()) {
+                            HproseInstance.preferenceHelper.setAppUrls(newUrls)
+                            Timber.tag("loadEntryUrls").d("✅ Updated entry URLs from network: $newUrls")
+                        } else {
+                            Timber.tag("loadEntryUrls").w("Received empty entry URLs from network")
+                        }
+                    } else {
+                        Timber.tag("loadEntryUrls").w("Failed to fetch entry URLs: HTTP ${response.status}")
+                    }
+                } ?: run {
+                    Timber.tag("loadEntryUrls").w("Could not get provider IP for entry URLs mid: $mid")
+                }
+            } catch (e: Exception) {
+                Timber.tag("loadEntryUrls").e(e, "Error loading entry URLs")
+            }
+        }
+    }
 }
