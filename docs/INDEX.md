@@ -7,7 +7,7 @@
 
 This folder contains all technical documentation for the Tweet distributed social media application. Documents are organized by category for easy navigation.
 
-**Total Documents:** 68 documentation files  
+**Total Documents:** 69 documentation files  
 **Last Updated:** December 2024  
 **Status:** ✅ All Documentation Organized in docs/ folder
 
@@ -36,7 +36,9 @@ This folder contains all technical documentation for the Tweet distributed socia
   - **[PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md)** - Merged audit + improvements
 
 ### Latest Features
+- **Search Functionality Enhancements (December 2024)** 🆕 - Intelligent query parsing, optimized user fetching, improved matching algorithms
 - **Small Video MP4 Conversion (December 2024)** 🆕 - Automatic MP4 conversion and resolution optimization for videos < 50MB
+- **[SEARCH_FUNCTIONALITY.md](SEARCH_FUNCTIONALITY.md)** - Comprehensive search documentation
 - **[BACKGROUND_VIDEO_PROCESSING.md](BACKGROUND_VIDEO_PROCESSING.md)** - Complete background processing architecture
 - **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Major performance optimization
 - **[VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md](VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md)** - Video manager unification
@@ -222,6 +224,14 @@ This folder contains all technical documentation for the Tweet distributed socia
   - Advanced gesture detection
   - Smart debouncing and pagination
   - Profile screen integration
+
+- **[SEARCH_FUNCTIONALITY.md](SEARCH_FUNCTIONALITY.md)** 🆕
+  - Intelligent query parsing (`@` prefix detection)
+  - User and tweet search algorithms
+  - Optimized user fetching (no retry/blacklist for search)
+  - Matching algorithms with scoring
+  - UI features (keyboard dismissal, clear button)
+  - Search limits and behavior summary
 
 - **[BADGE_IMPLEMENTATION.md](BADGE_IMPLEMENTATION.md)** ⭐ **CONSOLIDATED**
   - Launcher badge system with ShortcutBadger

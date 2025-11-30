@@ -6,15 +6,105 @@
 
 ## 📋 Table of Contents
 
-0. [Media Grid Video Resume](#media-grid-video-resume) 🆕 **(Nov 20, 2025)**
-1. [Small Video MP4 Conversion](#small-video-mp4-conversion) 🆕 **(December 2024)**
-2. [Documentation Cleanup](#documentation-cleanup) 🆕 **(Oct 14, 2025)**
-3. [Background Video Processing](#background-video-processing) 🆕 **(Oct 14, 2025)**
-4. [Connection Pooling Optimization](#connection-pooling-optimization)
-5. [Video Mute State Fix](#video-mute-state-fix)
-6. [HLS Segment Naming](#hls-segment-naming)
-7. [Java Toolchain Configuration](#java-toolchain-configuration)
-8. [Files Modified Summary](#files-modified-summary)
+0. [Search Functionality Enhancements](#search-functionality-enhancements) 🆕 **(December 2024)**
+1. [Media Grid Video Resume](#media-grid-video-resume) 🆕 **(Nov 20, 2025)**
+2. [Small Video MP4 Conversion](#small-video-mp4-conversion) 🆕 **(December 2024)**
+3. [Documentation Cleanup](#documentation-cleanup) 🆕 **(Oct 14, 2025)**
+4. [Background Video Processing](#background-video-processing) 🆕 **(Oct 14, 2025)**
+5. [Connection Pooling Optimization](#connection-pooling-optimization)
+6. [Video Mute State Fix](#video-mute-state-fix)
+7. [HLS Segment Naming](#hls-segment-naming)
+8. [Java Toolchain Configuration](#java-toolchain-configuration)
+9. [Files Modified Summary](#files-modified-summary)
+
+---
+
+## 🔍 Search Functionality Enhancements
+
+**Date:** December 2024  
+**Priority:** 🔶 **MEDIUM** - Search Improvements  
+**Status:** ✅ **Implemented & Documented**
+
+### Overview
+Enhanced search functionality with intelligent query parsing, improved matching algorithms, and optimized user fetching behavior for search operations.
+
+### Key Features
+
+#### 1. **Intelligent Query Parsing**
+- **`@query` (Username-only search):**
+  - Searches users only (exact match + partial search)
+  - Skips tweet search
+  - No retry or blacklist updates during user fetch
+
+- **Non-`@` query (Combined search):**
+  - Searches both users and tweets
+  - User search: matches username and name
+  - Tweet search: matches content and title only (excludes author username/name)
+
+#### 2. **Optimized User Fetching for Search**
+- **No retries:** Single attempt only (`maxRetries = 1`)
+- **No blacklist updates:** Success/failure does not update blacklist
+- **Fast failure:** Returns `null` immediately on error
+- Uses `skipRetryAndBlacklist = true` parameter in `getUser()`
+
+#### 3. **Improved Matching Algorithms**
+
+**User Matching:**
+- Score 0: Username prefix match (highest priority)
+- Score 1: Username contains match
+- Score 2: Name prefix match
+- Score 3: Name contains match (lowest priority)
+
+**Tweet Matching:**
+- Score 0: Content prefix match (highest priority)
+- Score 1: Content contains match
+- Score 2: Title prefix match
+- Score 3: Title contains match (lowest priority)
+- **Excludes** author username and name from tweet search
+
+#### 4. **UI Enhancements**
+- Clear button in search bar (when query is not empty)
+- Keyboard dismissal when tapping outside tappable elements
+- Real-time search as user types
+- Separate sections for user and tweet results
+
+### Implementation Details
+
+**Modified Files:**
+1. `app/src/main/java/us/fireshare/tweet/service/SearchScreen.kt`
+   - Enhanced search logic with `@` prefix detection
+   - Added keyboard dismissal functionality
+   - Improved result merging and display
+
+2. `app/src/main/java/us/fireshare/tweet/datamodel/TweetCacheManager.kt`
+   - Updated `User.matchScore()` to validate username before matching
+   - Updated `Tweet.matchScore()` to search only content and title (excludes author info)
+
+3. `app/src/main/java/us/fireshare/tweet/HproseInstance.kt`
+   - Added `skipRetryAndBlacklist` parameter to `getUser()`
+   - Added `skipRetryAndBlacklist` parameter to `updateUserFromServerWithRetry()`
+   - Skips retry logic and blacklist updates when `skipRetryAndBlacklist = true`
+
+### Behavior Summary
+
+**For `@username` queries:**
+- ✅ Search users only (exact + partial)
+- ✅ Skip tweet search
+- ✅ No retry or blacklist updates during user fetch
+
+**For non-`@` queries:**
+- ✅ Search users (exact + partial) - matches username and name
+- ✅ Search tweets (partial) - matches content and title only
+- ✅ Exclude author username/name from tweet search
+
+### Benefits
+- ✅ Faster search results (no retries for search operations)
+- ✅ More accurate tweet search (content/title only, not author info)
+- ✅ Better user experience (keyboard dismissal, clear button)
+- ✅ Prevents blacklist pollution from search operations
+
+### Documentation
+- **[SEARCH_FUNCTIONALITY.md](SEARCH_FUNCTIONALITY.md)** - Comprehensive search documentation
 
 ---
 
