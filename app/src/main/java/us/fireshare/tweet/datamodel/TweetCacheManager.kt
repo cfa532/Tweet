@@ -461,7 +461,7 @@ object TweetCacheManager {
     }
 
     private fun Tweet.matchScore(query: String): Int? {
-        // Search only in content and title, not in author username or name
+        // Search only in content and title, not in author username/name
         val contentValue = content?.normalizedLowercase() ?: ""
         val titleValue = title?.normalizedLowercase() ?: ""
 
