@@ -1477,6 +1477,7 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
+            "version" to "v2",
             "followingid" to followedId,
             "userid" to followingId
         )
@@ -1504,18 +1505,51 @@ object HproseInstance {
             
             when (rawResponse) {
                 is Boolean -> {
+                    // Legacy format: direct boolean response
                     Timber.tag("toggleFollowing").d("toggle_following returned boolean: $rawResponse")
                     rawResponse
                 }
                 is Map<*, *> -> {
-                    // Server might have returned an error object or wrapped response
-                    Timber.tag("toggleFollowing").e("toggle_following returned Map instead of Boolean: $rawResponse")
-                    // Check if it's an error response
-                    val error = (rawResponse as? Map<String, Any>)?.get("message") as? String
-                    if (error != null) {
+                    val responseMap = rawResponse as? Map<String, Any>
+                    // Check for v2 error response
+                    if (responseMap?.get("success") == false) {
+                        val error = responseMap["message"] as? String ?: "Unknown error"
                         Timber.tag("toggleFollowing").e("Server returned error: $error")
+                        null
+                    } else {
+                        // For v2 API: server returns {success: true, data: {isFollowing: bool}}
+                        // Extract isFollowing from the data dictionary
+                        val data = responseMap?.get("data")
+                        when (data) {
+                            is Map<*, *> -> {
+                                val dataMap = data as? Map<String, Any>
+                                val isFollowing = dataMap?.get("isFollowing") as? Boolean
+                                if (isFollowing != null) {
+                                    Timber.tag("toggleFollowing").d("toggle_following returned v2 format isFollowing: $isFollowing")
+                                    isFollowing
+                                } else {
+                                    Timber.tag("toggleFollowing").e("toggle_following v2 response missing isFollowing field: $dataMap")
+                                    null
+                                }
+                            }
+                            is Boolean -> {
+                                // Direct boolean in data field
+                                Timber.tag("toggleFollowing").d("toggle_following returned boolean in data field: $data")
+                                data
+                            }
+                            else -> {
+                                // Try direct isFollowing field in response
+                                val isFollowing = responseMap?.get("isFollowing") as? Boolean
+                                if (isFollowing != null) {
+                                    Timber.tag("toggleFollowing").d("toggle_following returned isFollowing directly: $isFollowing")
+                                    isFollowing
+                                } else {
+                                    Timber.tag("toggleFollowing").e("toggle_following returned Map but couldn't extract isFollowing: $responseMap")
+                                    null
+                                }
+                            }
+                        }
                     }
-                    null
                 }
                 null -> {
                     Timber.tag("toggleFollowing").w("toggle_following returned null after ${duration}ms - backend may have failed, timed out, or returned undefined")
@@ -2316,11 +2350,55 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
+            "version" to "v2",
             "appuserid" to appUser.mid,
             "tweetid" to tweetId
         )
         return try {
-            appUser.hproseService?.runMApp<Boolean>(entry, params)
+            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+            
+            // For v2 API: server returns {success: true, data: {isPinned: bool}}
+            // After unwrapping, we need to extract isPinned from the data dictionary
+            when (rawResponse) {
+                is Boolean -> {
+                    // Legacy format: direct boolean response
+                    rawResponse
+                }
+                is Map<*, *> -> {
+                    val responseMap = rawResponse as? Map<String, Any>
+                    // Check for v2 error response
+                    if (responseMap?.get("success") == false) {
+                        val error = responseMap["message"] as? String ?: "Unknown error"
+                        Timber.tag("togglePinnedTweet").e("Server returned error: $error")
+                        null
+                    } else {
+                        // Try to extract from v2 format: {success: true, data: {isPinned: bool}}
+                        val data = responseMap?.get("data")
+                        when (data) {
+                            is Map<*, *> -> {
+                                val dataMap = data as? Map<String, Any>
+                                dataMap?.get("isPinned") as? Boolean
+                            }
+                            is Boolean -> {
+                                // Direct boolean in data field
+                                data
+                            }
+                            else -> {
+                                // Try direct isPinned field in response
+                                responseMap?.get("isPinned") as? Boolean
+                            }
+                        }
+                    }
+                }
+                null -> {
+                    Timber.tag("togglePinnedTweet").w("Server returned null response")
+                    null
+                }
+                else -> {
+                    Timber.tag("togglePinnedTweet").e("Unexpected response type: ${rawResponse.javaClass.simpleName}")
+                    null
+                }
+            }
         } catch (e: Exception) {
             Timber.tag("togglePinnedTweet").e("Error toggling pinned tweet: $tweetId $e")
             null
