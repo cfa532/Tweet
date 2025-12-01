@@ -43,6 +43,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -210,9 +212,11 @@ fun TweetDetailBody(
                                 tonalElevation = 2.dp,
                                 modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
                             ) {
+                                // Use activity scope to ensure same ViewModel instance is shared
+                                val activity = LocalActivity.current as ComponentActivity
                                 TweetItemBody(
                                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                        parentEntry, key = tweet.originalTweetId
+                                        viewModelStoreOwner = activity, key = tweet.originalTweetId
                                     ) { factory -> factory.create(originalTweet!!) },
                                     parentEntry = parentEntry,
                                     isQuoted = true

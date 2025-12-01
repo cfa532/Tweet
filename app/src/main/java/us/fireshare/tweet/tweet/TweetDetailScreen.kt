@@ -55,6 +55,8 @@ import kotlin.math.abs
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -78,8 +80,10 @@ fun TweetDetailScreen(
     tweetId: String,
     parentEntry: NavBackStackEntry
 ) {
+    // Use activity scope to ensure same ViewModel instance is shared with TweetItem
+    val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweetId
+        viewModelStoreOwner = activity, key = tweetId
     ) { factory ->
         factory.create(Tweet(mid = tweetId, authorId = authorId))
     }

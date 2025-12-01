@@ -37,6 +37,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
@@ -66,8 +68,10 @@ fun TweetItem(
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
     context: String = "default"
 ) {
+    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
+    val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweet.mid
+        viewModelStoreOwner = activity, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }
@@ -224,9 +228,11 @@ private fun RetweetContent(
                     Box(modifier = Modifier.size(0.dp))
                 } else {
                     // The tweet area with 'Forwarded by' label above
+                    // Use activity scope to ensure same ViewModel instance is shared
+                    val activity = LocalActivity.current as ComponentActivity
                     val originalTweetViewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
+                            viewModelStoreOwner = activity, key = tweet.originalTweetId
                         ) { factory -> factory.create(originalTweetNonNull) }
 
                     Column(modifier = Modifier.padding(top = 0.dp)) {
@@ -286,8 +292,10 @@ private fun RetweetWithContent(
     context: String = "default"
 ) {
     val navController = LocalNavController.current
+    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
+    val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweet.mid
+        viewModelStoreOwner = activity, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }
@@ -517,9 +525,11 @@ private fun QuotedTweetContent(
                 tonalElevation = 8.dp,
             ) {
                 // quoted tweet
+                // Use activity scope to ensure same ViewModel instance is shared
+                val activity = LocalActivity.current as ComponentActivity
                 TweetItemBody(
                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweet.originalTweetId
+                        viewModelStoreOwner = activity, key = tweet.originalTweetId
                     ) { factory ->
                         factory.create(originalTweet!!)
                     },
