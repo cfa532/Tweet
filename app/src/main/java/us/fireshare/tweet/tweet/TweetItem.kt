@@ -116,10 +116,20 @@ fun TweetItem(
         }
     }
 
+    val navController = LocalNavController.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
+            .clickable(onClick = {
+                // Navigate to detail view when tapping on non-tappable areas
+                navController.navigate(
+                    NavTweet.TweetDetail(
+                        tweet.authorId,
+                        tweet.mid
+                    )
+                )
+            })
             .onGloballyPositioned { layoutCoordinates ->
                 val now = System.currentTimeMillis()
                 if (now - lastVisibilityUpdate > debounceMs) {
@@ -165,7 +175,18 @@ private fun RetweetContent(
     onTweetUnavailable: ((MimeiId) -> Unit)?,
     context: String = "default"
 ) {
-    Surface {
+    val navController = LocalNavController.current
+    Surface(
+        modifier = Modifier.clickable(onClick = {
+            // Navigate to detail view when tapping on non-tappable areas
+            navController.navigate(
+                NavTweet.TweetDetail(
+                    tweet.authorId,
+                    tweet.mid
+                )
+            )
+        })
+    ) {
         // Use remember with a stable key based on originalTweetId to maintain state across recompositions
         val originalTweetId = tweet.originalTweetId
         var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
@@ -392,17 +413,27 @@ private fun RetweetWithContent(
                             SelectableText(
                                 text = tweet.content!!,
                                 maxLines = 10,
-                            ) { _ ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    withContext(Dispatchers.Main) {
-                                        navController.navigate(
-                                            NavTweet.UserProfile(
-                                                tweet.authorId
-                                            )
+                                onTextClick = {
+                                    // Navigate to detail view when text (not username) is clicked
+                                    navController.navigate(
+                                        NavTweet.TweetDetail(
+                                            tweet.authorId,
+                                            tweet.mid
                                         )
+                                    )
+                                },
+                                callback = { _ ->
+                                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        withContext(Dispatchers.Main) {
+                                            navController.navigate(
+                                                NavTweet.UserProfile(
+                                                    tweet.authorId
+                                                )
+                                            )
+                                        }
                                     }
                                 }
-                            }
+                            )
                         }
 
                         // Media files

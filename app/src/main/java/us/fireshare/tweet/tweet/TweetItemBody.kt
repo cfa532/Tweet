@@ -148,16 +148,21 @@ fun TweetItemBody(
                     SelectableText(
                         text = tweet.content!!,
                         maxLines = 10,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    ) { username ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            HproseInstance.getUserId(username)?.let {
-                                withContext(Dispatchers.Main) {
-                                    navController.navigate(NavTweet.UserProfile(it))
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        onTextClick = {
+                            // Navigate to detail view when text (not username) is clicked
+                            navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                        },
+                        callback = { username ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                HproseInstance.getUserId(username)?.let {
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(NavTweet.UserProfile(it))
+                                    }
                                 }
                             }
                         }
-                    }
+                    )
                 }
 
                 // Media files
