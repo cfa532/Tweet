@@ -796,12 +796,17 @@ object HproseInstance {
             "set_author_core_data"
         }
         
-        val params = mapOf(
+        val params = mutableMapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "user" to Json.encodeToString(user)
         )
+
+        // Add debug flag for debug builds
+        if (BuildConfig.DEBUG) {
+            params["debug"] = "true"
+        }
         return try {
             val rawResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
             unwrapV2Response<Map<String, Any>>(rawResponse)
