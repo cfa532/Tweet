@@ -207,6 +207,7 @@ class TweetActivity : ComponentActivity() {
 class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
+    val systemDomainToShare = mutableStateOf<String?>(null)
 
     /**
      * Load entry URLs from BuildConfig.ENTRY_URLS.
@@ -272,6 +273,12 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     return@launch
                 }
                 Timber.tag("checkForUpgrade").d("Server versionInfo: $versionInfo")
+
+                // Store system domainToShare from backend response
+                versionInfo["domain"]?.let { domain ->
+                    systemDomainToShare.value = domain
+                    Timber.tag("checkForUpgrade").d("Retrieved system domainToShare: $domain")
+                }
                 
                 // Get server version
                 val serverVersionString = versionInfo["version"]

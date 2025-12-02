@@ -52,6 +52,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import us.fireshare.tweet.ActivityViewModel
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -204,6 +208,8 @@ fun EditProfileScreen(
 ) {
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
+    val activityViewModel: ActivityViewModel = hiltViewModel(LocalActivity.current as ComponentActivity)
+    val domainToShareFocusRequester = remember { FocusRequester() }
     val username by viewModel.username
     val password by viewModel.password
     val confirm = remember { mutableStateOf(password) }
@@ -219,6 +225,7 @@ fun EditProfileScreen(
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
     val hostIdFocused = remember { mutableStateOf(false) }
+    val domainToShareFocused = remember { mutableStateOf(false) }
 
     // Debounce state to prevent rapid button clicks (similar to iOS DebounceButton)
     val lastClickTime = remember { mutableLongStateOf(0L) }
@@ -480,11 +487,21 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = domainToShare,
                     onValueChange = { viewModel.onDomainToShareChange(it) },
-                    label = { Text(stringResource(R.string.domain_to_share)) },
+                    label = {
+                        val labelText = if (domainToShareFocused.value) {
+                            activityViewModel.systemDomainToShare.value ?: ""
+                        } else {
+                            stringResource(R.string.domain_to_share)
+                        }
+                        Text(labelText)
+                    },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
-                        .focusRequester(focusRequester),
+                        .focusRequester(domainToShareFocusRequester)
+                        .onFocusChanged { focusState ->
+                            domainToShareFocused.value = focusState.isFocused
+                        },
                     singleLine = true
                 )
             }
