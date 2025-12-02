@@ -225,8 +225,8 @@ fun EditProfileScreen(
             profile != (appUser.profile ?: "") ||
             // Check if password has been entered
             password.isNotEmpty() ||
-            // Compare domainToShare - handle nulls by converting to empty string
-            domainToShare != (appUser.domainToShare ?: "") ||
+            // Compare domainToShare - always compare against empty string since it's never pre-populated
+            domainToShare.isNotEmpty() ||
             // Compare cloudDrivePort - ViewModel converts 0 to "", so compare accordingly
             cloudDrivePort != (if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
         }
@@ -256,7 +256,7 @@ fun EditProfileScreen(
         // Sync ViewModel values with current appUser to ensure no false unsaved changes detection
         viewModel.name.value = appUser.name ?: ""
         viewModel.profile.value = appUser.profile ?: ""
-        viewModel.domainToShare.value = appUser.domainToShare ?: ""
+        // Do not sync domainToShare at all - keep it empty
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
     }
     
@@ -274,7 +274,7 @@ fun EditProfileScreen(
         // Force sync ViewModel values with current appUser when screen opens
         viewModel.name.value = appUser.name ?: ""
         viewModel.profile.value = appUser.profile ?: ""
-        viewModel.domainToShare.value = appUser.domainToShare ?: ""
+        // Do not sync domainToShare at all - keep it empty
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
     }
 

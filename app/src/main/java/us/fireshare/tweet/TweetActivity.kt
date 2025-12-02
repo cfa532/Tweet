@@ -318,16 +318,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     showUpdateDialog(context, downloadUrl)
                 } else {
                     Timber.tag("checkForUpgrade").d("No upgrade needed (current=$currentVersion >= server=$serverVersion)")
-                    
-                    // Update domainToShare from checkUpgrade response
-                    versionInfo["domain"]?.let { domain ->
-                        if (domain.isNotEmpty() && HproseInstance.appUser.domainToShare != domain) {
-                            HproseInstance.appUser = HproseInstance.appUser.copy(domainToShare = domain)
-                            us.fireshare.tweet.datamodel.TweetCacheManager.saveUser(HproseInstance.appUser)
-                            Timber.tag("checkForUpgrade").d("✅ Updated domainToShare from checkUpgrade: $domain")
-                        }
-                    }
-                    
+
                     // Load entry URLs (works for all versions including Play)
                     loadEntryUrls()
                 }

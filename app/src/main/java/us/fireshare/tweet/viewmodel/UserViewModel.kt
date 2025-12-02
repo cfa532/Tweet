@@ -102,7 +102,7 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(appUser.name ?: "")
     var profile = mutableStateOf(appUser.profile ?: "")
-    var domainToShare = mutableStateOf(appUser.domainToShare ?: "")
+    var domainToShare = mutableStateOf("")
     var hostId = mutableStateOf("")
     var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
     var isPasswordVisible = mutableStateOf(false)
@@ -1087,7 +1087,7 @@ class UserViewModel @AssistedInject constructor(
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
-                domainToShare.value = appUser.domainToShare ?: ""
+                // Do not populate domainToShare - keep it empty
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
@@ -1265,7 +1265,7 @@ class UserViewModel @AssistedInject constructor(
                                 // Update profile state variables to match saved values
                                 name.value = appUser.name ?: ""
                                 profile.value = appUser.profile ?: ""
-                                domainToShare.value = appUser.domainToShare ?: ""
+                                // Do not populate domainToShare - keep it empty
                                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                 
@@ -1345,7 +1345,7 @@ class UserViewModel @AssistedInject constructor(
                                     // Update profile state variables to match saved values
                                     name.value = appUser.name ?: ""
                                     profile.value = appUser.profile ?: ""
-                                    domainToShare.value = appUser.domainToShare ?: ""
+                                    // Do not populate domainToShare - keep it empty
                                     hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                                     cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                                     
