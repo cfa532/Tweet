@@ -760,23 +760,6 @@ object HproseInstance {
         return Pair(null, lastError ?: context.getString(R.string.login_error))
     }
 
-    /**
-     * Given host url, get the node Id
-     * */
-    suspend fun getHostId(host: String? = appUser.baseUrl): MimeiId? {
-        val entry = "getvar"
-        val params = mapOf("name" to "hostid")
-        return try {
-            val hproseClient =
-                HproseClient.create("$host/webapi/").useService(HproseService::class.java)
-            val response =
-                hproseClient.runMApp<String>(entry, params)
-            response?.trim()?.trim('"')?.trim(',')
-        } catch (e: Exception) {
-            Timber.tag("getHostId").e("$e $host")
-            null
-        }
-    }
 
     /**
      * @param nodeId

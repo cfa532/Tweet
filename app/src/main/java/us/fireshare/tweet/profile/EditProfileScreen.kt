@@ -214,7 +214,6 @@ fun EditProfileScreen(
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
-    val defaultDomainPlaceholder = remember { mutableStateOf<String?>(null) }
     
     // Simple check for unsaved changes (excluding avatar and username which can't be changed)
     // Note: name and profile are non-nullable Strings in ViewModel (initialized with ?: "")
@@ -277,17 +276,6 @@ fun EditProfileScreen(
         viewModel.profile.value = appUser.profile ?: ""
         viewModel.domainToShare.value = appUser.domainToShare ?: ""
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
-        // get hostId if not exists
-        if (hostId.isEmpty()) {
-            viewModel.getHostId()
-        }
-        // Get domain from check_upgrade for placeholder text
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
-            val upgradeInfo = HproseInstance.checkUpgrade()
-            upgradeInfo?.get("domain")?.let { domain ->
-                defaultDomainPlaceholder.value = domain
-            }
-        }
     }
 
     // Show cropping screen if requested
@@ -439,7 +427,6 @@ fun EditProfileScreen(
                     value = domainToShare,
                     onValueChange = { viewModel.onDomainToShareChange(it) },
                     label = { Text(stringResource(R.string.domain_to_share)) },
-                    placeholder = defaultDomainPlaceholder.value?.let { { Text(it) } } ?: null,
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()

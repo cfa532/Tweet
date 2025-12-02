@@ -212,11 +212,6 @@ class UserViewModel @AssistedInject constructor(
         return pinnedTweets.value.any { it.mid == tweet.mid }
     }
 
-    suspend fun getHostId() {
-        hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
-            HproseInstance.getHostId() ?: ""
-        } else user.value.hostIds!!.first()
-    }
 
     suspend fun updateAvatar(context: Context, uri: Uri) {
         isLoading.value = true
