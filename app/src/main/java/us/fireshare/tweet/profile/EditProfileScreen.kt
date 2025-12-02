@@ -210,6 +210,7 @@ fun EditProfileScreen(
     val name by viewModel.name
     val profile by viewModel.profile
     val hostId by viewModel.hostId
+    val domainToShare by viewModel.domainToShare
     val cloudDrivePort by viewModel.cloudDrivePort
     val isPasswordVisible by viewModel.isPasswordVisible
     val isLoading by viewModel.isLoading.collectAsState()
@@ -353,6 +354,14 @@ fun EditProfileScreen(
                     singleLine = true,
                     enabled = appUser.isGuest()  // register new user
                 )
+                if (viewModel.usernameError.value.isNotEmpty()) {
+                    Text(
+                        text = viewModel.usernameError.value,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
                 OutlinedTextField(
                     value = password,
                     onValueChange = { viewModel.onPasswordChange(it) },
@@ -370,6 +379,14 @@ fun EditProfileScreen(
                     trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
                     singleLine = true
                 )
+                if (viewModel.passwordError.value.isNotEmpty()) {
+                    Text(
+                        text = viewModel.passwordError.value,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
                 if (showConfirm.value) {
                     OutlinedTextField(
                         value = confirm.value,
@@ -383,6 +400,14 @@ fun EditProfileScreen(
                         trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
                         singleLine = true,
                     )
+                    if (viewModel.confirmPasswordError.value.isNotEmpty()) {
+                        Text(
+                            text = viewModel.confirmPasswordError.value,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = name ?: "",
@@ -414,10 +439,36 @@ fun EditProfileScreen(
                         .focusRequester(focusRequester),
                     singleLine = false
                 )
+                if (viewModel.hostIdError.value.isNotEmpty()) {
+                    Text(
+                        text = viewModel.hostIdError.value,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
                 OutlinedTextField(
                     value = cloudDrivePort,
                     onValueChange = { viewModel.onCloudDrivePortChange(it) },
                     label = { Text(stringResource(R.string.cloud_port)) },
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true
+                )
+                if (viewModel.cloudDrivePortError.value.isNotEmpty()) {
+                    Text(
+                        text = viewModel.cloudDrivePortError.value,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
+                OutlinedTextField(
+                    value = domainToShare,
+                    onValueChange = { viewModel.onDomainToShareChange(it) },
+                    label = { Text(stringResource(R.string.domain_to_share)) },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
@@ -438,14 +489,24 @@ fun EditProfileScreen(
                     if (isLoading) return@Button
 
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
-                        if (password.isNotEmpty() && password != confirm.value) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.confirm_pwd),
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                        // Clear previous validation errors
+                        viewModel.usernameError.value = ""
+                        viewModel.passwordError.value = ""
+                        viewModel.confirmPasswordError.value = ""
+                        viewModel.hostIdError.value = ""
+                        viewModel.cloudDrivePortError.value = ""
+
+                        // Validate cloud drive port if provided
+                        if (cloudDrivePort.isNotEmpty()) {
+                            val port = cloudDrivePort.toIntOrNull()
+                            if (port == null || port < 8000 || port > 65535) {
+                                viewModel.cloudDrivePortError.value = "Port must be between 8000 and 65535"
+                                return@launch
                             }
+                        }
+
+                        if (password.isNotEmpty() && password != confirm.value) {
+                            viewModel.confirmPasswordError.value = context.getString(R.string.confirm_pwd)
                             return@launch
                         }
                         viewModel.register(context) {

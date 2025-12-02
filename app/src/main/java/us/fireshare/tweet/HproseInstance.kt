@@ -789,7 +789,8 @@ object HproseInstance {
         alias: String?,
         profile: String,
         hostId: String? = null,
-        cloudDrivePort: Int = 0
+        cloudDrivePort: Int = 0,
+        domainToShare: String? = null
     ): Pair<Boolean, String?> {
         // Validate hostId if provided
         hostId?.let { id ->
@@ -806,7 +807,8 @@ object HproseInstance {
             username = username,
             password = password,
             profile = profile,
-            cloudDrivePort = cloudDrivePort
+            cloudDrivePort = cloudDrivePort,
+            domainToShare = domainToShare
         ).apply {
             // Set hostIds only if hostId is a valid Mimei ID (at least 27 characters after trimming)
             hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
@@ -918,7 +920,8 @@ object HproseInstance {
         alias: String? = null,
         profile: String? = null,
         hostId: String? = null,
-        cloudDrivePort: Int = 0
+        cloudDrivePort: Int = 0,
+        domainToShare: String? = null
     ): Pair<Boolean, String?> {
         // Validate hostId if provided
         hostId?.let { id ->
@@ -934,7 +937,8 @@ object HproseInstance {
             name = alias,
             password = password,
             profile = profile,
-            cloudDrivePort = cloudDrivePort
+            cloudDrivePort = cloudDrivePort,
+            domainToShare = domainToShare
         ).apply {
             // Set hostIds only if hostId is a valid Mimei ID (at least 27 characters after trimming)
             hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }

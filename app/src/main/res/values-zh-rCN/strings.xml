@@ -74,6 +74,7 @@
     <string name="comment_delete_failed">评论删除失败，请重试。</string>
     <string name="delete_failed">推文删除失败，请重试。</string>
     <string name="confirm_pwd">请确认密码</string>
+    <string name="domain_to_share">分享域名</string>
     <string name="use_current_pswd">保持现有密码</string>
     <string name="user_bookmarks">书签</string>
     <string name="user_favorites">喜欢</string>

@@ -104,8 +104,16 @@ class UserViewModel @AssistedInject constructor(
     var profile = mutableStateOf(appUser.profile ?: "")
     var hostId = mutableStateOf("")
     var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
+    var domainToShare = mutableStateOf(appUser.domainToShare ?: "")
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
+
+    // Validation error states for showing red text warnings
+    var usernameError = mutableStateOf("")
+    var passwordError = mutableStateOf("")
+    var confirmPasswordError = mutableStateOf("")
+    var hostIdError = mutableStateOf("")
+    var cloudDrivePortError = mutableStateOf("")
 
     var initState = MutableStateFlow(true)      // initial load state
 
@@ -1148,29 +1156,35 @@ class UserViewModel @AssistedInject constructor(
         if (isLoading.value) return
 
         isLoading.value = true
+
+        // Clear previous validation errors
+        usernameError.value = ""
+        passwordError.value = ""
+        confirmPasswordError.value = ""
+        hostIdError.value = ""
+        cloudDrivePortError.value = ""
+
+        // Validate cloud drive port if provided
+        if (cloudDrivePort.value.isNotEmpty()) {
+            val port = cloudDrivePort.value.toIntOrNull()
+            if (port == null || port < 8000 || port > 65535) {
+                cloudDrivePortError.value = "Port must be between 8000 and 65535"
+                isLoading.value = false
+                return
+            }
+        }
+
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             /**
              * Register a new user. Check username and password first.
              * */
             if (username.value.isNullOrEmpty()) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.username_required),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                usernameError.value = context.getString(R.string.username_required)
                 isLoading.value = false
                 return
             }
             if (password.value.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.password_required),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                passwordError.value = context.getString(R.string.password_required)
                 isLoading.value = false
                 return
             }
@@ -1179,13 +1193,7 @@ class UserViewModel @AssistedInject constructor(
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
             } ?: run {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.node_not_found),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                hostIdError.value = context.getString(R.string.node_not_found)
                 isLoading.value = false
                 return
             }
@@ -1205,7 +1213,8 @@ class UserViewModel @AssistedInject constructor(
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
                 hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
-                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0),
+                domainToShare = domainToShare.value.trim().takeIf { it.isNotEmpty() }
             )
         } else {
             HproseInstance.updateUserCore(
@@ -1213,7 +1222,8 @@ class UserViewModel @AssistedInject constructor(
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
                 hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
-                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0),
+                domainToShare = domainToShare.value.trim().takeIf { it.isNotEmpty() }
             )
         }
 
@@ -1301,7 +1311,25 @@ class UserViewModel @AssistedInject constructor(
             cloudDrivePort.value = value
             isLoading.value = false
             loginError.value = ""
+
+            // Validate port range if not empty
+            if (value.isNotEmpty()) {
+                val port = value.toIntOrNull()
+                if (port != null && (port < 8000 || port > 65535)) {
+                    cloudDrivePortError.value = "Port must be between 8000 and 65535"
+                } else {
+                    cloudDrivePortError.value = ""
+                }
+            } else {
+                cloudDrivePortError.value = ""
+            }
         }
+    }
+
+    fun onDomainToShareChange(value: String) {
+        domainToShare.value = value.trim()
+        isLoading.value = false
+        loginError.value = ""
     }
 
     fun onPasswordChange(pwd: String) {
