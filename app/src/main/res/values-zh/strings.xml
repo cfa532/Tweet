@@ -99,6 +99,8 @@
     <string name="invalid_hls_structure">無效的HLS結構</string>
     <string name="app_id_mismatch">應用程式ID不匹配</string>
     <string name="chunk_size_exceeds_limit">區塊大小超過1MB限制</string>
+    <string name="invalid_host_id_format">無效的主機ID格式。請檢查您的主機ID後重試。</string>
+    <string name="invalid_host_id_length">主機ID必須至少27個字符長。</string>
     <string name="network_connection_lost">網路連接已中斷。請檢查您的網路連接。</string>
     <string name="request_timeout">請求超時。請重試。</string>
     <string name="server_unreachable">無法連接到伺服器。請稍後重試。</string>

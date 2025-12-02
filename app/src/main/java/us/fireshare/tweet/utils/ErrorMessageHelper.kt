@@ -56,6 +56,11 @@ object ErrorMessageHelper {
 
             // App errors
             lowerError == "app id mismatch" -> context.getString(R.string.app_id_mismatch)
+            lowerError == "invalid host id: must be at least 27 characters" -> context.getString(R.string.invalid_host_id_length)
+            lowerError.contains("failed to parse peer id") ||
+            lowerError.contains("invalid cid") ||
+            lowerError.contains("selected encoding not supported") ->
+                context.getString(R.string.invalid_host_id_format)
 
             // Network/server errors
             lowerError.contains("chunk size") && lowerError.contains("exceeds") && lowerError.contains("1mb limit") ->

@@ -1192,7 +1192,7 @@ class UserViewModel @AssistedInject constructor(
         }
         var updatedUser = User(
             baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
-            name = name.value.trim(), hostIds = listOf(hostId.value.trim()),
+            name = name.value.trim(), hostIds = hostId.value.trim().takeIf { it.isNotEmpty() }?.let { listOf(it) },
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value.trim(),
             cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
@@ -1204,7 +1204,7 @@ class UserViewModel @AssistedInject constructor(
                 password = password.value,
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
-                hostId = hostId.value.trim(),
+                hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
                 cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
             )
         } else {
@@ -1212,7 +1212,7 @@ class UserViewModel @AssistedInject constructor(
                 password = password.value,
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
-                hostId = hostId.value.trim(),
+                hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
                 cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
             )
         }

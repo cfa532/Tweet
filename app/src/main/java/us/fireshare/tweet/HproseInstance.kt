@@ -791,6 +791,15 @@ object HproseInstance {
         hostId: String? = null,
         cloudDrivePort: Int = 0
     ): Pair<Boolean, String?> {
+        // Validate hostId if provided
+        hostId?.let { id ->
+            val trimmedId = id.trim()
+            if (trimmedId.isNotEmpty() && trimmedId.length < 27) {
+                Timber.tag("registerUser").e("Invalid hostId: must be at least 27 characters")
+                return Pair(false, "Invalid host ID: must be at least 27 characters")
+            }
+        }
+
         val newUser = User(
             mid = appUser.mid,
             name = alias,
@@ -799,8 +808,8 @@ object HproseInstance {
             profile = profile,
             cloudDrivePort = cloudDrivePort
         ).apply {
-            // Only set hostIds if hostId is provided and not empty
-            hostId?.takeIf { it.isNotEmpty() }?.let { this.hostIds = listOf(it) }
+            // Set hostIds only if hostId is a valid Mimei ID (at least 27 characters after trimming)
+            hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
         }
 
         val entry = "register"
@@ -911,6 +920,15 @@ object HproseInstance {
         hostId: String? = null,
         cloudDrivePort: Int = 0
     ): Pair<Boolean, String?> {
+        // Validate hostId if provided
+        hostId?.let { id ->
+            val trimmedId = id.trim()
+            if (trimmedId.isNotEmpty() && trimmedId.length < 27) {
+                Timber.tag("updateUserCore").e("Invalid hostId: must be at least 27 characters")
+                return Pair(false, "Invalid host ID: must be at least 27 characters")
+            }
+        }
+
         val updatedUser = User(
             mid = appUser.mid,
             name = alias,
@@ -918,7 +936,8 @@ object HproseInstance {
             profile = profile,
             cloudDrivePort = cloudDrivePort
         ).apply {
-            hostId?.let { this.hostIds = listOf(it) }
+            // Set hostIds only if hostId is a valid Mimei ID (at least 27 characters after trimming)
+            hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
         }
 
         val entry = "set_author_core_data"

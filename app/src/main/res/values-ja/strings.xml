@@ -147,6 +147,8 @@
     <string name="invalid_hls_structure">無効なHLS構造</string>
     <string name="app_id_mismatch">アプリIDが一致しません</string>
     <string name="chunk_size_exceeds_limit">チャンクサイズが1MB制限を超えています</string>
+    <string name="invalid_host_id_format">ホストIDの形式が無効です。ホストIDを確認して、もう一度お試しください。</string>
+    <string name="invalid_host_id_length">ホストIDは27文字以上でなければなりません。</string>
     <string name="network_connection_lost">ネットワーク接続が失われました。インターネット接続を確認してください。</string>
     <string name="request_timeout">リクエストがタイムアウトしました。もう一度お試しください。</string>
     <string name="server_unreachable">サーバーに接続できません。後でもう一度お試しください。</string>

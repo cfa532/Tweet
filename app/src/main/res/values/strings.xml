@@ -369,6 +369,8 @@
     <string name="invalid_hls_structure">Invalid HLS structure</string>
     <string name="app_id_mismatch">App ID mismatch</string>
     <string name="chunk_size_exceeds_limit">Chunk size exceeds 1MB limit</string>
+    <string name="invalid_host_id_format">Invalid host ID format. Please check your host ID and try again.</string>
+    <string name="invalid_host_id_length">Host ID must be at least 27 characters long.</string>
     <string name="network_connection_lost">Network connection lost. Please check your internet connection.</string>
     <string name="request_timeout">The request took too long. Please try again.</string>
     <string name="server_unreachable">Cannot reach the server. Please try again later.</string>

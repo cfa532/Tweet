@@ -300,6 +300,8 @@
     <string name="invalid_hls_structure">无效的HLS结构</string>
     <string name="app_id_mismatch">应用程序ID不匹配</string>
     <string name="chunk_size_exceeds_limit">块大小超过1MB限制</string>
+    <string name="invalid_host_id_format">无效的主机ID格式。请检查您的主机ID后重试。</string>
+    <string name="invalid_host_id_length">主机ID必须至少27个字符长。</string>
     <string name="network_connection_lost">网络连接已断开。请检查您的网络连接。</string>
     <string name="request_timeout">请求超时。请重试。</string>
     <string name="server_unreachable">无法连接到服务器。请稍后重试。</string>
