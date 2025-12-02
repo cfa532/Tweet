@@ -2,6 +2,7 @@ package us.fireshare.tweet.profile
 
 import android.net.Uri
 import android.widget.Toast
+import java.lang.System
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +62,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
@@ -206,7 +209,6 @@ fun EditProfileScreen(
     val showConfirm = remember { mutableStateOf(false) }
     val name by viewModel.name
     val profile by viewModel.profile
-    val domainToShare by viewModel.domainToShare
     val hostId by viewModel.hostId
     val cloudDrivePort by viewModel.cloudDrivePort
     val isPasswordVisible by viewModel.isPasswordVisible
@@ -214,6 +216,10 @@ fun EditProfileScreen(
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
+
+    // Debounce state to prevent rapid button clicks (similar to iOS DebounceButton)
+    val lastClickTime = remember { mutableLongStateOf(0L) }
+    val debounceDuration = 1000L // 1 second cooldown, matching iOS
     
     // Simple check for unsaved changes (excluding avatar and username which can't be changed)
     // Note: name and profile are non-nullable Strings in ViewModel (initialized with ?: "")
@@ -225,8 +231,6 @@ fun EditProfileScreen(
             profile != (appUser.profile ?: "") ||
             // Check if password has been entered
             password.isNotEmpty() ||
-            // Compare domainToShare - always compare against empty string since it's never pre-populated
-            domainToShare.isNotEmpty() ||
             // Compare cloudDrivePort - ViewModel converts 0 to "", so compare accordingly
             cloudDrivePort != (if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
         }
@@ -248,7 +252,6 @@ fun EditProfileScreen(
     LaunchedEffect(
         appUser.name,
         appUser.profile,
-        appUser.domainToShare,
         appUser.cloudDrivePort,
         appUser.mid,
         appUser.avatar
@@ -256,7 +259,6 @@ fun EditProfileScreen(
         // Sync ViewModel values with current appUser to ensure no false unsaved changes detection
         viewModel.name.value = appUser.name ?: ""
         viewModel.profile.value = appUser.profile ?: ""
-        // Do not sync domainToShare at all - keep it empty
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
     }
     
@@ -274,7 +276,6 @@ fun EditProfileScreen(
         // Force sync ViewModel values with current appUser when screen opens
         viewModel.name.value = appUser.name ?: ""
         viewModel.profile.value = appUser.profile ?: ""
-        // Do not sync domainToShare at all - keep it empty
         viewModel.cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
     }
 
@@ -423,27 +424,28 @@ fun EditProfileScreen(
                         .focusRequester(focusRequester),
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = domainToShare,
-                    onValueChange = { viewModel.onDomainToShareChange(it) },
-                    label = { Text(stringResource(R.string.domain_to_share)) },
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    singleLine = true
-                )
             }
             Button(
                 onClick = {
+                    // Prevent rapid clicks (debounce mechanism like iOS DebounceButton)
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastClickTime.longValue < debounceDuration) {
+                        return@Button
+                    }
+                    lastClickTime.longValue = currentTime
+
+                    // Additional check for loading state
+                    if (isLoading) return@Button
+
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
                         if (password.isNotEmpty() && password != confirm.value) {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.confirm_pwd),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            viewModel.isLoading.value = false
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.confirm_pwd),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                             return@launch
                         }
                         viewModel.register(context) {

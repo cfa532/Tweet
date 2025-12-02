@@ -444,10 +444,15 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             if (!appUser.isGuest()) {
                                 try {
                                     // Send 0 as cloudPort if field is empty/blank to indicate removal
-                                    val portValue = cloudPort
-                                    appUser.cloudDrivePort = if (portValue.isNullOrBlank()) 0 else (portValue.toIntOrNull() ?: 0)
+                                    val portString = cloudPort
+                                    val portValue = if (portString.isNullOrBlank()) 0 else (portString.toIntOrNull() ?: 0)
                                     applicationScope.launch(Dispatchers.IO) {
-                                        HproseInstance.setUserData(appUser)
+                                        val (success, _) = HproseInstance.updateUserCore(
+                                            cloudDrivePort = portValue
+                                        )
+                                        if (success) {
+                                            appUser.cloudDrivePort = portValue
+                                        }
                                     }
                                 } catch (e: Exception) {
                                     Timber.tag("SystemSettings")

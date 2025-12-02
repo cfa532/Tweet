@@ -102,7 +102,6 @@ class UserViewModel @AssistedInject constructor(
     var password = mutableStateOf("")
     var name = mutableStateOf(appUser.name ?: "")
     var profile = mutableStateOf(appUser.profile ?: "")
-    var domainToShare = mutableStateOf("")
     var hostId = mutableStateOf("")
     var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
     var isPasswordVisible = mutableStateOf(false)
@@ -1087,7 +1086,6 @@ class UserViewModel @AssistedInject constructor(
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
-                // Do not populate domainToShare - keep it empty
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
@@ -1146,6 +1144,9 @@ class UserViewModel @AssistedInject constructor(
      * Do NOT update appUser, wait for the new user to login.
      * */
     suspend fun register(context: Context, popBack: () -> Unit) {
+        // Prevent repeated submission
+        if (isLoading.value) return
+
         isLoading.value = true
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             /**
@@ -1194,209 +1195,49 @@ class UserViewModel @AssistedInject constructor(
             name = name.value.trim(), hostIds = listOf(hostId.value.trim()),
             username = username.value!!.lowercase().trim(), password = password.value,
             profile = profile.value.trim(),
-            domainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim(),
             cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
         )
-        HproseInstance.setUserData(updatedUser)?.let { ret ->
-            if (ret["status"] == "success") {
-                try {
-                    // Pre-process the user data to handle timestamp conversion
-                    val userData = ret["user"] as? Map<String, Any>
-                    if (userData != null) {
-                        val processedUserData = userData.toMutableMap()
-                        
-                        // Handle timestamp conversion from decimal to long
-                        processedUserData["timestamp"]?.let { value ->
-                            when (value) {
-                                is Number -> processedUserData["timestamp"] = value.toLong()
-                                is String -> {
-                                    try {
-                                        processedUserData["timestamp"] = value.toDouble().toLong()
-                                    } catch (_: NumberFormatException) {
-                                        Timber.w("Failed to parse timestamp: $value")
-                                        processedUserData["timestamp"] = System.currentTimeMillis()
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Handle lastLogin conversion from decimal to long
-                        processedUserData["lastLogin"]?.let { value ->
-                            when (value) {
-                                is Number -> processedUserData["lastLogin"] = value.toLong()
-                                is String -> {
-                                    try {
-                                        processedUserData["lastLogin"] = value.toDouble().toLong()
-                                    } catch (_: NumberFormatException) {
-                                        Timber.w("Failed to parse lastLogin: $value")
-                                        processedUserData["lastLogin"] = System.currentTimeMillis()
-                                    }
-                                }
-                            }
-                        }
+        // Call the new separate functions based on user type
+        val (success, errorMessage) = if (appUser.isGuest()) {
+            HproseInstance.registerUser(
+                username = username.value!!.lowercase().trim(),
+                password = password.value,
+                alias = name.value.trim(),
+                profile = profile.value.trim(),
+                hostId = hostId.value.trim(),
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+            )
+        } else {
+            HproseInstance.updateUserCore(
+                password = password.value,
+                alias = name.value.trim(),
+                profile = profile.value.trim(),
+                hostId = hostId.value.trim(),
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
+            )
+        }
 
-                        if (appUser.isGuest()) {
-                            // new user registered, wait for its login
-                            popBack()
-                        } else {
-                            // Update existing user profile
-                            appUser.from(processedUserData)
-
-                            // CRITICAL: Update cloudDrivePort and domainToShare directly with values that were sent
-                            // This matches iOS behavior and ensures consistency even if server response is incomplete
-                            val savedCloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
-                            val savedDomainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim()
-                            appUser.cloudDrivePort = savedCloudDrivePort
-                            appUser.domainToShare = savedDomainToShare
-                            
-                            _user.value = appUser
-                            
-                            // Update the shared appUserViewModel if this is the current user's profile
-                            if (userId == appUser.mid) {
-                                // Update all the count variables in this ViewModel to match the updated appUser
-                                _bookmarksCount.value = appUser.bookmarksCount
-                                _favoritesCount.value = appUser.favoritesCount
-                                _followersCount.value = appUser.followersCount
-                                _followingsCount.value = appUser.followingCount
-                                _tweetCount.value = appUser.tweetCount
-                                
-                                // Update profile state variables to match saved values
-                                name.value = appUser.name ?: ""
-                                profile.value = appUser.profile ?: ""
-                                // Do not populate domainToShare - keep it empty
-                                hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
-                                
-                                // Also update the user state to reflect the new profile data
-                                _user.value = appUser
-                                
-                                // Save the updated user to cache
-                                TweetCacheManager.saveUser(appUser)
-                                
-                                // Force refresh of the shared appUserViewModel by updating its user state
-                                // This ensures that all components using the shared ViewModel get updated
-                                viewModelScope.launch {
-                                    // Small delay to ensure the update is processed
-                                    delay(100)
-                                    _user.value = appUser
-                                }
-                            }
-                            
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.profile_update_ok),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                popBack()
-                            }
-                        }
-                    } else {
-                        // Fallback to custom Gson parsing with timestamp handling
-                        try {
-                            val jsonString = ret["user"].toString()
-                            
-                            // Pre-process JSON string to fix timestamp issues
-                            val processedJson = jsonString.replace(
-                            Regex("\"timestamp\":\\s*([0-9]+\\.[0-9]+)"),
-                            "\"timestamp\": $1"
-                        ).replace(
-                            Regex("\"lastLogin\":\\s*([0-9]+\\.[0-9]+)"),
-                            "\"lastLogin\": $1"
-                        ).replace(
-                                Regex("\"timestamp\":\\s*([0-9]+)\\.([0-9]+)"),
-                                "\"timestamp\": $1"
-                            ).replace(
-                                Regex("\"lastLogin\":\\s*([0-9]+)\\.([0-9]+)"),
-                                "\"lastLogin\": $1"
-                            )
-                            
-                            val gson = Gson()
-                            val userType = object : TypeToken<User>() {}.type
-                            
-                            if (appUser.isGuest()) {
-                                password.value = ""
-                                popBack()
-                            } else {
-                                updatedUser = gson.fromJson(processedJson, userType)
-                                // Update existing user profile using from() method to properly update singleton instance
-                                appUser.from(updatedUser)
-                                
-                                // CRITICAL: Update cloudDrivePort and domainToShare directly with values that were sent
-                                // This matches iOS behavior and ensures consistency even if server response is incomplete
-                                val savedCloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
-                                val savedDomainToShare = if (domainToShare.value.isBlank()) null else domainToShare.value.trim()
-                                appUser.cloudDrivePort = savedCloudDrivePort
-                                appUser.domainToShare = savedDomainToShare
-                                
-                                _user.value = appUser
-                                
-                                // Update the shared appUserViewModel if this is the current user's profile
-                                if (userId == appUser.mid) {
-                                    // Update all the count variables in this ViewModel to match the updated appUser
-                                    _bookmarksCount.value = appUser.bookmarksCount
-                                    _favoritesCount.value = appUser.favoritesCount
-                                    _followersCount.value = appUser.followersCount
-                                    _followingsCount.value = appUser.followingCount
-                                    _tweetCount.value = appUser.tweetCount
-                                    
-                                    // Update profile state variables to match saved values
-                                    name.value = appUser.name ?: ""
-                                    profile.value = appUser.profile ?: ""
-                                    // Do not populate domainToShare - keep it empty
-                                    hostId.value = appUser.hostIds?.firstOrNull() ?: ""
-                                    cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
-                                    
-                                    // Also update the user state to reflect the new profile data
-                                    _user.value = appUser
-                                    
-                                    // Save the updated user to cache
-                                    TweetCacheManager.saveUser(appUser)
-                                    
-                                    // Force refresh of the shared appUserViewModel by updating its user state
-                                    // This ensures that all components using the shared ViewModel get updated
-                                    viewModelScope.launch {
-                                        // Small delay to ensure the update is processed
-                                        delay(100)
-                                        _user.value = appUser
-                                    }
-                                }
-                                
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.profile_update_ok),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    popBack()
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "Error in fallback Gson parsing")
-                            throw e // Re-throw to be caught by outer catch block
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "Error processing user data during ${if (appUser.isGuest()) "registration" else "profile update"}")
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            if (appUser.isGuest()) context.getString(R.string.registration_failed)
-                            else context.getString(R.string.profile_update_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+        if (success) {
+            if (appUser.isGuest()) {
+                // new user registered, wait for its login
+                popBack()
             } else {
+                // Update existing user profile - the updateUserCore function handles all UI updates internally
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.profile_update_ok),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    popBack()
                 }
             }
-        } ?: run {
+        } else {
             withContext(Dispatchers.Main) {
+                val userFriendlyMessage = us.fireshare.tweet.utils.ErrorMessageHelper.getUserFriendlyMessage(errorMessage, context)
                 Toast.makeText(
                     context,
-                    context.getString(R.string.registration_failed),
+                    userFriendlyMessage,
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -1444,12 +1285,6 @@ class UserViewModel @AssistedInject constructor(
 
     fun onProfileChange(value: String) {
         profile.value = value
-        isLoading.value = false
-        loginError.value = ""
-    }
-
-    fun onDomainToShareChange(value: String) {
-        domainToShare.value = value
         isLoading.value = false
         loginError.value = ""
     }

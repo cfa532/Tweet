@@ -348,4 +348,29 @@
     <string name="node_required_title">Need to set up your own node</string>
     <string name="node_required_message">You have more than 10 tweets and need to set up your own node to continue posting. Please set up your own node for better performance and storage.</string>
     <string name="node_required_ok">OK</string>
+
+    <!-- Error message helper strings -->
+    <string name="unknown_error">Unknown error occurred</string>
+    <string name="wrong_password">Wrong password</string>
+    <string name="invalid_username_format">Invalid username format</string>
+    <string name="user_not_found_or_missing_host">User not found or missing host</string>
+    <string name="user_host_not_found">User host not found</string>
+    <string name="author_host_not_found">Author host not found</string>
+    <string name="user_not_found_in_database">User not found in database</string>
+    <string name="user_missing_host">User missing host</string>
+    <string name="cannot_follow_yourself">Cannot follow yourself</string>
+    <string name="cannot_get_followed_user">Cannot get followed user</string>
+    <string name="missing_host_for_followed_user">Missing host for followed user</string>
+    <string name="tweet_not_found">Tweet not found</string>
+    <string name="only_author_can_update_privacy">Only the tweet author can update privacy settings</string>
+    <string name="not_a_friend_of_the_host">Not a friend of the host</string>
+    <string name="no_provider_ip_found">No provider IP found</string>
+    <string name="failed_to_extract_zip_file">Failed to extract zip file</string>
+    <string name="invalid_hls_structure">Invalid HLS structure</string>
+    <string name="app_id_mismatch">App ID mismatch</string>
+    <string name="chunk_size_exceeds_limit">Chunk size exceeds 1MB limit</string>
+    <string name="network_connection_lost">Network connection lost. Please check your internet connection.</string>
+    <string name="request_timeout">The request took too long. Please try again.</string>
+    <string name="server_unreachable">Cannot reach the server. Please try again later.</string>
+    <string name="connection_error">Connection error. Please try again.</string>
 </resources>

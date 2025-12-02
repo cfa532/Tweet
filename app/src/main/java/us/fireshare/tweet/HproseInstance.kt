@@ -14,7 +14,6 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import hprose.client.HproseClient
 import hprose.io.HproseClassManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -24,7 +23,6 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -35,7 +33,6 @@ import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDeserializer
-import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.FeedResetReason
@@ -777,50 +774,202 @@ object HproseInstance {
     }
 
     /**
-     * Register a new user or update an existing user account.
-     * */
-    suspend fun setUserData(userObj: User): Map<*, *>? {
-        val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
-        val params = mutableMapOf(
+     * Register a new user account.
+     * @param username Username for the new account
+     * @param password Password for the new account
+     * @param alias Display name/alias for the user
+     * @param profile Profile description/bio
+     * @param hostId Optional host ID for the account
+     * @param cloudDrivePort Optional cloud drive port number
+     * @return Boolean indicating if registration was successful
+     */
+    suspend fun registerUser(
+        username: String,
+        password: String,
+        alias: String?,
+        profile: String,
+        hostId: String? = null,
+        cloudDrivePort: Int = 0
+    ): Pair<Boolean, String?> {
+        val newUser = User(
+            mid = appUser.mid,
+            name = alias,
+            username = username,
+            password = password,
+            profile = profile,
+            cloudDrivePort = cloudDrivePort
+        ).apply {
+            // Only set hostIds if hostId is provided and not empty
+            hostId?.takeIf { it.isNotEmpty() }?.let { this.hostIds = listOf(it) }
+        }
+
+        val entry = "register"
+        val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
-            "user" to Json.encodeToString(user)
+            "user" to Json.encodeToString(newUser)
         )
-        val entry = if (user.isGuest()) {
-            params["followings"] = Json.encodeToString(getAlphaIds())
-            /**
-             * Register a new user.
-             * */
-            "register"
-        } else {
-            /**
-             * Update existing user account.
-             * If hostId is changed, sync user mimei on new node first.
-             * */
-            "set_author_core_data"
-        }
-        
-        // Add debug flag for debug builds
-        if (BuildConfig.DEBUG) {
-            params["debug"] = "true"
-        }
-        return try {
-            val rawResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
-            unwrapV2Response<Map<String, Any>>(rawResponse)
-        } catch (e: java.net.SocketException) {
-            Timber.tag("setUserData").e("Network connection error: $e")
-            // Return a specific error response for network issues
-            mapOf("status" to "network_error", "reason" to "Connection failed. Please check your internet connection.")
-        } catch (e: java.net.ConnectException) {
-            Timber.tag("setUserData").e("Connection refused: $e")
-            mapOf("status" to "network_error", "reason" to "Cannot connect to server. Please try again later.")
-        } catch (e: java.util.concurrent.TimeoutException) {
-            Timber.tag("setUserData").e("Request timeout: $e")
-            mapOf("status" to "network_error", "reason" to "Request timed out. Please try again.")
+
+        try {
+            val rawResponse = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+
+            // Check raw response directly for v2 format (like iOS does)
+            val response = rawResponse as? Map<String, Any>
+
+            if (response == null) {
+                Timber.tag("registerUser").e("Registration failed: No response from server")
+                return Pair(false, "No response from server")
+            }
+
+            // Check if this is a v2 response with success field
+            val success = when (val successValue = response["success"]) {
+                is Boolean -> successValue
+                is Int -> successValue != 0
+                else -> null
+            }
+
+            if (success == true) {
+                Timber.tag("registerUser").d("Registration successful")
+
+                // Extract the newly created user's ID from the response
+                val userDict = response["user"] as? Map<String, Any>
+                val registeredUserId = userDict?.get("mid") as? String
+
+                if (registeredUserId != null) {
+                    // Make the newly registered user follow each user in getAlphaIds()
+                    val alphaIds = getAlphaIds()
+                    for (alphaId in alphaIds) {
+                        try {
+                            val followResult = toggleFollowing(alphaId, registeredUserId)
+                            Timber.tag("registerUser").d("New user $registeredUserId followed alpha user $alphaId, result: $followResult")
+                        } catch (e: Exception) {
+                            Timber.tag("registerUser").e(e, "Failed to follow alphaId $alphaId for new user $registeredUserId")
+                            // Continue with other users even if one fails
+                        }
+                    }
+                } else {
+                    Timber.tag("registerUser").w("Warning: User object not found in registration response")
+                }
+
+                return Pair(true, null)
+            } else if (success == false) {
+                // Error response - extract error message (like iOS does)
+                val message = response["message"] as? String
+                    ?: response["reason"] as? String
+                    ?: "Registration failed"
+                Timber.tag("registerUser").e("Registration failed: $message")
+                return Pair(false, message)
+            } else {
+                // Not a v2 response, try unwrapV2Response for backward compatibility
+                val unwrappedResponse = unwrapV2Response<Map<String, Any>>(rawResponse)
+                if (unwrappedResponse != null) {
+                    Timber.tag("registerUser").d("Registration successful (legacy format)")
+                    return Pair(true, null)
+                } else {
+                    Timber.tag("registerUser").e("Registration failed: Invalid response format")
+                    return Pair(false, "Invalid response format")
+                }
+            }
         } catch (e: Exception) {
-            Timber.tag("setUserData").e(e)
-            null  // For other errors, return null to show generic message
+            Timber.tag("registerUser").e(e, "Registration error")
+            return Pair(false, e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Helper function to update appUser in-memory with new values
+     */
+    private suspend fun updateAppUserInMemory(
+        alias: String?,
+        profile: String?,
+        hostId: String?,
+        cloudDrivePort: Int
+    ) {
+        withContext(Dispatchers.Main) {
+            alias?.let { appUser.name = it }
+            profile?.let { appUser.profile = it }
+            hostId?.let { appUser.hostIds = listOf(it) }
+            appUser.cloudDrivePort = cloudDrivePort
+        }
+    }
+
+    /**
+     * Update user profile/core data.
+     * @param password Optional new password
+     * @param alias Optional new display name/alias
+     * @param profile Optional new profile description/bio
+     * @param hostId Optional new host ID
+     * @param cloudDrivePort New cloud drive port number (0 to clear)
+     * @param domainToShare Optional domain to share
+     * @return Boolean indicating if update was successful
+     */
+    suspend fun updateUserCore(
+        password: String? = null,
+        alias: String? = null,
+        profile: String? = null,
+        hostId: String? = null,
+        cloudDrivePort: Int = 0
+    ): Pair<Boolean, String?> {
+        val updatedUser = User(
+            mid = appUser.mid,
+            name = alias,
+            password = password,
+            profile = profile,
+            cloudDrivePort = cloudDrivePort
+        ).apply {
+            hostId?.let { this.hostIds = listOf(it) }
+        }
+
+        val entry = "set_author_core_data"
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "user" to Json.encodeToString(updatedUser)
+        )
+
+        try {
+            val rawResponse = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+
+            // Check raw response directly for v2 format (like iOS does)
+            val response = rawResponse as? Map<String, Any>
+
+            if (response == null) {
+                Timber.tag("updateUserCore").e("Profile update failed: No response from server")
+                return Pair(false, "No response from server")
+            }
+
+            Timber.tag("updateUserCore").d("Server response: $response")
+
+            // Check for success in response
+            val isSuccess = when {
+                response["success"] == true -> true
+                response["status"] == "success" -> true // Legacy format fallback
+                else -> false
+            }
+
+            if (isSuccess) {
+                Timber.tag("updateUserCore").d("Profile update successful")
+
+                // Update in-memory appUser with new values
+                updateAppUserInMemory(alias, profile, hostId, cloudDrivePort)
+
+                // Clear user cache to ensure fresh data is loaded
+                TweetCacheManager.removeCachedUser(appUser.mid)
+                Timber.tag("updateUserCore").d("Cleared user cache for: ${appUser.mid}")
+
+                return Pair(true, null)
+            } else {
+                val errorMessage = response["message"] as? String
+                    ?: response["reason"] as? String
+                    ?: "Profile update failed"
+                Timber.tag("updateUserCore").e("Profile update failed: $errorMessage")
+                return Pair(false, errorMessage)
+            }
+        } catch (e: Exception) {
+            Timber.tag("updateUserCore").e(e, "Profile update error")
+            return Pair(false, e.message ?: "Unknown error")
         }
     }
 

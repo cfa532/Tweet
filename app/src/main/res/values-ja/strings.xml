@@ -126,4 +126,29 @@
     <string name="no_more_messages">これ以上のメッセージはありません</string>
     <string name="loading_older_messages">古いメッセージを読み込み中...</string>
     <string name="failed_to_send_message">メッセージの送信に失敗しました：%s</string>
+
+    <!-- Error message helper strings (Japanese) -->
+    <string name="username_taken">ユーザー名が既に使用されています</string>
+    <string name="wrong_password">パスワードが間違っています</string>
+    <string name="invalid_username_format">無効なユーザー名形式</string>
+    <string name="user_not_found_or_missing_host">ユーザーが見つからないかホストがありません</string>
+    <string name="user_host_not_found">ユーザーホストが見つかりません</string>
+    <string name="author_host_not_found">投稿者ホストが見つかりません</string>
+    <string name="user_not_found_in_database">データベースにユーザーが見つかりません</string>
+    <string name="user_missing_host">ユーザーにホストがありません</string>
+    <string name="cannot_follow_yourself">自分自身をフォローできません</string>
+    <string name="cannot_get_followed_user">フォローされたユーザーを取得できません</string>
+    <string name="missing_host_for_followed_user">フォローされたユーザーのホストがありません</string>
+    <string name="tweet_not_found">ツイートが見つかりません</string>
+    <string name="only_author_can_update_privacy">ツイートの投稿者のみがプライバシー設定を更新できます</string>
+    <string name="not_a_friend_of_the_host">ホストの友人ではありません</string>
+    <string name="no_provider_ip_found">プロバイダーIPが見つかりません</string>
+    <string name="failed_to_extract_zip_file">ZIPファイルの展開に失敗しました</string>
+    <string name="invalid_hls_structure">無効なHLS構造</string>
+    <string name="app_id_mismatch">アプリIDが一致しません</string>
+    <string name="chunk_size_exceeds_limit">チャンクサイズが1MB制限を超えています</string>
+    <string name="network_connection_lost">ネットワーク接続が失われました。インターネット接続を確認してください。</string>
+    <string name="request_timeout">リクエストがタイムアウトしました。もう一度お試しください。</string>
+    <string name="server_unreachable">サーバーに接続できません。後でもう一度お試しください。</string>
+    <string name="connection_error">接続エラー。もう一度お試しください。</string>
 </resources>

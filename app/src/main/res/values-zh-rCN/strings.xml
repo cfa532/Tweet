@@ -280,4 +280,28 @@
     <string name="crop_instructions">拖拽重新定位，双指缩放。圆形区域将是您的头像。</string>
     <string name="cropping_avatar">正在裁剪头像...</string>
     <string name="uploading_avatar">正在上传头像...</string>
+
+    <!-- Error message helper strings (Chinese Simplified) -->
+    <string name="wrong_password">密码错误</string>
+    <string name="invalid_username_format">无效的用户名格式</string>
+    <string name="user_not_found_or_missing_host">找不到用户或缺少主机</string>
+    <string name="user_host_not_found">找不到用户主机</string>
+    <string name="author_host_not_found">找不到作者主机</string>
+    <string name="user_not_found_in_database">在数据库中找不到用户</string>
+    <string name="user_missing_host">用户缺少主机</string>
+    <string name="cannot_follow_yourself">不能关注自己</string>
+    <string name="cannot_get_followed_user">无法获取被关注的用户</string>
+    <string name="missing_host_for_followed_user">被关注用户缺少主机</string>
+    <string name="tweet_not_found">找不到推文</string>
+    <string name="only_author_can_update_privacy">只有推文作者可以更新隐私设置</string>
+    <string name="not_a_friend_of_the_host">不是主机的朋友</string>
+    <string name="no_provider_ip_found">找不到提供者IP</string>
+    <string name="failed_to_extract_zip_file">解压缩ZIP文件失败</string>
+    <string name="invalid_hls_structure">无效的HLS结构</string>
+    <string name="app_id_mismatch">应用程序ID不匹配</string>
+    <string name="chunk_size_exceeds_limit">块大小超过1MB限制</string>
+    <string name="network_connection_lost">网络连接已断开。请检查您的网络连接。</string>
+    <string name="request_timeout">请求超时。请重试。</string>
+    <string name="server_unreachable">无法连接到服务器。请稍后重试。</string>
+    <string name="connection_error">连接错误。请重试。</string>
 </resources>

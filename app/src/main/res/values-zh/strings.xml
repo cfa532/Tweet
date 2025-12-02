@@ -78,5 +78,30 @@
     <string name="node_required_title">需要建立自己的節點</string>
     <string name="node_required_message">您已發布超過10條推文，需要建立自己的節點才能繼續發布。請建立您自己的節點以獲得更好的性能和存儲。</string>
     <string name="node_required_ok">我知道了</string>
+
+    <!-- Error message helper strings (Chinese Traditional) -->
+    <string name="username_taken">用戶名已被使用</string>
+    <string name="wrong_password">密碼錯誤</string>
+    <string name="invalid_username_format">無效的用戶名格式</string>
+    <string name="user_not_found_or_missing_host">找不到用戶或缺少主機</string>
+    <string name="user_host_not_found">找不到用戶主機</string>
+    <string name="author_host_not_found">找不到作者主機</string>
+    <string name="user_not_found_in_database">在數據庫中找不到用戶</string>
+    <string name="user_missing_host">用戶缺少主機</string>
+    <string name="cannot_follow_yourself">不能關注自己</string>
+    <string name="cannot_get_followed_user">無法獲取被關注的用戶</string>
+    <string name="missing_host_for_followed_user">被關注用戶缺少主機</string>
+    <string name="tweet_not_found">找不到推文</string>
+    <string name="only_author_can_update_privacy">只有推文作者可以更新隱私設置</string>
+    <string name="not_a_friend_of_the_host">不是主機的朋友</string>
+    <string name="no_provider_ip_found">找不到提供者IP</string>
+    <string name="failed_to_extract_zip_file">解壓縮ZIP文件失敗</string>
+    <string name="invalid_hls_structure">無效的HLS結構</string>
+    <string name="app_id_mismatch">應用程式ID不匹配</string>
+    <string name="chunk_size_exceeds_limit">區塊大小超過1MB限制</string>
+    <string name="network_connection_lost">網路連接已中斷。請檢查您的網路連接。</string>
+    <string name="request_timeout">請求超時。請重試。</string>
+    <string name="server_unreachable">無法連接到伺服器。請稍後重試。</string>
+    <string name="connection_error">連接錯誤。請重試。</string>
 </resources>
 
