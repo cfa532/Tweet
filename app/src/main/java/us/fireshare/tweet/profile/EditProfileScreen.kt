@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -217,6 +218,7 @@ fun EditProfileScreen(
     val selectedImageUri = remember { mutableStateOf<Uri?>(null) }
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
+    val hostIdFocused = remember { mutableStateOf(false) }
 
     // Debounce state to prevent rapid button clicks (similar to iOS DebounceButton)
     val lastClickTime = remember { mutableLongStateOf(0L) }
@@ -432,11 +434,21 @@ fun EditProfileScreen(
                 OutlinedTextField(
                     value = hostId,
                     onValueChange = { viewModel.onNodeIdChange(it) },
-                    label = { Text(stringResource(R.string.host_id)) },
+                    label = {
+                        val labelText = if (hostIdFocused.value) {
+                            appUser.hostIds?.firstOrNull() ?: stringResource(R.string.host_id)
+                        } else {
+                            stringResource(R.string.host_id)
+                        }
+                        Text(labelText)
+                    },
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .fillMaxWidth()
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { focusState ->
+                            hostIdFocused.value = focusState.isFocused
+                        },
                     singleLine = false
                 )
                 if (viewModel.hostIdError.value.isNotEmpty()) {
