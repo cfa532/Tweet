@@ -781,7 +781,14 @@ object HproseInstance {
      * */
     suspend fun setUserData(userObj: User): Map<*, *>? {
         val user = userObj.copy(fansList = null, followingList = null)  // Do not save them.
+        val params = mutableMapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "user" to Json.encodeToString(user)
+        )
         val entry = if (user.isGuest()) {
+            params["followings"] = Json.encodeToString(getAlphaIds())
             /**
              * Register a new user.
              * */
@@ -794,15 +801,6 @@ object HproseInstance {
             "set_author_core_data"
         }
         
-        val params = mutableMapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "user" to Json.encodeToString(user)
-        )
-        if (entry == "register") {
-            params["followings"] = Json.encodeToString(getAlphaIds())
-        }
         // Add debug flag for debug builds
         if (BuildConfig.DEBUG) {
             params["debug"] = "true"
