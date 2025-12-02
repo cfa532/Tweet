@@ -443,7 +443,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             HproseInstance.preferenceHelper.setCloudPort(cloudPort)
                             if (!appUser.isGuest()) {
                                 try {
-                                    // Send 0 if field is empty/blank to indicate removal
+                                    // Send 0 as cloudPort if field is empty/blank to indicate removal
                                     val portValue = cloudPort
                                     appUser.cloudDrivePort = if (portValue.isNullOrBlank()) 0 else (portValue.toIntOrNull() ?: 0)
                                     applicationScope.launch(Dispatchers.IO) {

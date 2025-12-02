@@ -760,7 +760,6 @@ object HproseInstance {
         return Pair(null, lastError ?: context.getString(R.string.login_error))
     }
 
-
     /**
      * @param nodeId
      * Find IP addresses of given node.
@@ -786,7 +785,6 @@ object HproseInstance {
             /**
              * Register a new user.
              * */
-            user.followingList = getAlphaIds()
             "register"
         } else {
             /**
@@ -802,7 +800,9 @@ object HproseInstance {
             "version" to "v2",
             "user" to Json.encodeToString(user)
         )
-
+        if (entry == "register") {
+            params["followings"] = Json.encodeToString(getAlphaIds())
+        }
         // Add debug flag for debug builds
         if (BuildConfig.DEBUG) {
             params["debug"] = "true"
@@ -810,9 +810,19 @@ object HproseInstance {
         return try {
             val rawResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
             unwrapV2Response<Map<String, Any>>(rawResponse)
+        } catch (e: java.net.SocketException) {
+            Timber.tag("setUserData").e("Network connection error: $e")
+            // Return a specific error response for network issues
+            mapOf("status" to "network_error", "reason" to "Connection failed. Please check your internet connection.")
+        } catch (e: java.net.ConnectException) {
+            Timber.tag("setUserData").e("Connection refused: $e")
+            mapOf("status" to "network_error", "reason" to "Cannot connect to server. Please try again later.")
+        } catch (e: java.util.concurrent.TimeoutException) {
+            Timber.tag("setUserData").e("Request timeout: $e")
+            mapOf("status" to "network_error", "reason" to "Request timed out. Please try again.")
         } catch (e: Exception) {
             Timber.tag("setUserData").e(e)
-            null
+            null  // For other errors, return null to show generic message
         }
     }
 

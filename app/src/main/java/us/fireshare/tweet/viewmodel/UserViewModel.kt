@@ -1234,16 +1234,14 @@ class UserViewModel @AssistedInject constructor(
                                 }
                             }
                         }
-                        
+
                         if (appUser.isGuest()) {
-                            // Create new user from processed data
-                            User.from(processedUserData)
-                            password.value = ""     // clear the password
+                            // new user registered, wait for its login
                             popBack()
                         } else {
                             // Update existing user profile
                             appUser.from(processedUserData)
-                            
+
                             // CRITICAL: Update cloudDrivePort and domainToShare directly with values that were sent
                             // This matches iOS behavior and ensures consistency even if server response is incomplete
                             val savedCloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
