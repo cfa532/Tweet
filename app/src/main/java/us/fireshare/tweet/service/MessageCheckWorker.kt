@@ -99,13 +99,29 @@ class MessageCheckWorker @AssistedInject constructor(
             // Get the first message for notification
             val firstMessage = messages.first()
             val authorId = firstMessage.authorId
-            val messagePreview = firstMessage.content ?: "New message"
+            
+            // Create message preview text
+            val messagePreview = when {
+                !firstMessage.content.isNullOrBlank() -> firstMessage.content!!
+                !firstMessage.attachments.isNullOrEmpty() -> {
+                    // Show attachment type in preview
+                    val attachmentType = firstMessage.attachments.first().type.name.lowercase()
+                    "Sent $attachmentType"
+                }
+                else -> "New message"
+            }
             
             // Count messages from the same sender
             val messagesFromSameSender = messages.count { it.authorId == authorId }
             
-            // Use authorId as sender name for simplicity
-            val senderName = authorId
+            // Try to get sender name from cache, fallback to authorId
+            val senderName = try {
+                val cachedUser = us.fireshare.tweet.datamodel.TweetCacheManager.getCachedUser(authorId)
+                cachedUser?.name ?: cachedUser?.username ?: authorId
+            } catch (e: Exception) {
+                Timber.tag("MessageCheckWorker").d("Could not get cached user for $authorId, using ID")
+                authorId
+            }
             
             SystemNotificationManager.showChatMessageNotification(
                 applicationContext,
@@ -114,7 +130,7 @@ class MessageCheckWorker @AssistedInject constructor(
                 messagesFromSameSender
             )
             
-            Timber.tag("MessageCheckWorker").d("System notifications shown for ${messages.size} new messages")
+            Timber.tag("MessageCheckWorker").d("System notifications shown for ${messages.size} new messages from $senderName")
         } catch (e: Exception) {
             Timber.tag("MessageCheckWorker").e(e, "Error showing system notifications")
         }

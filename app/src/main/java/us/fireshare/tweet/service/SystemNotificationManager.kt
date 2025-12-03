@@ -97,22 +97,33 @@ object SystemNotificationManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            val title = if (messageCount == 1) {
-                context.getString(R.string.notification_new_chat_message_simple)
-            } else {
-                context.getString(R.string.notification_new_chat_messages_simple, messageCount)
-            }
+            // Use sender name as title, or fallback to generic title
+            val title = senderName.takeIf { it.isNotBlank() && it != "No One" } 
+                ?: if (messageCount == 1) {
+                    context.getString(R.string.notification_new_chat_message_simple)
+                } else {
+                    context.getString(R.string.notification_new_chat_messages_simple, messageCount)
+                }
             
+            // Use message preview as content text, or fallback message
+            val contentText = messagePreview.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.notification_tap_to_view)
+            
+            // Create notification with BigTextStyle for better preview
             val notification = NotificationCompat.Builder(context, DEFAULT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notice)
                 .setContentTitle(title)
-                .setContentText(context.getString(R.string.notification_tap_to_view))
+                .setContentText(contentText)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(contentText)
+                    .setBigContentTitle(title))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .setNumber(messageCount)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setShowWhen(true)
                 .build()
             
             try {

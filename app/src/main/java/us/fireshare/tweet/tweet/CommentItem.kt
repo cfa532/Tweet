@@ -129,7 +129,7 @@ fun CommentItem(
                 }
 
                 if (!comment.content.isNullOrEmpty()) {
-                    SelectableText(text = comment.content!!, maxLines = 10) { username ->
+                    SelectableText(text = comment.content!!, maxLines = 7) { username ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {
                                 withContext(Dispatchers.Main) {

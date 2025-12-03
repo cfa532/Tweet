@@ -412,7 +412,7 @@ private fun RetweetWithContent(
                         if (hasContent) {
                             SelectableText(
                                 text = tweet.content!!,
-                                maxLines = 10,
+                                maxLines = 7,
                                 onTextClick = {
                                     // Navigate to detail view when text (not username) is clicked
                                     navController.navigate(
