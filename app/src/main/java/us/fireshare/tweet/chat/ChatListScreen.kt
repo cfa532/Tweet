@@ -245,8 +245,12 @@ fun ChatListScreen(
                 viewModel.createInMemoryChatSession(selectedUserId)
                 // Navigate to the chat screen
                 navController.navigate(NavTweet.ChatBox(selectedUserId))
+                // Close the dialog
+                showFollowingsDialog = false
             },
-            onDismiss = { }
+            onDismiss = { 
+                showFollowingsDialog = false
+            }
         )
     }
 }
@@ -303,13 +307,9 @@ fun ChatUserItem(
         }
     }
     
-    // Retry loading if the user data failed to load (user is guest)
-    LaunchedEffect(user) {
-        if (user.isGuest()) {
-            withContext(Dispatchers.IO) {
-                userViewModel.getUser()
-            }
-        }
+    // Don't show invalid users (guests or users without username)
+    if (user.isGuest() || user.username.isNullOrBlank()) {
+        return
     }
     
     Row(
