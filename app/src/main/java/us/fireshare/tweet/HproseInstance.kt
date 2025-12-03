@@ -581,6 +581,7 @@ object HproseInstance {
     }
 
     // get the recent unread message from a sender.
+    // Matches iOS implementation which unwraps v2 response and filters out outgoing messages.
     suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
         val entry = "message_fetch"
         val params = mapOf(
@@ -593,22 +594,82 @@ object HproseInstance {
         )
 
         return try {
+            // Get raw response and unwrap v2 format (matching iOS implementation)
+            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+            Timber.tag("fetchMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
+            
+            // Handle v2 response format: {success: true, data: [...]} or {success: false, error: ...} or direct array
+            val messageArray = when (rawResponse) {
+                is Map<*, *> -> {
+                    val responseMap = rawResponse as? Map<String, Any>
+                    val success = responseMap?.get("success") as? Boolean
+                    if (success == true) {
+                        // Extract data field which should be a List
+                        val data = responseMap?.get("data")
+                        when (data) {
+                            is List<*> -> data.filterIsInstance<Map<String, Any>>()
+                            else -> {
+                                Timber.tag("fetchMessages").w("Unexpected data type: ${data?.javaClass?.simpleName}")
+                                emptyList()
+                            }
+                        }
+                    } else {
+                        // Error response
+                        val errorMessage = responseMap?.get("error") as? String 
+                            ?: responseMap?.get("message") as? String 
+                            ?: "Unknown error"
+                        Timber.tag("fetchMessages").e("Server returned error: $errorMessage")
+                        return null
+                    }
+                }
+                is List<*> -> {
+                    // Legacy format: direct array
+                    rawResponse.filterIsInstance<Map<String, Any>>()
+                }
+                else -> {
+                    Timber.tag("fetchMessages").w("Unexpected response type: ${rawResponse?.javaClass?.simpleName}")
+                    emptyList()
+                }
+            }
+            
+            Timber.tag("fetchMessages").d("Received ${messageArray.size} messages from server (before filtering)")
+            
             val gson = GsonBuilder()
                 .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
                 .create()
 
-            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
-                ?.mapNotNull { messageData ->
+            val allMessages = messageArray.mapNotNull { messageData ->
+                try {
                     gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
+                } catch (e: Exception) {
+                    Timber.tag("fetchMessages").e(e, "Error decoding message")
+                    null
                 }
+            }
+
+            // Filter to only return incoming messages (sent by others to current user)
+            // Filter out messages sent by the current user (matching iOS implementation)
+            val incomingMessages = allMessages.filter { message ->
+                val isIncoming = message.authorId != appUser.mid
+                if (!isIncoming) {
+                    Timber.tag("fetchMessages").d("Filtered out outgoing message from ${message.authorId}")
+                } else {
+                    Timber.tag("fetchMessages").d("Incoming message from ${message.authorId} to ${message.receiptId}")
+                }
+                isIncoming
+            }
+
+            Timber.tag("fetchMessages").d("Returning ${incomingMessages.size} incoming messages (after filtering)")
+            return incomingMessages
         } catch (e: Exception) {
-            Timber.tag("fetchMessages").e(e)
+            Timber.tag("fetchMessages").e(e, "Error in fetchMessages")
             null
         }
     }
 
     /**
      * Get a list of unread incoming messages. Only check, do not fetch them.
+     * Matches iOS implementation which unwraps v2 response and filters out outgoing messages.
      * */
     suspend fun checkNewMessages(): List<ChatMessage>? {
         if (appUser.isGuest()) return null
@@ -621,16 +682,80 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         return try {
+            // Get raw response and unwrap v2 format (matching iOS implementation)
+            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+            Timber.tag("checkNewMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
+            
+            // Handle v2 response format: {success: true, data: [...]} or direct array
+            val response = when (rawResponse) {
+                is Map<*, *> -> {
+                    val responseMap = rawResponse as? Map<String, Any>
+                    val success = responseMap?.get("success") as? Boolean
+                    if (success == true) {
+                        // Extract data field which should be a List
+                        val data = responseMap?.get("data")
+                        when (data) {
+                            is List<*> -> data.filterIsInstance<Map<String, Any>>()
+                            else -> {
+                                Timber.tag("checkNewMessages").w("Unexpected data type: ${data?.javaClass?.simpleName}")
+                                emptyList()
+                            }
+                        }
+                    } else {
+                        // Error response
+                        val message = responseMap?.get("message") as? String
+                        Timber.tag("checkNewMessages").w("API returned error: $message")
+                        emptyList()
+                    }
+                }
+                is List<*> -> {
+                    // Legacy format: direct array
+                    rawResponse.filterIsInstance<Map<String, Any>>()
+                }
+                else -> {
+                    Timber.tag("checkNewMessages").w("Unexpected response type: ${rawResponse?.javaClass?.simpleName}")
+                    emptyList()
+                }
+            }
+            
+            Timber.tag("checkNewMessages").d("Extracted ${response.size} messages from response")
+            
+            Timber.tag("checkNewMessages").d("Received ${response.size} messages from server (before filtering)")
+            
             val gson = GsonBuilder()
                 .registerTypeAdapter(ChatMessage::class.java, ChatMessageDeserializer())
                 .create()
 
-            appUser.hproseService?.runMApp<List<Map<String, Any>>>(entry, params)
-                ?.mapNotNull { messageData ->
+            val allMessages = response.mapNotNull { messageData ->
+                try {
                     gson.fromJson(gson.toJson(messageData), ChatMessage::class.java)
+                } catch (e: Exception) {
+                    Timber.tag("checkNewMessages").e(e, "Error decoding message")
+                    null
                 }
+            }
+
+            // Filter to only return incoming messages (sent by others to current user)
+            // Filter out messages sent by the current user (matching iOS implementation)
+            val incomingMessages = allMessages.filter { message ->
+                val isIncoming = message.authorId != appUser.mid
+                if (!isIncoming) {
+                    Timber.tag("checkNewMessages").d("Filtered out outgoing message from ${message.authorId}")
+                } else {
+                    Timber.tag("checkNewMessages").d("Incoming message from ${message.authorId} to ${message.receiptId}")
+                }
+                isIncoming
+            }
+
+            Timber.tag("checkNewMessages").d("Returning ${incomingMessages.size} incoming messages (after filtering)")
+
+            // Update timestamp to current system time for incoming messages (matching iOS)
+            val currentTime = System.currentTimeMillis()
+            return incomingMessages.map { message ->
+                message.copy(timestamp = currentTime)
+            }
         } catch (e: Exception) {
-            Timber.tag("checkNewMessages").e(e)
+            Timber.tag("checkNewMessages").e(e, "Error in checkNewMessages")
             null
         }
     }

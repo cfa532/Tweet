@@ -2,6 +2,7 @@ package us.fireshare.tweet.chat
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
@@ -162,82 +163,82 @@ class ChatSessionRepository @Inject constructor(
      * Chat message is identified by its Normalized pair of authorId and receiptId.
      * The session's author is always the current app user, and its receipt is the one
      * engaging in conversation with the appUser.
+     * 
+     * This implementation matches the iOS version which determines the partner ID
+     * directly from the message (authorId for incoming, receiptId for outgoing).
      * */
     fun mergeMessagesWithSessions(
         existingSessions: List<ChatSession>,
         newMessages: List<ChatMessage>
     ): List<ChatSession> {
-
-        // a map using senderId and receiptId as key, and ChatMessage as value
-        val messageMap = mutableMapOf<Pair<MimeiId, MimeiId>, ChatMessage>()
-        fun normalizedKey(message: ChatMessage): Pair<MimeiId, MimeiId> {
-            return if (message.receiptId < message.authorId) {
-                Pair(message.receiptId, message.authorId)
+        // Group messages by conversation partner (matching iOS implementation)
+        // For incoming messages: partnerId = authorId (the sender)
+        // For outgoing messages: partnerId = receiptId (the recipient)
+        val messagesByPartner = newMessages.groupBy { message ->
+            if (message.authorId == appUser.mid) {
+                message.receiptId  // Outgoing: use receiptId (recipient)
             } else {
-                Pair(message.authorId, message.receiptId)
+                message.authorId   // Incoming: use authorId (sender)
             }
         }
-        // Add existing messages to the map
-        existingSessions.forEach { session ->
-            val message = session.lastMessage
-            val key = normalizedKey(message)
-            messageMap[key] = message
-        }
-
-        // Merge new messages into the map, by replacing old last messages.
-        // Compare by message ID first (more reliable), then by timestamp
-        // This is important because previewMessages sets all incoming messages to the same currentTime
-        newMessages.forEach { message ->
-            val key = normalizedKey(message)
-            val existingMessage = messageMap[key]
-            if (existingMessage == null) {
-                messageMap[key] = message
-            } else {
-                // Update if message ID is different (new message) or if timestamp is newer
-                val isDifferentMessage = message.id != existingMessage.id
-                val isNewerTimestamp = message.timestamp > existingMessage.timestamp
-                if (isDifferentMessage || isNewerTimestamp) {
-                    messageMap[key] = message
-                }
-            }
-        }
-
+        
         val updatedSessions = existingSessions.toMutableList()
-        messageMap.forEach { (key, rawMessage) ->
+        
+        // Process each group of messages by partner
+        messagesByPartner.forEach { (partnerId, messages) ->
+            // Use the last message from the group (newest message)
+            val lastMessage = messages.maxByOrNull { it.timestamp } ?: return@forEach
+            
             // Create preview message for display (original message content is preserved)
-            val msg = rawMessage.withAttachmentPreview(context)
-            val es =
-                existingSessions.find { it.receiptId == key.first || it.receiptId == key.second }
-            if (es == null) {
-                // a new session is created.
+            val msg = lastMessage.withAttachmentPreview(context)
+            
+            Timber.tag("ChatSessionRepository").d(
+                "mergeMessagesWithSessions: Processing message - " +
+                "authorId=${lastMessage.authorId}, receiptId=${lastMessage.receiptId}, " +
+                "partnerId=$partnerId, appUser.mid=${appUser.mid}, " +
+                "isIncoming=${lastMessage.authorId != appUser.mid}"
+            )
+            
+            // Find existing session by partnerId (the other user)
+            val existingSession = existingSessions.find { it.receiptId == partnerId }
+            
+            if (existingSession == null) {
+                // Create new session
+                Timber.tag("ChatSessionRepository").d(
+                    "mergeMessagesWithSessions: Creating new session for partnerId=$partnerId"
+                )
                 updatedSessions.add(
                     ChatSession(
                         id = ChatSession.generateSessionId(), // Generate UUID for session
                         timestamp = msg.timestamp,
                         userId = appUser.mid,
-                        receiptId = if (key.first == appUser.mid) key.second else key.first,
+                        receiptId = partnerId,
                         hasNews = true,
                         lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()) // Will be updated when session is saved
                     )
                 )
             } else {
-                // Update if message ID is different (new message) or if timestamp is newer
+                // Update existing session if message ID is different (new message) or if timestamp is newer
                 // Message ID comparison is more reliable since previewMessages sets all incoming messages to same currentTime
-                val isDifferentMessage = msg.id != es.lastMessage.id
-                val isNewerTimestamp = msg.timestamp > es.lastMessage.timestamp
+                val isDifferentMessage = msg.id != existingSession.lastMessage.id
+                val isNewerTimestamp = msg.timestamp > existingSession.lastMessage.timestamp
                 if (isDifferentMessage || isNewerTimestamp) {
-                    // existing session is updated with new message.
-                    updatedSessions.remove(es)
-                    updatedSessions.add(
-                        es.copy(
-                            lastMessage = msg.copy(sessionId = es.id),
+                    Timber.tag("ChatSessionRepository").d(
+                        "mergeMessagesWithSessions: Updating existing session for partnerId=$partnerId, " +
+                        "oldMessageId=${existingSession.lastMessage.id}, newMessageId=${msg.id}"
+                    )
+                    val index = updatedSessions.indexOf(existingSession)
+                    if (index >= 0) {
+                        updatedSessions[index] = existingSession.copy(
+                            lastMessage = msg.copy(sessionId = existingSession.id),
                             timestamp = msg.timestamp,
                             hasNews = true
                         )
-                    )
+                    }
                 }
             }
         }
+        
         return updatedSessions.toList()
     }
 

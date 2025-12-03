@@ -108,7 +108,18 @@ class ChatListViewModel @Inject constructor(
     // check if there are new messages on the server. If so, retrieve the last one for UI update.
     suspend fun previewMessages() {
         val newMessages = HproseInstance.checkNewMessages() ?: return
-        Timber.tag("checkNewMessages").d("previewMessages: $newMessages")
+        Timber.tag("checkNewMessages").d("previewMessages: Received ${newMessages.size} messages from server")
+        
+        // Log details of each message for debugging
+        newMessages.forEach { message ->
+            Timber.tag("checkNewMessages").d(
+                "previewMessages: Message - id=${message.id}, " +
+                "authorId=${message.authorId}, receiptId=${message.receiptId}, " +
+                "content=${message.content?.take(50)}, " +
+                "appUser.mid=${appUser.mid}, " +
+                "isIncoming=${message.authorId != appUser.mid}"
+            )
+        }
 
         // Filter out messages that already exist in local database
         val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
@@ -122,20 +133,12 @@ class ChatListViewModel @Inject constructor(
         // Notify callback about new messages found
         onNewMessageCallback?.invoke(trulyNewMessages.size)
 
-        // Update timestamps with local system time for received messages
-        val currentTime = System.currentTimeMillis()
-        val updatedNewMessages = trulyNewMessages.map { message ->
-            if (message.authorId != appUser.mid) {
-                // Update timestamp for incoming messages with local time
-                message.copy(timestamp = currentTime)
-            } else {
-                message
-            }
-        }
+        // Note: checkNewMessages already filters to only incoming messages and updates timestamps
+        // So trulyNewMessages contains only incoming messages with updated timestamps
 
         // Create sessions for new messages but don't insert the messages
         val updatedSessions =
-            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, updatedNewMessages)
+            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, trulyNewMessages)
 
         // Update chat session database (create empty sessions)
         updatedSessions.forEach { chatSession ->
