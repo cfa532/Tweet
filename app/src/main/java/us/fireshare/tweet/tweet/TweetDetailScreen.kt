@@ -207,45 +207,63 @@ fun TweetDetailScreen(
 
     // Track if we've loaded page 0 to prevent infinite reloads
     var hasLoadedPage0 by remember { mutableStateOf(false) }
-    // Track if we've confirmed there are no comments (to prevent infinite loading)
-    var hasConfirmedNoComments by remember { mutableStateOf(false) }
+    // Track if we should stop pagination (when empty page is returned)
+    var shouldStopPagination by remember { mutableStateOf(false) }
 
     // Initial comment load when tweet is available - only load once per tweet
     LaunchedEffect(tweet.mid) {
         if (tweet.mid != null && !hasLoadedPage0) {
             hasLoadedPage0 = true
+            isInitialLoading = true
             withContext(Dispatchers.IO) {
-                viewModel.loadComments(tweet, 0)
+                val newCommentsCount = viewModel.loadComments(tweet, 0)
                 currentPage = 0
                 lastLoadedPage = 0
+                // If page 0 returned no comments, stop pagination immediately
+                if (newCommentsCount == 0) {
+                    shouldStopPagination = true
+                    Timber.tag("TweetDetailScreen").d("Page 0 returned no comments for tweet ${tweet.mid}, stopping pagination")
+                }
             }
             isInitialLoading = false
         }
     }
 
-    // Track if page 0 returned empty - set flag after comments state updates
-    LaunchedEffect(comments, hasLoadedPage0) {
-        if (hasLoadedPage0 && comments.isEmpty() && lastLoadedPage == 0) {
-            // We loaded page 0 and got no comments - confirm there are no comments
-            hasConfirmedNoComments = true
-            Timber.tag("TweetDetailScreen").d("Confirmed no comments after loading page 0")
-        } else if (comments.isNotEmpty()) {
-            // We have comments, reset the flag
-            hasConfirmedNoComments = false
-        }
-    }
+    // Track last pagination attempt to prevent rapid repeated calls
+    var lastPaginationAttempt by remember { mutableStateOf(-1L) }
 
-    // Infinite scroll for comments - only load if we have comments and haven't confirmed no comments
-    LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && hasLoadedPage0 && !hasConfirmedNoComments && comments.isNotEmpty()) {
+    // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
+    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
+        // CRITICAL: Don't attempt pagination if we've confirmed there are no comments
+        if (shouldStopPagination || (comments.isEmpty() && hasLoadedPage0)) {
+            return@LaunchedEffect
+        }
+        
+        val now = System.currentTimeMillis()
+        // Add throttling: don't attempt pagination more than once per second
+        // Only load if we're at bottom, have comments, and haven't stopped pagination
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && hasLoadedPage0 && 
+            !shouldStopPagination && comments.isNotEmpty() && 
+            (now - lastPaginationAttempt) > 1000L) {
+            
+            lastPaginationAttempt = now
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
                         val nextPage = lastLoadedPage + 1
-                        viewModel.loadComments(tweet, nextPage)
-                        currentPage = nextPage
-                        lastLoadedPage = nextPage
+                        val newCommentsCount = viewModel.loadComments(tweet, nextPage)
+                        
+                        if (newCommentsCount == 0) {
+                            // No new comments from this page, stop pagination
+                            shouldStopPagination = true
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
+                        } else {
+                            // Got new comments, continue pagination
+                            currentPage = nextPage
+                            lastLoadedPage = nextPage
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned $newCommentsCount comments, continuing pagination")
+                        }
                     }
                 } finally {
                     isRefreshingAtBottom = false

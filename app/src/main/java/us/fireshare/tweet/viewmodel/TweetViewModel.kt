@@ -254,7 +254,7 @@ class TweetViewModel @AssistedInject constructor(
         isCheckedToTweet.value = value
     }
 
-    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
+    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0): Int {
         val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
             it.author = HproseInstance.getUser(it.authorId)
             it
@@ -270,6 +270,9 @@ class TweetViewModel @AssistedInject constructor(
             }
             finalComments
         }
+        
+        // Return the number of new comments fetched from this page
+        return newComments.size
     }
 
     suspend fun delComment(commentId: MimeiId) {
