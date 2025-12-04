@@ -127,10 +127,12 @@ class UserViewModel @AssistedInject constructor(
             // Load first page (page 0) which includes pinned tweets
             val page0Tweets = getTweets(0)
             
-            // Check if page 0 returned empty (server depleted)
+            // Check if page 0 indicates server depletion
+            // If server returns fewer than PAGE_SIZE tweets, it's depleted (regardless of null/valid)
             val page0ValidTweets = page0Tweets.filterNotNull()
-            if (page0ValidTweets.isEmpty() && page0Tweets.size < TW_CONST.PAGE_SIZE) {
-                Timber.tag("initLoad").d("Page 0 returned no tweets, server depleted - stopping initial load")
+            if (page0Tweets.size < TW_CONST.PAGE_SIZE) {
+                // Server is depleted - returned fewer than a full page
+                Timber.tag("initLoad").d("Page 0 returned ${page0Tweets.size} tweets (${page0ValidTweets.size} valid), server depleted - stopping initial load")
             } else {
                 // Load additional pages if needed to get at least 5 viewable tweets
                 var pageNumber = 1
