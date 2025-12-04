@@ -73,8 +73,8 @@ fun BottomNavigationBar(
     val context = LocalContext.current
     
 
-    // Stabilize the items list to prevent unnecessary recompositions
-    val items = remember {
+    // Items list - must depend on badgeCount to update when badge changes
+    val items = remember(badgeCount) {
         listOf(
             BottomNavigationItem(
                 title = "Home",

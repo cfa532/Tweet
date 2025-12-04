@@ -46,8 +46,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.navigation.TweetNavGraph
 import us.fireshare.tweet.service.AppUserRefreshWorker
+import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.ThemeManager
@@ -59,6 +61,9 @@ import javax.inject.Inject
 class TweetActivity : ComponentActivity() {
     private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
+    
+    @Inject
+    lateinit var chatSessionRepository: ChatSessionRepository
 
     // Register activity result launcher for notification permission
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -82,7 +87,15 @@ class TweetActivity : ComponentActivity() {
         }
 
         initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@TweetActivity)
+            HproseInstance.init(this@TweetActivity) {
+                // Callback called after initialization completes
+                // Check for new messages and update badge on startup
+                lifecycleScope.launch(IO) {
+                    if (::chatSessionRepository.isInitialized) {
+                        checkMessagesAndUpdateBadge()
+                    }
+                }
+            }
         }
 
         lifecycleScope.launch {
@@ -147,6 +160,13 @@ class TweetActivity : ComponentActivity() {
         // Resume incomplete uploads when app comes to foreground
         if (::initJob.isInitialized && initJob.isCompleted) {
             HproseInstance.resumeIncompleteUploads(this)
+            
+            // Check for new messages and update badge when app comes to foreground
+            lifecycleScope.launch(IO) {
+                if (::chatSessionRepository.isInitialized) {
+                    checkMessagesAndUpdateBadge()
+                }
+            }
         }
     }
 
@@ -200,6 +220,66 @@ class TweetActivity : ComponentActivity() {
         )
 
         Timber.tag("AppUserRefresh").d("Scheduled periodic appUser refresh every 30 minutes")
+    }
+
+    /**
+     * Check for new messages and update the badge count based on unread sessions
+     */
+    private suspend fun checkMessagesAndUpdateBadge() {
+        if (HproseInstance.appUser.isGuest()) {
+            Timber.tag("TweetActivity").d("Skipping message check - user is guest")
+            return
+        }
+
+        // Ensure repository is initialized
+        if (!::chatSessionRepository.isInitialized) {
+            Timber.tag("TweetActivity").w("ChatSessionRepository not initialized yet, skipping badge update")
+            return
+        }
+
+        try {
+            // Check for new messages from server
+            val newMessages = HproseInstance.checkNewMessages()
+            if (newMessages != null && newMessages.isNotEmpty()) {
+                Timber.tag("TweetActivity").d("Found ${newMessages.size} new messages, updating sessions")
+                
+                // Filter out messages that already exist in local database
+                val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
+                
+                if (trulyNewMessages.isNotEmpty()) {
+                    // Get existing sessions
+                    val existingSessions = chatSessionRepository.getAllSessions()
+                    
+                    // Merge new messages with existing sessions
+                    val updatedSessions = chatSessionRepository.mergeMessagesWithSessions(
+                        existingSessions,
+                        trulyNewMessages
+                    )
+                    
+                    // Update chat session database
+                    updatedSessions.forEach { chatSession ->
+                        chatSessionRepository.updateChatSession(
+                            HproseInstance.appUser.mid,
+                            chatSession.receiptId,
+                            hasNews = chatSession.hasNews
+                        )
+                    }
+                }
+            }
+            
+            // Count unread sessions (sessions with hasNews = true)
+            val allSessions = chatSessionRepository.getAllSessions()
+            val unreadCount = allSessions.count { it.hasNews }
+            
+            Timber.tag("TweetActivity").d("Unread sessions count: $unreadCount")
+            
+            // Update badge count
+            withContext(Main) {
+                BadgeStateManager.updateBadgeCount(unreadCount)
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetActivity").e(e, "Error checking messages and updating badge")
+        }
     }
 }
 

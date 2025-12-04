@@ -163,7 +163,7 @@ object HproseInstance {
         val videoConversionUri: String? = null  // Original video URI for aspect ratio calculation
     )
 
-    suspend fun init(context: Context) {
+    suspend fun init(context: Context, onInitialized: (suspend () -> Unit)? = null) {
         try {
             // Store Application context to avoid memory leaks
             this.applicationContext = context.applicationContext as Application
@@ -188,6 +188,9 @@ object HproseInstance {
             // CRITICAL: initAppEntry() must complete first and set IP-based baseUrl
             // This is suspend, so init() will wait for it to complete
             initAppEntry()
+            
+            // Call the callback after successful initialization
+            onInitialized?.invoke()
         } catch (e: Exception) {
             Timber.tag("HproseInstance").e(e, "Error during HproseInstance initialization")
             // Set up minimal fallback state to prevent app from being completely broken
