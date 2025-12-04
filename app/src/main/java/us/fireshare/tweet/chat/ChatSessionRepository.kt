@@ -55,38 +55,40 @@ class ChatSessionRepository @Inject constructor(
         message: ChatMessage,
         hasNews: Boolean
     ): ChatMessage {
-        // First, check if message already exists to avoid duplicate inserts
+        // First get or create session ID
+        val sessionId = getOrCreateSessionId(userId, receiptId)
+        
+        // Check if message already exists to avoid duplicate inserts
         val existingEntity = chatMessageDao.getMessageByMessageId(message.id)
         val messageEntity: ChatMessageEntity
         
         if (existingEntity != null) {
             // Message already exists, use it
             messageEntity = existingEntity
+            // Update message if sessionId changed
+            if (existingEntity.sessionId != sessionId) {
+                val entityWithSession = existingEntity.copy(sessionId = sessionId)
+                chatMessageDao.insertMessage(entityWithSession)
+                // Create/update session with correct values
+                updateSessionWithEntity(sessionId, entityWithSession, hasNews)
+            } else {
+                // SessionId already matches, just update session
+                updateSessionWithEntity(sessionId, messageEntity, hasNews)
+            }
         } else {
-            // Message doesn't exist, insert it (without sessionId first, will be set below)
-            val entityToInsert = message.toEntity()
+            // Message doesn't exist, insert it ONCE with sessionId already set
+            val entityToInsert = message.toEntity().copy(sessionId = sessionId)
             chatMessageDao.insertMessage(entityToInsert)
-            // Get the inserted entity with the auto-generated id
-            messageEntity = chatMessageDao.getMessageByMessageId(message.id) ?: entityToInsert
+            // Get the inserted entity with auto-generated id for lastMessageId
+            val insertedEntity = chatMessageDao.getMessageByMessageId(message.id)
+            if (insertedEntity == null) {
+                Timber.tag("ChatSessionRepository").e("Failed to retrieve inserted message: ${message.id}, sessionId: $sessionId")
+                throw IllegalStateException("Failed to retrieve inserted message: ${message.id}")
+            }
+            Timber.tag("ChatSessionRepository").d("Inserted message: messageId=${message.id}, autoId=${insertedEntity.id}, sessionId=$sessionId, hasNews=$hasNews")
+            // Create/update session with correct values (using inserted entity with auto-generated id)
+            updateSessionWithEntity(sessionId, insertedEntity, hasNews)
         }
-        
-        // Now get or create session ID and ensure session exists with correct values
-        val sessionId = getOrCreateSessionId(userId, receiptId)
-        
-        // Ensure message has sessionId set
-        val entityWithSession = if (messageEntity.sessionId != sessionId) {
-            messageEntity.copy(sessionId = sessionId)
-        } else {
-            messageEntity
-        }
-        
-        // Update message if sessionId changed
-        if (messageEntity.sessionId != sessionId) {
-            chatMessageDao.insertMessage(entityWithSession)
-        }
-        
-        // Create/update session with correct values (handles both new and existing sessions)
-        updateSessionWithEntity(sessionId, entityWithSession, hasNews)
         
         // Create preview message for session's lastMessage (for display only)
         val normalizedMessage = message.copy(sessionId = sessionId)

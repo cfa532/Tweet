@@ -298,14 +298,22 @@ class ChatViewModel @AssistedInject constructor(
             _chatMessages.update { existing ->
                 (existing + newMessages).sortedBy { it.timestamp }
             }
-            // update session in memory
-            val lastMessage = (newMessages + updatedNews).maxByOrNull { it.timestamp }
-            lastMessage?.let { message ->
-                Timber.tag("ChatViewModel")
-                    .d("fetchNewMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
-                val previewMessage = chatSessionRepository.updateChatSessionWithMessage(appUser.mid, receiptId, message, hasNews = false)
-                chatListViewModel?.updateSession(previewMessage, hasNews = false)
-            } ?: run {
+            // update session in memory - only update if we have new messages
+            // Don't call updateChatSessionWithMessage here as it will insert messages again
+            // Messages are already inserted above, just update the session metadata
+            if (newMessages.isNotEmpty()) {
+                val lastMessage = newMessages.maxByOrNull { it.timestamp }
+                lastMessage?.let { message ->
+                    Timber.tag("ChatViewModel")
+                        .d("fetchNewMessage updating session with message: ${message.content}, authorId: ${message.authorId}")
+                    // Just update the session, don't insert message again (it's already inserted above)
+                    // updateChatSession will find the latest message from the database and update the session
+                    chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
+                    // Update session in memory - use the message directly (preview will be handled by ChatListViewModel if needed)
+                    chatListViewModel?.updateSession(message, hasNews = false)
+                }
+            } else {
+                // No new messages, just mark session as read
                 chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
             }
         }
