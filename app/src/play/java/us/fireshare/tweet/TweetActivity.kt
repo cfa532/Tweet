@@ -97,6 +97,10 @@ class PlayTweetActivity : ComponentActivity() {
                     activityViewModel.loadEntryUrls()
                 }
 
+                // Handle initial intent
+                activityViewModel.currentIntent.value = intent
+                handleIntent(intent)
+
                 setContent {
                     // Initialize theme manager with current preference
                     val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
@@ -106,7 +110,10 @@ class PlayTweetActivity : ComponentActivity() {
                         Scaffold(
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                            TweetNavGraph(
+                                appLinkIntent = activityViewModel.currentIntent.value,
+                                modifier = Modifier.padding(innerPadding)
+                            )
                         }
                     }
                 }
@@ -114,6 +121,10 @@ class PlayTweetActivity : ComponentActivity() {
                 Timber.tag("TweetActivity").e(e, "Error during app initialization")
                 // Still show the app even if initialization fails
                 activityViewModel.isAppReady.value = true
+                // Handle initial intent
+                activityViewModel.currentIntent.value = intent
+                handleIntent(intent)
+                
                 setContent {
                     val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
                     ThemeManager.updateThemeMode(initialThemeMode)
@@ -122,11 +133,29 @@ class PlayTweetActivity : ComponentActivity() {
                         Scaffold(
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                            TweetNavGraph(
+                                appLinkIntent = activityViewModel.currentIntent.value,
+                                modifier = Modifier.padding(innerPadding)
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent) // Update the intent so getIntent() returns the latest one
+        handleIntent(intent)
+    }
+
+    /**
+     * Handle deep link intent
+     */
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
+            activityViewModel.currentIntent.value = intent
         }
     }
 
@@ -170,6 +199,7 @@ class PlayTweetActivity : ComponentActivity() {
 
 class PlayActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
+    val currentIntent = mutableStateOf<Intent?>(null)
 
     /**
      * Load entry URLs from BuildConfig.ENTRY_URLS.
@@ -206,3 +236,4 @@ class PlayActivityViewModel: ViewModel() {
         }
     }
 }
+
