@@ -160,12 +160,15 @@ class TweetActivity : ComponentActivity() {
         // Resume incomplete uploads when app comes to foreground
         if (::initJob.isInitialized && initJob.isCompleted) {
             HproseInstance.resumeIncompleteUploads(this)
-            
-            // Check for new messages and update badge when app comes to foreground
-            lifecycleScope.launch(IO) {
-                if (::chatSessionRepository.isInitialized) {
-                    checkMessagesAndUpdateBadge()
-                }
+        }
+        
+        // Always check for new messages and update badge when app comes to foreground
+        // This ensures badge is updated even if initialization is still in progress
+        lifecycleScope.launch(IO) {
+            if (::chatSessionRepository.isInitialized) {
+                checkMessagesAndUpdateBadge()
+            } else {
+                Timber.tag("TweetActivity").d("ChatSessionRepository not initialized yet, will check messages after initialization")
             }
         }
     }
@@ -256,11 +259,16 @@ class TweetActivity : ComponentActivity() {
                         trulyNewMessages
                     )
                     
-                    // Update chat session database
+                    // Update chat session database - create/update sessions and save messages for badge counting
+                    // Messages are saved here so the session can be created with hasNews flag
+                    // fetchNewMessage() will filter out existing messages using filterExistingMessages
                     updatedSessions.forEach { chatSession ->
-                        chatSessionRepository.updateChatSession(
+                        // Use updateChatSessionWithMessage to create session and save message
+                        // This ensures the session exists with hasNews flag for badge counting
+                        chatSessionRepository.updateChatSessionWithMessage(
                             HproseInstance.appUser.mid,
                             chatSession.receiptId,
+                            chatSession.lastMessage,
                             hasNews = chatSession.hasNews
                         )
                     }
