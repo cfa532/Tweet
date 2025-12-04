@@ -521,9 +521,6 @@ fun TweetListView(
 
     // Infinite scroll - Only trigger when last tweet is visible and server not depleted
     LaunchedEffect(isAtLastTweet, isRefreshingAtBottom, serverDepleted, externalLoadMoreRequest) {
-        Timber.tag("TweetListView")
-            .d("isAtLastTweet changed: $isAtLastTweet, isRefreshingAtBottom: $isRefreshingAtBottom, tweets.size: ${tweets.size}, serverDepleted: $serverDepleted, externalLoadMoreRequest: $externalLoadMoreRequest, lastLoadedPage: $lastLoadedPage")
-
         // Allow loading if last tweet is visible, not already refreshing, and no pending load for the same page
         // OR if there's an external loadmore request (even when serverDepleted is true)
         if ((isAtLastTweet && !isRefreshingAtBottom && tweets.isNotEmpty() && !serverDepleted) ||
