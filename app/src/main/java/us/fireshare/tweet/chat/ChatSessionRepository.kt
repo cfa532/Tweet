@@ -55,8 +55,12 @@ class ChatSessionRepository @Inject constructor(
         message: ChatMessage,
         hasNews: Boolean
     ): ChatMessage {
-        // First get or create session ID
-        val sessionId = getOrCreateSessionId(userId, receiptId)
+        // For incoming messages, use authorId as sessionId; for outgoing, use receiptId
+        val sessionId = if (message.authorId != userId) {
+            message.authorId // Incoming message: use sender's ID as session ID
+        } else {
+            receiptId // Outgoing message: use recipient's ID as session ID
+        }
         
         // Check if message already exists to avoid duplicate inserts
         val existingEntity = chatMessageDao.getMessageByMessageId(message.id)
@@ -232,18 +236,18 @@ class ChatSessionRepository @Inject constructor(
             val existingSession = existingSessions.find { it.receiptId == partnerId }
             
             if (existingSession == null) {
-                // Create new session
+                // Create new session - use partnerId (authorId for incoming messages) as session ID
                 Timber.tag("ChatSessionRepository").d(
-                    "mergeMessagesWithSessions: Creating new session for partnerId=$partnerId"
+                    "mergeMessagesWithSessions: Creating new session for partnerId=$partnerId, sessionId=$partnerId"
                 )
                 updatedSessions.add(
                     ChatSession(
-                        id = ChatSession.generateSessionId(), // Generate UUID for session
+                        id = partnerId, // Use partnerId (authorId for incoming) as session ID
                         timestamp = msg.timestamp,
                         userId = appUser.mid,
                         receiptId = partnerId,
                         hasNews = true,
-                        lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()) // Will be updated when session is saved
+                        lastMessage = msg.copy(sessionId = partnerId) // Use same sessionId
                     )
                 )
             } else {
