@@ -8,13 +8,16 @@ import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import timber.log.Timber
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
@@ -60,7 +63,7 @@ val LocalNavController = compositionLocalOf<NavController> {
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetNavGraph(
-    appLinkIntent: Intent,
+    appLinkIntent: Intent?,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
@@ -78,16 +81,48 @@ fun TweetNavGraph(
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
-    // Handle deeplink
-    if (appLinkIntent.action == Intent.ACTION_VIEW) {
-        val appLinkData = appLinkIntent.data
-        if (appLinkData != null) {
-            val pathSegments = appLinkData.pathSegments
-            if (pathSegments.size >= 3) { // Check if enough segments are present
-                val tweetId = pathSegments[1] // Get the 2nd segment (tweetId)
-                val authorId = pathSegments[2] // Get the 3rd segment (authorId)
-                tweetId?.let { startDestination = NavTweet.DeepLink(tweetId, authorId) }
+    // Parse deep link from intent
+    val deepLinkDestination = remember(appLinkIntent) {
+        parseDeepLink(appLinkIntent)
+    }
+    
+    // Track the last processed intent URI to avoid duplicate navigation
+    var lastProcessedUri by remember { mutableStateOf<String?>(null) }
+    
+    // Set initial destination if deep link is present
+    if (deepLinkDestination != null) {
+        val currentUri = appLinkIntent?.data?.toString()
+        if (currentUri != lastProcessedUri) {
+            // This is either initial load or a new deep link
+            if (lastProcessedUri == null) {
+                // Initial load - set start destination
+                startDestination = deepLinkDestination
+                lastProcessedUri = currentUri
+            } else {
+                // New deep link while app is running - will be handled by LaunchedEffect
             }
+        }
+    }
+    
+    // Handle deep link navigation when app is already running (onNewIntent)
+    LaunchedEffect(appLinkIntent?.data?.toString()) {
+        val currentUri = appLinkIntent?.data?.toString()
+        if (currentUri != null && currentUri != lastProcessedUri) {
+            val destination = parseDeepLink(appLinkIntent)
+            if (destination != null) {
+                Timber.tag("DeepLink").d("Navigating to deep link: tweetId=${destination.tweetId}, authorId=${destination.authorId}")
+                // Navigate to deep link, clearing back stack to root
+                navController.navigate(destination) {
+                    popUpTo(navController.graph.startDestinationId) {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                }
+                lastProcessedUri = currentUri
+            }
+        } else if (currentUri == null && lastProcessedUri == null) {
+            // Initial load without deep link - mark as processed
+            lastProcessedUri = ""
         }
     }
     CompositionLocalProvider(LocalNavController provides navController) {
@@ -239,6 +274,51 @@ fun TweetNavGraph(
             }
         }
     }
+}
+
+/**
+ * Parse deep link from intent
+ * Expected URL format: http://fireshare.uk/tweet/{tweetId}/{authorId}
+ */
+private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
+    if (intent?.action != Intent.ACTION_VIEW) {
+        return null
+    }
+    
+    val appLinkData = intent.data
+    if (appLinkData == null) {
+        Timber.tag("DeepLink").d("Intent data is null")
+        return null
+    }
+    
+    Timber.tag("DeepLink").d("Parsing deep link: ${appLinkData}")
+    Timber.tag("DeepLink").d("Host: ${appLinkData.host}, Path: ${appLinkData.path}")
+    
+    val pathSegments = appLinkData.pathSegments
+    Timber.tag("DeepLink").d("Path segments: $pathSegments (size: ${pathSegments.size})")
+    
+    // Expected format: /tweet/{tweetId}/{authorId}
+    // pathSegments will be: ["tweet", "tweetId", "authorId"]
+    if (pathSegments.size < 3) {
+        Timber.tag("DeepLink").w("Invalid deep link format: expected at least 3 path segments, got ${pathSegments.size}")
+        return null
+    }
+    
+    if (pathSegments[0] != "tweet") {
+        Timber.tag("DeepLink").w("Invalid deep link format: first segment should be 'tweet', got '${pathSegments[0]}'")
+        return null
+    }
+    
+    val tweetId = pathSegments[1]
+    val authorId = pathSegments[2]
+    
+    if (tweetId.isBlank() || authorId.isBlank()) {
+        Timber.tag("DeepLink").w("Invalid deep link: tweetId or authorId is blank (tweetId='$tweetId', authorId='$authorId')")
+        return null
+    }
+    
+    Timber.tag("DeepLink").d("Successfully parsed deep link: tweetId=$tweetId, authorId=$authorId")
+    return NavTweet.DeepLink(tweetId, authorId)
 }
 
 @HiltViewModel

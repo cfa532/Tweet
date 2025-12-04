@@ -170,7 +170,32 @@ class TweetViewModel @AssistedInject constructor(
                     Timber.w("Tweet authorId is null, skipping user cache check")
                 }
                 
-                // Step 3: Refresh tweet from server (getUser inside refreshTweet will use cache or fetch)
+                // Step 3: Ensure we have the author before refreshing tweet
+                // For deep links, we need to fetch the author first to get their baseUrl
+                // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery (important for deep links)
+                var author: User? = cachedUser
+                @Suppress("SENSELESS_COMPARISON")
+                if (tweet.authorId != null && author == null) {
+                    Timber.d("TweetViewModel - Fetching author from server for deep link: ${tweet.authorId}")
+                    try {
+                        // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery (important for deep links)
+                        // This bypasses cache and forces fresh fetch with provider IP discovery
+                        Timber.d("TweetViewModel - About to call getUser for authorId: ${tweet.authorId} with forceRefresh=true")
+                        author = HproseInstance.getUser(tweet.authorId, baseUrl = "", forceRefresh = true)
+                        Timber.d("TweetViewModel - getUser returned: ${if (author != null) "success, username=${author.username}, baseUrl=${author.baseUrl}" else "null"}")
+                        if (author != null) {
+                            Timber.d("TweetViewModel - Successfully fetched author: ${author.username}, baseUrl: ${author.baseUrl}")
+                            val tweetWithAuthor = tweet.copy(author = author)
+                            _tweetState.value = tweetWithAuthor
+                        } else {
+                            Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId} - getUser returned null")
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "TweetViewModel - Exception fetching author: ${tweet.authorId}")
+                    }
+                }
+                
+                // Step 4: Refresh tweet from server (now that we have author with baseUrl)
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
                     HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
@@ -178,17 +203,19 @@ class TweetViewModel @AssistedInject constructor(
                         _tweetState.value = refreshedTweet
                         _attachments.value = refreshedTweet.attachments
                     } ?: run {
-                        Timber.w("TweetViewModel - Failed to refresh tweet, but keeping cached user if available")
-                        // If refresh failed but we have cached user, at least show tweet with author
-                        if (cachedUser != null && tweetState.value.author == null) {
-                            _tweetState.value = tweet.copy(author = cachedUser)
+                        Timber.w("TweetViewModel - Failed to refresh tweet, but keeping author if available")
+                        // If refresh failed but we have author, at least show tweet with author
+                        val currentAuthor = author ?: cachedUser
+                        if (currentAuthor != null && tweetState.value.author == null) {
+                            _tweetState.value = tweet.copy(author = currentAuthor)
                         }
                     }
                 } else {
                     Timber.w("Cannot refresh tweet due to null mid or authorId")
-                    // Optionally populate with cachedUser if available
-                    if (cachedUser != null && tweetState.value.author == null) {
-                        _tweetState.value = tweet.copy(author = cachedUser)
+                    // Optionally populate with author if available
+                    val currentAuthor = author ?: cachedUser
+                    if (currentAuthor != null && tweetState.value.author == null) {
+                        _tweetState.value = tweet.copy(author = currentAuthor)
                     }
                 }
             }

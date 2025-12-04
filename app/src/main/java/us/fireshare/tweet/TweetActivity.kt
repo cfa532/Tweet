@@ -143,7 +143,10 @@ class TweetActivity : ComponentActivity() {
                         Scaffold(
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                            TweetNavGraph(
+                                appLinkIntent = activityViewModel.currentIntent.value,
+                                modifier = Modifier.padding(innerPadding)
+                            )
                         }
                     }
                 }
@@ -159,11 +162,35 @@ class TweetActivity : ComponentActivity() {
                         Scaffold(
                             modifier = Modifier.fillMaxWidth()
                         ) { innerPadding ->
-                            TweetNavGraph(intent, modifier = Modifier.padding(innerPadding))
+                            TweetNavGraph(
+                                appLinkIntent = activityViewModel.currentIntent.value,
+                                modifier = Modifier.padding(innerPadding)
+                            )
                         }
                     }
                 }
             }
+        }
+        
+        // Handle initial intent
+        activityViewModel.currentIntent.value = intent
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        Timber.tag("TweetActivity").d("onNewIntent called with: ${intent.data}")
+        setIntent(intent) // Update the intent so getIntent() returns the latest one
+        handleIntent(intent)
+    }
+
+    /**
+     * Handle deep link intent
+     */
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
+            Timber.tag("DeepLink").d("Handling deep link: ${intent.data}")
+            activityViewModel.currentIntent.value = intent
         }
     }
 
@@ -308,6 +335,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
     private val _isDownloading = MutableStateFlow(false)
     val systemDomainToShare = mutableStateOf<String?>(null)
+    val currentIntent = mutableStateOf<Intent?>(null)
 
     /**
      * Load entry URLs from BuildConfig.ENTRY_URLS.
@@ -728,4 +756,5 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     }
 
 }
+
 
