@@ -205,39 +205,45 @@ fun TweetDetailScreen(
             }
     }
 
-    // Initial comment load when tweet is available
-    LaunchedEffect(tweet.mid) {
-        if (tweet.mid != null) {
-            // Load comments if we haven't loaded any yet (initial loading) or if comments list is empty
-            if (isInitialLoading || (comments.isEmpty() && lastLoadedPage < 0)) {
-                withContext(Dispatchers.IO) {
-                    viewModel.loadComments(tweet, 0)
-                    currentPage = 0
-                    lastLoadedPage = 0
-                    isInitialLoading = false
-                }
-            }
-        }
-    }
+    // Track if we've loaded page 0 to prevent infinite reloads
+    var hasLoadedPage0 by remember { mutableStateOf(false) }
+    // Track if we've confirmed there are no comments (to prevent infinite loading)
+    var hasConfirmedNoComments by remember { mutableStateOf(false) }
 
-    // Track initial loading completion (fallback in case LaunchedEffect doesn't trigger)
-    LaunchedEffect(comments) {
-        if (isInitialLoading && comments.isNotEmpty()) {
-            // Only set loading to false when we actually receive comments
+    // Initial comment load when tweet is available - only load once per tweet
+    LaunchedEffect(tweet.mid) {
+        if (tweet.mid != null && !hasLoadedPage0) {
+            hasLoadedPage0 = true
+            withContext(Dispatchers.IO) {
+                viewModel.loadComments(tweet, 0)
+                currentPage = 0
+                lastLoadedPage = 0
+            }
             isInitialLoading = false
         }
     }
 
-    // Infinite scroll for comments
+    // Track if page 0 returned empty - set flag after comments state updates
+    LaunchedEffect(comments, hasLoadedPage0) {
+        if (hasLoadedPage0 && comments.isEmpty() && lastLoadedPage == 0) {
+            // We loaded page 0 and got no comments - confirm there are no comments
+            hasConfirmedNoComments = true
+            Timber.tag("TweetDetailScreen").d("Confirmed no comments after loading page 0")
+        } else if (comments.isNotEmpty()) {
+            // We have comments, reset the flag
+            hasConfirmedNoComments = false
+        }
+    }
+
+    // Infinite scroll for comments - only load if we have comments and haven't confirmed no comments
     LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && hasLoadedPage0 && !hasConfirmedNoComments && comments.isNotEmpty()) {
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
                         val nextPage = lastLoadedPage + 1
                         viewModel.loadComments(tweet, nextPage)
-                        // Update page tracking after load
                         currentPage = nextPage
                         lastLoadedPage = nextPage
                     }
