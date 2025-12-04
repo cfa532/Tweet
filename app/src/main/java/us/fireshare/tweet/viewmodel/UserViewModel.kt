@@ -125,13 +125,35 @@ class UserViewModel @AssistedInject constructor(
             Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
 
             // Load first page (page 0) which includes pinned tweets
-            getTweets(0)
-
-            // Load additional pages if needed to get at least 5 viewable tweets
-            var pageNumber = 1
-            while (tweets.value.size < 5 && pageNumber < 10) {
-                getTweets(pageNumber)
-                pageNumber++
+            val page0Tweets = getTweets(0)
+            
+            // Check if page 0 returned empty (server depleted)
+            val page0ValidTweets = page0Tweets.filterNotNull()
+            if (page0ValidTweets.isEmpty() && page0Tweets.size < TW_CONST.PAGE_SIZE) {
+                Timber.tag("initLoad").d("Page 0 returned no tweets, server depleted - stopping initial load")
+            } else {
+                // Load additional pages if needed to get at least 5 viewable tweets
+                var pageNumber = 1
+                var serverDepleted = false
+                
+                while (tweets.value.size < 5 && pageNumber < 10 && !serverDepleted) {
+                    val pageTweets = getTweets(pageNumber)
+                    val validTweets = pageTweets.filterNotNull()
+                    
+                    // Check if server is depleted (returned fewer tweets than PAGE_SIZE)
+                    if (pageTweets.size < TW_CONST.PAGE_SIZE) {
+                        serverDepleted = true
+                        Timber.tag("initLoad").d("Server depleted at page $pageNumber, returned ${pageTweets.size} tweets (${validTweets.size} valid)")
+                    }
+                    
+                    // Also stop if we got no valid tweets from server
+                    if (validTweets.isEmpty() && serverDepleted) {
+                        Timber.tag("initLoad").d("Page $pageNumber returned no valid tweets, stopping initial load")
+                        break
+                    }
+                    
+                    pageNumber++
+                }
             }
 
             Timber.tag("initLoad")
