@@ -96,6 +96,10 @@ object HproseInstance {
     // Private backing field for appUser
     private var _appUser: User = User(mid = TW_CONST.GUEST_ID)
     
+    // Track if appUser refresh is in progress to prevent concurrent refreshes
+    @Volatile
+    private var isAppUserRefreshing = false
+    
     // Lazy initialization of MediaUploadService
     private val mediaUploadService: MediaUploadService by lazy {
         MediaUploadService(applicationContext, httpClient, appUser, appId)
@@ -105,11 +109,13 @@ object HproseInstance {
      * Global app user with automatic expiration checking.
      * When accessed, automatically checks if the user has expired (30 minutes)
      * and refreshes from server if needed, similar to other user objects.
+     * Includes deduplication to prevent concurrent refresh requests.
      */
     var appUser: User
         get() {
-            // Check if appUser has expired and refresh if needed
-            if (!_appUser.isGuest() && _appUser.hasExpired) {
+            // Check if appUser has expired and refresh if needed (with deduplication)
+            if (!_appUser.isGuest() && _appUser.hasExpired && !isAppUserRefreshing) {
+                isAppUserRefreshing = true
                 Timber.tag("appUser").d("AppUser expired, refreshing from server...")
                 // Use coroutine scope to refresh user data
                 TweetApplication.applicationScope.launch {
@@ -123,8 +129,12 @@ object HproseInstance {
                         }
                     } catch (e: Exception) {
                         Timber.tag("appUser").e(e, "Error refreshing appUser")
+                    } finally {
+                        isAppUserRefreshing = false
                     }
                 }
+            } else if (isAppUserRefreshing) {
+                Timber.tag("appUser").d("AppUser refresh already in progress, skipping duplicate request")
             }
             return _appUser
         }
