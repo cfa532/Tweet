@@ -272,13 +272,14 @@ fun TweetDetailScreen(
         }
     }
 
-    // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
+    // Refresh handler: refresh immediately when opened, then every 5 minutes
     LaunchedEffect(Unit) {
-        delay(3000L)
+        // Refresh immediately when screen is opened
         withContext(Dispatchers.IO) {
             viewModel.refreshTweetAndOriginal()
-            Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
+            Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
         }
+        // Then refresh periodically every 5 minutes
         while (true) {
             delay(5 * 60 * 1000)
             withContext(Dispatchers.IO) {
