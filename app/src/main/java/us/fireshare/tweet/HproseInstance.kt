@@ -2598,10 +2598,8 @@ object HproseInstance {
                 } else {
                     // Retry attempts: Always force fresh IP resolution
                     val providerIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
-                    if (providerIP == null) {
-                        throw Exception("Provider not found for userId: ${user.mid}")
-                    }
-                    
+                        ?: throw Exception("Provider not found for userId: ${user.mid}")
+
                     // Check if resolved IP:port is the same as current IP:port (redirect loop prevention)
                     // ip:8081 is different from ip:8082, so only exact match (IP:port) is a redirect loop
                     // getProviderIPWithRetry returns IP:port without protocol (e.g., "115.192.224.7:8081")
