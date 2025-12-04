@@ -155,7 +155,7 @@ fun TweetListView(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) } // Use rememberSaveable to persist across recompositions
-    var lastUserId by remember { mutableStateOf(currentUserId) }
+    var lastUserId by remember { mutableStateOf<MimeiId?>(null) } // Initialize to null to trigger on first composition
     var serverDepleted by rememberSaveable { mutableStateOf(false) } // Use rememberSaveable to persist across recompositions
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) } // Track which page is currently being loaded
     var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
@@ -174,10 +174,29 @@ fun TweetListView(
     LaunchedEffect(currentUserId) {
         if (currentUserId != lastUserId) {
             Timber.tag("TweetListView")
-                .d("User changed from $lastUserId to $currentUserId, initializing data")
+                .d("User changed from $lastUserId to $currentUserId, tweets.size=${tweets.size}, initializing data")
             lastUserId = currentUserId
             lastLoadedPage = -1 // Reset last loaded page
             serverDepleted = false // Reset server depleted flag for new user
+
+            // If tweets are already loaded (by initLoad), infer server depletion and skip initialization
+            if (tweets.isNotEmpty()) {
+                Timber.tag("TweetListView")
+                    .d("Tweets already loaded (${tweets.size} tweets), inferring server depletion")
+                
+                // If we have fewer than PAGE_SIZE tweets, server is depleted
+                if (tweets.size < TW_CONST.PAGE_SIZE) {
+                    serverDepleted = true
+                    lastLoadedPage = 0
+                    Timber.tag("TweetListView")
+                        .d("Inferred server depletion: ${tweets.size} < ${TW_CONST.PAGE_SIZE} (PAGE_SIZE)")
+                } else {
+                    lastLoadedPage = 0
+                    Timber.tag("TweetListView")
+                        .d("Server may have more data: ${tweets.size} >= ${TW_CONST.PAGE_SIZE} (PAGE_SIZE)")
+                }
+                return@LaunchedEffect
+            }
 
             // Initialize with enough data (at least 4 tweets) - with timeout protection
             var localServerDepleted = false
