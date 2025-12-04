@@ -198,7 +198,7 @@ fun ChatListScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Top
             ) {
-                items(filteredChatSessions, key = {it.receiptId}) { chatSession ->
+                items(filteredChatSessions, key = {it.id}) { chatSession ->
                     ChatSession(chatSession, navController, viewModel)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),

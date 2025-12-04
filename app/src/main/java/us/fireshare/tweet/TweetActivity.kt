@@ -109,6 +109,18 @@ class TweetActivity : ComponentActivity() {
                 
                 activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
+                // Check for new messages and update badge after initialization completes
+                // This ensures badge is updated even if the callback in init() didn't run
+                // (e.g., if chatSessionRepository wasn't initialized yet)
+                launch(IO) {
+                    if (::chatSessionRepository.isInitialized) {
+                        checkMessagesAndUpdateBadge()
+                        Timber.tag("TweetActivity").d("Checked messages after initialization complete")
+                    } else {
+                        Timber.tag("TweetActivity").d("ChatSessionRepository not initialized yet after initJob completion")
+                    }
+                }
+
                 // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
 
